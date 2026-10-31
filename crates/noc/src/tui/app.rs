@@ -10517,7 +10517,7 @@ mod tests {
             "{text}"
         );
         assert!(
-            text.contains("[< Yes >]"),
+            text.contains("{ Yes }"),
             "Yes is the default, as in mc: {text}"
         );
         let (id, targets, remote, _) = delete_job(app.handle(action(Action::Confirm)));
@@ -10564,7 +10564,7 @@ mod tests {
             text.contains("Cannot delete /srv/left/b: permission denied"),
             "{text}"
         );
-        assert!(text.contains("[< Ignore >]"), "{text}");
+        assert!(text.contains("{ Ignore }"), "{text}");
         app.handle(action(Action::Right));
         app.handle(action(Action::Confirm));
         assert_eq!(decision.try_recv(), Ok(Decision::SkipAll));
@@ -11173,7 +11173,7 @@ mod tests {
             text.contains("New:      12345 bytes, 2023-11-14 19:26"),
             "{text}"
         );
-        assert!(text.contains("[< No >]"), "{text}");
+        assert!(text.contains("{ No }"), "{text}");
         app.handle(action(Action::Confirm));
         assert_eq!(answer.try_recv(), Ok(Conflict::Skip));
         let mut answer = ask(&mut app);
@@ -13559,7 +13559,7 @@ mod tests {
         assert_eq!(app.take_clipboard(), Some("ab".repeat(32)));
         assert_eq!(app.take_clipboard(), None, "copied once");
         let text = screen_of(&mut app, 20);
-        assert!(text.contains("[< To clipboard >]"), "{text}");
+        assert!(text.contains("{ To clipboard }"), "{text}");
         assert!(!text.contains("clipboard."), "no status: {text}");
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);

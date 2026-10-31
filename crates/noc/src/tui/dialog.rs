@@ -576,7 +576,7 @@ pub(crate) struct Dialog {
     parts: Vec<Part>,
     buttons: Vec<Button>,
     /// The button that Enter in the field activates, and that starts with the focus otherwise;
-    /// drawn as `[< … >]`, as in mc.
+    /// drawn bold in `{ … }`.
     default: usize,
     focus: Focus,
     /// Widest the dialog gets, in cells, borders included.
@@ -1893,17 +1893,13 @@ fn label_spans(
     )
 }
 
-/// The brackets around a button: `[< >]` for the default one, `[ ]` for the others.
+/// The brackets around a button: `{ }` for the default one, `[ ]` for the others.
 fn brackets(default: bool) -> (&'static str, &'static str) {
-    if default {
-        ("[< ", " >]")
-    } else {
-        ("[ ", " ]")
-    }
+    if default { ("{ ", " }") } else { ("[ ", " ]") }
 }
 
-/// Buttons, centered, as mc draws them: the default one in `[< >]`, the one with the focus in
-/// its color, each with its letter set apart.
+/// Buttons, centered: the default one bold in `{ }`, the one with the focus in its color, each
+/// with its letter set apart.
 pub(crate) fn button_line(
     labels: &[Label],
     default: usize,
@@ -1916,11 +1912,14 @@ pub(crate) fn button_line(
             spans.push(Span::raw(" "));
         }
         let focused = focus == Some(index);
-        let style = if focused {
+        let mut style = if focused {
             colors.focused
         } else {
             colors.button
         };
+        if index == default {
+            style = style.add_modifier(Modifier::BOLD);
+        }
         let (open, close) = brackets(index == default);
         spans.push(Span::styled(open, style));
         let hotkey = colors.hotkey_style(focused);
@@ -2548,7 +2547,7 @@ mod tests {
             Dialog::question("Long", &lines.join("\n"), vec![Button::Ok], 0, Tone::Plain);
         let shown = |dialog: &Dialog| draw(dialog, 40, 12).backend().to_string();
         let top = shown(&dialog);
-        assert!(top.contains("line 1 ") && top.contains("[< OK >]"), "{top}");
+        assert!(top.contains("line 1 ") && top.contains("{ OK }"), "{top}");
         assert!(top.contains('▲') && top.contains('█'), "{top}");
         assert!(!top.contains("line 30"), "{top}");
         dialog.scroll(Scroll::By(Motion::Down));
@@ -2559,10 +2558,44 @@ mod tests {
         );
         dialog.scroll(Scroll::To(usize::MAX));
         let end = shown(&dialog);
-        assert!(end.contains("line 30") && end.contains("[< OK >]"), "{end}");
+        assert!(end.contains("line 30") && end.contains("{ OK }"), "{end}");
         let short = Dialog::question("Short", "one line", vec![Button::Ok], 0, Tone::Plain);
         let text = shown(&short);
         assert!(!text.contains('░') && short.bar().is_none(), "{text}");
+    }
+
+    #[test]
+    fn the_default_button_is_bold_in_braces_with_the_focus_or_without() {
+        let mut dialog = Dialog::question(
+            "Sure?",
+            "Delete it?",
+            vec![Button::Yes, Button::No],
+            1,
+            Tone::Plain,
+        );
+        let bold = |dialog: &Dialog, label: &str| {
+            let terminal = draw(dialog, 40, 8);
+            let buffer = terminal.backend().buffer();
+            let row = (0..8)
+                .find(|&y| {
+                    let line: String = (0..40).map(|x| buffer[(x, y)].symbol()).collect();
+                    line.contains(label)
+                })
+                .unwrap();
+            let line: String = (0..40).map(|x| buffer[(x, row)].symbol()).collect();
+            let byte = line.find(label).unwrap();
+            let start = u16::try_from(line[..byte].chars().count()).unwrap();
+            let width = u16::try_from(label.len()).unwrap();
+            (start..start + width)
+                .map(|x| buffer[(x, row)].modifier.contains(Modifier::BOLD))
+                .collect::<Vec<_>>()
+        };
+        let all = |cells: Vec<bool>, on: bool| cells.iter().all(|&cell| cell == on);
+        assert!(all(bold(&dialog, "{ No }"), true), "the default, focused");
+        assert!(all(bold(&dialog, "[ Yes ]"), false), "the other");
+        dialog.handle(action(Action::Left));
+        assert!(all(bold(&dialog, "{ No }"), true), "the default, unfocused");
+        assert!(all(bold(&dialog, "[ Yes ]"), false), "the other, focused");
     }
 
     #[test]
@@ -3658,7 +3691,7 @@ mod tests {
         assert_eq!(colors(4, 2), (Color::White, Color::Red), "message");
         let (x, y) = (0..60)
             .flat_map(|x| (0..8).map(move |y| (x, y)))
-            .find(|&(x, y)| buffer[(x, y)].symbol() == "[")
+            .find(|&(x, y)| buffer[(x, y)].symbol() == "{")
             .unwrap();
         assert_eq!(
             colors(x, y),

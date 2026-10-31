@@ -11,6 +11,6 @@ expression: terminal.backend()
 "  ║ Optional: hex                    ║  "
 "  ║ [ ] Verbose                      ║  "
 "  ╟──────────────────────────────────╢  "
-"  ║       [< OK >] [ Cancel ]        ║  "
+"  ║        { OK } [ Cancel ]         ║  "
 "  ╚══════════════════════════════════╝  "
 "                                        "

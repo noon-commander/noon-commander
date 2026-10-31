@@ -3282,7 +3282,7 @@ mod tests {
     fn enter_sends_to_the_background_and_esc_aborts() {
         let press = |view: &mut JobView, action| view.handle(Resolved::Action(action));
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
-        assert!(draw(&view).contains("[< Background >] [ Abort ]"));
+        assert!(draw(&view).contains("{ Background } [ Abort ]"));
         assert_eq!(
             press(&mut view, Action::Confirm),
             Some(JobButton::Background)

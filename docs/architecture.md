@@ -554,7 +554,7 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ║ ⠹ 3 lines in 2 files                                               ║
 ║ 2 errors: rg: ./secret: Permission denied (os error 13)            ║
 ╟────────────────────────────────────────────────────────────────────╢
-║              [< Go to >] [ View ] [ Edit ] [ Cancel ]              ║
+║               { Go to } [ View ] [ Edit ] [ Cancel ]               ║
 ╚════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -1914,7 +1914,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   a dialog does not reach what is under it. While the mouse is captured, the terminal selects
   text with a modifier held: Shift in most terminals, Option in iTerm2.
 - **Dialogs.** Modal and centered over the panels, those for one panel too, such as Go to
-  directory and those of `g +` and `g -`, with mc-style buttons: `[< OK >]` marks the default
+  directory and those of `g +` and `g -`, with buttons: `{ OK }`, in bold, marks the default
   one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart
   from what is above them, in every dialog and window. A dialog has a message, combo boxes, text
   fields, check boxes, and buttons, each optional but the buttons;

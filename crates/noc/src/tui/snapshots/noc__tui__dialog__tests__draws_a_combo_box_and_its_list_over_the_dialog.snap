@@ -9,7 +9,7 @@ expression: terminal.backend()
 "  ║ Count: [one   ▼]                 ║  "
 "  ║ [ ] Ver┌────────┐                ║  "
 "  ╟────────│• one   │────────────────╢  "
-"  ║       [│  two   │Cancel ]        ║  "
+"  ║        │  two   │ancel ]         ║  "
 "  ╚════════│  three │════════════════╝  "
 "           └────────┘                   "
 "                                        "

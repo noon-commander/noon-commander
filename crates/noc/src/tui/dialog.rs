@@ -1808,6 +1808,22 @@ pub(crate) fn frame_around(inner: Rect) -> Rect {
     )
 }
 
+/// Where a list that pops up from `anchor` goes in `area`, `size` with its frame, from the
+/// column `x`, as vim's pop-up menu: under `anchor`, or above it where there is more room there,
+/// as tall as the room lets it be.
+pub(crate) fn pop_up(anchor: Rect, area: Rect, x: u16, (width, height): (u16, u16)) -> Rect {
+    let below = area.bottom().saturating_sub(anchor.bottom());
+    let above = anchor.y.saturating_sub(area.y);
+    let (y, height) = if below >= height || below >= above {
+        (anchor.bottom(), height.min(below))
+    } else {
+        let height = height.min(above);
+        (anchor.y - height, height)
+    };
+    let width = width.min(area.right().saturating_sub(x));
+    Rect::new(x, y, width, height)
+}
+
 /// Draws an empty dialog box centered in `area`: a frame of `size` in the theme's lines with
 /// its title bold in the middle, a blank cell around it where there is room, and mc's shadow. Returns the room
 /// inside, one column in from the frame on either side.

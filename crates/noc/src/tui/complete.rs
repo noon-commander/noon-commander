@@ -12,7 +12,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, Tone};
+use super::dialog::{Colors, Tone, pop_up};
 use super::keymap::Action;
 use super::mouse::{Drawn, Pointer, Press};
 use super::theme::Theme;
@@ -421,20 +421,8 @@ impl Choices {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, field: Rect, area: Rect, theme: &Theme) {
         let rows = self.items.len().min(MAX_ROWS);
         let height = u16::try_from(rows).unwrap_or(0) + 2;
-        let below = area.bottom().saturating_sub(field.bottom());
-        let above = field.y.saturating_sub(area.y);
-        let (y, height) = if below >= height || below >= above {
-            (field.bottom(), height.min(below))
-        } else {
-            let height = height.min(above);
-            (field.y - height, height)
-        };
         let x = field.x.saturating_sub(1);
-        let width = field
-            .width
-            .saturating_add(2)
-            .min(area.right().saturating_sub(x));
-        let outer = Rect::new(x, y, width, height);
+        let outer = pop_up(field, area, x, (field.width.saturating_add(2), height));
         self.drawn = Drawn::default();
         self.bar = None;
         if outer.height < 3 || outer.width < 4 {

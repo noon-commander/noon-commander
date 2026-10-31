@@ -85,17 +85,14 @@ pub(crate) struct Glyphs {
     /// In the viewer, in place of what cannot be shown: invalid UTF-8, and characters the
     /// terminal would act on. Quiet, as mc's `.`, and one cell in every font.
     pub(crate) hidden: &'static str,
-    /// The marks of the pull-down menu's commands: the choice taken among others, and a setting
-    /// that is on.
-    pub(crate) menu_marks: (char, char),
     /// After a section of the help that has sections of its own: closed, and open.
     pub(crate) folds: (char, char),
     /// At the end of a combo box, whose list opens under it.
     pub(crate) combo_box: char,
-    /// In a check box that is on.
+    /// In a check box that is on, and in front of a command of the pull-down menu that is on.
     pub(crate) check: char,
     /// In front of the choice taken among others, as the dot of a radio button: in the list of a
-    /// combo box.
+    /// combo box, and in the pull-down menu, as its sort order.
     pub(crate) choice: char,
     /// In front of each point of a tip in the help.
     pub(crate) bullet: char,
@@ -148,7 +145,6 @@ impl Glyphs {
             after: "󰄾",
         },
         hidden: "·",
-        menu_marks: ('•', '✓'),
         // nf-md-chevron_right and nf-md-chevron_down.
         folds: ('󰅂', '󰅀'),
         // nf-md-chevron_down, as an open fold.
@@ -222,7 +218,6 @@ impl Glyphs {
             after: "»",
         },
         hidden: "·",
-        menu_marks: ('*', 'x'),
         folds: ('▸', '▾'),
         // Far's arrow, as the scroll bar's.
         combo_box: '▼',

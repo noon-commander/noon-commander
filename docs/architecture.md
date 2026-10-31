@@ -308,8 +308,11 @@ menu:
   [zoxide](#zoxide) window, the other-panel commands, the jobs, host settings and disconnect for the
   host the active panel shows, help, and redraw; Options has Configuration… and Show hidden files
   (`✓` while on); Workspace has Save workspace…, Workspace list…, and the saved
-  [workspaces](#workspaces), with digits as their letters, typed with Alt. Without icons, the marks
-  are `*` and `x`. A menu taller than the screen scrolls with the cursor.
+  [workspaces](#workspaces), with digits as their letters, typed with Alt, `•` on the one restored
+  or saved last. `•` is the dot of the lists of combo boxes, for one among others, and
+  `✓` the check of check boxes, for a setting that is on; Nerd Font ones with icons, in the color
+  of titles (`dialog_symbol`) but on the cursor and on a command that cannot run now. A menu
+  taller than the screen scrolls with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
   it in the active panel's context (`Keymap::key`). Left and Right show the keys of the active
   panel's menu as they are, `g l` for Change location… and `t t` for Tab list…, and those of the
@@ -2067,8 +2070,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
-  cut short, the marks of the pull-down menu, the arrow of combo boxes and the dot of the choice in
-  their lists, and the check of check boxes; `Lines::DOUBLE` and `Lines::SINGLE` by
+  cut short, the arrow of combo boxes, the dot of a choice among others, in the lists of combo
+  boxes and the pull-down menu, and the check of a setting that is on, in check boxes and the
+  pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by
   `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
   way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
   the arrows of the sort order, the checks of checksums, the progress bar, the mark of secrets, and

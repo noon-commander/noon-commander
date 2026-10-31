@@ -211,7 +211,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0057](docs/adr/0057-combo-boxes.md)).
 - Check boxes show `[✓]` (a Nerd Font check with `ui.icons`) rather than `[x]`. Their brackets,
   and those of combo boxes, are faint, and the check and the arrow of a combo box are in the color
-  of titles, but on what has the focus.
+  of titles, but on what has the focus. The pull-down menu of F9 marks the sort order and the
+  workspace restored last with the dot of the lists of combo boxes, and Show hidden files
+  with the check of check boxes, in the same color, where it had `•` and `✓`, or `*` and `x`
+  without icons.
 - Questions before something that cannot be undone are no longer red as errors: deleting, a file
   that is there already, replacing or deleting a workspace, and quitting with jobs that would stop
   are on a background of their own, yellow in mc-classic, peach in Catppuccin, orange in the Noon

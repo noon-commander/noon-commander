@@ -133,7 +133,9 @@ pub(crate) struct Theme {
     pub(crate) dialog_input: Style,
     /// Drawn over the others: the brackets of a check box and of a combo box, faint, so that
     /// what is in them stands out; and what they show besides text, the check and the arrow, in
-    /// the color of titles. On what has the focus they take its colors.
+    /// the color of titles, as the dot of the choice in the list of a combo box, and
+    /// the marks of the pull-down menu, over `menu`. On what has the focus or the cursor they
+    /// take its colors.
     pub(crate) dialog_bracket: Style,
     pub(crate) dialog_symbol: Style,
     /// The progress bar of a job.
@@ -1281,6 +1283,10 @@ mod tests {
                         );
                     }
                 }
+                // The marks of the pull-down menu.
+                let mark = theme.menu.patch(theme.dialog_symbol);
+                assert!(mark != theme.menu, "{name} {depth:?}: menu");
+                assert!(mark.fg.is_none() || mark.fg != mark.bg);
             }
         }
     }

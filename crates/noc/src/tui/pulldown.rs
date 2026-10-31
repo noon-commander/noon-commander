@@ -75,9 +75,9 @@ pub(crate) enum PullDownEvent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mark {
     None,
-    /// One of several, such as a sort order.
-    Radio,
-    /// A setting that is on or off.
+    /// One of several, such as a sort order: the dot of a radio button while it is the one taken.
+    Choice,
+    /// A setting that is on or off: the check of a check box while it is on.
     Check,
 }
 
@@ -197,7 +197,7 @@ fn workspace_menu(title: Label, workspaces: &[String], marks: Marks) -> Menu {
         entries.push(Entry::Item(Item {
             label,
             command: Command::Workspace(index),
-            mark: Mark::Radio,
+            mark: Mark::Choice,
         }));
     }
     Menu { title, entries }
@@ -212,7 +212,7 @@ fn panel_menu(title: Label, side: Side) -> Menu {
             mark,
         })
     };
-    let sort = |text: String, action| item(text, Command::On(side, action), Mark::Radio);
+    let sort = |text: String, action| item(text, Command::On(side, action), Mark::Choice);
     Menu {
         title,
         entries: vec![
@@ -745,7 +745,6 @@ impl PullDown {
         frame.render_widget(block, outer);
         let room = usize::from(rows.width);
         let (left_tee, right_tee) = theme.tees();
-        let marks = theme.glyphs.menu_marks;
         // A menu taller than the screen scrolls to the cursor.
         let page = usize::from(rows.height);
         let total = menu.entries.len();
@@ -771,7 +770,7 @@ impl PullDown {
             };
             let y = rows.y + line;
             if let (Entry::Item(item), Some(status)) = (entry, status) {
-                let line = item_line(item, status, index == self.cursor, room, theme, marks);
+                let line = item_line(item, status, index == self.cursor, room, theme);
                 let row = Rect::new(rows.x, y, rows.width, 1);
                 frame.render_widget(line, row);
                 drawn.rows.push((index, row));
@@ -787,15 +786,16 @@ impl PullDown {
     }
 }
 
-/// A command in `room` cells: its mark, from `marks` for radio buttons and check boxes, its
-/// name with its letter, and its keys on the right.
+/// A command in `room` cells: its mark, the dot of a radio button while it is the one taken or
+/// the check of a check box while it is on, in the color of titles as in dialogs, but on the
+/// cursor and where the command cannot run now; its name with its letter, and its keys on the
+/// right.
 fn item_line(
     item: &Item,
     status: &Status,
     selected: bool,
     room: usize,
     theme: &Theme,
-    (radio, check): (char, char),
 ) -> Line<'static> {
     let style = match (selected, status.enabled) {
         (true, _) => theme.menu_selected,
@@ -803,9 +803,14 @@ fn item_line(
         (false, false) => theme.menu.patch(theme.disabled),
     };
     let mark = match (item.mark, status.checked) {
-        (Mark::Radio, true) => radio,
-        (Mark::Check, true) => check,
+        (Mark::Choice, true) => theme.glyphs.choice,
+        (Mark::Check, true) => theme.glyphs.check,
         _ => ' ',
+    };
+    let mark_style = if selected || !status.enabled {
+        style
+    } else {
+        style.patch(theme.dialog_symbol)
     };
     let truncated = if selected {
         theme.truncated_cursor
@@ -818,7 +823,11 @@ fn item_line(
         theme.menu_hotkey
     };
     let hotkey = status.enabled.then_some(hotkey);
-    let mut spans = vec![Span::styled(format!(" {mark} "), style)];
+    let mut spans = vec![
+        Span::styled(" ", style),
+        Span::styled(mark.to_string(), mark_style),
+        Span::styled(" ", style),
+    ];
     spans.extend(item.label.spans(style, hotkey, truncated));
     let key = status.key.as_deref().unwrap_or_default();
     let used = 3 + cells::width(&item.label.text);
@@ -1271,7 +1280,8 @@ mod tests {
     fn marks_the_sort_order_and_stays_on_screen() {
         let menu = open(Side::Right);
         let text = draw(&menu, &Theme::mc_classic());
-        assert!(text.contains("* Sort by name"), "{text}");
+        let chosen = format!("{} Sort by name", Glyphs::PLAIN.choice);
+        assert!(text.contains(&chosen), "{text}");
         let lines: Vec<&str> = text.lines().collect();
         assert!(
             lines[1].trim_end().trim_end_matches('"').ends_with('╗'),
@@ -1394,14 +1404,13 @@ mod tests {
             panic!("{menu:?}");
         };
         let theme = Theme::mc_classic();
-        let marks = ('*', 'x');
         let key_style = |selected: bool, enabled: bool| {
             let status = Status {
                 enabled,
                 checked: false,
                 key: Some("o n".to_owned()),
             };
-            let line = item_line(item, &status, selected, 40, &theme, marks);
+            let line = item_line(item, &status, selected, 40, &theme);
             line.spans
                 .iter()
                 .find(|span| span.content.contains("o n"))
@@ -1411,6 +1420,46 @@ mod tests {
         assert_eq!(key_style(false, true), theme.menu.patch(theme.menu_keys));
         assert_eq!(key_style(true, true), theme.menu_selected);
         assert_eq!(key_style(false, false), theme.menu.patch(theme.disabled));
+    }
+
+    #[test]
+    fn marks_take_the_color_of_titles_but_on_the_cursor_and_where_disabled() {
+        let menu = PullDown::new(Side::Left, false, None, &[], Glyphs::PLAIN.marks, &status);
+        let item = |menu_index: usize, index: usize| {
+            let Some(Entry::Item(item)) = menu.menus[menu_index].entries.get(index) else {
+                panic!("{menu:?}");
+            };
+            item
+        };
+        let theme = Theme::mc_classic();
+        let glyphs = theme.glyphs;
+        // Sort by name, one among others, and Show hidden files, on or off.
+        for (item, kind, glyph) in [
+            (item(0, 2), Mark::Choice, glyphs.choice),
+            (item(3, 2), Mark::Check, glyphs.check),
+        ] {
+            assert_eq!(item.mark, kind, "{:?}", item.label.text);
+            let mark = |selected: bool, enabled: bool, checked: bool| {
+                let status = Status {
+                    enabled,
+                    checked,
+                    key: None,
+                };
+                let line = item_line(item, &status, selected, 40, &theme);
+                (line.spans[1].content.to_string(), line.spans[1].style)
+            };
+            let glyph = glyph.to_string();
+            assert_eq!(
+                mark(false, true, true),
+                (glyph.clone(), theme.menu.patch(theme.dialog_symbol))
+            );
+            assert_eq!(mark(true, true, true), (glyph.clone(), theme.menu_selected));
+            assert_eq!(
+                mark(false, false, true),
+                (glyph, theme.menu.patch(theme.disabled))
+            );
+            assert_eq!(mark(false, true, false).0, " ", "neither taken nor on");
+        }
     }
 
     #[test]

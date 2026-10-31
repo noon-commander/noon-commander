@@ -12625,7 +12625,8 @@ mod tests {
         assert!(app.pulldown.is_none());
         app.handle(action(Action::PullDownLast));
         let text = screen_of(&mut app, 20);
-        assert!(text.contains("* Sort by size"), "{text}");
+        let chosen = format!("{} Sort by size", app.theme.glyphs.choice);
+        assert!(text.contains(&chosen), "{text}");
         app.handle(action(Action::Confirm));
         assert_eq!(
             app.panel(Side::Left).sort_action(),
@@ -12636,7 +12637,8 @@ mod tests {
         // Options: the hidden files, in both panels.
         app.handle(action(Action::PullDown));
         assert!(app.handle(Resolved::Hotkey('o')).is_empty());
-        assert!(screen_of(&mut app, 20).contains("x Show hidden files"));
+        let checked = format!("{} Show hidden files", app.theme.glyphs.check);
+        assert!(screen_of(&mut app, 20).contains(&checked));
         app.handle(Resolved::Hotkey('h'));
         assert!(!app.config.ui.show_hidden);
 
@@ -14036,7 +14038,7 @@ mod tests {
         assert_eq!(app.workspace.as_deref(), Some("noon"));
         app.handle(action(Action::PullDownLast));
         assert!(
-            screen_of(&mut app, 16).contains("* 2 noon"),
+            screen_of(&mut app, 16).contains(&format!("{} 2 noon", app.theme.glyphs.choice)),
             "the one restored last"
         );
     }

@@ -36,7 +36,11 @@ want.
   stands out between them. Check boxes take the same, `[✓]`, their brackets faint and their
   check, which was `x`, a `✓` in the color of titles, or a Nerd Font check with `ui.icons`; one
   function draws them, in the dialogs and the Configuration dialog alike. What has the focus is
-  in its colors alone.
+  in its colors alone. The pull-down menu of F9 takes the marks of both, in the same color: the
+  dot of the lists (below) for a command taken among others, as a sort order or the
+  workspace restored last, where it had `•` (`*` without icons), and the check for a setting that
+  is on, where it had `x` without icons. Two marks, as the menus of Windows and GTK have, so that
+  one among others does not read as a setting to turn off.
 - **Its list opens under it**, or above it where there is more room, over the dialog and past its
   frame, as the list of completions (`dialog::pop_up`): a frame, at most ten rows, a scroll bar on
   the frame when they do not all fit, and the cursor on the choice. The choice has the dot of a

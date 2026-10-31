@@ -479,7 +479,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 continue;
             };
             self.progress(&item.source);
-            let before = self.bytes_done;
+            let (before, total) = (self.bytes_done, self.bytes_total);
             let copied = loop {
                 let attempt = match item.metadata.kind {
                     FileKind::Dir => self.copy_dir(item, &target).await.map(|made_now| {
@@ -500,7 +500,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                     Ok(copied) => break copied,
                     Err(Stop::Aborted) => return Err(Aborted),
                     Err(Stop::Failed(path, error)) => {
-                        self.bytes_done = before;
+                        (self.bytes_done, self.bytes_total) = (before, total);
                         match self.reporter.ask(path, error).await {
                             Decision::Retry => {}
                             Decision::Skip | Decision::SkipAll => break false,
@@ -511,6 +511,10 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             };
             if copied {
                 self.outcome.done += 1;
+                // A file that shrank since it was counted held less than the total said; one
+                // that grew has added to it as its bytes arrived.
+                let moved = self.bytes_done - before;
+                self.bytes_total -= size.saturating_sub(moved);
                 let dir = item.metadata.kind == FileKind::Dir;
                 if self.options.remove_sources && !dir && !self.remove_source(item).await? {
                     keep(&mut kept, items, index);
@@ -985,10 +989,14 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     }
 
     /// Counts what has arrived through `writer` beyond the `counted` bytes of `item`, and
-    /// reports it if there is any.
+    /// reports it if there is any. Bytes beyond the size the file had when it was counted add to
+    /// the total, so that the bytes done never go past it.
     fn arrived(&mut self, item: &Item<A::Path>, writer: &B::Writer, counted: &mut u64) {
         let new = writer.written().saturating_sub(*counted);
         if new > 0 {
+            let size = file_size(item);
+            let beyond = |bytes: u64| bytes.saturating_sub(size);
+            self.bytes_total += beyond(*counted + new) - beyond(*counted);
             *counted += new;
             self.bytes_done += new;
             self.bytes_copied += new;
@@ -1184,6 +1192,7 @@ mod tests {
                 Event::Scanning { items } => seen.scanned.push((seen.bytes.len(), items)),
                 Event::Progress(progress) => {
                     seen.bytes.push((progress.bytes_done, progress.bytes_total));
+                    assert!(progress.bytes_done <= progress.bytes_total, "{progress:?}");
                     assert!(progress.bytes_copied >= seen.copied, "it never goes back");
                     seen.copied = progress.bytes_copied;
                     if script.cancel_midway && progress.bytes_done > 0 {
@@ -1984,6 +1993,61 @@ mod tests {
         assert_eq!(done, [0, 65_536, 131_072, 196_608, 262_144, 300_000]);
         assert_eq!(seen.copied, 300_000);
         assert_eq!(fs::read(dst.join("file")).unwrap(), vec![7; 300_000]);
+    }
+
+    #[tokio::test]
+    async fn the_total_follows_files_that_changed_since_they_were_counted() {
+        // While the copy asks about the taken name of `a`, a file it has counted grows and
+        // another shrinks: the total takes what each holds, so that the bytes done never go
+        // past it, and come to it.
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("src");
+        fs::create_dir(&src).unwrap();
+        let names = ["a", "grows", "shrinks", "z"];
+        for (name, size) in names.into_iter().zip([10, 1_000, 200_000, 3]) {
+            fs::write(src.join(name), vec![7; size]).unwrap();
+        }
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        fs::write(dst.join("a"), "taken").unwrap();
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let mut reporter = Reporter::new(events, CancellationToken::new());
+        let job = async {
+            let side = Endpoint {
+                vfs: &LocalFs,
+                report: &report::<PathBuf>,
+            };
+            let sources = names.map(|name| src.join(name)).to_vec();
+            let outcome = copy_within(side, sources, dst.clone(), BOTH, &mut reporter).await;
+            drop(reporter);
+            outcome
+        };
+        let watch = async {
+            let mut bytes = Vec::new();
+            while let Some(event) = incoming.recv().await {
+                match event {
+                    Event::Progress(progress) => {
+                        bytes.push((progress.bytes_done, progress.bytes_total));
+                    }
+                    Event::Exists { reply, .. } => {
+                        fs::write(src.join("grows"), vec![7; 300_000]).unwrap();
+                        fs::write(src.join("shrinks"), vec![7; 5]).unwrap();
+                        let _ = reply.send(Conflict::Overwrite);
+                    }
+                    Event::Scanning { .. } => {}
+                    Event::Failed { path, .. } => panic!("{path} failed"),
+                }
+            }
+            bytes
+        };
+        let (outcome, bytes) = tokio::join!(job, watch);
+        assert_eq!((outcome.done, outcome.aborted), (4, false));
+        assert_eq!(bytes.first(), Some(&(0, 201_013)), "as counted");
+        assert!(bytes.iter().all(|(done, total)| done <= total), "{bytes:?}");
+        // As `z` starts, then once it is done.
+        let end = &bytes[bytes.len() - 2..];
+        assert_eq!(end, [(300_015, 300_018), (300_018, 300_018)]);
+        assert_eq!(fs::read(dst.join("grows")).unwrap().len(), 300_000);
     }
 
     /// Copies `source` to `target` with `cancel`, within the while a cancelled job has.

@@ -959,7 +959,11 @@ removing a file it did not finish, still happens there, in order, while the sess
 returns an `Outcome`: entries done, entries skipped, and whether it was aborted.
 
 `Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
-size at once and goes back to the start of a file that is retried. `bytes_copied` counts only
+size at once and goes back to the start of a file that is retried. `bytes_total` starts as the
+sizes the job found as it counted, and takes what each file holds as it is read: bytes beyond
+its size add to it as they come, and what a finished file held short of it comes off, so that
+`bytes_done` comes to it and never goes past it, whether the file grew or shrank since it was
+counted. `bytes_copied` counts only
 bytes read and written and never goes back, so the UI derives the speed from it and the time
 left from both. Both count a byte written once it has arrived: a copy reports as the writer's
 `written` grows, and after the last chunk of a file reports what arrives as it settles the rest,

@@ -521,6 +521,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   out. As what is left to skip counts as work, the time left is unknown while more than two thirds
   of the last five seconds of work was skipped, where it would be three times too long or more,
   until less than a third is.
+- A file that grows or shrinks after a copy, a move, or checksums counted it no longer leaves
+  the job's total off: the total takes what each file holds as it is read, so the bytes done come
+  to it and never go past it. A log cut down after it was counted kept its old size among the
+  bytes left, so the time left was too long and the gauge stopped short of 100%; a file still
+  being written showed more done than in all, and a time left too short.
 
 ## [0.2.0] - 2026-10-14
 

@@ -120,6 +120,14 @@ are those after the review.
   directory: files alone that it could not rename, as across the file systems of a host, sent no
   report of it, so the tries to rename them, three round trips each, counted as work that did
   nothing.
+- **The total is what the files hold.** The bytes left are the total less the bytes done, and
+  the total starts as the sizes the job found as it counted. A file that grows or shrinks after
+  that, a log being written or cut down, left the total off for the rest of the job: the bytes
+  done went past it, and the time left was too short, or stopped short of it, with the gauge
+  below 100% at the end and a time left too long by the bytes the file no longer held. So the
+  bytes a file holds beyond the size it was counted with add to the total as they are read, and
+  what a finished file held short of it comes off, as copies and checksums do; a try that fails
+  takes back what it added, as it does the bytes done.
 - **The time left shown follows the end the forecast says, smoothed** (`count_down`). The time at
   which the forecast says the job ends is smoothed, each second taking 9% of the time left as long
   to follow, from a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`). A forecast that is
@@ -145,8 +153,9 @@ are those after the review.
   seconds hid before.
 - It all comes from the counts that jobs report (`Counts`), with no change to `noc-ops` but for
   when a byte written counts (ADR 0052), when a directory is finished (ADR 0053), that a move
-  reports counting after its renames, and that checksums report a file once as they start it, as
-  copies do, not again before they open it for Retry.
+  reports counting after its renames, that checksums report a file once as they start it, as
+  copies do, not again before they open it for Retry, and that the total takes what the files
+  hold.
 - **Each report counts at the time the job made it**, which the task that runs the job takes as
   it passes the report on, in a batch with others
   ([ADR 0055](0055-a-job-s-reports-go-in-batches.md)), and a question at the time the job asked
@@ -288,6 +297,9 @@ are those after the review.
   the run leaves the last five seconds; in the middle of a job, it is unknown through the run,
   where it showed half as long again as the copy left. Tests check both, and that a share between
   a third and two thirds keeps the time left as it was.
+- A file that grew after it was counted no longer takes the bytes done past the total, nor one
+  that shrank leaves bytes left that will never come: at the end of a job the bytes done are
+  the total, and the gauge is at 100%. Tests check both, for copies and for checksums.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

@@ -71,6 +71,8 @@ pub struct Progress<P> {
     pub items_total: u64,
     /// Bytes of files done or skipped so far; zero for jobs that do not move data.
     pub bytes_done: u64,
+    /// The sizes of the files the job found as it counted, each taking what the file holds once
+    /// it is read, so that `bytes_done` comes to it and never goes past it.
     pub bytes_total: u64,
     /// Bytes actually read and written so far, retried ones included and skipped ones not: it
     /// only grows, so speeds follow it rather than `bytes_done`. Like `bytes_done`, it counts a

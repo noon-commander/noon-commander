@@ -336,17 +336,17 @@ impl<'r, L> Checksum<'r, L> {
         files: Files<V::Path>,
     ) -> Result<(), Aborted> {
         for file in files.files {
-            let before = self.bytes_done;
+            let (before, total) = (self.bytes_done, self.bytes_total);
             self.progress(side, &file.path);
             let hashed = loop {
                 if self.reporter.cancelled() {
                     return Err(Aborted);
                 }
-                match self.hash_file(side, &file.path).await {
+                match self.hash_file(side, &file).await {
                     Ok(hashed) => break Some(hashed),
                     Err(Stop::Aborted) => return Err(Aborted),
                     Err(Stop::Failed(error)) => {
-                        self.bytes_done = before;
+                        (self.bytes_done, self.bytes_total) = (before, total);
                         match self.reporter.ask((side.report)(&file.path), error).await {
                             Decision::Retry => {}
                             Decision::Skip | Decision::SkipAll => break None,
@@ -357,6 +357,9 @@ impl<'r, L> Checksum<'r, L> {
             };
             let (bytes, digest) = if let Some((bytes, digest)) = hashed {
                 self.outcome.done += 1;
+                // A file that shrank since it was found held less than the total said; one
+                // that grew has added to it as it was read.
+                self.bytes_total -= file.size.saturating_sub(bytes);
                 (bytes, Some(digest))
             } else {
                 self.outcome.skipped += 1;
@@ -373,13 +376,15 @@ impl<'r, L> Checksum<'r, L> {
         Ok(())
     }
 
-    /// Reads the file at `path` and hashes it off the async thread, a batch at a time, while
-    /// the next batch is read; its size as read, and its digest.
+    /// Reads `file` and hashes it off the async thread, a batch at a time, while the next batch
+    /// is read; its size as read, and its digest. Bytes beyond the size it had when it was found
+    /// add to the total, so that the bytes done never go past it.
     async fn hash_file<V: Vfs>(
         &mut self,
         side: &Endpoint<'_, V, L>,
-        path: &V::Path,
+        file: &File<V::Path>,
     ) -> Result<(u64, Vec<u8>), Stop> {
+        let path = &file.path;
         let mut reader = side.vfs.open_file(path).await.map_err(Stop::Failed)?;
         let mut running = Running::Ready(Box::new(Hasher::new(self.algorithm)));
         let mut batch = Vec::new();
@@ -393,6 +398,8 @@ impl<'r, L> Checksum<'r, L> {
                 break;
             };
             let length = chunk.len() as u64;
+            let beyond = |read: u64| read.saturating_sub(file.size);
+            self.bytes_total += beyond(bytes + length) - beyond(bytes);
             bytes += length;
             self.bytes_done += length;
             self.bytes_copied += length;
@@ -908,6 +915,46 @@ mod tests {
                 .all(|progress| progress.items_total == 2 && progress.bytes_total == 7)
         );
         sftp.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_total_follows_files_that_changed_since_they_were_found() {
+        // After the scan, one file grows and another shrinks: the total takes what each holds,
+        // so that the bytes done never go past it, and come to it.
+        let root = tempfile::tempdir().unwrap();
+        let paths = ["grows", "shrinks", "z"].map(|name| root.path().join(name));
+        for (path, size) in paths.iter().zip([1_000, 200_000, 3]) {
+            fs::write(path, vec![7; size]).unwrap();
+        }
+        let (events, incoming) = mpsc::unbounded_channel();
+        let mut reporter = Reporter::new(events, CancellationToken::new());
+        let job = async {
+            let side = Endpoint {
+                vfs: &LocalFs,
+                report: &report::<PathBuf>,
+            };
+            let mut job = Checksum::new(Algorithm::Sha256, &mut reporter);
+            let files = job.scan(&side, paths.to_vec()).await;
+            fs::write(&paths[0], vec![7; 600_000]).unwrap();
+            fs::write(&paths[1], vec![7; 5]).unwrap();
+            job.hash(&side, files).await;
+            let result = job.finish();
+            drop(reporter);
+            result
+        };
+        let ((outcome, sums), seen) = tokio::join!(job, listen(incoming, &[]));
+        assert_eq!((outcome.done, outcome.aborted), (3, false));
+        let sizes: Vec<u64> = sums.iter().map(|sum| sum.size).collect();
+        assert_eq!(sizes, [600_000, 5, 3]);
+        let grown = digest(Algorithm::Sha256, &vec![7; 600_000]);
+        assert_eq!(sums[0].digest, Some(grown));
+        let bytes: Vec<(u64, u64)> = (seen.progress.iter())
+            .map(|progress| (progress.bytes_done, progress.bytes_total))
+            .collect();
+        assert_eq!(bytes.first(), Some(&(0, 201_003)), "as found");
+        // As `z` starts, then once it is read.
+        let end = &bytes[bytes.len() - 2..];
+        assert_eq!(end, [(600_005, 600_008), (600_008, 600_008)]);
     }
 
     #[tokio::test]

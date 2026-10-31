@@ -1912,14 +1912,18 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
   taller than the screen scrolls between the top and the rest of the dialog, which keeps its
   buttons, with a scroll bar on the frame that the mouse and the wheel move.
-- **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]` after
-  its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the colors of
-  the focus while it has it, as a check box; `ComboBox` in `tui/combo_box.rs`, which the dialogs
+- **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]`
+  after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the
+  colors of text fields (`dialog_input`); `ComboBox` in `tui/combo_box.rs`, which the dialogs
   (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration
   dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where
   there is more room, as the list of completions (`dialog::pop_up`), over the dialog and past its
-  frame: at most ten rows that scroll with a scroll bar, the choice marked as the pull-down menu
-  marks the choice taken, the cursor on it. The list has the keys until it closes (context
+  frame, in the colors of fields too, apart from the dialog's: at most ten rows that scroll with a
+  scroll bar, the choice marked as the pull-down menu marks the choice taken, the cursor on it. The
+  row under the cursor, and a box with the focus, are in the colors of the focus, or in those of
+  fields reversed where fields have the focus's (mc-classic, the terminal theme); in the
+  Configuration dialog the name of the setting shows the cursor, and the box stays as a field. The
+  list has the keys until it closes (context
   `combo_box`, the line of the mode says `Combo box`): `j`, `k`, the page keys, `g g`, and `G`
   move its cursor, a count too, and the wheel as Up and Down; Enter, Space, a click, or Alt and the
   letter of a row takes it and closes the list; Esc, `q`, Ctrl+c, F10, or a click outside closes it

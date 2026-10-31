@@ -1418,7 +1418,7 @@ impl Dialog {
     ) {
         self.draw_parts(frame, area, theme, list);
         if let Some(combo) = self.open_combo_box() {
-            combo.render_list(frame, area, Colors::of(theme, self.tone), theme);
+            combo.render_list(frame, area, theme);
         }
     }
 
@@ -1582,9 +1582,9 @@ impl Dialog {
     }
 
     /// Draws the combo boxes from row `index` of `inner`, the room inside the frame, each after
-    /// its label, the boxes lined up a blank after the widest label, the one with the focus in
-    /// its color; and keeps where for the mouse in `spots`, the whole line. Returns the row
-    /// after them, or `None` without room.
+    /// its label, the boxes lined up a blank after the widest label, in the colors of fields,
+    /// the one with the focus apart; and keeps where for the mouse in `spots`, the whole line.
+    /// Returns the row after them, or `None` without room.
     fn draw_combo_boxes(
         &self,
         frame: &mut Frame<'_>,
@@ -1613,12 +1613,8 @@ impl Dialog {
             let mut spans = labelled
                 .label
                 .fit(label_width, colors.body_styles(), hotkey, marks);
-            let styles = if self.focus == Focus::ComboBox(number) {
-                (colors.focused, theme.truncated_cursor)
-            } else {
-                colors.body_styles()
-            };
-            let boxed = labelled.combo.box_spans(room - label_width, styles, theme);
+            let focused = self.focus == Focus::ComboBox(number);
+            let boxed = labelled.combo.box_spans(room - label_width, focused, theme);
             let cells = boxed.iter().map(Span::width).sum::<usize>();
             let x = inner.x + u16::try_from(label_width).unwrap_or(0);
             let width = u16::try_from(cells).unwrap_or(u16::MAX);
@@ -3023,11 +3019,35 @@ mod tests {
             Focus::ComboBox(0),
             "its second click acts on nothing under it"
         );
-        press_on(&mut dialog, Press::Click, "[two");
+        press_on(&mut dialog, Press::Click, "two");
         assert!(dialog.combo_box_open());
         press_on(&mut dialog, Press::Click, "Pick");
         assert!(!dialog.combo_box_open(), "a click outside closes the list");
         assert_eq!(dialog.chosen(0), 1);
+    }
+
+    #[test]
+    fn a_combo_box_has_the_colors_of_fields_and_its_focus_stands_apart() {
+        use ratatui::style::Color;
+
+        let theme = Theme::mc_classic();
+        let mut dialog = picker();
+        let cell = |dialog: &Dialog| {
+            let terminal = draw_themed(dialog, 40, 12, &theme);
+            let buffer = terminal.backend().buffer();
+            let at = super::super::mouse::find(buffer, "one");
+            buffer[(at.x, at.y)].clone()
+        };
+        let focused = cell(&dialog);
+        assert_eq!((focused.fg, focused.bg), (Color::Black, Color::Cyan));
+        assert!(
+            focused.modifier.contains(Modifier::REVERSED),
+            "fields have the focus's colors in mc-classic: reversed"
+        );
+        dialog.handle(action(Action::Down));
+        let idle = cell(&dialog);
+        assert_eq!(idle.bg, theme.dialog_input.bg.unwrap(), "as a field");
+        assert!(!idle.modifier.contains(Modifier::REVERSED));
     }
 
     #[test]

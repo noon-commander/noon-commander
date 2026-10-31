@@ -13450,7 +13450,7 @@ mod tests {
 
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
-        assert!(text.contains("[MD5"), "the last choice: {text}");
+        assert!(text.contains("Algorithm: [MD5"), "the last choice: {text}");
         type_text(&mut app, &"0".repeat(32));
         let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
         let mut md5 = sum("/srv/b", "b", None);

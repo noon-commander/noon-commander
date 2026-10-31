@@ -27,12 +27,19 @@ want.
 
 - **A combo box** (`ComboBox`, `tui/combo_box.rs`) shows its choice as `[SHA-256 ▼]`, after its
   label on its line, as wide as its widest choice, so that it does not move as the choice changes,
-  in the colors of the focus while it has it, as a check box. The arrow is `▼`, Far's, as the
-  scroll bars have it, or a Nerd Font chevron with `ui.icons`, from `tui/glyphs.rs`.
+  in the colors of text fields (`dialog_input`), as Far draws its combo boxes. The arrow is `▼`,
+  Far's, as the scroll bars have it, or a Nerd Font chevron with `ui.icons`, from
+  `tui/glyphs.rs`.
 - **Its list opens under it**, or above it where there is more room, over the dialog and past its
   frame, as the list of completions (`dialog::pop_up`): a frame, at most ten rows, a scroll bar on
   the frame when they do not all fit, the choice marked as the pull-down menu marks the choice
-  taken, and the cursor on it.
+  taken, and the cursor on it. It is in the colors of fields too, which every theme sets apart
+  from those of dialogs, so that it does not run into the dialog it covers.
+- **The row under the cursor, and a box with the focus**, are in the colors of the focus, as a
+  button with it; where fields have those colors already, as in mc-classic (black on cyan) and the
+  terminal theme (reversed), in those of fields reversed, as Far shows the text selected in a
+  field. No theme needs a color of its own for them. In the Configuration dialog the name of the
+  setting shows the cursor, and the box stays as a field, as its text fields do.
 - **The list has the keys until it closes**, as a menu: a context of its own, `combo_box`, which
   falls back to `global` only, and the line of the mode says `NORMAL · Combo box`. `j`, `k`, the
   arrows, Ctrl+n, Ctrl+p, the page keys, `g g`, and `G` move its cursor, with a count too; the

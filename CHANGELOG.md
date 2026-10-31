@@ -515,6 +515,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   file again for Retry counted as work, so a file that failed halfway, after a second's wait, and
   took two seconds to open again made the time left 68% too long early on and 11% later, for half
   a minute and more. Now it keeps within 1%.
+- A copy that skips files there already among those it copies shows its time left again: each
+  quarter of a second with a skip in it was left out whole, so on a fast disk, where hundreds of
+  files go in one, the time left stayed `-:--` for all of the copy. Now only the skips are left
+  out. As what is left to skip counts as work, the time left is unknown while more than two thirds
+  of the last five seconds of work was skipped, where it would be three times too long or more,
+  until less than a third is.
 
 ## [0.2.0] - 2026-10-14
 

@@ -77,10 +77,23 @@ are those after the review.
   slow link or disk shows a time left throughout after its first pause. Until a pause is known
   to be standing still, the forecast is that of the last report. The time is that of the job's
   stopwatch, so a question left open is no pause (as for the speed).
-- **Skipping is a pause.** A stretch in which more bytes were done than copied skipped some:
-  neither its time nor its entries count, and the work behind it does not fade, so that Skip all
-  over thousands of files, each found out by a round trip to the host, is no stall. Entries
-  without data that are skipped cannot be told apart and count.
+- **Skipping is a pause.** A stretch between two reports in which more bytes were done than
+  copied skipped some: neither its time nor its entries count, and the work behind it does not
+  fade, so that Skip all over thousands of files, each found out by a round trip to the host, is
+  no stall. The stretch of work under way ends at the report before it, however short: left out
+  whole, a quarter of a second at least, it took the work around a skip with it, and where many
+  files go in a quarter of a second, as on a fast disk, skipped ones among those copied left
+  no stretch at all. Entries without data that are skipped cannot be told apart and count.
+- **Mostly skipping is unknown.** What is left to skip counts as work, as nothing tells which
+  files are there already, so the time left is too long by what will be skipped: twice as long
+  where half of it will. While more than two thirds of the work of the last five seconds, and
+  of the last 30 entries at least, was skipped (`SKIPPING`, `RECENT`, `SKIPS_SPAN`), bytes and
+  entries each at its cost, the forecast would be three times too long or more: the time left is
+  unknown, `-:--`. Once it has been so, it stays unknown until less than a third is skipped
+  (`SKIPPING_ENDS`), so that a share near either does not make it come and go; with 50% the
+  edge, files skipped one in two at random over a link made it come and go ten to twenty times
+  in five minutes. Until the work behind is that long, the share decides alone, so that a first
+  file skipped does not keep the time left unknown.
 - **A failure is a pause.** When the job asks what to do about a failure, what it did since its
   last report, a try that failed, perhaps after a read that waited, and what it does once
   answered, such as opening the entry again for Retry, tell nothing of the pace of its work: the
@@ -176,7 +189,8 @@ are those after the review.
   and the most it is off over a job falls from 28–35% to 10–13% for a local tree of 20,000
   files, from 37–109% to 4–16% for a download of a tree, and from 31–226% to 25–173% for an
   upload of one, where the forecasts of its first small files can agree and still be three times
-  too long. After a stretch of Skip all, which tells no pace, it shows three seconds later.
+  too long. After a stretch of Skip all, which tells no pace, it shows three seconds later, and
+  seven once mostly skipping is unknown, as below.
 - In the same check, a copy of 20 GiB whose reports the UI took only after half a minute away
   showed 2:38 left when 5:39 were, and was off by 23% on average over the next two minutes; two
   minutes away, 0:45 for 4:09, and 44%. Counted at the times the job made them, the reports keep
@@ -264,6 +278,16 @@ are those after the review.
   before it tries again. Tests check both ways of reporting, and that a question about a taken
   name before each file keeps their cost. Failures that come again and again are no part of the
   time left either: it is that of the work.
+- In the simulator, where files there already were skipped among those copied, a stretch with a
+  skip in it left out whole made the time left unknown for all of a local copy: files of 64 KiB on
+  a fast disk with one in twenty skipped, or of 1 MiB with one in five; over a local network,
+  files of 256 KiB with one in five skipped showed it after 35 seconds. Now it shows after three,
+  too long by what is left to skip: 6% with one in twenty, 24% with one in five, twice as long with
+  one in two; with four in five, unknown, where over a link it showed nearly three times too long.
+  After a run of Skip all, the time left shows seven seconds into the copy rather than three, as
+  the run leaves the last five seconds; in the middle of a job, it is unknown through the run,
+  where it showed half as long again as the copy left. Tests check both, and that a share between
+  a third and two thirds keeps the time left as it was.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
   one is right; one whose pace changes with the size of the files in other ways is not.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then

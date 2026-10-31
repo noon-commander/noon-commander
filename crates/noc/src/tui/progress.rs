@@ -90,6 +90,19 @@ const AHEAD: f64 = 10.0;
 /// write what it holds back, every so often.
 const PAUSES: Duration = Duration::from_secs(60);
 
+/// The fewest entries that the share of the work skipped looks back over, beside [`RECENT`] of
+/// work: files of a few MiB over a link take seconds each, and a handful of them tell little.
+const SKIPS_SPAN: u64 = 30;
+
+/// While more than this share of the recent work was skipped, the time left is unknown: what is
+/// left to skip counts as work, so the forecast would be three times too long or more.
+const SKIPPING: f64 = 2.0 / 3.0;
+
+/// Once less than this share of the recent work is skipped, the time left shows again; in
+/// between it stays as it was, so that it does not come and go while the share keeps near
+/// either.
+const SKIPPING_ENDS: f64 = 1.0 / 3.0;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
     /// Waiting for other jobs to finish.
@@ -209,6 +222,18 @@ impl Point {
             starts: false,
         }
     }
+}
+
+/// What a job had done, and skipped of it, at some moment of its work, for the share of its
+/// recent work that it skipped.
+#[derive(Debug, Clone, Copy)]
+struct Tally {
+    at: Duration,
+    entries: u64,
+    copied: u64,
+    /// Bytes and entries skipped by then.
+    skipped: u64,
+    skipped_entries: u64,
 }
 
 /// Below this, a sum that fades and gets nothing new tells nothing: work some three hours old.
@@ -419,6 +444,96 @@ struct Forecast {
     failure: Option<(u64, u64)>,
     /// The job asked about a failure within the entry under way, whose cost it does not tell.
     failed_entry: bool,
+    /// Where the job was at its last report.
+    reported: Option<Point>,
+    skips: Skips,
+}
+
+/// What a job skipped, for the share of its recent work that it skipped.
+#[derive(Debug, Default)]
+struct Skips {
+    /// Bytes and entries skipped so far, by the stretches between reports that skipped data.
+    bytes: u64,
+    entries: u64,
+    /// What the job had done and skipped as entries were done, back over [`RECENT`] of work
+    /// and [`SKIPS_SPAN`] entries at least.
+    tallies: VecDeque<Tally>,
+    /// More than [`SKIPPING`] of the recent work was skipped, and not yet less than
+    /// [`SKIPPING_ENDS`] since: the time left is unknown.
+    skipping: bool,
+}
+
+impl Skips {
+    /// Counts what the job skipped from `from` to `to`, two reports one after the other
+    /// between which it [`skipped`] data.
+    fn skipped(&mut self, from: Point, to: Point) {
+        self.bytes += to.done.saturating_sub(from.done) - to.copied.saturating_sub(from.copied);
+        self.entries += to.entries.saturating_sub(from.entries);
+    }
+
+    /// What the job had done and skipped at `point`.
+    fn tally(&self, point: Point) -> Tally {
+        Tally {
+            at: point.at,
+            entries: point.entries,
+            copied: point.copied,
+            skipped: self.bytes,
+            skipped_entries: self.entries,
+        }
+    }
+
+    /// Takes what the job had done and skipped at `point`, the last report, once it has done
+    /// more entries a [`SAMPLE`] after the last tally, and lets go of those beyond [`RECENT`] of
+    /// work and [`SKIPS_SPAN`] entries. Then it is [`skipping`](Self::skipping) while more than
+    /// [`SKIPPING`] of the work since the first tally was skipped, at the costs of `sums`, and
+    /// once the tallies go back that far, until less than [`SKIPPING_ENDS`] is: over fewer, as
+    /// early in a job, a share tells little, and a first file skipped would keep the time left
+    /// unknown.
+    fn take(&mut self, point: Point, sums: &Sums) {
+        if self
+            .tallies
+            .back()
+            .is_none_or(|back| point.entries > back.entries && point.at >= back.at + SAMPLE)
+        {
+            self.tallies.push_back(self.tally(point));
+        }
+        let far = |tally: &Tally| {
+            tally.at + RECENT <= point.at && tally.entries + SKIPS_SPAN <= point.entries
+        };
+        while self.tallies.get(1).is_some_and(far) {
+            self.tallies.pop_front();
+        }
+        let full = self.tallies.front().is_some_and(far);
+        let share = self.share(point, sums);
+        self.skipping = if self.skipping && full {
+            share >= SKIPPING_ENDS
+        } else {
+            share > SKIPPING
+        };
+    }
+
+    /// The share of the work from the first tally to `point`, the last report, that the job
+    /// skipped: bytes and entries, each at its cost in `sums`, skipped over those copied or
+    /// skipped.
+    fn share(&self, point: Point, sums: &Sums) -> f64 {
+        let Some(from) = self.tallies.front() else {
+            return 0.0;
+        };
+        if self.bytes == from.skipped {
+            return 0.0;
+        }
+        let skipped = float(self.bytes - from.skipped);
+        let skipped_entries = float(self.entries - from.skipped_entries);
+        let copied = float(point.copied.saturating_sub(from.copied));
+        let entries = float(point.entries.saturating_sub(from.entries));
+        let (byte, entry) = sums.costs();
+        let all = byte * (copied + skipped) + entry * entries;
+        if all > 0.0 {
+            (byte * skipped + entry * skipped_entries) / all
+        } else {
+            0.0
+        }
+    }
 }
 
 impl Forecast {
@@ -449,13 +564,24 @@ impl Forecast {
         self.entries = counts.done;
         self.copied = counts.bytes_copied;
         point.at = at.saturating_sub(self.still);
-        let (Some(last), Some(finished)) = (self.last, self.finished) else {
+        let (Some(last), Some(finished), Some(reported)) =
+            (self.last, self.finished, self.reported)
+        else {
             self.first = Some(point);
             self.last = Some(point);
             self.finished = Some(point);
+            self.reported = Some(point);
+            self.skips.take(point, &self.sums);
             return;
         };
-        if point.at >= last.at + SAMPLE {
+        // Skipped since the last report: only that is left out, not the work before it within
+        // the stretch, so that skipped files among copied ones, many in a quarter of a second
+        // on a fast disk, still leave a pace.
+        let skip = skipped(reported, point);
+        if skip {
+            self.skips.skipped(reported, point);
+        }
+        if skip || point.at >= last.at + SAMPLE {
             if let Some((entries, copied)) = self.failure {
                 // As a pause, which the work behind does not fade over. A report with nothing
                 // new, as a job may send before it tries again, does not end it.
@@ -463,13 +589,17 @@ impl Forecast {
                     self.failure = None;
                 }
             } else {
-                if !skipped(last, point) {
-                    self.paced += point.at.saturating_sub(last.at);
+                let end = if skip { reported } else { point };
+                if end.at > last.at {
+                    if !skipped(last, end) {
+                        self.paced += end.at.saturating_sub(last.at);
+                    }
+                    self.sums.add(last, end);
                 }
-                self.sums.add(last, point);
             }
             self.last = Some(point);
         }
+        self.reported = Some(point);
         if point.entries > finished.entries {
             if !std::mem::take(&mut self.failed_entry) {
                 self.sums.fit(finished, point);
@@ -479,6 +609,7 @@ impl Forecast {
         }
         self.told |= self.sums.stream_bytes > 0.0
             || self.sizes.is_some_and(|(least, most)| most >= 2.0 * least);
+        self.skips.take(point, &self.sums);
         self.settle(at, counts);
     }
 
@@ -572,14 +703,15 @@ impl Forecast {
 
     /// The time left at `at`, with `counts` behind the job: unknown once no report has come
     /// for longer than the job pauses as it works, five seconds at least, as the speed falls
-    /// to nothing then; before any work has a pace; or while the entries left are far larger
-    /// than those done and the work has not told what a byte costs.
+    /// to nothing then; before any work has a pace; while the entries left are far larger than
+    /// those done and the work has not told what a byte costs; or while most of the recent work
+    /// was skipped, as what is left to skip counts as work.
     fn left(&self, at: Duration, counts: &Counts) -> Option<Duration> {
         let (_, stall) = self.pace_of_pauses(at);
         if at.saturating_sub(self.seen?) >= stall {
             return None;
         }
-        if !self.told && self.bigger_ahead(counts) {
+        if self.skips.skipping || !self.told && self.bigger_ahead(counts) {
             return None;
         }
         let sums = &self.sums;
@@ -1553,8 +1685,8 @@ mod tests {
     fn skipped_and_retried_bytes_do_not_bend_the_speed() {
         let start = Instant::now();
         let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
-        // 1 MiB a second for 10 seconds, then 80 MiB skipped at once, then a retry that takes
-        // 6 MiB back to the start of a file: the speed follows the bytes that moved.
+        // 1 MiB a second for 10 seconds, then 15 MiB skipped at once, then a retry that takes
+        // 12 MiB back to the start of a file: the speed follows the bytes that moved.
         for second in 0..=10 {
             view.working(
                 "a".to_owned(),
@@ -1562,17 +1694,17 @@ mod tests {
                 start + secs(second),
             );
         }
-        view.working("b".to_owned(), copying(90, 10), start + secs(10));
+        view.working("b".to_owned(), copying(25, 10), start + secs(10));
         let timing = view.timing(start + secs(10)).unwrap();
         assert!((timing.speed.unwrap() - 1024.0 * 1024.0).abs() < 1.0);
-        assert_eq!(timing.left.map(whole_seconds), Some(10));
-        view.working("c".to_owned(), copying(85, 11), start + secs(11));
+        assert_eq!(timing.left.map(whole_seconds), Some(75));
+        view.working("c".to_owned(), copying(14, 11), start + secs(11));
         let timing = view.timing(start + secs(11)).unwrap();
         assert!((timing.speed.unwrap() - 1024.0 * 1024.0).abs() < 1.0);
-        let forecast = view.forecast.left(secs(11), &copying(85, 11));
-        assert_eq!(forecast.map(whole_seconds), Some(15));
-        // The time left shown moves there from the 9 seconds counted down, halfway at once.
-        assert_eq!(timing.left.map(whole_seconds), Some(12));
+        let forecast = view.forecast.left(secs(11), &copying(14, 11));
+        assert_eq!(forecast.map(whole_seconds), Some(86));
+        // The time left shown moves there from the 74 seconds counted down, halfway at once.
+        assert_eq!(timing.left.map(whole_seconds), Some(80));
     }
 
     #[test]
@@ -2659,11 +2791,20 @@ mod tests {
         for _ in 0..5_000 {
             run.skip(1024, 0.02);
             // The skipped ones leave the work, and their time does not slow the pace.
-            assert!(run.left() < before, "{} after {before}", run.left());
+            let left = run.left_at(run.at);
+            assert!(
+                left.is_none_or(|left| left < before),
+                "{left:?} after {before}"
+            );
+        }
+        // Most of the work of late was skipped, and what is left to skip would count as work.
+        assert_eq!(run.left_at(run.at), None);
+        for _ in 0..200 {
+            run.copy(1024, 10 * MIB, 0.05);
         }
         let left = run.left();
         let then = run.at;
-        for _ in 0..1_000 {
+        for _ in 0..800 {
             run.copy(1024, 10 * MIB, 0.05);
         }
         let took = run.at - then;
@@ -2869,16 +3010,90 @@ mod tests {
         run.counts.done += 5_000;
         run.counts.bytes_done += 5_000 * 1024;
         run.report();
-        for _ in 0..20 {
+        // Most of the work of late was skipped, until it is more than five seconds behind.
+        assert_eq!(run.left_at(run.at), None);
+        for _ in 0..120 {
             run.copy(1024, 10 * MIB, 0.05);
         }
         let left = run.left();
         let then = run.at;
-        for _ in 0..980 {
+        for _ in 0..880 {
             run.copy(1024, 10 * MIB, 0.05);
         }
         let took = run.at - then;
         assert!((left - took).abs() < took * 0.2, "{left} for {took}");
+    }
+
+    #[test]
+    fn skipped_files_among_copied_ones_leave_a_pace() {
+        // 20,000 files of 64 KiB on a fast disk, at 1 GiB a second, each opened and closed in
+        // half a millisecond; one in five is there already, found out in 50 µs, and skipped.
+        // Hundreds of them go in a quarter of a second, so that each stretch of one held a skip
+        // and none counted: the time left was unknown throughout.
+        let (size, speed, files) = (64 * 1024, 1024 * MIB, 20_000);
+        let (open, close, skip) = (0.000_5, 0.000_5, 0.000_05);
+        let mut run = Run::new(files, files * size);
+        for n in 0..10_000 {
+            if n % 5 == 4 {
+                run.report();
+                run.skip(size, skip);
+            } else {
+                run.file(size, speed, (open, close));
+            }
+        }
+        run.report();
+        let each = open + float(size) / float(speed) + close;
+        let truth = float(files - 10_000) * (0.8 * each + 0.2 * skip);
+        // What is left to skip counts as work, as nothing tells which: a quarter more.
+        let left = run.left();
+        assert!(
+            (left / (truth * 1.25) - 1.0).abs() < 0.03,
+            "{left} for {truth}"
+        );
+        assert!(run.view.timing(run.now()).unwrap().left.is_some());
+    }
+
+    #[test]
+    fn the_time_left_is_unknown_while_most_files_are_skipped() {
+        // Files of 256 KiB over a fast link, at 100 MiB a second, opened in 4 ms and closed in
+        // 2; one that is there already is found out in a millisecond and skipped. Some twenty
+        // seconds each of one in two skipped, of four in five, of one in two again, then of
+        // none.
+        let (size, speed, times) = (256 * 1024, 100 * MIB, (0.004, 0.002));
+        let phases = [(4_000, 1, 2), (8_000, 4, 5), (4_000, 1, 2), (2_400, 0, 1)];
+        let files = phases.iter().map(|&(count, ..)| count).sum::<u64>();
+        let mut run = Run::new(files, files * size);
+        let mut known = Vec::new();
+        for (count, skipped, of) in phases {
+            let start = run.at;
+            let mut seen = Vec::new();
+            for n in 0..count {
+                if n % of < skipped {
+                    run.report();
+                    run.skip(size, 0.001);
+                } else {
+                    run.file(size, speed, times);
+                }
+                seen.push((run.at - start, run.left_at(run.at).is_some()));
+            }
+            known.push(seen);
+        }
+        let from = |phase: &[(f64, bool)], from: f64, shown: bool| {
+            phase
+                .iter()
+                .filter(|&&(at, _)| at >= from)
+                .all(|&(_, known)| known == shown)
+        };
+        // Twice as long as it takes, with the files left to skip as work: it shows.
+        assert!(from(&known[0], 5.0, true));
+        // Five times as long: unknown, a few seconds in.
+        assert!(from(&known[1], 5.0, false));
+        // Half the work skipped again does not make it come back.
+        assert!(from(&known[2], 0.0, false));
+        // With none skipped for five seconds and more, it shows, and keeps showing.
+        let first = known[3].iter().position(|&(_, known)| known).unwrap();
+        assert!(known[3][first].0 < 6.0, "after {} s", known[3][first].0);
+        assert!(known[3][first..].iter().all(|&(_, known)| known));
     }
 
     #[test]

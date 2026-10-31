@@ -1,6 +1,7 @@
 # 0018. Mouse support
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0057](0057-combo-boxes.md): a click opens the list of a combo
+  box, where radio buttons were
 - Date: 2026-10-05
 
 ## Context

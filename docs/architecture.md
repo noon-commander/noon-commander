@@ -562,8 +562,9 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
   as they were last. With no text it lists the files. The dialog keeps
   the cursor of the rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and
   draws each row (`ListView`).
-- Two modes, radio buttons on a line above the fields (`Dialog::in_a_row`): Text, with ripgrep
-  (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons are Go to
+- Two modes, in a combo box above the fields (Mode, [ADR 0057](adr/0057-combo-boxes.md)): Text,
+  with ripgrep (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons
+  are Go to
   and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a
   regular expression or as it is, with the case of the text; `!` globs go to it as `--exclude`,
   which tells case apart, as do the others then (`search::Kind::FILES_FD`), and
@@ -766,7 +767,7 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
 ```
 
 - Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only);
-  the settings of the chosen one are on the right: check boxes `[x]`, choices `< … >`, and
+  the settings of the chosen one are on the right: check boxes `[x]`, combo boxes `[… ▼]`, and
   text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
   Interface (`[ui]`), Animations (`[animations]`), Transfers (`[transfer]`), SSH (`[ssh]` and
   the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line
@@ -788,8 +789,9 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   each, and each setting has a letter, unique within its page: Alt and it do what Space or Enter
   does on the row, or put the focus in its text field, in Insert mode, as the letters of every
   dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
-- Space or Enter switches a check box or picks the next choice, and `h` and `l` pick choices: each
-  takes effect at once. The dialog opens on the language, a text field, in Insert mode; a text field
+- Space or Enter switches a check box or opens the list of a combo box, where Enter takes the
+  choice, and `h` and `l` take the choice before and the next without the list: each takes effect
+  at once. The dialog opens on the language, a text field, in Insert mode; a text field
   the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes to Insert mode,
   and one it comes to with Tab or Shift+Tab, a click, or from a field in Insert mode, in Insert mode
   (see [Text fields](#ui)); what Visual mode selects shows in reverse. A text field takes effect
@@ -1517,8 +1519,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   does not open in the middle of other work. F10 asks before quitting while jobs run;
   quitting stops them and waits up to five seconds, so that a copy removes its unfinished
   file before the connections close.
-- **Checksums.** `f #` (not in mc) asks for an algorithm (radio buttons, the last one
-  chosen first, SHA-256 at first) for the marked entries, or the one under the cursor; files
+- **Checksums.** `f #` (not in mc) asks for an algorithm (a combo box, the last one chosen,
+  SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,
   pasted from a download page or a line of `sha256sum` (the first word counts, in any case);
   hex of another length picks the algorithm that has it, and anything else is an error. If
@@ -1891,17 +1893,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Dialogs.** Modal and centered over the panels, those for one panel too, such as Go to
   directory and those of `g +` and `g -`, with mc-style buttons: `[< OK >]` marks the default
   one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart
-  from what is above them, in every dialog and window. A dialog has a message, radio buttons (`(*)`
-  on the chosen one), text fields, check boxes, and buttons, each optional but the buttons;
+  from what is above them, in every dialog and window. A dialog has a message, combo boxes, text
+  fields, check boxes, and buttons, each optional but the buttons;
   ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue
   knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and
   `dialog_input`). A dialog whose first focus is a text field opens in Insert mode, with the cursor
   after the field's text, and any other in Normal mode. In Normal mode `j`, `k`, `h`, `l`, the
-  arrows, and Tab move between the radio buttons, the fields, the check boxes, and the buttons, as
+  arrows, and Tab move between the combo boxes, the fields, the check boxes, and the buttons, as
   many as a count says, past the fields too, `g g` and `G` (Home, End, Ctrl+b, Ctrl+f) go to the
-  first of them and the last, Space chooses a radio button, switches a check box, or presses a
-  button, Enter presses the button with the focus (the default one from elsewhere, after choosing
-  the radio button it is on), and Esc, `q`, Ctrl+c, or F10 cancels. A field takes the keys of a
+  first of them and the last, Space opens the list of a combo box, switches a check box, or presses
+  a button, Enter presses the button with the focus (the default one from elsewhere), and Esc, `q`,
+  Ctrl+c, or F10 cancels. A field takes the keys of a
   [text field](#ui) in its mode: in Insert mode every character is text, Space too, Tab, Up, and
   Down still move the focus, Enter presses the default button, Esc goes to Normal mode, and Ctrl+c
   or F10 cancels; in Normal mode, Esc gives up an operator that waits, then cancels. The focus comes
@@ -1910,6 +1912,21 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
   taller than the screen scrolls between the top and the rest of the dialog, which keeps its
   buttons, with a scroll bar on the frame that the mouse and the wheel move.
+- **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]` after
+  its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the colors of
+  the focus while it has it, as a check box; `ComboBox` in `tui/combo_box.rs`, which the dialogs
+  (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration
+  dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where
+  there is more room, as the list of completions (`dialog::pop_up`), over the dialog and past its
+  frame: at most ten rows that scroll with a scroll bar, the choice marked as the pull-down menu
+  marks the choice taken, the cursor on it. The list has the keys until it closes (context
+  `combo_box`, the line of the mode says `Combo box`): `j`, `k`, the page keys, `g g`, and `G`
+  move its cursor, a count too, and the wheel as Up and Down; Enter, Space, a click, or Alt and the
+  letter of a row takes it and closes the list; Esc, `q`, Ctrl+c, F10, or a click outside closes it
+  with the choice it had, and the second click of a double click that closed it ends there. Moving
+  does not change the choice: Enter does. On a closed box, Enter presses the default button, as on
+  a check box, and `j` and `k` move the focus. The box has no text of its own yet; one that takes
+  typed text, as a combo box of Far or Qt can, may come.
 - **Letters of dialogs** ([ADR 0033](adr/0033-letters-in-dialogs.md)). As in Far and mc, every
   element of a dialog but Cancel has a letter, which an `&` marks in its Fluent text (`Label`, in
   `tui/label.rs`, as for the menus of F9) and which shows in the theme's `dialog_hotkey`, or
@@ -1918,8 +1935,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `errdhotfocus`: the color of titles, not bold, and underlined where that color would not show
   (the cursor, red dialogs, a title's own color). Alt and it act on the
   element from anywhere in the dialog, in every mode, while typing in a field too: a text field
-  gets the focus, in Insert mode, as with Tab; a check box switches and a radio button is chosen,
-  each getting the focus; a button is pressed. The one field of a form without a label (Copy,
+  gets the focus, in Insert mode, as with Tab; a check box switches and the list of a combo box
+  opens, each getting the focus; a button is pressed. In the open list, Alt and the letter of a
+  choice take it, as the algorithms have theirs. The one field of a form without a label (Copy,
   Move, Create a new directory, Go to directory, Save workspace, Rename workspace, Save
   checksums) takes its letter from the prompt over it, as `&Copy "x" to:`. What ssh asks is ssh's
   text, with no letter, but the buttons of its dialogs have theirs. Names that the user gave, of
@@ -2040,11 +2058,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
-  cut short, and the marks of the pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by
+  cut short, the marks of the pull-down menu, and the arrow of combo boxes; `Lines::DOUBLE` and
+  `Lines::SINGLE` by
   `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
   way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
   the arrows of the sort order, the checks of checksums, the progress bar, the marks of dialogs'
-  radio buttons, check boxes, and secrets, and the icons of the Configuration dialog's categories.
+  check boxes and secrets, and the icons of the Configuration dialog's categories.
   `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and
   `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the
   viewer's `Styles`). `just glyphs`, part of `just lint`, fails on a special character written in

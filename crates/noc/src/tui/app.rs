@@ -30,6 +30,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::cd;
 use super::cells::{self, Align};
+use super::combo_box::ComboBox;
 use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration, run_of, run_text};
@@ -956,6 +957,8 @@ enum Scrolled {
     PullDown,
     /// The list of completions.
     Choices,
+    /// The open list of a combo box in what is in front.
+    ComboBox,
     JobsList,
     /// The window of a checksum job's results.
     Results,
@@ -1480,8 +1483,11 @@ impl App {
     fn pointer_window(&mut self, pointer: Pointer) -> Vec<Effect> {
         let front = self.front();
         if let Some(keys) = self.wheel_keys(pointer.press) {
+            let combo = self.open_combo_box().is_some();
             return match (front, &mut self.help) {
                 (Front::Job | Front::Reading, _) => Vec::new(),
+                // The wheel moves in the open list of a combo box, as in a menu.
+                (Front::Find, _) if combo => self.wheel(keys),
                 // The wheel scrolls the rows of the search, wherever the focus is.
                 (Front::Find, _) => {
                     if let Some(window) = &mut self.find {
@@ -1595,8 +1601,16 @@ impl App {
     }
 
     /// The scroll bars of what is in front, as they were last drawn, with what each scrolls:
-    /// the list of completions first, which shows over its field.
+    /// the list of completions first, which shows over its field; the open list of a combo box
+    /// alone, which has the mouse until it closes.
     fn scroll_bars(&self) -> Vec<(Scrolled, scrollbar::Bar)> {
+        if let Some(combo) = self.open_combo_box() {
+            return combo
+                .bar()
+                .map(|bar| (Scrolled::ComboBox, bar))
+                .into_iter()
+                .collect();
+        }
         let choices = |target: Completes| {
             let completing = self.completion.as_ref()?;
             let choices = completing.choices.as_ref()?;
@@ -1697,6 +1711,7 @@ impl App {
                 | Scrolled::Find
                 | Scrolled::KeyHints
                 | Scrolled::Choices
+                | Scrolled::ComboBox
         );
         if let (true, Scroll::By(motion)) = (keys, scroll) {
             let action = match motion {
@@ -1768,7 +1783,8 @@ impl App {
             | Scrolled::History
             | Scrolled::Find
             | Scrolled::KeyHints
-            | Scrolled::Choices => {}
+            | Scrolled::Choices
+            | Scrolled::ComboBox => {}
         }
         Vec::new()
     }
@@ -1820,7 +1836,32 @@ impl App {
                     choices.scroll_to(top);
                 }
             }
+            Scrolled::ComboBox => {
+                if let Some(combo) = self.open_combo_box_mut() {
+                    combo.scroll_to(top);
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// The combo box whose list is open in what is in front: a dialog, the search of a tree,
+    /// or the Configuration dialog.
+    fn open_combo_box(&self) -> Option<&ComboBox> {
+        match self.front() {
+            Front::Dialog(_) => self.dialogs.front()?.dialog.open_combo_box(),
+            Front::Find => self.find.as_ref()?.open_combo_box(),
+            Front::Configuration => self.configuration.as_ref()?.open_combo_box(),
+            _ => None,
+        }
+    }
+
+    fn open_combo_box_mut(&mut self) -> Option<&mut ComboBox> {
+        match self.front() {
+            Front::Dialog(_) => self.dialogs.front_mut()?.dialog.open_combo_box_mut(),
+            Front::Find => self.find.as_mut()?.open_combo_box_mut(),
+            Front::Configuration => self.configuration.as_mut()?.open_combo_box_mut(),
+            _ => None,
         }
     }
 
@@ -1876,12 +1917,18 @@ impl App {
 
     /// Gives a press of the mouse to the dialog in front, and does what it was for if it
     /// closes; or to the list of completions under its field, which goes at a press outside
-    /// it. The wheel scrolls a message that does not fit.
+    /// it. The wheel scrolls a message that does not fit, and moves in the open list of a combo
+    /// box as Up and Down do.
     fn pointer_dialog(&mut self, pointer: Pointer) -> Vec<Effect> {
         if let Some(effects) = self.pointer_choices(Completes::Field, pointer) {
             return effects;
         }
         self.completion = None;
+        if let Some(keys) = self.wheel_keys(pointer.press)
+            && self.open_combo_box().is_some()
+        {
+            return self.wheel(keys);
+        }
         let down = match pointer.press {
             Press::WheelUp => Some(false),
             Press::WheelDown => Some(true),
@@ -5754,9 +5801,9 @@ impl App {
     }
 
     /// Opens the checksum dialog for the marked entries of the active panel, or the one under
-    /// the cursor: the algorithm, last chosen first; for one file, a field for the checksum
-    /// it should have, and, if the other panel's cursor is on a file, a check box to compare
-    /// the two, checked if they have the same name.
+    /// the cursor: a combo box of the algorithm, the last one chosen; for one file, a field for
+    /// the checksum it should have, and, if the other panel's cursor is on a file, a check box to
+    /// compare the two, checked if they have the same name.
     fn ask_checksum(&mut self) {
         let panel = self.panel(self.active);
         let chosen = panel.chosen();
@@ -5796,7 +5843,7 @@ impl App {
                 (fl!("checksum-compare", path = path), *same)
             })
             .collect();
-        let choices: Vec<String> = Algorithm::ALL.iter().map(|&a| algorithm_name(a)).collect();
+        let algorithms: Vec<String> = Algorithm::ALL.iter().map(|&a| algorithm_name(a)).collect();
         let chosen = Algorithm::ALL
             .iter()
             .position(|&a| a == self.algorithm)
@@ -5805,7 +5852,7 @@ impl App {
         let title = fl!("checksum-title");
         let dialog = Dialog::fields(&title, &fields, &checks, buttons)
             .with_message(&message)
-            .with_choices(&choices, chosen);
+            .with_combo_box(&fl!("checksum-algorithm"), &algorithms, chosen);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Checksum {
@@ -5828,7 +5875,7 @@ impl App {
         expect: bool,
     ) -> Vec<Effect> {
         let mut algorithm = Algorithm::ALL
-            .get(dialog.chosen())
+            .get(dialog.chosen(0))
             .copied()
             .unwrap_or(Algorithm::Sha256);
         let typed = if expect { dialog.text().trim() } else { "" };
@@ -7703,6 +7750,7 @@ fn window_kind(context: Context) -> Option<String> {
         | Context::Completion
         | Context::Find
         | Context::FindInput => fl!("window-dialog"),
+        Context::ComboBox => fl!("window-combo-box"),
         Context::Help => fl!("window-help"),
         Context::Viewer => fl!("window-viewer"),
         Context::Panel
@@ -9335,7 +9383,13 @@ mod tests {
     fn files_and_dirs_find_names_with_fd_and_enter_opens_a_directory() {
         let mut app = with_files(&["a1", "b2"]);
         keys(&mut app, &["f", "/"]);
-        let effects = keys(&mut app, &["backtab", "space"]);
+        keys(&mut app, &["backtab", "space"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::ComboBox));
+        assert!(
+            mode_of(&mut app).contains("Combo box"),
+            "the line of the mode"
+        );
+        let effects = keys(&mut app, &["j", "enter"]);
         let request = find_request(&effects);
         let FindQuery::Names(query) = &request.query else {
             panic!("expected a search by name, got {:?}", request.query);
@@ -9349,7 +9403,7 @@ mod tests {
         };
         app.found(generation, vec![found]);
         app.find_ended(generation, Ok(FindSummary::default()));
-        // Past the choice and the fields, to the rows.
+        // Past the combo box and the fields, to the rows.
         keys(&mut app, &["tab", "tab", "tab", "tab"]);
         let effects = keys(&mut app, &["enter"]);
         assert_eq!(app.context(), Context::Panel);
@@ -12650,7 +12704,17 @@ mod tests {
         );
         app.handle(action(Action::End));
         app.handle(action(Action::Up));
-        let effects = app.handle(action(Action::Toggle));
+        assert!(
+            app.handle(action(Action::Toggle)).is_empty(),
+            "the list opens"
+        );
+        assert_eq!(app.place(), (Mode::Normal, Context::ComboBox));
+        assert!(
+            mode_of(&mut app).contains("Combo box"),
+            "the line of the mode"
+        );
+        app.handle(action(Action::Down));
+        let effects = app.handle(action(Action::Confirm));
         assert_eq!(app.config.ui.menu_bar, MenuBar::Always);
         let [Effect::SaveConfig { old, .. }] = &effects[..] else {
             panic!("expected the menu bar to be saved: {effects:?}");
@@ -13337,11 +13401,17 @@ mod tests {
         let mut app = on_files();
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
-        assert!(text.contains("Checksum of \"b\" with:"), "{text}");
-        assert!(text.contains("(*) SHA-256"), "{text}");
-        assert!(text.contains("( ) BLAKE3"), "{text}");
+        assert!(text.contains("Checksum of \"b\""), "{text}");
+        assert!(text.contains("Algorithm: [SHA-256"), "{text}");
+        assert!(!text.contains("BLAKE3"), "the list is closed: {text}");
         assert!(text.contains("Expected checksum"), "{text}");
         assert!(!text.contains("Compare with"), "the same file: {text}");
+        // Alt and its letter open the list, which shows every algorithm, and Esc closes it.
+        app.handle(Resolved::Hotkey('a'));
+        assert_eq!(app.place(), (Mode::Normal, Context::ComboBox));
+        assert!(screen_of(&mut app, 20).contains("BLAKE3"));
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Dialog, "the dialog stays");
         let (id, targets, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
         assert_eq!(targets, [(vec![local("/srv/b")], false)]);
         assert_eq!(algorithm, Algorithm::Sha256);
@@ -13380,7 +13450,7 @@ mod tests {
 
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
-        assert!(text.contains("(*) MD5"), "the last choice: {text}");
+        assert!(text.contains("[MD5"), "the last choice: {text}");
         type_text(&mut app, &"0".repeat(32));
         let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
         let mut md5 = sum("/srv/b", "b", None);
@@ -13398,26 +13468,25 @@ mod tests {
     }
 
     #[test]
-    fn choices_take_space_or_enter() {
+    fn the_algorithm_is_taken_in_the_list_of_its_combo_box() {
         let mut app = on_files();
         app.handle(action(Action::Checksum));
-        // From the field up to the last choice, BLAKE3.
-        app.handle(action(Action::Up));
-        let (id, _, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
-        assert_eq!(algorithm, Algorithm::Blake3);
+        // From the field up to the combo box, whose list Space opens.
+        keys(&mut app, &["up", "space"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::ComboBox));
+        assert!(
+            keys(&mut app, &["3", "j", "enter"]).is_empty(),
+            "the list closes"
+        );
+        assert_eq!(app.context(), Context::Dialog);
+        let (id, _, algorithm) = checksum_job(keys(&mut app, &["enter"]));
+        assert_eq!(algorithm, Algorithm::Md5, "3j, then Enter twice");
         app.job_event(id, JobEvent::Finished { complete: false });
         app.handle(action(Action::Checksum));
-        app.handle(action(Action::Up));
-        app.handle(action(Action::Up));
-        app.handle(action(Action::Toggle));
-        app.handle(action(Action::Down));
-        app.handle(action(Action::Down));
+        app.handle(Resolved::Hotkey('a'));
+        app.handle(Resolved::Hotkey('b'));
         let (_, _, algorithm) = checksum_job(app.handle(action(Action::Confirm)));
-        assert_eq!(
-            algorithm,
-            Algorithm::Md5,
-            "Space chose it; Enter in the field keeps it"
-        );
+        assert_eq!(algorithm, Algorithm::Blake3, "Alt and the letters");
     }
 
     #[test]
@@ -13465,7 +13534,7 @@ mod tests {
         app.handle(action(Action::Checksum));
         let text = screen_of(&mut app, 20);
         assert!(
-            text.contains("Checksums of 1 file and 1 directory with:"),
+            text.contains("Checksums of 1 file and 1 directory"),
             "{text}"
         );
         assert!(!text.contains("Expected"), "{text}");

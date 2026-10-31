@@ -460,6 +460,22 @@ pub(super) const PRESET: Preset = &[
             (Action::CancelCompletion, &["ctrl-e"]),
         ],
     ),
+    // The open list of a combo box, as a menu: the keys of the lists move its cursor, Enter or
+    // Space takes the row, and Esc closes it with the choice it had (ADR 0057).
+    (
+        Mode::Normal,
+        Context::ComboBox,
+        &[
+            (Action::Up, &["k", "up", "ctrl-p"]),
+            (Action::Down, &["j", "down", "ctrl-n"]),
+            (Action::PageUp, &["ctrl-b", "pageup"]),
+            (Action::PageDown, &["ctrl-f", "pagedown"]),
+            (Action::Home, &["g g", "home"]),
+            (Action::End, &["shift-g", "end"]),
+            (Action::Confirm, &["enter", "ctrl-m", "space"]),
+            (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
+        ],
+    ),
     // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less.
     (
         Mode::Normal,

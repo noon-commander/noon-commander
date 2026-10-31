@@ -1,7 +1,7 @@
 //! Modal dialogs: prompts from ssh (passwords and passphrases, host keys, confirmations, and
 //! notices), the app's own questions, and the search of a whole tree, whose dialog has a list.
 //! As in mc and Far, Alt and the letter that an `&` marks in a label act on what it labels:
-//! press a button, switch a check box, pick a choice, or put the focus in a field.
+//! press a button, switch a check box, open a combo box, or put the focus in a field.
 
 use std::cell::{Cell, RefCell};
 use std::fmt;
@@ -20,6 +20,7 @@ use secrecy::SecretString;
 use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
+use super::combo_box::{ComboBox, ComboEvent};
 use super::edit::{Editor, Registers};
 use super::glyphs;
 use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
@@ -139,7 +140,7 @@ impl Button {
 /// Where the keys go inside a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
-    Choice(usize),
+    ComboBox(usize),
     Field(usize),
     Check(usize),
     List,
@@ -457,6 +458,13 @@ struct Check {
     on: bool,
 }
 
+/// A combo box, after its label on its line.
+#[derive(Debug)]
+struct LabelledComboBox {
+    label: Label,
+    combo: ComboBox,
+}
+
 /// Rows under the check boxes, which whoever opened the dialog draws at each render
 /// ([`ListView`]); the dialog moves the cursor over them and scrolls them as vim's window.
 #[derive(Debug, Default)]
@@ -501,9 +509,9 @@ pub(crate) enum DialogEvent {
     Cancelled,
 }
 
-/// A modal dialog: a message, a group of choices of which one is chosen, text fields, check
-/// boxes, and buttons, each of them optional but the buttons. Whoever opens it reads the choice,
-/// the fields, and the check boxes once it closes.
+/// A modal dialog: a message, combo boxes, text fields, check boxes, and buttons, each of them
+/// optional but the buttons. Whoever opens it reads the choices of the combo boxes, the fields,
+/// and the check boxes once it closes.
 #[derive(Debug)]
 pub(crate) struct Dialog {
     /// Tells this dialog from one that takes its place.
@@ -511,11 +519,8 @@ pub(crate) struct Dialog {
     title: String,
     /// The text above the rest; a form's marks the letter of its field.
     message: Label,
-    /// Radio buttons, as mc draws them: `(*)` on the chosen one.
-    choices: Vec<Label>,
-    chosen: usize,
-    /// The choices on one line, rather than one under another.
-    in_a_row: bool,
+    /// Each on a line of its own under the message, the boxes lined up after the labels.
+    combo_boxes: Vec<LabelledComboBox>,
     fields: Vec<LabelledField>,
     checks: Vec<Check>,
     buttons: Vec<Button>,
@@ -530,7 +535,7 @@ pub(crate) struct Dialog {
     completes: bool,
     /// Where its first field was drawn last, for the list of completions under it.
     field_area: Cell<Option<Rect>>,
-    /// Where each choice, field, check box, and button was drawn last, for the mouse.
+    /// Where each combo box, field, check box, and button was drawn last, for the mouse.
     spots: RefCell<Vec<(Focus, Rect)>>,
     /// Where the glyphs of each field that searches were drawn last, by the field's index, for
     /// the mouse.
@@ -651,9 +656,7 @@ impl Dialog {
             id: LAST_ID.fetch_add(1, Ordering::Relaxed) + 1,
             title: cells::sanitize(title.as_bytes()),
             message: Label::plain(message.trim_end()),
-            choices: Vec::new(),
-            chosen: 0,
-            in_a_row: false,
+            combo_boxes: Vec::new(),
             fields: Vec::new(),
             checks: Vec::new(),
             buttons,
@@ -856,20 +859,17 @@ impl Dialog {
         self
     }
 
-    /// The same dialog with `choices` above its fields, `chosen` of them chosen. Without
-    /// fields, the chosen one starts with the focus.
-    pub(crate) fn with_choices(mut self, choices: &[String], chosen: usize) -> Self {
-        self.chosen = chosen.min(choices.len().saturating_sub(1));
-        if self.fields.is_empty() && !choices.is_empty() {
-            self.focus = Focus::Choice(self.chosen);
+    /// The same dialog with a combo box of `items` under its message, after those it has,
+    /// labelled `label`, of which `chosen` is chosen. Without fields, its first combo box starts
+    /// with the focus.
+    pub(crate) fn with_combo_box(mut self, label: &str, items: &[String], chosen: usize) -> Self {
+        if self.fields.is_empty() && self.combo_boxes.is_empty() {
+            self.focus = Focus::ComboBox(0);
         }
-        self.choices = choices.iter().map(|choice| Label::parse(choice)).collect();
-        self
-    }
-
-    /// The same dialog with its choices on one line.
-    pub(crate) fn in_a_row(mut self) -> Self {
-        self.in_a_row = true;
+        self.combo_boxes.push(LabelledComboBox {
+            label: Label::parse(&cells::sanitize(label.as_bytes())),
+            combo: ComboBox::new(items, chosen),
+        });
         self
     }
 
@@ -884,9 +884,33 @@ impl Dialog {
         }
     }
 
-    /// The choice that is chosen.
-    pub(crate) fn chosen(&self) -> usize {
-        self.chosen
+    /// The index of the choice of combo box `index`.
+    pub(crate) fn chosen(&self, index: usize) -> usize {
+        self.combo_boxes
+            .get(index)
+            .map_or(0, |labelled| labelled.combo.chosen())
+    }
+
+    /// The combo box whose list is open, which has the keys.
+    pub(crate) fn open_combo_box(&self) -> Option<&ComboBox> {
+        let Focus::ComboBox(index) = self.focus else {
+            return None;
+        };
+        let labelled = self.combo_boxes.get(index)?;
+        labelled.combo.is_open().then_some(&labelled.combo)
+    }
+
+    pub(crate) fn open_combo_box_mut(&mut self) -> Option<&mut ComboBox> {
+        let Focus::ComboBox(index) = self.focus else {
+            return None;
+        };
+        let combo = &mut self.combo_boxes.get_mut(index)?.combo;
+        combo.is_open().then_some(combo)
+    }
+
+    /// Whether the list of a combo box is open, and has the keys.
+    pub(crate) fn combo_box_open(&self) -> bool {
+        self.open_combo_box().is_some()
     }
 
     /// The answer for ssh after `event`: the secret for OK on a secret prompt, `yes` for Yes,
@@ -958,7 +982,7 @@ impl Dialog {
     pub(crate) fn search_focused(&self) -> Option<Kind> {
         match self.focus {
             Focus::Field(index) => Some(self.fields.get(index)?.search?.kind()),
-            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
+            Focus::ComboBox(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
         }
     }
 
@@ -980,17 +1004,21 @@ impl Dialog {
     }
 
     /// The keymap context for the next key: `DialogInput` while a text field has the focus,
-    /// `PathInput` in a field that completes paths.
+    /// `PathInput` in a field that completes paths, and `ComboBox` while the list of a combo
+    /// box is open.
     pub(crate) fn context(&self) -> Context {
         match self.focus {
             Focus::Field(0) if self.completes => Context::PathInput,
             Focus::Field(_) => Context::DialogInput,
-            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => Context::Dialog,
+            Focus::ComboBox(_) if self.combo_box_open() => Context::ComboBox,
+            Focus::ComboBox(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => {
+                Context::Dialog
+            }
         }
     }
 
     /// The mode keys are typed in: the focused field's, or Normal mode on a button, a check
-    /// box, or a choice.
+    /// box, or a combo box.
     pub(crate) fn mode(&self) -> Mode {
         self.focused_field().map_or(Mode::Normal, Field::mode)
     }
@@ -1031,14 +1059,14 @@ impl Dialog {
     pub(crate) fn focused_field(&self) -> Option<&Field> {
         match self.focus {
             Focus::Field(index) => self.fields.get(index).map(|field| &field.field),
-            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
+            Focus::ComboBox(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
         }
     }
 
     fn focused_field_mut(&mut self) -> Option<&mut Field> {
         match self.focus {
             Focus::Field(index) => self.fields.get_mut(index).map(|field| &mut field.field),
-            Focus::Choice(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
+            Focus::ComboBox(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
         }
     }
 
@@ -1050,9 +1078,18 @@ impl Dialog {
 
     /// Handles an action or a typed character: the focused field takes what it edits with,
     /// in its mode. Tab brings the focus to a field in Insert mode; the other keys that move it
-    /// bring it there in Normal mode, but from a field in Insert mode.
+    /// bring it there in Normal mode, but from a field in Insert mode. The open list of a combo
+    /// box takes every key, Alt and a letter too, until it closes.
     pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> DialogEvent {
         let Typed { resolved, extra } = typed;
+        if let Some(combo) = self.open_combo_box_mut() {
+            match resolved {
+                Resolved::Action(action) => combo.handle(action, extra),
+                Resolved::Hotkey(c) => combo.hotkey(c),
+                Resolved::Insert(_) => ComboEvent::Pending,
+            };
+            return DialogEvent::Pending;
+        }
         if let Resolved::Hotkey(c) = resolved {
             return self.hotkey(c);
         }
@@ -1090,20 +1127,15 @@ impl Dialog {
             return DialogEvent::Pending;
         }
         match action {
-            // Enter takes the choice it is on, as that is the one that looks chosen.
             Action::Confirm => match self.focus {
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
-                Focus::Choice(index) => {
-                    self.chosen = index;
-                    DialogEvent::Pressed(self.buttons[self.default])
-                }
-                Focus::Field(_) | Focus::Check(_) | Focus::List => {
+                Focus::ComboBox(_) | Focus::Field(_) | Focus::Check(_) | Focus::List => {
                     DialogEvent::Pressed(self.buttons[self.default])
                 }
             },
             Action::Toggle => match self.focus {
-                Focus::Choice(index) => {
-                    self.chosen = index;
+                Focus::ComboBox(index) => {
+                    self.combo_boxes[index].combo.open();
                     DialogEvent::Pending
                 }
                 Focus::Check(index) => {
@@ -1136,14 +1168,14 @@ impl Dialog {
     }
 
     /// Alt and `c`, as mc and Far take them: a button with the letter is pressed, a check box
-    /// switched, and a choice chosen, each with the focus; a field with it, or under a prompt
-    /// with it, gets the focus in Insert mode. Nothing else has it.
+    /// switched, and the list of a combo box opened, each with the focus; a field with it, or
+    /// under a prompt with it, gets the focus in Insert mode. Nothing else has it.
     fn hotkey(&mut self, c: char) -> DialogEvent {
         let found = if self.message.has(c) && !self.fields.is_empty() {
             Some(Focus::Field(0))
         } else {
             self.stops().into_iter().find(|&stop| match stop {
-                Focus::Choice(index) => self.choices[index].has(c),
+                Focus::ComboBox(index) => self.combo_boxes[index].label.has(c),
                 Focus::Field(index) => self.fields[index].label.has(c),
                 Focus::Check(index) => self.checks[index].label.has(c),
                 Focus::List => false,
@@ -1159,7 +1191,7 @@ impl Dialog {
         self.give_up();
         self.focus_on(stop, Mode::Insert);
         match stop {
-            Focus::Choice(index) => self.chosen = index,
+            Focus::ComboBox(index) => self.combo_boxes[index].combo.open(),
             Focus::Check(index) => self.checks[index].on = !self.checks[index].on,
             Focus::Field(_) | Focus::List | Focus::Button(_) => {}
         }
@@ -1171,13 +1203,13 @@ impl Dialog {
     #[cfg(test)]
     pub(crate) fn letters(&self) -> Vec<char> {
         let prompt = (!self.fields.is_empty()).then(|| self.message.letter());
-        let choices = self.choices.iter().map(Label::letter);
+        let combo_boxes = self.combo_boxes.iter().map(|combo| combo.label.letter());
         let fields = self.fields.iter().map(|field| field.label.letter());
         let checks = self.checks.iter().map(|check| check.label.letter());
         let buttons = self.buttons.iter().map(|button| button.label().letter());
         prompt
             .into_iter()
-            .chain(choices)
+            .chain(combo_boxes)
             .chain(fields)
             .chain(checks)
             .chain(buttons)
@@ -1185,12 +1217,25 @@ impl Dialog {
             .collect()
     }
 
-    /// Takes a press of the mouse, where the dialog was drawn last: a click chooses a choice,
-    /// puts the cursor in a field or on a row of the list, switches a check box, or presses a
-    /// button. A double click on a choice or a row presses the default button too, as Enter
-    /// does there. A click on a glyph at the end of a field that searches gives it the focus
-    /// and switches whether case counts, or how it matches, as the keys after Ctrl+s do there.
+    /// Takes a press of the mouse, where the dialog was drawn last: a click opens the list of a
+    /// combo box, puts the cursor in a field or on a row of the list, switches a check box, or
+    /// presses a button. A double click on a row presses the default button too, as Enter does
+    /// there. A click on a glyph at the end of a field that searches gives it the focus and
+    /// switches whether case counts, or how it matches, as the keys after Ctrl+s do there. The
+    /// open list of a combo box takes every press, and the second click of a double click that
+    /// closed it does nothing.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> DialogEvent {
+        let mut spent = false;
+        for labelled in &mut self.combo_boxes {
+            spent |= labelled.combo.spent(pointer);
+        }
+        if let Some(combo) = self.open_combo_box_mut() {
+            combo.pointer(pointer);
+            return DialogEvent::Pending;
+        }
+        if spent {
+            return DialogEvent::Pending;
+        }
         let Pointer { press, at } = pointer;
         let glyph = self
             .glyphs
@@ -1244,12 +1289,7 @@ impl Dialog {
         }
         self.focus = focus;
         match focus {
-            Focus::Choice(index) => {
-                self.chosen = index;
-                if press == Press::DoubleClick {
-                    return DialogEvent::Pressed(self.buttons[self.default]);
-                }
-            }
+            Focus::ComboBox(index) => self.combo_boxes[index].combo.open(),
             Focus::Field(index) => {
                 if let Some(LabelledField { field, .. }) = self.fields.get_mut(index) {
                     let column = usize::from(at.x - area.x);
@@ -1265,11 +1305,11 @@ impl Dialog {
         DialogEvent::Pending
     }
 
-    /// Where the focus can be: the choices, the fields, the check boxes, the list, and the
+    /// Where the focus can be: the combo boxes, the fields, the check boxes, the list, and the
     /// buttons.
     fn stops(&self) -> Vec<Focus> {
-        (0..self.choices.len())
-            .map(Focus::Choice)
+        (0..self.combo_boxes.len())
+            .map(Focus::ComboBox)
             .chain((0..self.fields.len()).map(Focus::Field))
             .chain((0..self.checks.len()).map(Focus::Check))
             .chain(self.list.as_ref().map(|_| Focus::List))
@@ -1277,7 +1317,7 @@ impl Dialog {
             .collect()
     }
 
-    /// Moves the focus through the choices, the fields, the check boxes, the list, and the
+    /// Moves the focus through the combo boxes, the fields, the check boxes, the list, and the
     /// buttons, round; a field it comes to is in `mode`, Insert or Normal.
     fn move_focus(&mut self, forward: bool, mode: Mode) {
         let stops = self.stops();
@@ -1367,7 +1407,22 @@ impl Dialog {
         self.render_with(frame, area, theme, Some(list));
     }
 
+    /// Draws the dialog, then over it the open list of a combo box, which may go past its
+    /// frame, within `area`.
     fn render_with(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        list: Option<&ListView<'_>>,
+    ) {
+        self.draw_parts(frame, area, theme, list);
+        if let Some(combo) = self.open_combo_box() {
+            combo.render_list(frame, area, Colors::of(theme, self.tone), theme);
+        }
+    }
+
+    fn draw_parts(
         &self,
         frame: &mut Frame<'_>,
         area: Rect,
@@ -1382,20 +1437,15 @@ impl Dialog {
             self.message.wrap(text_width)
         };
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
-        // Borders, the message, the choices, the fields under their labels, the check boxes, a
-        // line, the buttons.
+        // Borders, the message, the combo boxes, the fields under their labels, the check boxes,
+        // a line, the buttons.
         let labels = self
             .fields
             .iter()
             .filter(|f| !f.label.text.is_empty())
             .count();
-        let choice_rows = if self.in_a_row {
-            self.choices.len().min(1)
-        } else {
-            self.choices.len()
-        };
         let height = rows(lines.len())
-            .saturating_add(rows(choice_rows))
+            .saturating_add(rows(self.combo_boxes.len()))
             .saturating_add(rows(self.fields.len() + labels))
             .saturating_add(rows(self.checks.len()));
         // A line, a row at least, and a line over the status, under the rest.
@@ -1424,7 +1474,8 @@ impl Dialog {
             .saturating_add(below);
         let message = (lines.as_slice(), letter);
         let mut index = self.render_message(frame, inner, message, rest, colors, theme);
-        let Some(after) = self.draw_choices(frame, (inner, index), colors, &mut spots) else {
+        let combo_boxes = self.draw_combo_boxes(frame, (inner, index), (colors, theme), &mut spots);
+        let Some(after) = combo_boxes else {
             return;
         };
         index = after;
@@ -1448,7 +1499,7 @@ impl Dialog {
             let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
             let focus = match self.focus {
                 Focus::Button(index) => Some(index),
-                Focus::Choice(_) | Focus::Field(_) | Focus::Check(_) | Focus::List => None,
+                Focus::ComboBox(_) | Focus::Field(_) | Focus::Check(_) | Focus::List => None,
             };
             let line = button_line(&labels, self.default, focus, colors);
             let buttons = button_spots(&labels, self.default, row(index + 1));
@@ -1530,44 +1581,52 @@ impl Dialog {
         Some(index)
     }
 
-    /// Draws the choices from row `index` of `inner`, the room inside the frame, one under
-    /// another or on one line, and keeps where for the mouse in `spots`. Returns the row after
-    /// them, or `None` without room.
-    fn draw_choices(
+    /// Draws the combo boxes from row `index` of `inner`, the room inside the frame, each after
+    /// its label, the boxes lined up a blank after the widest label, the one with the focus in
+    /// its color; and keeps where for the mouse in `spots`, the whole line. Returns the row
+    /// after them, or `None` without room.
+    fn draw_combo_boxes(
         &self,
         frame: &mut Frame<'_>,
         (inner, mut index): (Rect, u16),
-        colors: Colors,
+        (colors, theme): (Colors, &Theme),
         spots: &mut Vec<(Focus, Rect)>,
     ) -> Option<u16> {
-        let mut x = inner.x;
-        for (number, choice) in self.choices.iter().enumerate() {
+        let room = usize::from(inner.width);
+        let widest = self
+            .combo_boxes
+            .iter()
+            .map(|labelled| cells::width(&labelled.label.text))
+            .max()
+            .unwrap_or(0);
+        let label_width = (widest + 1).min(room / 2);
+        let marks = theme.glyphs.marks;
+        for labelled in &self.combo_boxes {
+            labelled.combo.place(None);
+        }
+        for (number, labelled) in self.combo_boxes.iter().enumerate() {
             if index >= inner.height {
                 return None;
             }
-            let text = format!("({}) ", mark(number == self.chosen, glyphs::CHOSEN));
-            let focused = self.focus == Focus::Choice(number);
-            let style = if focused { colors.focused } else { colors.body };
-            let cells = cells::width(&text) + cells::width(&choice.text);
-            let width = u16::try_from(cells).unwrap_or(u16::MAX);
-            let area = if self.in_a_row {
-                Rect::new(x, inner.y + index, width, 1).intersection(inner)
+            let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
+            let hotkey = colors.hotkey_style(false);
+            let mut spans = labelled
+                .label
+                .fit(label_width, colors.body_styles(), hotkey, marks);
+            let styles = if self.focus == Focus::ComboBox(number) {
+                (colors.focused, theme.truncated_cursor)
             } else {
-                Rect::new(inner.x, inner.y + index, inner.width, 1)
+                colors.body_styles()
             };
-            let mut spans = vec![Span::styled(text, style)];
-            let hotkey = colors.hotkey_style(focused);
-            spans.extend(choice.spans(style, Some(hotkey), colors.mark));
-            frame.render_widget(Line::from(spans), area);
-            spots.push((Focus::Choice(number), area));
-            if self.in_a_row {
-                // Three blanks apart, as mc sets its radio buttons on a line.
-                x = x.saturating_add(width).saturating_add(3);
-            } else {
-                index += 1;
-            }
-        }
-        if self.in_a_row && !self.choices.is_empty() {
+            let boxed = labelled.combo.box_spans(room - label_width, styles, theme);
+            let cells = boxed.iter().map(Span::width).sum::<usize>();
+            let x = inner.x + u16::try_from(label_width).unwrap_or(0);
+            let width = u16::try_from(cells).unwrap_or(u16::MAX);
+            let area = Rect::new(x, row.y, width, 1).intersection(row);
+            labelled.combo.place(Some(area));
+            spans.extend(boxed);
+            frame.render_widget(Line::from(spans).style(colors.body), row);
+            spots.push((Focus::ComboBox(number), row));
             index += 1;
         }
         Some(index)
@@ -2078,7 +2137,7 @@ fn placeholder_line(placeholder: &str, room: usize, theme: &Theme) -> Line<'stat
     Line::from(spans).style(theme.dialog_input)
 }
 
-/// `glyph` in a radio button or a check box that is on, `on`; a blank in one that is off.
+/// `glyph` in a check box that is on, `on`; a blank in one that is off.
 fn mark(on: bool, glyph: char) -> char {
     if on { glyph } else { ' ' }
 }
@@ -2523,11 +2582,11 @@ mod tests {
         ];
         Dialog::form("Select", "&Pattern:", "*", &checks)
             .with_width(50)
-            .with_choices(&["O&ne".to_owned(), "T&wo".to_owned()], 0)
+            .with_combo_box("&Number:", &["O&ne".to_owned(), "T&wo".to_owned()], 0)
     }
 
     #[test]
-    fn alt_and_a_letter_switch_choose_focus_and_press_from_anywhere() {
+    fn alt_and_a_letter_switch_open_focus_and_press_from_anywhere() {
         let mut dialog = lettered();
         assert_eq!(
             dialog.focus,
@@ -2538,12 +2597,20 @@ mod tests {
         assert_eq!(hotkey(&mut dialog, 'f'), DialogEvent::Pending);
         assert!(dialog.checked(0));
         assert_eq!(dialog.focus, Focus::Check(0));
-        hotkey(&mut dialog, 'W');
+        hotkey(&mut dialog, 'N');
         assert_eq!(
-            (dialog.chosen(), dialog.focus),
-            (1, Focus::Choice(1)),
-            "either case"
+            (dialog.focus, dialog.context()),
+            (Focus::ComboBox(0), Context::ComboBox),
+            "either case opens the list"
         );
+        assert_eq!(
+            hotkey(&mut dialog, 'o'),
+            DialogEvent::Pending,
+            "the list's letters alone, not OK's"
+        );
+        assert_eq!(dialog.context(), Context::ComboBox);
+        hotkey(&mut dialog, 'W');
+        assert_eq!((dialog.chosen(0), dialog.context()), (1, Context::Dialog));
         hotkey(&mut dialog, 'p');
         assert_eq!(
             dialog.focus,
@@ -2598,8 +2665,10 @@ mod tests {
         assert_eq!(colors.hotkey_style(false).fg, Some(Color::Blue));
         let prompt = find("Pattern:");
         assert_eq!((fg(prompt, 0), fg(prompt, 1)), (Color::Blue, Color::Black));
+        let combo = find("Number:");
+        assert_eq!((fg(combo, 0), fg(combo, 1)), (Color::Blue, Color::Black));
         let choice = find("One");
-        assert_eq!(fg(choice, 1), Color::Blue);
+        assert_eq!(fg(choice, 1), Color::Black, "its letter shows in its list");
         let check = find("Files only");
         assert_eq!(fg(check, 0), Color::Blue, "on the focus too");
         assert_eq!(buffer[(check.x, check.y)].bg, Color::Cyan);
@@ -2614,12 +2683,19 @@ mod tests {
         assert!(!text.contains('&'), "{text}");
     }
 
-    /// Asserts that what `dialog` acts on by a letter has one of its own: its choices, its
-    /// labelled fields, its check boxes, and its buttons but Cancel.
+    /// Asserts that what `dialog` acts on by a letter has one of its own: its combo boxes, its
+    /// labelled fields, its check boxes, and its buttons but Cancel; and each choice of a combo
+    /// box one of its own in the list.
     fn assert_letters(name: &str, dialog: &Dialog) {
+        for labelled in &dialog.combo_boxes {
+            let letters = labelled.combo.letters();
+            let unique: std::collections::HashSet<char> = letters.iter().copied().collect();
+            assert_eq!(unique.len(), letters.len(), "{name}: {letters:?}");
+        }
         let labels = dialog
-            .choices
+            .combo_boxes
             .iter()
+            .map(|labelled| &labelled.label)
             .chain(dialog.fields.iter().map(|field| &field.label))
             .chain(dialog.checks.iter().map(|check| &check.label));
         let missing: Vec<&str> = labels
@@ -2713,7 +2789,7 @@ mod tests {
                     ok_cancel(),
                 )
                 .with_message(&fl!("checksum-one", name = "x"))
-                .with_choices(&algorithms, 0),
+                .with_combo_box(&fl!("checksum-algorithm"), &algorithms, 0),
             ),
             ("password", secret()),
             (
@@ -2865,20 +2941,102 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_double_click_on_a_choice_chooses_it_and_confirms() {
-        let choices = ["one".to_owned(), "two".to_owned()];
-        let mut dialog = Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel])
+    fn picker() -> Dialog {
+        let checks = [("&Verbose".to_owned(), false)];
+        let choices = ["&one".to_owned(), "&two".to_owned(), "t&hree".to_owned()];
+        Dialog::fields("Pick", &[], &checks, vec![Button::Ok, Button::Cancel])
             .with_width(40)
-            .with_choices(&choices, 0);
-        press_on(&mut dialog, Press::Click, "two");
-        assert_eq!((dialog.chosen(), dialog.focus), (1, Focus::Choice(1)));
-        press_on(&mut dialog, Press::Click, "one");
+            .with_combo_box("&Count:", &choices, 0)
+    }
+
+    #[test]
+    fn space_opens_a_combo_box_whose_list_has_the_keys() {
+        let mut dialog = picker();
         assert_eq!(
-            press_on(&mut dialog, Press::DoubleClick, "two"),
-            DialogEvent::Pressed(Button::Ok)
+            (dialog.focus, dialog.context()),
+            (Focus::ComboBox(0), Context::Dialog),
+            "without fields, the combo box first"
         );
-        assert_eq!(dialog.chosen(), 1);
+        dialog.handle(action(Action::Toggle));
+        assert_eq!(
+            (dialog.context(), dialog.mode()),
+            (Context::ComboBox, Mode::Normal)
+        );
+        let two = Typed {
+            resolved: action(Action::Down),
+            extra: Extra {
+                count: Some(2),
+                ..Extra::default()
+            },
+        };
+        dialog.handle_typed(two, &mut Registers::default());
+        assert_eq!(dialog.chosen(0), 0, "the cursor moves, not the choice");
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pending,
+            "Enter takes the row and closes the list"
+        );
+        assert_eq!((dialog.chosen(0), dialog.context()), (2, Context::Dialog));
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Up));
+        dialog.handle(action(Action::Cancel));
+        assert_eq!(dialog.chosen(0), 2, "Esc keeps the choice");
+        dialog.handle(action(Action::Down));
+        assert_eq!(dialog.focus, Focus::Check(0), "j and k move the focus");
+        dialog.handle(action(Action::Up));
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            DialogEvent::Pressed(Button::Ok),
+            "Enter on the box presses the default button"
+        );
+    }
+
+    #[test]
+    fn a_click_opens_a_combo_box_and_one_in_its_list_takes_a_row() {
+        let mut dialog = picker();
+        dialog.handle(action(Action::Down));
+        assert_eq!(
+            press_on(&mut dialog, Press::Click, "Count:"),
+            DialogEvent::Pending
+        );
+        assert_eq!(
+            (dialog.focus, dialog.context()),
+            (Focus::ComboBox(0), Context::ComboBox)
+        );
+        assert_eq!(
+            press_on(&mut dialog, Press::DoubleClick, "Count:"),
+            DialogEvent::Pending
+        );
+        assert!(
+            dialog.combo_box_open(),
+            "the second click of the one that opened it"
+        );
+        let terminal = draw(&dialog, 40, 12);
+        let two = super::super::mouse::find(terminal.backend().buffer(), "two");
+        let at = |press| Pointer { press, at: two };
+        assert_eq!(dialog.pointer(at(Press::Click)), DialogEvent::Pending);
+        assert_eq!((dialog.chosen(0), dialog.combo_box_open()), (1, false));
+        // The row was over the buttons.
+        assert_eq!(dialog.pointer(at(Press::DoubleClick)), DialogEvent::Pending);
+        assert_eq!(
+            dialog.focus,
+            Focus::ComboBox(0),
+            "its second click acts on nothing under it"
+        );
+        press_on(&mut dialog, Press::Click, "[two");
+        assert!(dialog.combo_box_open());
+        press_on(&mut dialog, Press::Click, "Pick");
+        assert!(!dialog.combo_box_open(), "a click outside closes the list");
+        assert_eq!(dialog.chosen(0), 1);
+    }
+
+    #[test]
+    fn draws_a_combo_box_and_its_list_over_the_dialog() {
+        let mut dialog = picker();
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Down));
+        let terminal = draw(&dialog, 40, 12);
+        insta::assert_snapshot!(terminal.backend());
     }
 
     #[test]

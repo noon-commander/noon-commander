@@ -1,0 +1,16 @@
+---
+source: crates/noc/src/tui/dialog.rs
+expression: terminal.backend()
+---
+"                                        "
+"                                        "
+"                                        "
+"  ╔══════════════ Pick ══════════════╗  "
+"  ║ Count: [one   ▼]                 ║  "
+"  ║ [ ] Ver┌────────┐                ║  "
+"  ╟────────│* one   │────────────────╢  "
+"  ║       [│  two   │Cancel ]        ║  "
+"  ╚════════│  three │════════════════╝  "
+"           └────────┘                   "
+"                                        "
+"                                        "

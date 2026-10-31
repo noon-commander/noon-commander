@@ -713,7 +713,8 @@ stops, past the fields too, g g and G to the first and the last field or button,
 first and the last line, and q and Esc close the dialog. Dialogs are modal: the panel's keys do
 nothing there. Every element but Cancel has a letter, highlighted in its label, and Alt and it act
 on the element from anywhere in the dialog, in every mode, as in Far and mc: a text field gets the
-focus, in Insert mode, a check box switches, a radio button is chosen, and a button is pressed. In
+focus, in Insert mode, a check box switches, the list of a combo box opens, and a button is
+pressed; on a combo box, Space opens its list too, and Enter presses the default button. In
 the Configuration dialog, Alt+1 … Alt+8 open its categories, and the letter of a setting does what
 Space or Enter does on it, or puts the focus in its text field. Alt and a letter that nothing has
 do nothing, and here and in the text fields of dialogs Alt and a key never stand for Esc and the
@@ -735,9 +736,9 @@ questions on the console.
 | Next field or button; in the help, the sections or the text | `next_field` | ✅ | Tab<br>Ctrl+i | Tab | — | — | — |
 | Previous field or button; in the help, the sections or the text | `prev_field` | ✅ | Shift+Tab | Shift+Tab | — | — | — |
 | Press the focused button; from a text field or a check box, the default one; in the help, open the section, or close the help from its text | `confirm` | ✅ | Enter<br>Ctrl+m | Enter | Ctrl+Enter (default button) | Enter (confirm, help)<br>y (confirm) | — |
-| Switch the check box, choose the radio button, or press the focused button | `toggle` | ✅ | Space | Space | — | — | — |
+| Switch the check box, open the list of the combo box, or press the focused button | `toggle` | ✅ | Space | Space | Ctrl+Down (combo box) | — | — |
 | Cancel; abort the job in front; close the help or the window | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | Esc<br>Esc Esc<br>F10<br>Ctrl+g<br>Ctrl+c (abort copy/delete) | Esc | Esc<br>Ctrl+[<br>Ctrl+c<br>n (confirm)<br>w (tasks) | Esc<br>q<br>Q<br>w<br>Ctrl+c |
-| Put the focus in a field, switch a check box, choose a radio button, or press a button by its letter (noc: Alt and the letter) | — | ⏳ | — | Alt+letter<br>Letter (not in a text field) | Alt+letter | — | — |
+| Put the focus in a field, switch a check box, open the list of a combo box, or press a button by its letter (noc: Alt and the letter) | — | ⏳ | — | Alt+letter<br>Letter (not in a text field) | Alt+letter | — | — |
 | Copy/move in background (in dialog) | — | ⏳ | — | Alt+b | — | — | — |
 | Focus first dialog item | — | ⏳ | — | — | Home | — | — |
 | Focus default dialog item | — | ⏳ | — | — | PgDn<br>End | — | — |
@@ -891,6 +892,29 @@ ranger has no list: Tab and Shift+Tab put the next and the previous choice in th
 | Keep the match, and close the list | `accept_completion` | ⏳ | Ctrl+y | — | — | Tab | — |
 | Put back what was typed, and close the list | `cancel_completion` | ⏳ | Ctrl+e | — | — | Ctrl+c | — |
 | Put the choice in the field and run it | — | ⏳ | — | — | — | Enter | — |
+
+## List of a combo box (`combo_box`, Normal mode)
+
+The list of the choices of a combo box, open under the box in a dialog, the search of a tree, or the
+Configuration dialog, after Space, Alt and the letter of the box, or a click on it, as Far's combo
+boxes open their list ([ADR 0057](adr/0057-combo-boxes.md)). It has the keys until it closes, as a
+menu: it falls back to `global` only, and the line of the mode says Combo box. Moving its cursor
+does not change the choice; Enter takes the row under it. A count moves as many rows, or to that row
+with g g and G. Alt and the letter of a choice takes it, where its choices have letters, as the
+algorithms of f # do; other Alt keys do nothing. mc has no combo box: its dialogs set one of a few
+choices with radio buttons. yazi and ranger ask their questions in their input boxes and console.
+
+| Description | Action | Status | noc | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- |
+| One row up | `up` | ⏳ | k<br>Up<br>Ctrl+p | — | Up | — | — |
+| One row down | `down` | ⏳ | j<br>Down<br>Ctrl+n | — | Down | — | — |
+| One page up | `page_up` | ⏳ | Ctrl+b<br>PgUp | — | PgUp | — | — |
+| One page down | `page_down` | ⏳ | Ctrl+f<br>PgDn | — | PgDn | — | — |
+| The first row; with a count, that row | `home` | ⏳ | g g<br>Home | — | Home | — | — |
+| The last row; with a count, that row | `end` | ⏳ | G<br>End | — | End | — | — |
+| Take the choice under the cursor, and close the list | `confirm` | ⏳ | Enter<br>Ctrl+m<br>Space | — | Enter | — | — |
+| Close the list, keeping the choice it had | `cancel` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c<br>q<br>F10 | — | Esc | — | — |
+| Take a choice by its letter (noc: Alt and the letter) | — | ⏳ | — | — | — | — | — |
 
 ## Viewer (`viewer`, Normal mode)
 
@@ -1236,11 +1260,12 @@ directory, local or on a host, for the text of the first field, among those the 
 let through, again as either changes, or either switches how it matches or whether case counts; with
 no text it lists the files. It is a dialog: two fields, the rows, and the buttons Go to, View, Edit,
 and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a
-text in a dialog first. Its other mode, Files and dirs, a radio button above the fields, finds files
-and directories by name with fd, and Go to goes into a directory; f f, or F9 → Command → Find files
-and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to `dialog`,
-whose motions move the cursor of the rows while they have the focus, and Tab leaves them. F3 and F4
-work wherever the focus is. In the field of the text, Ctrl+s and a letter take it as it is or as a
+text in a dialog first. Its other mode, Files and dirs, in the combo box Mode above the fields,
+finds files and directories by name with fd, and Go to goes into a directory; f f, or F9 → Command →
+Find files and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to
+`dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them.
+F3 and F4 work wherever the focus is, but in the open list of the modes (`combo_box`). In the field
+of the text, Ctrl+s and a letter take it as it is or as a
 regular expression and switch its case (`search_input`); in the field of the globs, shell patterns,
 they switch their case, which by name, where fd tells case apart in them, they cannot. Each field
 opens as it was last, at first in `ui.default_search_mode` (fzf is regex there) and smart case, and
@@ -1304,13 +1329,13 @@ panel, its columns, and its tabs, and ranger in its pager too; neither has a dou
 | Show a tab | — | ⏳ | Click on the tab | — | — | Click on the tab | Click on the tab |
 | Open a menu of the menu bar / run a command | — | ⏳ | Click | Click | Click | — | — |
 | Close the menu bar | — | ⏳ | Click outside it | Click outside it | Click outside it | — | — |
-| Dialog: press a button, switch a check box, choose a radio button | — | ⏳ | Click | Click | Click | — | — |
+| Dialog: press a button, switch a check box, open the list of a combo box | — | ⏳ | Click | Click | Click | — | — |
+| List of a combo box: take a choice / close it as it was | — | ⏳ | Click on a row / Click outside it | — | Click on a row / Click outside it | — | — |
 | Dialog: put the cursor in a text field | — | ⏳ | Click | Click | Click | — | — |
 | Switch how a field that searches matches, as Ctrl+s Ctrl+s, or its case, as Ctrl+s c: quick search, a filter, a field of a dialog | — | ⏳ | Click on the glyph of the way, or of the case, at the end of the field | — | — | — | — |
-| Dialog: choose a radio button and press the default button | — | ⏳ | Double click | — | — | — | — |
 | Menu or list in a window: move the cursor / open the row | — | ⏳ | Click / Double click | Click / Double click | Click / Click in a menu, Double click in a dialog's list | — | — |
 | Close a menu or the list of completions | — | ⏳ | Click outside it | Click outside a menu | Click outside it | — | — |
-| Scroll a menu, a list, or the help | — | ⏳ | Wheel | Wheel (not the help) | Wheel | — | — |
+| Scroll a menu, a list, the list of a combo box, or the help | — | ⏳ | Wheel | Wheel (not the help) | Wheel | — | — |
 | Scroll a dialog's message that does not fit the screen | — | ⏳ | Wheel | — | — | — | — |
 | Scroll bar of a panel, a list, a menu, a window, the viewer: a step of the wheel / a page | — | ⏳ | Click on an arrow / Click on the track | — | Click on an arrow / Click on the track | — | — |
 | Scroll bar: scroll to where the thumb is dragged | — | ⏳ | Drag the thumb | — | Drag the thumb | — | — |

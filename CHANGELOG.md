@@ -199,6 +199,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Combo boxes replace radio buttons and the `< … >` choices: the algorithm of `f #`
+  (`Algorithm: [SHA-256 ▼]`), the mode of the search of a tree (`Mode: [Text ▼]`), and every
+  choice of the Configuration dialog. Space, a click, or Alt and the letter of the box opens its
+  list of choices under it; `j` and `k` move in it, Enter, Space, a click, or Alt and the letter
+  of a choice takes it, and Esc keeps the one it had, with `NORMAL · Combo box` on the line of the
+  mode. Enter on a closed box presses the default button; in Configuration it opens the list,
+  and `h` and `l` still go to the choice before and the next
+  ([ADR 0057](docs/adr/0057-combo-boxes.md)).
 - Questions before something that cannot be undone are no longer red as errors: deleting, a file
   that is there already, replacing or deleting a workspace, and quitting with jobs that would stop
   are on a background of their own, yellow in mc-classic, peach in Catppuccin, orange in the Noon

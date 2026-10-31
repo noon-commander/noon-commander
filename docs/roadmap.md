@@ -249,7 +249,7 @@
       runs as root
       ([ADR 0031](adr/0031-who-and-where-on-screen.md))
 - [x] Letters in every dialog, as in Far and mc: Alt and the letter puts the focus in a field,
-      switches a check box, chooses a radio button, or presses a button, while typing too;
+      switches a check box, opens a combo box, or presses a button, while typing too;
       Alt+1 … Alt+8 open the categories of the Configuration dialog, and Alt and a letter the
       sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
 - [x] Windows grow from their middle as they open and shrink back as they close, the menus of
@@ -275,6 +275,10 @@
 - [x] Search that matches names in either Unicode form, NFC or NFD (as macOS has them), and
       ignores case by full case folding (`ß` as `ss`), in plain text, regular expressions,
       `g +` and `g -`, and completion
+- [x] Combo boxes in place of radio buttons and `< … >`: the algorithm of `f #`, the mode of the
+      search of a tree, and the choices of the Configuration dialog; a list that opens under the
+      box and has the keys, context `combo_box` ([ADR 0057](adr/0057-combo-boxes.md))
+- [ ] Combo boxes that take typed text, filtering their list or giving a value of their own
 - [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the
       kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads
       it ([crossterm#1074](https://github.com/crossterm-rs/crossterm/pull/1074)); letters and

@@ -1,6 +1,6 @@
 # 0029. Files and directories with fd
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0057](0057-combo-boxes.md): the modes are in a combo box
 - Date: 2026-10-16
 - Amends: [ADR 0027](0027-search-of-a-whole-tree.md),
   [ADR 0028](0028-programs-on-hosts-without-a-terminal.md)

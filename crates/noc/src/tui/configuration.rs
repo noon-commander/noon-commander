@@ -15,10 +15,11 @@ use noc_scroll::scrollbar::{self, Bar};
 use noc_vars::VarsError;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align, Marks};
+use super::cells::{self, Align};
+use super::combo_box::{ComboBox, ComboEvent};
 use super::dialog::{Colors, Field, Tone, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
 use super::glyphs::{self, categories};
@@ -83,10 +84,10 @@ enum Key {
 enum Value {
     /// A check box.
     Toggle(bool),
-    /// One of `options`, each its value in `config.toml` and its text.
+    /// One of `values`, as `config.toml` writes them, in a combo box of their texts.
     Choice {
-        options: Vec<(String, String)>,
-        chosen: usize,
+        values: Vec<String>,
+        combo: ComboBox,
     },
     /// A text field, and the text it had when it was last applied; lists are words in it,
     /// see [`split_words`].
@@ -117,25 +118,21 @@ impl Setting {
         }
     }
 
+    /// Switches a check box, or opens the list of a combo box.
     fn toggle(&mut self) {
         match &mut self.value {
             Value::Toggle(on) => *on = !*on,
-            Value::Choice { options, chosen } => *chosen = (*chosen + 1) % options.len().max(1),
+            Value::Choice { combo, .. } => combo.open(),
             Value::Text { .. } => {}
         }
     }
 
-    /// Picks the next choice, or the one before.
+    /// Takes the next choice, or the one before, without the list.
     fn cycle(&mut self, forward: bool) -> bool {
-        let Value::Choice { options, chosen } = &mut self.value else {
+        let Value::Choice { combo, .. } = &mut self.value else {
             return false;
         };
-        let count = options.len().max(1);
-        *chosen = if forward {
-            (*chosen + 1) % count
-        } else {
-            (*chosen + count - 1) % count
-        };
+        combo.cycle(forward);
         true
     }
 
@@ -146,8 +143,8 @@ impl Setting {
     /// The value in `config.toml` of a choice or a text.
     fn text(&self) -> &str {
         match &self.value {
-            Value::Choice { options, chosen } => {
-                options.get(*chosen).map_or("", |(value, _)| value.as_str())
+            Value::Choice { values, combo } => {
+                values.get(combo.chosen()).map_or("", String::as_str)
             }
             Value::Text { field, .. } => field.text(),
             Value::Toggle(_) => "",
@@ -383,20 +380,26 @@ struct Drawn {
 }
 
 /// The values of a choice with their texts; `current` is chosen, and added if it is not
-/// among them.
-fn choice(values: &[(&str, String)], current: &str) -> Value {
-    let mut options: Vec<(String, String)> = values
+/// among them. The texts have no letters: the settings have them.
+fn choice(options: &[(&str, String)], current: &str) -> Value {
+    let mut values: Vec<String> = options
         .iter()
-        .map(|(value, text)| ((*value).to_owned(), text.clone()))
+        .map(|(value, _)| (*value).to_owned())
         .collect();
-    let chosen = options
+    let mut texts: Vec<String> = options
         .iter()
-        .position(|(value, _)| value == current)
+        .map(|(_, text)| label::escape(text))
+        .collect();
+    let chosen = values
+        .iter()
+        .position(|value| value == current)
         .unwrap_or_else(|| {
-            options.push((current.to_owned(), current.to_owned()));
-            options.len() - 1
+            values.push(current.to_owned());
+            texts.push(label::escape(current));
+            values.len() - 1
         });
-    Value::Choice { options, chosen }
+    let combo = ComboBox::new(&texts, chosen);
+    Value::Choice { values, combo }
 }
 
 fn text(value: &str) -> Value {
@@ -616,12 +619,48 @@ impl Configuration {
         }
     }
 
-    /// The keymap context for the next key: `DialogInput` in a text field.
+    /// The keymap context for the next key: `DialogInput` in a text field, and `ComboBox` while
+    /// the list of a combo box is open.
     pub(crate) fn context(&self) -> Context {
         if self.field().is_some() {
             Context::DialogInput
+        } else if self.open_combo_box().is_some() {
+            Context::ComboBox
         } else {
             Context::Dialog
+        }
+    }
+
+    /// The combo box under the cursor whose list is open, which has the keys.
+    pub(crate) fn open_combo_box(&self) -> Option<&ComboBox> {
+        if self.focus != Focus::Settings {
+            return None;
+        }
+        match &self.settings().get(self.row)?.value {
+            Value::Choice { combo, .. } if combo.is_open() => Some(combo),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn open_combo_box_mut(&mut self) -> Option<&mut ComboBox> {
+        if self.focus != Focus::Settings {
+            return None;
+        }
+        match &mut self.setting_mut()?.value {
+            Value::Choice { combo, .. } if combo.is_open() => Some(combo),
+            _ => None,
+        }
+    }
+
+    /// Applies the choice that `event` of the open list took, at once.
+    fn combo_event(&mut self, event: ComboEvent) -> ConfigEvent {
+        let change = match event {
+            ComboEvent::Chosen(_) => self.apply().unwrap_or_default(),
+            ComboEvent::Pending | ComboEvent::Closed => None,
+        };
+        ConfigEvent {
+            change,
+            closed: false,
         }
     }
 
@@ -664,14 +703,24 @@ impl Configuration {
     }
 
     /// Takes a key, with its count and register. Tab moves between the categories and the
-    /// settings; Up and Down move within them; Space or Enter switches a check box or picks the
-    /// next choice, and Left and Right pick choices, each applied at once. Alt and a letter or a
-    /// digit go to what has it (see [`Self::hotkey`]). A text field edits its text in vim's
-    /// modes; it is applied when the cursor leaves it or on Enter, and keeps the cursor while it
-    /// holds something invalid. A text field the cursor comes to is in Normal mode, but after
-    /// Tab or its letter, or from a field in Insert mode. Esc in Normal mode closes the dialog,
-    /// applying the text field under the cursor, or putting it back if invalid.
+    /// settings; Up and Down move within them; Space or Enter switches a check box or opens the
+    /// list of a combo box, and Left and Right take the choice before or the next without it,
+    /// each applied at once. The open list takes every key until it closes, and what it takes is
+    /// applied at once. Alt and a letter or a digit go to what has it (see [`Self::hotkey`]). A
+    /// text field edits its text in vim's modes; it is applied when the cursor leaves it or on
+    /// Enter, and keeps the cursor while it holds something invalid. A text field the cursor
+    /// comes to is in Normal mode, but after Tab or its letter, or from a field in Insert mode.
+    /// Esc in Normal mode closes the dialog, applying the text field under the cursor, or
+    /// putting it back if invalid.
     pub(crate) fn handle_typed(&mut self, typed: Typed, registers: &mut Registers) -> ConfigEvent {
+        if let Some(combo) = self.open_combo_box_mut() {
+            let event = match typed.resolved {
+                Resolved::Action(action) => combo.handle(action, typed.extra),
+                Resolved::Hotkey(c) => combo.hotkey(c),
+                Resolved::Insert(_) => ComboEvent::Pending,
+            };
+            return self.combo_event(event);
+        }
         let before = (self.focus, self.category, self.row);
         // A field after Ctrl+o is in Insert mode but for one command.
         let left = if self.field().is_some_and(Field::once) {
@@ -824,10 +873,10 @@ impl Configuration {
     /// Alt and `c`, as mc and Far take them, from the categories or the settings. A category's
     /// digit shows it, with the focus on the categories, as moving their cursor there does. A
     /// setting's letter, among those of the category shown, puts the cursor on it and does
-    /// what Space does there: switches a check box or picks the next choice, applied at once;
-    /// a text field gets the focus in Insert mode. Leaving a text field applies it, as a key
-    /// that leaves it does, and one that holds something invalid keeps the cursor. Nothing
-    /// else has it.
+    /// what Space does there: switches a check box, applied at once, or opens the list of a
+    /// combo box; a text field gets the focus in Insert mode. Leaving a text field applies it,
+    /// as a key that leaves it does, and one that holds something invalid keeps the cursor.
+    /// Nothing else has it.
     fn hotkey(&mut self, c: char) -> ConfigEvent {
         let mut event = ConfigEvent::default();
         let category = self.category_labels().iter().position(|label| label.has(c));
@@ -870,12 +919,24 @@ impl Configuration {
 
     /// Takes a press of the mouse, where the dialog was drawn last. A click on a category shows
     /// its settings; one on a setting puts the cursor there, and on its value switches a check
-    /// box, picks the next choice (the one before at `<`), or puts the cursor in the text where
-    /// clicked. Leaving a text field applies it, as a key that leaves it does, and one that
-    /// holds something invalid keeps the cursor.
+    /// box, opens the list of a combo box, or puts the cursor in the text where clicked.
+    /// Leaving a text field applies it, as a key that leaves it does, and one that holds
+    /// something invalid keeps the cursor. The open list of a combo box takes every press, and
+    /// the second click of a double click that closed it does nothing.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> ConfigEvent {
+        if let Some(combo) = self.open_combo_box_mut() {
+            let event = combo.pointer(pointer);
+            return self.combo_event(event);
+        }
+        let spent = match self.setting_mut().map(|setting| &mut setting.value) {
+            Some(Value::Choice { combo, .. }) => combo.spent(pointer),
+            _ => false,
+        };
         let Pointer { press, at } = pointer;
         let mut event = ConfigEvent::default();
+        if spent {
+            return event;
+        }
         if !matches!(press, Press::Click | Press::DoubleClick) {
             return event;
         }
@@ -927,11 +988,7 @@ impl Configuration {
             field.click(column, usize::from(value.width));
             return event;
         }
-        if matches!(setting.value, Value::Toggle(_)) {
-            setting.toggle();
-        } else {
-            setting.cycle(column > 0);
-        }
+        setting.toggle();
         event.change = chain(event.change, self.apply().unwrap_or_default());
         event
     }
@@ -1029,6 +1086,9 @@ impl Configuration {
             let area = Rect::new(inner.x, body.bottom() + 1 + row, inner.width, 1);
             frame.render_widget(Line::from(line).style(styles.0), area);
         }
+        if let Some(combo) = self.open_combo_box() {
+            combo.render_list(frame, area, colors, theme);
+        }
     }
 
     /// The names of the categories, as the sidebar shows them, each after its digit as its
@@ -1108,9 +1168,9 @@ impl Configuration {
                     let mark = if *on { 'x' } else { ' ' };
                     vec![Span::styled(format!("[{mark}]"), label_style)]
                 }
-                Value::Choice { options, chosen } => {
-                    let text = options.get(*chosen).map_or("", |(_, text)| text.as_str());
-                    choice_spans(text, value_width, styles, theme.glyphs.marks)
+                // Within the row, which leaves two cells before the frame.
+                Value::Choice { combo, .. } => {
+                    combo.box_spans(value_width.saturating_sub(2), styles, theme)
                 }
                 Value::Text { field, .. } => {
                     let ([before, selected, after], column) = field.visible_parts(value_width);
@@ -1146,6 +1206,9 @@ impl Configuration {
             let line = Line::from(spans).style(theme.dialog);
             frame.render_widget(line, row);
             let value = Rect::new(x, y, value_cells, 1).intersection(row);
+            if let Value::Choice { combo, .. } = &setting.value {
+                combo.place(Some(value));
+            }
             drawn.push((index, row, value));
         }
         if let Some(position) = cursor {
@@ -1153,26 +1216,6 @@ impl Configuration {
         }
         self.drawn.settings = drawn;
     }
-}
-
-/// The choice `text` between `<` and `>` in at most `width` cells, in `style`, cut in its
-/// middle where it is longer, with the mark in `mark` over `style`.
-fn choice_spans(
-    text: &str,
-    width: usize,
-    (style, mark): (Style, Style),
-    marks: Marks,
-) -> Vec<Span<'static>> {
-    let text = text.trim_end();
-    let room = width.saturating_sub(4);
-    let mut spans = vec![Span::styled("< ", style)];
-    if cells::width(text) > room {
-        spans.extend(cells::fit(text, room, Align::Left, (style, mark), marks));
-    } else {
-        spans.push(Span::styled(text.to_owned(), style));
-    }
-    spans.push(Span::styled(" >", style));
-    spans
 }
 
 /// Choices whose text is their value, as the names of themes are.
@@ -1656,13 +1699,29 @@ mod tests {
             ("mc-classic", "terminal")
         );
         dialog.handle(action(Action::Down));
+        assert_eq!(
+            dialog.handle(action(Action::Confirm)),
+            ConfigEvent::default(),
+            "Enter opens the list"
+        );
+        assert_eq!(
+            (dialog.context(), dialog.mode()),
+            (Context::ComboBox, Mode::Normal)
+        );
+        assert_eq!(dialog.handle(action(Action::Down)), ConfigEvent::default());
         let (old, new) = dialog.handle(action(Action::Confirm)).change.unwrap();
         assert_eq!(old.ui.theme, "terminal", "the change before counts");
         assert_eq!(
             new.ui.borders,
             Borders::Single,
-            "Enter picks the next choice"
+            "Enter takes the row under the cursor"
         );
+        assert_eq!(dialog.context(), Context::Dialog);
+        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Up));
+        let event = dialog.handle(action(Action::Cancel));
+        assert_eq!(event, ConfigEvent::default(), "Esc keeps the choice");
+        assert_eq!(dialog.context(), Context::Dialog, "and the dialog");
 
         // A text field takes effect when the cursor leaves it.
         category(&mut dialog, 2);
@@ -1747,11 +1806,32 @@ mod tests {
         );
         assert_eq!(dialog.row, 1);
 
+        // On the value of a combo box, the click opens its list, where a click takes a row.
         category(&mut dialog, 0);
-        let (_, new) = press_on(&mut dialog, "< mc-classic >", 3).change.unwrap();
-        assert_eq!(new.ui.theme, "terminal", "the next choice");
-        let (_, new) = press_on(&mut dialog, "< terminal >", 0).change.unwrap();
-        assert_eq!(new.ui.theme, "mc-classic", "the one before at `<`");
+        assert_eq!(
+            press_on(&mut dialog, "[mc-classic", 3),
+            ConfigEvent::default()
+        );
+        assert_eq!(dialog.context(), Context::ComboBox);
+        let (_, new) = press_on(&mut dialog, " terminal ", 1).change.unwrap();
+        assert_eq!(new.ui.theme, "terminal");
+        assert_eq!(dialog.context(), Context::Dialog);
+        press_on(&mut dialog, "[terminal", 0);
+        assert_eq!(
+            press_on(&mut dialog, "Interface", 0),
+            ConfigEvent::default(),
+            "a click outside the list closes it"
+        );
+        assert_eq!((dialog.context(), dialog.category), (Context::Dialog, 0));
+    }
+
+    #[test]
+    fn draws_the_list_of_a_combo_box_over_the_settings() {
+        let mut dialog = dialog();
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Toggle));
+        insta::assert_snapshot!(draw(&mut dialog, 72, 16));
     }
 
     #[test]
@@ -1775,7 +1855,7 @@ mod tests {
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Right));
         dialog.handle(action(Action::Down));
-        dialog.handle(action(Action::Toggle));
+        dialog.handle(action(Action::Right));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
         for _ in 0..2 {
@@ -2122,11 +2202,17 @@ mod tests {
         assert_eq!((old.ui.language.as_str(), old.ui.icons), ("auto", true));
         assert_eq!((new.ui.language.as_str(), new.ui.icons), ("de", false));
         assert_eq!((dialog.focus, dialog.row), (Focus::Settings, 4));
-        // A choice goes round, in either case of its letter.
-        let (_, new) = dialog.handle(Resolved::Hotkey('T')).change.unwrap();
-        assert_eq!((new.ui.theme.as_str(), dialog.row), ("terminal", 2));
-        let (_, new) = dialog.handle(Resolved::Hotkey('t')).change.unwrap();
-        assert_eq!(new.ui.theme, "mc-classic", "round to the first");
+        // A combo box opens its list, in either case of its letter.
+        assert_eq!(dialog.handle(Resolved::Hotkey('T')), ConfigEvent::default());
+        assert_eq!((dialog.context(), dialog.row), (Context::ComboBox, 2));
+        assert_eq!(
+            dialog.handle(Resolved::Hotkey('w')),
+            ConfigEvent::default(),
+            "the list's letters alone, which its choices have not"
+        );
+        dialog.handle(action(Action::End));
+        let (_, new) = dialog.handle(action(Action::Confirm)).change.unwrap();
+        assert_eq!(new.ui.theme, "terminal");
         // A text field gets the focus in Insert mode, from the categories too.
         dialog.handle(action(Action::PrevField));
         assert_eq!(dialog.handle(Resolved::Hotkey('w')), ConfigEvent::default());
@@ -2158,9 +2244,10 @@ mod tests {
         let (_, new) = dialog.handle(Resolved::Hotkey('b')).change.unwrap();
         assert_eq!(
             (new.ui.wheel, new.ui.borders),
-            (Wheel::Page, Borders::Single)
+            (Wheel::Page, Borders::Double)
         );
         assert_eq!((dialog.row, dialog.error.as_deref()), (3, None));
+        assert_eq!(dialog.context(), Context::ComboBox, "its list");
     }
 
     #[test]

@@ -167,6 +167,7 @@ impl Part {
             Self::MenusAndDialogs => vec![
                 (Mode::Normal, Context::PullDown, fl!("help-pulldown")),
                 (Mode::Normal, Context::Dialog, fl!("help-dialogs")),
+                (Mode::Normal, Context::ComboBox, fl!("help-combo-box")),
                 (Mode::Normal, Context::Help, fl!("help-this-help")),
             ],
             Self::Viewer => vec![(Mode::Normal, Context::Viewer, fl!("help-viewer"))],
@@ -262,7 +263,10 @@ fn tips() -> Vec<Entry> {
         ),
         (
             fl!("help-tip-dialogs"),
-            vec![fl!("help-tip-dialogs-letters")],
+            vec![
+                fl!("help-tip-dialogs-letters"),
+                fl!("help-tip-dialogs-combo-box"),
+            ],
         ),
         (
             fl!("help-tip-key-hints"),
@@ -1008,6 +1012,10 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Dialog | Context::DialogInput, Action::Confirm) => fl!("help-confirm"),
         (Context::Dialog, Action::Toggle) => fl!("help-toggle"),
         (Context::Dialog | Context::DialogInput, Action::Cancel) => fl!("help-dialog-cancel"),
+        (Context::ComboBox, Action::Home) => fl!("help-first-row"),
+        (Context::ComboBox, Action::End) => fl!("help-last-row"),
+        (Context::ComboBox, Action::Confirm) => fl!("help-combo-box-take"),
+        (Context::ComboBox, Action::Cancel) => fl!("help-combo-box-close"),
         (Context::Jump, Action::Confirm) => fl!("help-jump-go"),
         (Context::Jump, Action::Cancel) => fl!("help-menu-close"),
         (Context::KeyHints, Action::Confirm) => fl!("help-key-hints-run"),
@@ -1250,7 +1258,12 @@ fn describe_text(context: Context, action: Action) -> Option<String> {
 fn describe_rows(context: Context, action: Action) -> Option<String> {
     let rows = matches!(
         context,
-        Context::Panel | Context::Viewer | Context::Help | Context::List | Context::Find
+        Context::Panel
+            | Context::Viewer
+            | Context::Help
+            | Context::List
+            | Context::Find
+            | Context::ComboBox
     );
     let text = match action {
         Action::Up if rows => fl!("help-row-up"),
@@ -1596,7 +1609,12 @@ mod tests {
                 ),
                 (
                     "Menus and dialogs",
-                    vec!["Pull-down menu", "Dialogs and help", "This help"]
+                    vec![
+                        "Pull-down menu",
+                        "Dialogs and help",
+                        "The list of a combo box",
+                        "This help"
+                    ]
                 ),
                 ("Viewer", vec![]),
                 (

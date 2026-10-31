@@ -3,6 +3,7 @@
 mod app;
 mod cd;
 mod cells;
+mod combo_box;
 mod command;
 mod complete;
 mod configuration;

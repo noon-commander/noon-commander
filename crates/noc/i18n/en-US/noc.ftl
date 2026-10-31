@@ -58,6 +58,9 @@ window-menu = Menu
 # Every dialog: questions, forms, errors, prompts of ssh, the Configuration dialog, the search
 # of a whole tree, the jobs, and the checksums.
 window-dialog = Dialog
+# The open list of a combo box, a box with a choice and an arrow in a dialog, which opens a list
+# of the others.
+window-combo-box = Combo box
 window-help = Help
 window-viewer = Viewer
 
@@ -218,8 +221,9 @@ jump-not-installed = zoxide is not installed: cannot run { $program }. Get it fr
 
 # The title: where it searches, as the panel's title shows it.
 find-title = Find in { $dir }
-# Its modes, as radio buttons: text in the files, with ripgrep, or files and directories by name,
-# with fd.
+# The label of the combo box of its modes, and the modes, which Alt and their letters take in its
+# open list: text in the files, with ripgrep, or files and directories by name, with fd.
+find-mode = &Mode:
 find-mode-text = Te&xt
 find-mode-names = Files and &dirs
 # The labels of the fields: the text to find, whose field ends with the glyphs of whether case
@@ -645,6 +649,9 @@ help-renaming-insert = Renaming in place
 help-command-line = Command line
 help-command-line-normal = Command line in Normal mode
 help-dialogs = Dialogs and help
+help-combo-box = The list of a combo box
+help-combo-box-take = Take the choice under the cursor, and close the list
+help-combo-box-close = Close the list, keeping the choice it had
 help-this-help = This help
 help-this-help-top = The top
 help-this-help-end = The end
@@ -808,7 +815,7 @@ help-dialog-end = The last field or button; in a list or this help, the end
 help-next-field = Next field or button; in this help, the sections or the text
 help-prev-field = Previous field or button; in this help, the sections or the text
 help-confirm = Press the button with the focus
-help-toggle = Switch the check box, or press the button
+help-toggle = Switch the check box, open the list of the combo box, or press the button
 help-dialog-cancel = Cancel, or close this help
 help-field-home = Start of the line
 help-field-first-non-blank = The first character of the line that is not blank
@@ -907,7 +914,8 @@ help-tip-command-shell = The shell of Configuration → Command line → Run wit
 help-tip-pulldown = Pull-down menu
 help-tip-pulldown-letters = Alt and the highlighted letter of a menu open it, and Alt and that of a command run it.
 help-tip-dialogs = Dialogs
-help-tip-dialogs-letters = Alt and a highlighted letter press its button, switch its check box, pick its choice, or put the focus in its field, from anywhere in the dialog; in Configuration, Alt and a digit open a category, and in this help, Alt and a letter show a section.
+help-tip-dialogs-letters = Alt and a highlighted letter press its button, switch its check box, open the list of its combo box, or put the focus in its field, from anywhere in the dialog; in the open list, Alt and a letter take its choice. In Configuration, Alt and a digit open a category, and in this help, Alt and a letter show a section.
+help-tip-dialogs-combo-box = A combo box, a choice in brackets with an arrow, opens its list of choices with Space, Alt and its letter, or a click; j and k move in the list, Enter takes the choice, and Esc keeps the one it had. In Configuration, h and l take the choice before and the next without the list.
 help-tip-key-hints = Key hints
 help-tip-key-hints-show = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one.
 help-tip-key-hints-keys = Esc closes them, and Backspace takes back the last key, or closes them when none is typed.
@@ -1132,16 +1140,18 @@ rename-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; F6 
 ## Checksums, f # (src/tui/app, src/tui/sums). Prefix: checksum-.
 
 checksum-title = Checksum
-# Above the algorithms. Directories count with the files in them.
-checksum-one = Checksum of "{ $name }" with:
-checksum-directory = Checksums of the files in "{ $name }" with:
-checksum-many = Checksums of { marked-entries } with:
+# Above the algorithm. Directories count with the files in them.
+checksum-one = Checksum of "{ $name }"
+checksum-directory = Checksums of the files in "{ $name }"
+checksum-many = Checksums of { marked-entries }
+# The label of the combo box of the algorithms.
+checksum-algorithm = &Algorithm:
 # Above a field for a checksum to compare with, as a download page gives it.
 checksum-expected = &Expected checksum (optional; paste it):
 # A check box: also hash the file under the cursor of the other panel, and compare the two.
 checksum-compare = &Compare with { $path }
-# The names of the algorithms, the choices of the dialog with their letters; the title of the
-# window of the checksums without them.
+# The names of the algorithms, the choices of the combo box with their letters, which Alt and
+# they take in its open list; the title of the window of the checksums without them.
 checksum-sha256 = SHA-&256
 checksum-sha512 = SHA-&512
 checksum-sha1 = SHA-&1

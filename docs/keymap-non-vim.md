@@ -166,10 +166,10 @@ not:
 | --- | --- | --- | --- | --- | --- |
 | Tab<br>Ctrl+i | `next_field` | mc | j, Ctrl+n (vim), but on a list and in the help | Same | The next field or button, as in mc's dialogs. vim's Tab is Ctrl+i, which goes forward through the jump list, which a dialog has not. |
 | Shift+Tab | `prev_field` | mc | k, Ctrl+p (vim), but on a list and in the help | Same | The field or button before, as in mc's dialogs. |
-| Space | `toggle` | mc | Space (mc) | Same | Switch the check box, choose the radio button, or press the button, as in mc's dialogs. vim's Space goes right. |
+| Space | `toggle` | mc | Space (mc) | Same | Switch the check box, open the list of the combo box, or press the button, as in mc's dialogs. vim's Space goes right. |
 | q | `cancel` | less, ranger | Esc, Ctrl+c (vim); q (less, ranger) | Same | Close, as q quits less and closes ranger's windows. vim's q records a macro. |
 | F10 | `cancel` | mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | Cancel, as in mc's dialogs ([ADR 0022](adr/0022-vim-modes.md)). |
-| Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and act on its element rather than leave Insert mode or close the dialog | Put the focus in a text field, in Insert mode, switch a check box, choose a radio button, or press a button, by the letter highlighted in its label, from anywhere in the dialog, as in Far's and mc's dialogs; with Alt, so that the plain letters stay vim's keys and text ([ADR 0033](adr/0033-letters-in-dialogs.md)). In every mode, in the text fields too (`dialog_input`, `path_input`, `completion`, `find`, `find_input`), where Alt and a key no longer stand for Esc and the key; the Configuration dialog takes Alt+1 … Alt+8 for its categories. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
+| Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and act on its element rather than leave Insert mode or close the dialog | Put the focus in a text field, in Insert mode, switch a check box, open the list of a combo box, or press a button, by the letter highlighted in its label, from anywhere in the dialog, as in Far's and mc's dialogs; with Alt, so that the plain letters stay vim's keys and text ([ADR 0033](adr/0033-letters-in-dialogs.md)). In every mode, in the text fields too (`dialog_input`, `path_input`, `completion`, `find`, `find_input`), where Alt and a key no longer stand for Esc and the key; the Configuration dialog takes Alt+1 … Alt+8 for its categories. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
 
 ## Help (`help`, Normal mode)
 
@@ -200,6 +200,14 @@ not:
 | Ctrl+s p<br>Ctrl+s f<br>Ctrl+s r<br>Ctrl+s g | `search_plain`<br>`search_fzf`<br>`search_regex`<br>`search_glob` | noc | Ctrl+s p, f, r, g (noc) | Same | Match as it is, as fzf does, as a regular expression, or as a shell pattern, by its initial, if the field has that way; the key hints show only those it has. |
 | Ctrl+s c | `case_mode` | noc | Ctrl+s c (noc) | Same | Switch whether case counts, round: smart case, case ignored, case. c for case. |
 | Ctrl+s a<br>Ctrl+s i<br>Ctrl+s m | `case_smart`<br>`case_ignore`<br>`case_match` | noc | Ctrl+s a, i, m (noc) | Same | Smart case (a for auto: case counts once a capital is typed), ignore case, or match case, as ripgrep's `--smart-case`, `--ignore-case`, and `--case-sensitive` name them. vim's `\c` and `\C` say it in the pattern, which a field that takes names as text cannot. |
+
+## List of a combo box (`combo_box`, Normal mode)
+
+| Keys | Action | From | Vim-style keys | Without kitty | Why |
+| --- | --- | --- | --- | --- | --- |
+| Space | `confirm` | noc | Enter (vim) | Same | Take the choice under the cursor and close the list, as Enter does: Space opened it on the box, so Space again takes what it shows, as the space bar does in the lists of macOS and of browsers ([ADR 0057](adr/0057-combo-boxes.md)). vim's Space goes right, which a list has not. |
+| q<br>F10 | `cancel` | less, ranger, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | Close the list with the choice it had, as in `dialog`; the dialog stays. |
+| Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and take its choice rather than close the list | Take the choice whose letter is highlighted in the list, as the letters of dialogs act on their elements ([ADR 0033](adr/0033-letters-in-dialogs.md)); other Alt keys do nothing. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
 
 ## Viewer (`viewer`, Normal mode)
 

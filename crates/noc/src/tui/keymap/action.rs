@@ -66,6 +66,9 @@ pub(crate) enum Context {
     /// The list of completions under a path field, or over the command line; keys it does not
     /// bind go to the field.
     Completion,
+    /// The open list of a combo box, in a dialog or the Configuration dialog, which has the keys
+    /// until it closes; falls back to `Global`.
+    ComboBox,
     /// The viewer of F3.
     Viewer,
     /// The command line of `!` and `:`; falls back to `Input`. Other keys, but the global ones,
@@ -161,6 +164,8 @@ impl Context {
                 Self::Dialog,
                 Self::Global,
             ],
+            // The list of a combo box is modal, as a menu.
+            Self::ComboBox => &[Self::ComboBox, Self::Global],
             Self::Viewer => &[Self::Viewer, Self::Global],
             Self::CommandLine => &[Self::CommandLine, Self::Input, Self::Global],
             Self::CommandCompletion => &[
@@ -214,8 +219,8 @@ impl Context {
 
     /// Whether Alt and a letter act on what has that letter, as in mc and Far: in the pull-down
     /// menu, whose plain letters move as `h`, `j`, `k`, and `l` do, in the help, whose sections
-    /// have letters, and in the dialogs, whose fields take them as text. There Alt and a key
-    /// never stand for Esc and the key.
+    /// have letters, in the dialogs, whose fields take them as text, and in the list of a combo
+    /// box, whose choices have letters. There Alt and a key never stand for Esc and the key.
     pub(crate) fn alt_letters_are_hotkeys(self) -> bool {
         matches!(
             self,
@@ -225,6 +230,7 @@ impl Context {
                 | Self::DialogInput
                 | Self::PathInput
                 | Self::Completion
+                | Self::ComboBox
                 | Self::Find
                 | Self::FindInput
         )
@@ -549,7 +555,8 @@ pub(crate) enum Action {
     CancelCompletion,
     /// Accepts the dialog, or activates the focused button.
     Confirm,
-    /// Switches the focused check box, or presses the focused button.
+    /// Switches the focused check box, opens the list of the focused combo box, or presses the
+    /// focused button.
     Toggle,
     /// Closes the dialog, ends quick search, or stops a pending listing or connection.
     Cancel,
@@ -791,6 +798,7 @@ impl Context {
         Self::DialogInput,
         Self::PathInput,
         Self::Completion,
+        Self::ComboBox,
         Self::Viewer,
         Self::CommandLine,
         Self::CommandCompletion,

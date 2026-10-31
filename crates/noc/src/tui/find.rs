@@ -21,6 +21,7 @@ use ratatui::text::{Line, Span};
 use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
+use super::combo_box::ComboBox;
 use super::decor::Decor;
 use super::dialog::{Button, Dialog, DialogEvent, Field, ListView};
 use super::edit::Registers;
@@ -39,7 +40,9 @@ const BEFORE_MATCH: usize = 8;
 /// The fields of the dialog, and its check boxes.
 const TEXT: usize = 0;
 const FILES: usize = 1;
-/// Its modes, as its choices: text in the files, or files and directories by name.
+/// Its combo box of the modes, and the modes, as its choices: text in the files, or files and
+/// directories by name.
+const MODE: usize = 0;
 const TEXT_MODE: usize = 0;
 const NAMES_MODE: usize = 1;
 
@@ -51,7 +54,7 @@ pub(crate) enum FindMode {
 }
 
 impl FindMode {
-    /// Its choice among the radio buttons of the modes.
+    /// Its choice in the combo box of the modes.
     fn choice(self) -> usize {
         match self {
             Self::Text => TEXT_MODE,
@@ -238,8 +241,7 @@ impl FindWindow {
         let chosen = find.choice();
         let dialog = Dialog::fields(&title, &fields, &[], buttons(chosen))
             .with_width(WIDTH)
-            .with_choices(&modes, chosen)
-            .in_a_row()
+            .with_combo_box(&fl!("find-mode"), &modes, chosen)
             .with_list()
             .with_search(TEXT, text)
             .with_search(FILES, files_in(chosen, files));
@@ -280,7 +282,7 @@ impl FindWindow {
         let input = self.text_input();
         let regex = input.way() == Way::Regex;
         let case = input.case();
-        if self.dialog.chosen() == NAMES_MODE {
+        if self.dialog.chosen(MODE) == NAMES_MODE {
             return FindQuery::Names(fd::Query {
                 pattern,
                 globs,
@@ -429,7 +431,7 @@ impl FindWindow {
     /// text mode.
     pub(crate) fn files_input(&self) -> Input {
         match self.dialog.search(FILES) {
-            Some(files) if self.dialog.chosen() == TEXT_MODE => files,
+            Some(files) if self.dialog.chosen(MODE) == TEXT_MODE => files,
             _ => self.rg_files,
         }
     }
@@ -439,13 +441,25 @@ impl FindWindow {
         self.dialog.search_focused()
     }
 
-    /// The keymap context for the next key: `FindInput` while a field has the focus.
+    /// The keymap context for the next key: `FindInput` while a field has the focus, and
+    /// `ComboBox` while the list of the modes is open.
     pub(crate) fn context(&self) -> Context {
-        if self.dialog.focused_field().is_some() {
+        if self.dialog.combo_box_open() {
+            Context::ComboBox
+        } else if self.dialog.focused_field().is_some() {
             Context::FindInput
         } else {
             Context::Find
         }
+    }
+
+    /// The combo box of the modes while its list is open, which has the keys.
+    pub(crate) fn open_combo_box(&self) -> Option<&ComboBox> {
+        self.dialog.open_combo_box()
+    }
+
+    pub(crate) fn open_combo_box_mut(&mut self) -> Option<&mut ComboBox> {
+        self.dialog.open_combo_box_mut()
     }
 
     /// The mode keys are typed in: the focused field's, or Normal mode elsewhere.
@@ -471,7 +485,7 @@ impl FindWindow {
     /// What the search depends on now.
     fn settings(&self) -> Settings {
         (
-            self.dialog.chosen(),
+            self.dialog.chosen(MODE),
             self.dialog.text_of(TEXT).to_owned(),
             self.dialog.text_of(FILES).to_owned(),
             self.text_input().way(),
@@ -613,7 +627,7 @@ impl FindWindow {
     /// The buttons of the mode chosen now, and the case of the globs: fd's, or ripgrep's as
     /// it was.
     fn follow_mode(&mut self, before: &Settings) {
-        let mode = self.dialog.chosen();
+        let mode = self.dialog.chosen(MODE);
         if mode != before.0 {
             if before.0 == TEXT_MODE
                 && let Some(files) = self.dialog.search(FILES)
@@ -1124,6 +1138,7 @@ mod tests {
         let hotkey = |window: &mut FindWindow, c| {
             window.handle(Typed::from(Resolved::Hotkey(c)), &mut Registers::default())
         };
+        hotkey(&mut window, 'm');
         hotkey(&mut window, 'd');
         hotkey(&mut window, 'f');
         assert_eq!(window.search_focused(), Some(Kind::FILES_FD));
@@ -1134,6 +1149,7 @@ mod tests {
             Case::Ignore,
             "ripgrep's is kept"
         );
+        hotkey(&mut window, 'm');
         hotkey(&mut window, 'x');
         assert_eq!(window.query().lines().globs_case, Case::Ignore, "and back");
     }
@@ -1142,7 +1158,7 @@ mod tests {
     fn alt_and_the_letters_choose_the_mode_and_reach_the_fields() {
         let mut window = window();
         let letters = window.dialog.letters();
-        assert_eq!(letters, ['x', 'd', 't', 'f', 'g', 'v', 'e'], "each its own");
+        assert_eq!(letters, ['m', 't', 'f', 'g', 'v', 'e'], "each its own");
         let hotkey = |window: &mut FindWindow, c| {
             window.handle(Typed::from(Resolved::Hotkey(c)), &mut Registers::default())
         };
@@ -1154,17 +1170,24 @@ mod tests {
         );
         typed(&mut window, "*.rs");
         assert_eq!(window.query().lines().globs, ["*.rs"]);
+        assert_eq!(hotkey(&mut window, 'm'), FindEvent::Pending);
+        assert_eq!(
+            (window.mode(), window.context()),
+            (Mode::Normal, Context::ComboBox),
+            "the list of the modes"
+        );
+        assert_eq!(
+            hotkey(&mut window, 'v'),
+            FindEvent::Pending,
+            "no View there"
+        );
         assert_eq!(
             hotkey(&mut window, 'd'),
             FindEvent::Search,
             "the other mode"
         );
         assert!(matches!(window.query(), FindQuery::Names(_)));
-        assert_eq!(
-            window.dialog.letters(),
-            ['x', 'd', 't', 'f', 'g'],
-            "Go to alone"
-        );
+        assert_eq!(window.dialog.letters(), ['m', 't', 'f', 'g'], "Go to alone");
         assert_eq!(
             hotkey(&mut window, 'v'),
             FindEvent::Pending,
@@ -1291,9 +1314,11 @@ mod tests {
     #[allow(clippy::single_range_in_vec_init)]
     fn by_name_it_finds_files_and_directories_and_goes_into_one() {
         let mut window = window();
-        // Shift+Tab from the text goes to the modes, where Space chooses one.
+        // Shift+Tab from the text goes to the modes, whose list Space opens.
         press(&mut window, Action::PrevField);
-        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
+        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Pending);
+        assert_eq!(press(&mut window, Action::Down), FindEvent::Pending);
+        assert_eq!(press(&mut window, Action::Confirm), FindEvent::Search);
         let FindQuery::Names(query) = window.query() else {
             panic!("expected a search by name");
         };
@@ -1341,11 +1366,13 @@ mod tests {
                 line: None
             }
         );
-        // Back to the text, the first mode, four stops before the rows: its buttons come back.
-        for _ in 0..4 {
+        // Back to the text, the first mode, three stops before the rows: its buttons come back.
+        for _ in 0..3 {
             press(&mut window, Action::PrevField);
         }
         press(&mut window, Action::Toggle);
+        press(&mut window, Action::Home);
+        assert_eq!(press(&mut window, Action::Confirm), FindEvent::Search);
         assert!(matches!(window.query(), FindQuery::Lines(_)));
         assert!(draw(&mut window, 70).contains("View"));
     }
@@ -1374,15 +1401,16 @@ mod tests {
             screen.contains("Go to") && !screen.contains("View"),
             "{screen}"
         );
-        // Shift+Tab from the text to the modes, then to Text, which Space chooses.
+        // Shift+Tab from the text to the modes, whose list opens on Files and dirs; Text is up.
         press(&mut window, Action::PrevField);
-        press(&mut window, Action::Left);
-        assert_eq!(press(&mut window, Action::Toggle), FindEvent::Search);
+        press(&mut window, Action::Toggle);
+        press(&mut window, Action::Up);
+        assert_eq!(press(&mut window, Action::Confirm), FindEvent::Search);
         assert_eq!(window.query().lines().pattern, "main");
         assert!(draw(&mut window, 70).contains("View"));
     }
 
-    /// Tab from the second mode to the rows: past the fields and the check box.
+    /// Tab from the modes to the rows: past the fields.
     fn to_rows_from_the_modes(window: &mut FindWindow) {
         for _ in 0..3 {
             press(window, Action::NextField);

@@ -48,7 +48,9 @@ and the UI turns them into messages. `noc-viewer` is the exception
 that knows nothing of the keymap, the theme, or the app. The app maps its keys to the viewer's
 commands, gives it the styles of its theme, reads the parts it asks for (`Viewer::want`) with
 `noc_viewer::read_part` in a task of its own, which also makes their lines away from the thread
-that draws, gives them back (`Viewer::take`), and closes the viewer itself. `noc-scroll` draws
+that draws, gives them back (`Viewer::take`), and closes the viewer itself. Text that the app
+holds, such as the lines of checksums, it cuts into parts with `noc_viewer::part_of` at once
+([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). `noc-scroll` draws
 too, the scroll bar, but has no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code
 that two crates need goes into a crate of its own topic, such as `noc-text`, or `noc-pattern`,
 which builds the regular expressions of fd's search in `noc-tools` and of the regex mode in the
@@ -1530,14 +1532,19 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the other panel's cursor is on a file, a check box compares the two (checked when they have
   the same name), which hashes both. The job has the usual window, Background, and list.
   When it ends, a window shows the checksums: with several files, a list with each checksum
-  shortened in the middle and a mark (✓, ✗, or `-` for skipped), and under it the selected
-  file's whole checksum; then the verdict (matches or not, the same or different), in color.
-  Copy puts the selected checksum on the clipboard, Copy all every line in the format of
-  `sha256sum` (`<hex>  <name>`; names with a backslash or a line break escaped as GNU
-  coreutils does), and Save… writes those lines to a file in the panel's directory, locally
+  shortened in the middle and a mark (✓, ✗, or `-` for skipped), under a filter that finds a
+  file by its name or its checksum, and under the list, apart from it by a line as in the
+  location menu, the name and the whole checksum of the file under the cursor, in as many lines
+  whichever it is; then the verdict (matches or not, the same or different), in color
+  ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). The window opens on
+  the rows, in Normal mode (`checksums`, falling back to `dialog`); `/` types in the filter.
+  Copy puts the checksum of the file under the cursor on the clipboard, Copy all every line in
+  the format of `sha256sum` (`<hex>  <name>`; names with a backslash or a line break escaped as
+  GNU coreutils does), View (F3) shows those lines in the viewer, in place of the window, which
+  comes back when it closes, and Save… writes them to a file in the panel's directory, locally
   or on the host (`name.sha256` for one file, `SHA256SUMS` for several; `b3`, `md5`, …
-  for the others), after asking before it replaces one. Windows of jobs that end while one
-  is open wait their turn.
+  for the others), after asking before it replaces one. One file has no list and no View.
+  Windows of jobs that end while one is open wait their turn.
 - **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
   between frames, and the terminal puts the text on the clipboard of the machine it runs on,
   over ssh too. Nothing tells whether it did, so the UI says the text was sent to the
@@ -1703,7 +1710,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
   `rename`, `command_line`, `command_history`, `find`, `user_screen`, `list`, `location_menu`,
-  `tab_menu`, `jump`, `workspaces`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
+  `tab_menu`, `jump`, `workspaces`, `checksums`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
   `completion`, `viewer`), in the order the help lists them. The app says which mode and context the
   next key goes to (`App::place`): the mode is that of the text field with the keys, Visual mode
   while a panel selects rows, and else Normal mode. Each context falls back along a chain in its
@@ -1712,7 +1719,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mode, and the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`,
   `command_history`) to `list`, which holds the keys they share, then, in Insert mode only, to
   `input` for their filters; the search of a tree falls back as a dialog does, `find` to `dialog`
-  and its fields, `find_input`, to `dialog_input`. Every one but `user_screen` falls back to
+  and its fields, `find_input`, to `dialog_input`; the window of the checksums of several files,
+  `checksums`, to `dialog`, and while its filter takes text to `list` and `input`. Every one but
+  `user_screen` falls back to
   `global` last, whose keys are the same in every mode: the key hints, the output of commands, and
   Ctrl+l, which redraws the screen; the app takes them before whatever is in front, which stays as
   it was. The first context that knows a key sequence decides, except that a sequence it only starts
@@ -1741,9 +1750,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   them so without the kitty keyboard protocol; with it, which Noon Commander asks for, vim would
   type the key with the eighth bit set, and Noon Commander does as nvim does in Insert and Visual
   mode ([ADR 0022](adr/0022-vim-modes.md)). The pull-down menu and the dialogs (contexts
-  `pull_down`, `dialog`, `dialog_input`, `path_input`, `completion`, `find`, and `find_input`,
-  which `Context::alt_letters_are_hotkeys` names) take Alt and a key otherwise, in every mode: Alt
-  and a letter or a digit that nothing binds go to the app as `Resolved::Hotkey`, the letter of a
+  `pull_down`, `dialog`, `dialog_input`, `path_input`, `completion`, `find`, `find_input`, and
+  `checksums`, which `Context::alt_letters_are_hotkeys` names) take Alt and a key otherwise, in
+  every mode: Alt and a letter or a digit that nothing binds go to the app as `Resolved::Hotkey`,
+  the letter of a
   menu, a command, or an element of the dialog, and do nothing where nothing has the letter, and
   Alt never stands for Esc there ([ADR 0033](adr/0033-letters-in-dialogs.md)), as it never did on
   a password, where the `Esc` would close its dialog and send the key to the panels. Keys are

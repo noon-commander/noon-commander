@@ -18,7 +18,7 @@ use noc_tools::zoxide::Scored;
 use noc_vfs::{DirEntry, FileKind, Location, Metadata, RemotePath, Volume};
 use noc_viewer::{
     Command as ViewerCommand, Part as ViewerPart, Progress as ReadProgress, Sizes as ViewerSizes,
-    Styles as ViewerStyles, Taken, Viewer, Want,
+    Styles as ViewerStyles, Taken, Viewer, Want, part_of,
 };
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
@@ -683,6 +683,23 @@ struct Sizes {
     jump: Option<u16>,
 }
 
+/// What the viewer shows.
+#[derive(Debug)]
+enum Source {
+    /// A file, which a task reads in parts.
+    File {
+        location: Location,
+        host: Option<HostHandle>,
+    },
+    /// Text that the app holds, under a name of its own, such as the lines of the checksums of
+    /// a window of them, which goes back in front when the viewer closes (ADR 0058).
+    Text {
+        name: String,
+        bytes: Vec<u8>,
+        results: Box<Results>,
+    },
+}
+
 /// The viewer on screen, the part it reads, and what stops it loading.
 #[derive(Debug)]
 struct Viewing {
@@ -690,8 +707,7 @@ struct Viewing {
     viewer: Viewer,
     /// For the file, whose dots turn on its icon until it is read.
     wait: Wait,
-    location: Location,
-    host: Option<HostHandle>,
+    source: Source,
     /// The part being read, if any, with its window.
     reading: Option<Reading>,
     /// The window of the part read last, full for a moment.
@@ -700,6 +716,14 @@ struct Viewing {
 }
 
 impl Viewing {
+    /// The path of the file, or the name of the text, terminal-safe, as messages name it.
+    fn name(&self) -> String {
+        match &self.source {
+            Source::File { location, .. } => location_text(location),
+            Source::Text { name, .. } => cells::sanitize(name.as_bytes()),
+        }
+    }
+
     /// Draws the viewer over `area`, the icon of the file in front of its path: while the file
     /// is read, the dots turn in its place. A part that takes a while shows its window over it,
     /// with a gauge.
@@ -711,10 +735,14 @@ impl Viewing {
         spin: &Spin,
     ) {
         let loading = self.viewer.loading();
+        let name = match &self.source {
+            Source::File { location, .. } => file_name(location).unwrap_or_default(),
+            Source::Text { name, .. } => name.clone().into_bytes(),
+        };
         let icon = spin
             .wait_dots(&self.wait)
             .filter(|_| loading)
-            .unwrap_or_else(|| decor.file(&file_name(&self.location).unwrap_or_default()));
+            .unwrap_or_else(|| decor.file(&name));
         self.viewer.render(frame, area, &viewer_styles(theme), icon);
         if self
             .finished
@@ -1194,7 +1222,8 @@ impl App {
                 | Context::Jump
                 | Context::Workspaces
                 | Context::CommandHistory
-                | Context::KeyHints,
+                | Context::KeyHints
+                | Context::Checksums,
             ) => {
                 let mut effects = Vec::new();
                 if mode == Mode::Normal {
@@ -2041,8 +2070,9 @@ impl App {
             Context::Workspaces
         } else if self.history_window.is_some() {
             Context::CommandHistory
-        } else if !self.results.is_empty() || self.in_front().is_some() || self.jobs_list.is_some()
-        {
+        } else if let Some(results) = self.results.front() {
+            results.window.context()
+        } else if self.in_front().is_some() || self.jobs_list.is_some() {
             Context::Dialog
         } else if self.help.is_some() {
             Context::Help
@@ -2099,11 +2129,9 @@ impl App {
             window.mode()
         } else if let Some(window) = &self.history_window {
             window.mode()
-        } else if !self.results.is_empty()
-            || self.in_front().is_some()
-            || self.jobs_list.is_some()
-            || self.help.is_some()
-        {
+        } else if let Some(results) = self.results.front() {
+            results.window.mode()
+        } else if self.in_front().is_some() || self.jobs_list.is_some() || self.help.is_some() {
             Mode::Normal
         } else if let Some(configuration) = &self.configuration {
             configuration.mode()
@@ -2154,6 +2182,7 @@ impl App {
             Context::Jump => self.jump.as_ref()?.search(),
             Context::Workspaces => self.workspaces_window.as_ref()?.search(),
             Context::CommandHistory => self.history_window.as_ref()?.search(),
+            Context::Checksums => self.results.front()?.window.search(),
             Context::DialogInput | Context::PathInput => {
                 self.dialogs.front()?.dialog.search_focused()
             }
@@ -2266,6 +2295,7 @@ impl App {
                     | Context::Workspaces
                     | Context::CommandHistory
                     | Context::KeyHints
+                    | Context::Checksums
             )
         )
     }
@@ -2408,6 +2438,7 @@ impl App {
                 | Context::CommandHistory
                 | Context::KeyHints
                 | Context::Jump
+                | Context::Checksums
         );
         if pages && matches!(action, Action::PageUp | Action::PageDown) {
             return false;
@@ -2444,6 +2475,10 @@ impl App {
             Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
             Context::KeyHints => self.key_hints.as_mut().map(KeyHintsWindow::picker_mut),
             Context::Jump => self.jump.as_mut().map(JumpMenu::picker_mut),
+            Context::Checksums => self
+                .results
+                .front_mut()
+                .and_then(|results| results.window.picker_mut()),
             _ => None,
         };
         if let Some(picker) = picker {
@@ -2824,7 +2859,10 @@ impl App {
         if self.history_window.is_some() {
             return Some(self.handle_history(input));
         }
-        if self.handle_results(input) || self.handle_job(input) || self.handle_jobs_list(input) {
+        if let Some(effects) = self.handle_results(input) {
+            return Some(effects);
+        }
+        if self.handle_job(input) || self.handle_jobs_list(input) {
             return Some(Vec::new());
         }
         if let Some(help) = &mut self.help {
@@ -2877,6 +2915,10 @@ impl App {
                 Slot::Jump => self.jump.as_ref().map(JumpMenu::input),
                 Slot::FindText => self.find.as_ref().map(FindWindow::text_input),
                 Slot::FindFiles => self.find.as_ref().map(FindWindow::files_input),
+                Slot::Checksums => self
+                    .results
+                    .front()
+                    .and_then(|results| results.window.input()),
                 Slot::Mark => self
                     .dialogs
                     .iter()
@@ -4594,38 +4636,67 @@ impl App {
             },
             Location::Local(_) => None,
         };
-        self.last_job += 1;
+        let mut viewer = Viewer::new(location_text(&location), self.viewer_sizes());
+        if let Some(line) = line {
+            let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
+            viewer.handle(ViewerCommand::Top(line));
+        }
+        self.open_viewer(viewer, Source::File { location, host });
+        let mut effects = self.read_more();
+        effects.extend(self.note(dir));
+        effects
+    }
+
+    /// Views the checksums of the window `results` as the lines of a file of them, under the
+    /// name Save offers; the window goes back in front once the viewer closes (ADR 0058).
+    fn view_sums(&mut self, results: Results) -> Vec<Effect> {
+        let name = sums_name(&results);
+        let bytes = sums_file(&results.lines);
+        let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes());
+        let results = Box::new(results);
+        self.open_viewer(
+            viewer,
+            Source::Text {
+                name,
+                bytes,
+                results,
+            },
+        );
+        self.read_more()
+    }
+
+    /// How much of a file the viewer reads at once, and holds: `viewer.part_mib` and
+    /// `viewer.window_mib`.
+    fn viewer_sizes(&self) -> ViewerSizes {
         let mebibytes = |count: std::num::NonZeroUsize| {
             u64::try_from(count.get())
                 .unwrap_or(u64::MAX)
                 .saturating_mul(1 << 20)
         };
         let viewer = &self.config.viewer;
-        let sizes = ViewerSizes {
+        ViewerSizes {
             part: mebibytes(viewer.part_mib),
             window: mebibytes(viewer.window_mib),
-        };
-        let mut viewer = Viewer::new(location_text(&location), sizes);
-        if let Some(line) = line {
-            let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
-            viewer.handle(ViewerCommand::Top(line));
         }
+    }
+
+    /// Shows `viewer` on `source`, in place of the viewer on screen, if any.
+    fn open_viewer(&mut self, viewer: Viewer, source: Source) {
+        self.close_viewer();
+        self.last_job += 1;
         self.viewing = Some(Viewing {
             id: self.last_job,
             viewer,
             wait: Wait::default(),
-            location,
-            host,
+            source,
             reading: None,
             finished: None,
             cancel: CancellationToken::new(),
         });
-        let mut effects = self.read_more();
-        effects.extend(self.note(dir));
-        effects
     }
 
-    /// Reads the part the viewer wants next, unless it reads one already.
+    /// Reads the part the viewer wants next, unless it reads one already. Text that the app
+    /// holds gives every part it wants at once.
     fn read_more(&mut self) -> Vec<Effect> {
         let Some(viewing) = &mut self.viewing else {
             return Vec::new();
@@ -4633,6 +4704,18 @@ impl App {
         if viewing.reading.is_some() {
             return Vec::new();
         }
+        let (location, host) = match &viewing.source {
+            Source::File { location, host } => (location, host),
+            Source::Text { bytes, .. } => {
+                // A part it takes and wants again would come round for ever.
+                let mut last = None;
+                while let Some(want) = viewing.viewer.want().filter(|want| Some(*want) != last) {
+                    viewing.viewer.take(part_of(bytes, want));
+                    last = Some(want);
+                }
+                return Vec::new();
+            }
+        };
         let Some(want) = viewing.viewer.want() else {
             return Vec::new();
         };
@@ -4640,8 +4723,8 @@ impl App {
         viewing.reading = Some(Reading::new(want, stop.clone()));
         vec![Effect::Read(ReadRequest {
             id: viewing.id,
-            location: viewing.location.clone(),
-            host: viewing.host.clone(),
+            location: location.clone(),
+            host: host.clone(),
             want,
             stop,
             cancel: viewing.cancel.clone(),
@@ -5276,12 +5359,12 @@ impl App {
                     viewing.finished = reading.and_then(Reading::finish);
                 }
                 if viewing.viewer.take(part) == Taken::Changed {
-                    let path = location_text(&viewing.location);
+                    let path = viewing.name();
                     self.message = Some(fl!("viewer-changed", path = path));
                 }
             }
             Err(reason) => {
-                let path = location_text(&viewing.location);
+                let path = viewing.name();
                 let reason = cells::sanitize(reason.as_bytes());
                 if viewing.viewer.loading() {
                     self.close_viewer();
@@ -5345,9 +5428,13 @@ impl App {
         Vec::new()
     }
 
+    /// Closes the viewer; the window of checksums whose lines it showed goes back in front.
     fn close_viewer(&mut self) {
         if let Some(viewing) = self.viewing.take() {
             viewing.cancel.cancel();
+            if let Source::Text { results, .. } = viewing.source {
+                self.results.push_front(*results);
+            }
         }
     }
 
@@ -6019,7 +6106,7 @@ impl App {
         };
         let mut buttons = vec![SumsButton::Copy];
         if rows.len() > 1 {
-            buttons.push(SumsButton::CopyAll);
+            buttons.extend([SumsButton::CopyAll, SumsButton::View]);
         }
         if hashing.dir.is_some() {
             buttons.push(SumsButton::Save);
@@ -6038,9 +6125,10 @@ impl App {
             })
             .collect();
         let title = Label::parse(&algorithm_name(hashing.algorithm)).text;
+        let input = self.search_opens(Slot::Checksums);
         self.results.push_back(Results {
             id,
-            window: SumsWindow::new(title, rows, verdict, buttons),
+            window: SumsWindow::new(title, rows, verdict, buttons, input),
             algorithm: hashing.algorithm,
             dir: hashing.dir,
             lines,
@@ -6048,11 +6136,10 @@ impl App {
     }
 
     /// Gives a key to the window of checksums in front, if there is one: Copy puts a checksum
-    /// on the clipboard, Save asks where to save them all.
-    fn handle_results(&mut self, input: Resolved) -> bool {
-        let Some(results) = self.results.front_mut() else {
-            return false;
-        };
+    /// on the clipboard, View shows them all in the viewer, in its place, and Save asks where
+    /// to save them all.
+    fn handle_results(&mut self, input: Resolved) -> Option<Vec<Effect>> {
+        let results = self.results.front_mut()?;
         match results.window.handle(input) {
             SumsEvent::Pending => {}
             SumsEvent::Copy(row) => {
@@ -6066,15 +6153,14 @@ impl App {
                 self.clipboard = Some(String::from_utf8_lossy(&text).into_owned());
                 results.window.set_status(fl!("checksum-copied"));
             }
+            SumsEvent::View => {
+                if let Some(results) = self.results.pop_front() {
+                    return Some(self.view_sums(results));
+                }
+            }
             SumsEvent::Save => {
                 if let Some(dir) = results.dir.clone() {
-                    let name = match results.lines.as_slice() {
-                        [(name, _)] => {
-                            let name = String::from_utf8_lossy(name).into_owned();
-                            format!("{name}.{}", extension(results.algorithm))
-                        }
-                        _ => format!("{}SUMS", extension(results.algorithm).to_uppercase()),
-                    };
+                    let name = sums_name(results);
                     let bytes = sums_file(&results.lines);
                     let window = results.id;
                     let (title, prompt) = (fl!("checksum-save-title"), fl!("checksum-save-prompt"));
@@ -6089,7 +6175,7 @@ impl App {
                 self.results.pop_front();
             }
         }
-        true
+        Some(Vec::new())
     }
 
     /// Writes the checksums of the window `window` to `location`, over what is there if
@@ -7466,7 +7552,7 @@ impl App {
                 job.view.render(frame, panels, theme, (spin.at(), spin));
             });
         }
-        if let Some(results) = self.results.front() {
+        if let Some(results) = self.results.front_mut() {
             stage.show(frame, middle(zoom::Window::Results(results.id)), |frame| {
                 results.window.render(frame, panels, theme);
             });
@@ -7783,7 +7869,8 @@ fn window_kind(context: Context) -> Option<String> {
         | Context::PathInput
         | Context::Completion
         | Context::Find
-        | Context::FindInput => fl!("window-dialog"),
+        | Context::FindInput
+        | Context::Checksums => fl!("window-dialog"),
         Context::ComboBox => fl!("window-combo-box"),
         Context::Help => fl!("window-help"),
         Context::Viewer => fl!("window-viewer"),
@@ -7974,6 +8061,18 @@ fn parse_expected(text: &str, chosen: Algorithm) -> Option<(String, Algorithm)> 
             .find(|algorithm| algorithm.digest_len() * 2 == length)?
     };
     Some((word, algorithm))
+}
+
+/// The name of a file of the checksums of `results`: `name.sha256` for one file, `SHA256SUMS`
+/// for several, with the extension of the algorithm.
+fn sums_name(results: &Results) -> String {
+    match results.lines.as_slice() {
+        [(name, _)] => {
+            let name = String::from_utf8_lossy(name).into_owned();
+            format!("{name}.{}", extension(results.algorithm))
+        }
+        _ => format!("{}SUMS", extension(results.algorithm).to_uppercase()),
+    }
 }
 
 /// The lines of a file of checksums, as `sha256sum` writes them: the checksum, two spaces, and
@@ -13619,12 +13718,13 @@ mod tests {
         hashed(&mut app, id, sums);
         let text = screen_of(&mut app, 24);
         assert!(text.contains("skipped"), "{text}");
-        // Copy, Copy all, Save.
+        // Copy, Copy all, View, Save.
         app.handle(action(Action::Right));
         app.handle(action(Action::Confirm));
         let all = app.take_clipboard().unwrap();
         let line = |byte: &str, name: &str| format!("{}  {name}\n", byte.repeat(32));
         assert_eq!(all, line("01", "sub/x") + &line("02", "a"));
+        app.handle(action(Action::Right));
         app.handle(action(Action::Right));
         app.handle(action(Action::Confirm));
         let text = screen_of(&mut app, 24);
@@ -13656,6 +13756,63 @@ mod tests {
         let effects = app.written(&location, Ok(()));
         assert_eq!(effects.len(), 2, "both panels show /srv");
         assert!(screen_of(&mut app, 24).contains("Saved to /srv/SHA256SUMS."));
+    }
+
+    #[test]
+    fn the_checksums_filter_finds_a_file_and_f3_views_them_all_then_comes_back() {
+        let mut app = on_files();
+        let first = app.search_opens(Slot::Checksums).way();
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Mark));
+        app.handle(action(Action::Mark));
+        app.handle(action(Action::Checksum));
+        let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
+        let sums = vec![
+            sum("/srv/sub/x", "sub/x", Some(1)),
+            sum("/srv/sub/y", "sub/y", None),
+            sum("/srv/a", "a", Some(2)),
+        ];
+        hashed(&mut app, id, sums);
+        assert_eq!(app.place(), (Mode::Normal, Context::Checksums));
+        assert_eq!(mode_of(&mut app), "NORMAL · Dialog");
+        let text = screen_of(&mut app, 30);
+        assert!(text.contains("Filter:"), "{text}");
+        assert!(text.contains("[ View ]"), "{text}");
+        keys(&mut app, &["/"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::Checksums));
+        assert_eq!(app.key_place().search, Some(search::Kind::FILTER));
+        keys(&mut app, &["s", "u", "b", "/", "y"]);
+        let text = screen_of(&mut app, 30);
+        assert!(!text.contains("02020202"), "a is hidden: {text}");
+        // Its keys, and the one that switches how it matches, which it keeps.
+        keys(&mut app, &["ctrl-s", "ctrl-s"]);
+        keys(&mut app, &["esc"]);
+        assert_eq!(app.place(), (Mode::Normal, Context::Checksums));
+        keys(&mut app, &["enter"]);
+        assert_eq!(app.take_clipboard(), None, "sub/y was skipped");
+        keys(&mut app, &["/", "ctrl-u", "a", "enter"]);
+        assert_eq!(app.take_clipboard(), Some("02".repeat(32)));
+        // F3 shows every line in the viewer, in place of the window.
+        assert!(keys(&mut app, &["f3"]).is_empty(), "nothing to read");
+        assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
+        let text = screen_of(&mut app, 30);
+        assert!(text.contains("SHA256SUMS"), "{text}");
+        assert!(
+            text.contains(&format!("{}  sub/x", "01".repeat(32))),
+            "{text}"
+        );
+        assert!(text.contains(&format!("{}  a", "02".repeat(32))), "{text}");
+        assert!(!text.contains("Filter:"), "{text}");
+        // q closes the viewer, and the window comes back as it was, its filter typing.
+        keys(&mut app, &["q"]);
+        assert_eq!(app.place(), (Mode::Insert, Context::Checksums));
+        let text = screen_of(&mut app, 30);
+        assert!(text.contains("Filter: a"), "{text}");
+        keys(&mut app, &["esc", "esc"]);
+        assert_eq!(app.context(), Context::Panel);
+        let opens = app.search_opens(Slot::Checksums).way();
+        assert_ne!(opens, first, "as Ctrl+s Ctrl+s left it");
     }
 
     #[test]

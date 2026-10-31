@@ -134,7 +134,7 @@ impl Kind {
         cases: &CASES,
     };
     /// The filter of a list of names: the location menu, the tab menu, the workspaces, the
-    /// command history, the key hints.
+    /// command history, the key hints, the checksums.
     pub(crate) const FILTER: Self = Self {
         ways: &[Way::Plain, Way::Fzf, Way::Regex],
         instead: Way::Fzf,
@@ -334,11 +334,13 @@ pub(crate) enum Slot {
     FindFiles,
     /// The pattern of `g +` and `g -`.
     Mark,
+    /// The filter of the window of checksums.
+    Checksums,
 }
 
 impl Slot {
     /// Every slot.
-    pub(crate) const ALL: [Self; 10] = [
+    pub(crate) const ALL: [Self; 11] = [
         Self::QuickSearch,
         Self::LocationMenu,
         Self::TabMenu,
@@ -349,6 +351,7 @@ impl Slot {
         Self::FindText,
         Self::FindFiles,
         Self::Mark,
+        Self::Checksums,
     ];
 
     /// The kind of its field.
@@ -359,7 +362,8 @@ impl Slot {
             | Self::TabMenu
             | Self::Workspaces
             | Self::CommandHistory
-            | Self::KeyHints => Kind::FILTER,
+            | Self::KeyHints
+            | Self::Checksums => Kind::FILTER,
             Self::Jump => Kind::FILTER_PATHS,
             Self::FindText => Kind::TREE,
             Self::FindFiles => Kind::FILES,

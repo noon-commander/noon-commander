@@ -9,6 +9,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The window of the checksums of several files that `f #` shows has a filter, as the lists have:
+  `/` types in it, and it finds a file by its name or its checksum, matching as Ctrl+s
+  and the key after it say, as it was last. The window opens on the rows, and Esc goes back to
+  them from the filter, then closes it. The name and the whole checksum of the file under the
+  cursor show under the list, apart from it by a line as in the location menu, in as many lines
+  whichever file it is, with the verdict. A View button, and F3, show every line as `sha256sum`
+  prints them in the viewer, under the name Save… offers, and the window comes back when it
+  closes. Copy all, View, and Save… take every file, whatever the filter shows
+  ([ADR 0058](docs/adr/0058-the-window-of-checksums-filters-and-views-them.md)).
 - Aliases and functions from the shell's rc files work on the command line (`!` and `:!`):
   `shell.run`, Command line → Run with in the Configuration dialog, says what runs a command,
   `["$SHELL", "-i", "-c"]` by default, with the command after it as one more argument. `$NAME`

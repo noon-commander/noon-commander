@@ -163,6 +163,7 @@ impl Part {
                 (Mode::Normal, Context::LocationMenu, fl!("help-menu")),
                 (Mode::Normal, Context::TabMenu, fl!("help-tab-menu")),
                 (Mode::Normal, Context::Workspaces, fl!("help-workspaces")),
+                (Mode::Normal, Context::Checksums, fl!("help-checksums")),
             ],
             Self::MenusAndDialogs => vec![
                 (Mode::Normal, Context::PullDown, fl!("help-pulldown")),
@@ -966,6 +967,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         .or_else(|| describe_workspaces(context, action))
         .or_else(|| describe_command_line(context, action))
         .or_else(|| describe_history(context, action))
+        .or_else(|| describe_checksums(context, action))
         .or_else(|| describe_text(context, action))
     {
         return Some(text);
@@ -1161,6 +1163,21 @@ fn describe_history(context: Context, action: Action) -> Option<String> {
     Some(text)
 }
 
+/// What keys do in the window of the checksums of several files, besides those of dialogs.
+fn describe_checksums(context: Context, action: Action) -> Option<String> {
+    if context != Context::Checksums {
+        return None;
+    }
+    let text = match action {
+        Action::QuickSearch => fl!("help-list-filter"),
+        Action::View => fl!("help-checksums-view"),
+        Action::NextField => fl!("help-next-field"),
+        Action::PrevField => fl!("help-prev-field"),
+        _ => return None,
+    };
+    Some(text)
+}
+
 /// What keys do on the command line that they do not in other text fields.
 fn describe_command_line(context: Context, action: Action) -> Option<String> {
     if context != Context::CommandLine {
@@ -1263,6 +1280,7 @@ fn describe_rows(context: Context, action: Action) -> Option<String> {
             | Context::Help
             | Context::List
             | Context::Find
+            | Context::Checksums
             | Context::ComboBox
     );
     let text = match action {
@@ -1500,6 +1518,7 @@ mod tests {
                 "Half a page up",
                 "Delete to the start of the line",
                 "Half a page up",
+                "Half a page up",
                 "Half a page up"
             ]
         );
@@ -1604,7 +1623,8 @@ mod tests {
                         "The filter of a list",
                         "Location menu",
                         "Tab menu",
-                        "Workspaces"
+                        "Workspaces",
+                        "Checksums of several files"
                     ]
                 ),
                 (

@@ -1292,6 +1292,37 @@ text, `search_input` goes before it.
 | View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
 | Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
 
+## Checksums (`checksums`, Normal mode)
+
+The window that `f #` shows when it ends, for several files: their checksums in a list under a
+filter, and under them, apart, the whole checksum of the file under the cursor, then the buttons
+Copy, Copy all, View, Save…, and OK
+([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). It opens on the rows and
+falls back to `dialog`, whose motions move the cursor of the rows, whose Left, Right, and Tab move
+the focus of the buttons, and whose Enter and Space press the one with it; Alt and the letter of
+a button press it, as in every dialog. `/` types in the filter, as in the lists. F3 shows
+every line in the viewer, as `sha256sum` prints them, and the window comes back when it closes.
+One file has no list: its window is a dialog. mc and Far have no checksums; yazi and ranger
+neither.
+
+| Description | Action | Status | noc | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- |
+| Type in the filter again, in Insert mode | `quick_search` | ⏳ | / | — | — | — | — |
+| View the checksums, every line as sha256sum prints them | `view` | ⏳ | F3 | — | — | — | — |
+| Half a page up | `half_page_up` | ⏳ | Ctrl+u | — | — | — | — |
+| Half a page down | `half_page_down` | ⏳ | Ctrl+d | — | — | — | — |
+
+## Checksums (`checksums`, Insert mode)
+
+While its filter takes text. It falls back to `list`, then to `input`, then to `global`; F3 still
+views the checksums, and Tab and Shift+Tab still move the focus of the buttons.
+
+| Description | Action | Status | noc | mc | far | yazi | ranger |
+| --- | --- | :-: | --- | --- | --- | --- | --- |
+| View the checksums, every line as sha256sum prints them | `view` | ⏳ | F3 | — | — | — | — |
+| The next button | `next_field` | ⏳ | Tab<br>Ctrl+i | — | — | — | — |
+| The button before | `prev_field` | ⏳ | Shift+Tab | — | — | — | — |
+
 ## Key hints list (`key_hints`, Normal and Insert mode)
 
 Ctrl+k while the key hints show, as `K K` gives nvim's hover window the keys: every key sequence of

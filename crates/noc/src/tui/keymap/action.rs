@@ -85,6 +85,9 @@ pub(crate) enum Context {
     /// A field of the dialog of the search of a whole tree; falls back as the text fields of
     /// dialogs do.
     FindInput,
+    /// The window of the checksums of several files: a list with a filter and buttons; falls
+    /// back to `Dialog`, and, while its filter takes text, to `List` and `Input`.
+    Checksums,
     /// The key hints with the keys, after a second Ctrl+k: every key of what is under them, to
     /// filter and run; falls back as the location menu does.
     KeyHints,
@@ -203,6 +206,10 @@ impl Context {
                 Self::Dialog,
                 Self::Global,
             ],
+            Self::Checksums if filtering => {
+                &[Self::Checksums, Self::List, Self::Input, Self::Global]
+            }
+            Self::Checksums => &[Self::Checksums, Self::Dialog, Self::Global],
             Self::KeyHints if filtering => &[Self::KeyHints, Self::List, Self::Input, Self::Global],
             Self::KeyHints => &[Self::KeyHints, Self::List, Self::Global],
             Self::PullDown => &[Self::PullDown, Self::Global],
@@ -233,6 +240,7 @@ impl Context {
                 | Self::ComboBox
                 | Self::Find
                 | Self::FindInput
+                | Self::Checksums
         )
     }
 }
@@ -805,6 +813,7 @@ impl Context {
         Self::CommandHistory,
         Self::Find,
         Self::FindInput,
+        Self::Checksums,
         Self::KeyHints,
         Self::UserScreen,
     ];

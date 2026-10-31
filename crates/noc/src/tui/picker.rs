@@ -14,11 +14,12 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
 use super::dialog::{
-    Colors, Field, Tone, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
-    right_frame, rows_area,
+    Colors, Field, Tone, button_line, button_spots, draw_box, draw_separator, draw_skeleton,
+    draw_title_dots, frame_around, right_frame, rows_area,
 };
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
+use super::label::Label;
 use super::loading::Loading;
 use super::mouse::{Drawn, Pointer, Press};
 use super::scroll::Window;
@@ -99,6 +100,9 @@ pub(crate) struct Body<'a> {
     /// The whole text of the row under the cursor, which always shows under the rows while
     /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
+    /// Buttons under all of it, apart from it by a line, as a dialog's: their labels, the
+    /// first the default, and the one with the focus.
+    pub(crate) buttons: Option<(&'a [Label], usize)>,
 }
 
 impl Body<'_> {
@@ -208,6 +212,13 @@ impl Picker {
     pub(crate) fn plain_keywords(mut self) -> Self {
         self.plain_keywords = true;
         self.refilter();
+        self
+    }
+
+    /// The same picker, which opens on its rows, in Normal mode, rather than typing in the
+    /// filter; `/` types in it.
+    pub(crate) fn on_rows(mut self) -> Self {
+        self.filtering = false;
         self
     }
 
@@ -500,9 +511,15 @@ impl Picker {
         self.drawn.menu_press(pointer, &mut self.cursor)
     }
 
+    /// What a press does to the buttons of the last render: a click gives one the `focus`
+    /// and returns Enter, which presses it.
+    pub(crate) fn button_press(&self, pointer: Pointer, focus: &mut usize) -> Option<Action> {
+        self.drawn.button_press(pointer, focus)
+    }
+
     /// Draws the window centered over `area`: the filter, then the lines of `body`, scrolled
-    /// to the cursor, or its message, or a note that nothing matches, then its footer. `row`
-    /// draws a row.
+    /// to the cursor, or its message, or a note that nothing matches, then its footer and its
+    /// buttons. `row` draws a row.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -523,25 +540,34 @@ impl Picker {
             (footer, _) => u16::try_from(footer + 1).unwrap_or(u16::MAX),
         };
         let colors = Colors::of(theme, Tone::Plain);
-        // Borders, the filter, the line under it, the rows, the footer; or the skeleton, in
-        // place of the rows and of the whole row under them.
-        let height = shown.saturating_add(4).saturating_add(below);
+        // A line and the buttons.
+        let buttons = if body.buttons.is_some() { 2 } else { 0 };
+        // Borders, the filter, the line under it, the rows, the footer, the buttons; or the
+        // skeleton, in place of the rows and of the whole row under them.
+        let height = shown.saturating_add(4).saturating_add(below + buttons);
         let size = (body.width, height.saturating_add(body.waiting_full()));
-        let inner = draw_box(frame, area, size, body.title, colors, theme);
+        let boxed = draw_box(frame, area, size, body.title, colors, theme);
         let wait = body
             .loading
             .and_then(|(loading, spin)| Some((loading.wait()?, spin)));
         if let Some(dots) = wait.and_then(|(wait, spin)| spin.wait_dots(wait)) {
-            draw_title_dots(frame, inner, body.title, (dots, theme.busy_dialog), colors);
+            draw_title_dots(frame, boxed, body.title, (dots, theme.busy_dialog), colors);
         }
         self.drawn = Drawn {
-            frame: frame_around(inner),
+            frame: frame_around(boxed),
             ..Drawn::default()
         };
         self.bar = None;
         self.glyphs = None;
-        if inner.height < 3 || inner.width < 4 {
+        if boxed.height < 3 + buttons || boxed.width < 4 {
             return;
+        }
+        let inner = Rect {
+            height: boxed.height - buttons,
+            ..boxed
+        };
+        if let Some(buttons) = body.buttons {
+            self.drawn.buttons = draw_buttons(frame, boxed, buttons, theme);
         }
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
@@ -560,6 +586,8 @@ impl Picker {
             for (index, text) in room.zip(cells::wrap(&message, width)) {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
+            let footer = (full, body.footer, body.footer_column);
+            draw_below(frame, inner, below, footer, theme);
             return;
         }
         let cursor = self.cursor.min(rows - 1);
@@ -596,22 +624,8 @@ impl Picker {
             };
             frame.render_widget(text, line(y));
         }
-        if below > 0 {
-            let footer: Vec<Line<'static>> = match full {
-                Some(full) => {
-                    let styles = (theme.dialog, theme.truncated_dialog);
-                    cells::whole(
-                        full,
-                        (width, usize::from(FULL_ROWS)),
-                        Some('/'),
-                        styles,
-                        theme.glyphs.marks,
-                    )
-                }
-                None => body.footer,
-            };
-            draw_footer(frame, inner, (below, footer, body.footer_column), theme);
-        }
+        let footer = (full, body.footer, body.footer_column);
+        draw_below(frame, inner, below, footer, theme);
         self.cursor = cursor;
     }
 
@@ -695,6 +709,48 @@ impl Picker {
         );
         glyphs
     }
+}
+
+/// What goes in the last `below` lines of `inner`, if any: the whole text of the row under the
+/// cursor, `full`, if there is one, else the `footer`, in two columns from `column` if it says.
+fn draw_below(
+    frame: &mut Frame<'_>,
+    inner: Rect,
+    below: u16,
+    (full, footer, column): (Option<&str>, Vec<Line<'static>>, Option<u16>),
+    theme: &Theme,
+) {
+    if below == 0 {
+        return;
+    }
+    let footer = match full {
+        Some(full) => cells::whole(
+            full,
+            (usize::from(inner.width), usize::from(FULL_ROWS)),
+            Some('/'),
+            (theme.dialog, theme.truncated_dialog),
+            theme.glyphs.marks,
+        ),
+        None => footer,
+    };
+    draw_footer(frame, inner, (below, footer, column), theme);
+}
+
+/// The buttons of `labels`, the first the default and the one at `focus` with the focus, on the
+/// last line of `inner`, with a line above them that joins the frame, as a dialog's. Returns
+/// where they are.
+fn draw_buttons(
+    frame: &mut Frame<'_>,
+    inner: Rect,
+    (labels, focus): (&[Label], usize),
+    theme: &Theme,
+) -> Vec<Rect> {
+    let colors = Colors::of(theme, Tone::Plain);
+    let y = inner.bottom() - 1;
+    draw_separator(frame, inner, y - 1, colors, theme);
+    let row = Rect::new(inner.x, y, inner.width, 1);
+    frame.render_widget(button_line(labels, 0, Some(focus), colors), row);
+    button_spots(labels, 0, row)
 }
 
 /// The `footer`, in the last `below` lines of `inner` but the first, a line across it that joins

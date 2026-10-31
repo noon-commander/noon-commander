@@ -119,15 +119,37 @@ pub async fn read_part<V: Vfs>(
     bytes.truncate(limit);
     let read = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
     let end = !over && (eof || size.is_some_and(|size| want.offset + read >= size));
-    if want.new
-        && !end
-        && let Some(last) = bytes.iter().rposition(|&byte| byte == b'\n')
-    {
-        bytes.truncate(last + 1);
-    }
+    bytes.truncate(whole_lines(&bytes, want, end));
     tokio::task::spawn_blocking(move || Part::new(want, &bytes, (end, stopped), stamp))
         .await
         .map_err(|error| VfsError::Io(std::io::Error::other(error)))
+}
+
+/// The part of `text`, held whole in memory rather than read from a file, that `want` asks
+/// for, cut as a part of a file is. Its lines are made at once, on the thread that asks: for
+/// text such as the lines of a checksum file, small next to a file of megabytes.
+pub fn part_of(text: &[u8], want: Want) -> Part {
+    let start = usize::try_from(want.offset)
+        .unwrap_or(usize::MAX)
+        .min(text.len());
+    let limit = usize::try_from(want.length).unwrap_or(usize::MAX);
+    let bytes = &text[start..start.saturating_add(limit).min(text.len())];
+    let end = start + bytes.len() == text.len();
+    let bytes = &bytes[..whole_lines(bytes, want, end)];
+    let stamp = Stamp {
+        size: Some(u64::try_from(text.len()).unwrap_or(u64::MAX)),
+        modified: None,
+    };
+    Part::new(want, bytes, (end, false), stamp)
+}
+
+/// How many of `bytes`, read for `want`, the part keeps: a new part that is not the end ends
+/// after its last line feed, unless it has none.
+fn whole_lines(bytes: &[u8], want: Want, end: bool) -> usize {
+    match bytes.iter().rposition(|&byte| byte == b'\n') {
+        Some(last) if want.new && !end => last + 1,
+        _ => bytes.len(),
+    }
 }
 
 #[cfg(test)]
@@ -190,6 +212,30 @@ mod tests {
         assert_eq!((last.lines, last.end), (lines(&["ij"]), true));
         let past = read(&path, new(20, 4)).await;
         assert!(past.is_empty() && past.end);
+    }
+
+    #[test]
+    fn text_in_memory_is_cut_into_parts_as_a_file_is() {
+        let text = b"one\ntwo\nthree\n";
+        let part = part_of(text, new(0, 10));
+        assert_eq!(
+            (part.lines, part.len, part.end),
+            (lines(&["one", "two"]), 8, false)
+        );
+        assert_eq!(part.stamp.size, Some(14));
+        let last = part_of(text, new(8, 10));
+        assert_eq!(
+            (last.lines, last.len, last.end),
+            (lines(&["three"]), 6, true)
+        );
+        let known = Want {
+            new: false,
+            ..new(0, 10)
+        };
+        assert_eq!(part_of(text, known).lines, lines(&["one", "two", "th"]));
+        let beyond = part_of(text, new(20, 4));
+        assert!(beyond.is_empty() && beyond.end);
+        assert!(part_of(b"", new(0, 4)).end, "nothing is whole");
     }
 
     #[tokio::test]

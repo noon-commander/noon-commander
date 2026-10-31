@@ -635,6 +635,8 @@ help-list-close = Close the window
 help-menu = Location menu
 help-tab-menu = Tab menu
 help-workspaces = Workspaces
+help-checksums = Checksums of several files
+help-checksums-view = View the checksums, every line as sha256sum prints them
 help-find = Search of a whole tree
 help-find-fields = Search of a whole tree, in its fields
 help-history = Command history
@@ -1173,10 +1175,11 @@ checksum-matches = Matches the expected checksum.
 checksum-differs = Does not match the expected checksum.
 checksum-same = The files are the same.
 checksum-different = The files differ.
-# Buttons: the checksum of the selected file; every line, as sha256sum prints them; a file of
-# them.
+# Buttons: the checksum of the selected file; every line, as sha256sum prints them; those lines
+# in the viewer; a file of them.
 checksum-copy = &Copy
 checksum-copy-all = Copy &all
+checksum-view = &View
 checksum-save = &Save…
 # Nothing tells whether the terminal took it: some ignore the request (OSC 52).
 checksum-copied = Sent to the terminal's clipboard.

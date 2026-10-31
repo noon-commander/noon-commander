@@ -298,3 +298,10 @@ not:
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
 | F3<br>F4 | `view`<br>`edit` | mc, Far | — | Same | View the file of the row from its line, or edit it at the line, as in the results of mc's and Far's Find file. |
+
+## Checksums (`checksums`, Normal and Insert mode)
+
+| Keys | Action | From | Vim-style keys | Without kitty | Why |
+| --- | --- | --- | --- | --- | --- |
+| F3 | `view` | mc | — | Same | View the lines of the checksums, as F3 views a file ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). |
+| Tab<br>Ctrl+i<br>Shift+Tab | `next_field`<br>`next_field`<br>`prev_field` | noc | — | Same | In Insert mode, while the filter takes text: the focus of the buttons, as Tab goes through the fields of a dialog. vim's Tab is Ctrl+i, which goes forward through the jump list. |

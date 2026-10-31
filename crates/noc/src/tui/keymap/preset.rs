@@ -699,6 +699,29 @@ pub(super) const PRESET: Preset = &[
         Context::FindInput,
         &[(Action::View, &["f3"]), (Action::Edit, &["f4"])],
     ),
+    // The window of the checksums of several files, on top of the dialogs': `/` types in its
+    // filter, as in the lists, and F3 views the checksums, as F3 views a file. Ctrl+u and
+    // Ctrl+d move half a page, as in the lists. While the filter takes text, its keys fall back
+    // to the lists' and the text fields', and Tab still goes through the buttons.
+    (
+        Mode::Normal,
+        Context::Checksums,
+        &[
+            (Action::QuickSearch, &["/"]),
+            (Action::View, &["f3"]),
+            (Action::HalfPageUp, &["ctrl-u"]),
+            (Action::HalfPageDown, &["ctrl-d"]),
+        ],
+    ),
+    (
+        Mode::Insert,
+        Context::Checksums,
+        &[
+            (Action::View, &["f3"]),
+            (Action::NextField, &["tab", "ctrl-i"]),
+            (Action::PrevField, &["backtab"]),
+        ],
+    ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the
     // prompt under the output that vim's g < shows.
     (

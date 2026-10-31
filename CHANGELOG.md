@@ -213,6 +213,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the algorithm, with what it takes faint in it while empty: a hex checksum or a line of a
   checksum file. For a directory or many files it is faint and says it is only for a single
   file, and the focus, the mouse, and its letter pass it by.
+- That `f #` found no files to hash shows as a warning, in its colors, rather than as a plain
+  notice.
 - Check boxes show `[✓]` (a Nerd Font check with `ui.icons`) rather than `[x]`. Their brackets,
   and those of combo boxes, are faint, and the check and the arrow of a combo box are in the color
   of titles, but on what has the focus. The pull-down menu of F9 marks the sort order and the

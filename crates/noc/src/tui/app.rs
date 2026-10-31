@@ -5955,7 +5955,7 @@ impl App {
         };
         if sums.is_empty() {
             self.dialogs.push_back(Open {
-                dialog: Dialog::notice(&fl!("checksum-title"), &fl!("checksum-no-files")),
+                dialog: Dialog::warning(&fl!("checksum-title"), &fl!("checksum-no-files")),
                 purpose: Purpose::Info,
             });
             return;
@@ -13669,6 +13669,11 @@ mod tests {
         let (id, _, _) = checksum_job(app.handle(action(Action::Confirm)));
         hashed(&mut app, id, Vec::new());
         assert!(screen_of(&mut app, 20).contains("There are no files to hash."));
+        assert_eq!(
+            app.dialogs.front().map(|open| open.dialog.tone()),
+            Some(Tone::Warning),
+            "a warning"
+        );
     }
 
     #[test]

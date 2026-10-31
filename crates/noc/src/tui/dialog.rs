@@ -485,7 +485,7 @@ pub(crate) enum Tone {
     /// Something went wrong.
     Error,
     /// A question before something that cannot be undone, such as deleting or writing over a
-    /// file.
+    /// file, or something to heed, such as that there was nothing to do.
     Warning,
 }
 
@@ -636,6 +636,11 @@ impl Dialog {
             tone,
             ..Self::new(title, message, buttons)
         }
+    }
+
+    /// Something to heed, such as that there was nothing to do, titled `title`, with OK.
+    pub(crate) fn warning(title: &str, message: &str) -> Self {
+        Self::question(title, message, vec![Button::Ok], 0, Tone::Warning)
     }
 
     /// Something that went wrong, titled Error, with OK.
@@ -1153,6 +1158,12 @@ impl Dialog {
             Focus::Field(index) => self.fields.get_mut(index).map(|field| &mut field.field),
             Focus::ComboBox(_) | Focus::Check(_) | Focus::List | Focus::Button(_) => None,
         }
+    }
+
+    /// What it says, which its colors show.
+    #[cfg(test)]
+    pub(crate) fn tone(&self) -> Tone {
+        self.tone
     }
 
     /// Handles an action or a typed character, as typed without a count or a register.
@@ -3678,5 +3689,14 @@ mod tests {
         assert_eq!(title, (Color::Black, Color::Yellow));
         assert_ne!(body, colors(Tone::Plain).1);
         assert_ne!(body, colors(Tone::Error).1);
+    }
+
+    #[test]
+    fn a_warning_has_its_title_the_colors_of_warnings_and_ok() {
+        let dialog = Dialog::warning("Checksum", "There are no files to hash.");
+        assert_eq!(dialog.tone(), Tone::Warning);
+        assert_eq!(dialog.title, "Checksum");
+        assert_eq!(dialog.buttons, vec![Button::Ok]);
+        assert_eq!(dialog.focus, Focus::Button(0));
     }
 }

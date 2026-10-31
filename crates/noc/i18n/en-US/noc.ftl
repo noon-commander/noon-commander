@@ -530,11 +530,11 @@ dialog-skip = &Ignore
 dialog-skip-all = Ignore a&ll
 dialog-retry = &Retry
 dialog-abort = &Abort
-# Buttons of a taken name, as in mc: overwrite this and every later one, keep them all,
-# overwrite those that are older. They show with Yes, No, and Abort.
-dialog-all = A&ll
-dialog-none = Non&e
-dialog-older = &Older
+# Buttons of a taken name: replace the file there, keep it and leave the new one, give the new
+# one a name of its own. They show with Abort.
+dialog-overwrite = &Overwrite
+dialog-keep = &Skip
+dialog-rename = &Rename…
 # Title of error dialogs.
 dialog-error = Error
 # Fills a field of a form with what a panel shows, such as the directory open on a host.
@@ -1114,22 +1114,33 @@ transfer-same = the source and the target are the same
 # The target is in a source directory.
 transfer-into-itself = it is in { $path }
 
-## A taken name in a copy or a move (src/tui/app). Prefix: copy-. As in mc.
+## A taken name in a copy or a move (src/tui/app). Prefix: copy-.
 
-# What is to be copied, what is there, and the question. The sizes are in bytes, written as the
-# region writes numbers, and the times are dates and times of the region.
+# Over the path of the file there.
 copy-exists-title = File exists
-copy-exists =
-    { $path } is there already.
-    New:      { $new_size ->
-        [one] { $new_size } byte
-       *[other] { $new_size } bytes
-    }, { $new_time }
-    Existing: { $old_size ->
-        [one] { $old_size } byte
-       *[other] { $old_size } bytes
-    }, { $old_time }
-    Overwrite it?
+# The file to copy and the file there, each on a line that views it: its name on the left, its
+# size and time on the right. The size is in bytes, written as the region writes numbers; the
+# time is a date and a time of the region.
+copy-exists-new = &New
+copy-exists-existing = E&xisting
+copy-exists-file = { $size ->
+        [one] { $size } byte
+       *[other] { $size } bytes
+    }  { $time }
+# A combo box of what to do about the taken names that come after this one: ask about each, do
+# what the button pressed now does, or replace each file there that is older, smaller, or larger
+# than the new one, or not of its size, and leave the others.
+copy-exists-rest = &The rest:
+copy-exists-ask = Ask each time
+copy-exists-same = Same as this one
+copy-exists-older = Overwrite if older
+copy-exists-smaller = Overwrite if smaller
+copy-exists-larger = Overwrite if larger
+copy-exists-size-differs = Overwrite if the size differs
+# Rename…: the name of the new file, or a path, from the directory of the file there. It opens
+# with a name that is free there.
+copy-rename-title = Rename
+copy-rename-prompt = &New name:
 
 ## Copying the entry under the cursor beside it, Shift+F5 (src/tui/app), in the dialog of F5
 ## with its name in the field, as in mc. Prefix: duplicate-.

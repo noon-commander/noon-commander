@@ -641,7 +641,8 @@ impl FindWindow {
     fn event(&mut self, event: DialogEvent, before: &Settings) -> FindEvent {
         self.follow_mode(before);
         match event {
-            DialogEvent::Pending => self.changed(before),
+            // It has no items.
+            DialogEvent::Pending | DialogEvent::Opened(_) => self.changed(before),
             DialogEvent::Cancelled | DialogEvent::Pressed(Button::Cancel) => FindEvent::Closed,
             DialogEvent::Pressed(button) => self.press(button),
         }

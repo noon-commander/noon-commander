@@ -6,6 +6,7 @@
 mod checksum;
 mod copy;
 mod delete;
+mod free_name;
 mod job;
 mod rename;
 mod spelling;
@@ -15,5 +16,5 @@ mod testing;
 pub use checksum::{Algorithm, Checksum, Files, Hasher, Sum, checksum};
 pub use copy::{CopyOptions, Endpoint, copy, copy_within, move_within};
 pub use delete::delete;
-pub use job::{Conflict, Decision, Event, Outcome, Progress, Reporter, in_time};
+pub use job::{Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest, in_time};
 pub use rename::{RenameError, rename};

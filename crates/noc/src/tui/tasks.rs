@@ -202,18 +202,24 @@ pub(crate) enum JobEvent {
         error: String,
         reply: oneshot::Sender<Decision>,
     },
-    /// The name `target` of a copy is taken; the job waits for `reply`.
-    Exists {
-        at: Instant,
-        target: Location,
-        source_metadata: Metadata,
-        target_metadata: Metadata,
-        reply: oneshot::Sender<Conflict>,
-    },
+    /// The name of a copy is taken; the job waits for the answer.
+    Exists { at: Instant, taken: Box<TakenName> },
     /// The checksums of a checksum job that was not aborted, just before it is over.
     Sums(Vec<Sum<Location>>),
     /// The job is over; `complete` if it did all it was asked, without skipping or aborting.
     Finished { complete: bool },
+}
+
+/// A taken name that a copy job asks about: `source` was to go to `target`, where a file is,
+/// both with their metadata, and `free` is a name free beside it; the answer goes to `reply`.
+#[derive(Debug)]
+pub(crate) struct TakenName {
+    pub(crate) source: Location,
+    pub(crate) target: Location,
+    pub(crate) source_metadata: Metadata,
+    pub(crate) target_metadata: Metadata,
+    pub(crate) free: Vec<u8>,
+    pub(crate) reply: oneshot::Sender<Conflict>,
 }
 
 impl JobEvent {
@@ -1392,18 +1398,26 @@ async fn forward<P>(
                 reply,
             },
             Some(Event::Exists {
+                source,
                 target,
                 source_metadata,
                 target_metadata,
+                free,
                 reply,
-                ..
-            }) => JobEvent::Exists {
-                at,
-                target: location(target),
-                source_metadata,
-                target_metadata,
-                reply,
-            },
+            }) => {
+                let taken = TakenName {
+                    source: location(source),
+                    target: location(target),
+                    source_metadata,
+                    target_metadata,
+                    free,
+                    reply,
+                };
+                JobEvent::Exists {
+                    at,
+                    taken: Box::new(taken),
+                }
+            }
         };
         send(&mut waiting, at);
         let _ = done.send(Done::Job { id, event });

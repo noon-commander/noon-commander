@@ -21,6 +21,9 @@ pub trait VfsPath: Clone + PartialEq + fmt::Debug + Send + Sync + 'static {
 
     /// The path for messages, with invalid UTF-8 replaced.
     fn display(&self) -> String;
+
+    /// The path of these bytes, such as one a user typed.
+    fn from_bytes(bytes: &[u8]) -> Self;
 }
 
 impl VfsPath for PathBuf {
@@ -39,6 +42,10 @@ impl VfsPath for PathBuf {
     fn display(&self) -> String {
         self.as_path().display().to_string()
     }
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Self::from(OsStr::from_bytes(bytes))
+    }
 }
 
 impl VfsPath for RemotePath {
@@ -56,6 +63,10 @@ impl VfsPath for RemotePath {
 
     fn display(&self) -> String {
         Self::display(self).into_owned()
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Self::new(bytes)
     }
 }
 

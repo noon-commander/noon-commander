@@ -43,21 +43,54 @@ pub enum Decision {
     Abort,
 }
 
-/// What to do about a target that is there already.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Conflict {
+/// What to do about a target that is there already: about this one, and about the targets that
+/// are there that come after it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conflict {
+    pub this: Choice,
+    pub rest: Rest,
+}
+
+impl Conflict {
+    /// `this` for this target; the next one taken asks again.
+    pub fn once(this: Choice) -> Self {
+        Self {
+            this,
+            rest: Rest::Ask,
+        }
+    }
+}
+
+/// What to do about one target that is there already.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Choice {
     /// Replace it.
     Overwrite,
     /// Leave it, and do not copy the source.
     Skip,
-    /// Replace it and every later one, without asking.
-    OverwriteAll,
-    /// Leave it and every later one, without asking.
-    SkipAll,
-    /// Replace it and every later one if it is older than its source; leave the others.
-    OverwriteOlder,
+    /// Copy the source to this path instead, whole, on the target's file system; if that is
+    /// taken too, the job asks again.
+    Rename(Vec<u8>),
     /// Stop the job.
     Abort,
+}
+
+/// What to do about the targets that are there that come later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rest {
+    /// Ask about each.
+    Ask,
+    /// What [`Choice`] did to this one: replace each, leave each, or give each a free name, in
+    /// the directory the renamed one went to. After [`Choice::Abort`] nothing comes.
+    Same,
+    /// Replace each that is older than its source; leave the others. One without a time stays.
+    OverwriteOlder,
+    /// Replace each that is smaller than its source; leave the others.
+    OverwriteSmaller,
+    /// Replace each that is larger than its source; leave the others.
+    OverwriteLarger,
+    /// Replace each whose size is not its source's; leave the others.
+    OverwriteSizeDiffers,
 }
 
 /// How far a job is.
@@ -103,6 +136,8 @@ pub enum Event<P> {
         /// What the source and the target are now, for their sizes and times.
         source_metadata: Metadata,
         target_metadata: Metadata,
+        /// A name that is free in the target's directory, for [`Choice::Rename`] to offer.
+        free: Vec<u8>,
         reply: oneshot::Sender<Conflict>,
     },
 }

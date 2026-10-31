@@ -1094,11 +1094,16 @@ temporary file goes as well, once made; a target written directly stays, empty, 
 not open it within the two seconds a cancelled job has, since it may be one that another hand
 made just then.
 
-When the name of a file or symlink is taken, the job sends `Exists` with the metadata of both, for
-sizes and times, and waits for a `Conflict`: Overwrite, Skip, Overwrite all, Skip all, Overwrite
-older (every later one that is older than its source; unknown times keep the target), or Abort. With
-`overwrite`, the job replaces without asking, as when an edited file goes back where it came from. A
-directory where a file would go is a failure, not a question. A symlink in the way is removed first,
+When the name of a file or symlink is taken, the job sends `Exists` with both paths, the metadata
+of both, for sizes and times, and a name free beside the target (`free_name.rs`: the name with 2,
+3, and so on before its extension, after the last space, `_`, or `-` in it, else after `_`), and
+waits for a `Conflict` (ADR 0060). Its `Choice` is for this target: Overwrite, Skip, Rename to a
+path on the target's file system, which asks again if that is taken too, or Abort. Its `Rest` is
+for the later ones: ask about each, the same as this one (a renamed one's directory gets the free
+names of the rest), or overwrite those older, smaller, or larger than their sources, or not of
+their size, and keep the others; unknown times and sizes keep the target. With `overwrite`, the
+job replaces without asking, as when an edited file goes back where it came from. A directory
+where a file would go is a failure, not a question. A symlink in the way is removed first,
 so that a file written directly never goes through it; renaming replaces it anyway. Without
 `posix-rename`, the target is removed before the rename.
 
@@ -1416,10 +1421,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   that is the source directory, a source, or in one of the sources, is an error; so is, from
   the job, a source under its name spelled otherwise, where the file system ignores case (see
   File operations).
-  The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks in
-  red, as mc does, with the path, both sizes and times, and Yes, No (the default), All, None,
-  Older, and Abort. Copies are written under a temporary name and renamed when complete,
-  unless `transfer.atomic_upload` is off.
+  The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks as a
+  warning (ADR 0060): the path of the file there; New and Existing, each with its size and
+  time, on a line that views the file, over every window but the dialogs, the question back in
+  front once the viewer closes; a combo box for the rest of the taken names; and Overwrite,
+  Skip (the default), Rename…, and Abort. Rename… asks for a name or a path from the file's
+  directory, offering the free name. Copies are written under a temporary name and renamed when
+  complete, unless `transfer.atomic_upload` is off.
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
 - **Shift+F5 copies the entry under the cursor** (`y p`, as vim's `y y p` puts a copy of a
@@ -1917,15 +1925,18 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   directory and those of `g +` and `g -`, with buttons: `{ OK }`, in bold, marks the default
   one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart
   from what is above them, in every dialog and window. A dialog has a message, combo boxes, text
-  fields, check boxes, and buttons, each optional but the buttons;
+  fields, check boxes, items, and buttons, each optional but the buttons, with lines between
+  them where they need them; an item is a line that opens what it names, such as a file to view,
+  with what it says of it on the right, and the dialog stays while it is open;
   ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue
   knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and
   `dialog_input`). A dialog whose first focus is a text field opens in Insert mode, with the cursor
   after the field's text, and any other in Normal mode. In Normal mode `j`, `k`, `h`, `l`, the
-  arrows, and Tab move between the combo boxes, the fields, the check boxes, and the buttons, as
-  many as a count says, past the fields too, `g g` and `G` (Home, End, Ctrl+b, Ctrl+f) go to the
-  first of them and the last, Space opens the list of a combo box, switches a check box, or presses
-  a button, Enter presses the button with the focus (the default one from elsewhere), and Esc, `q`,
+  arrows, and Tab move between the combo boxes, the fields, the check boxes, the items, and the
+  buttons, as many as a count says, past the fields too, `g g` and `G` (Home, End, Ctrl+b, Ctrl+f)
+  go to the first of them and the last, Space opens the list of a combo box, switches a check box,
+  opens an item, or presses a button, Enter opens the item or presses the button with the focus
+  (the default one from elsewhere), and Esc, `q`,
   Ctrl+c, or F10 cancels. A field takes the keys of a
   [text field](#ui) in its mode: in Insert mode every character is text, Space too, Tab, Up, and
   Down still move the focus, Enter presses the default button, Esc goes to Normal mode, and Ctrl+c

@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use noc_vfs::{FileKind, FileReader as _, FileWriter as _, Metadata, Vfs, VfsError, VfsPath};
 
-use crate::job::{Conflict, Decision, Event, Outcome, Progress, Reporter};
+use crate::free_name::{free_name, numbered};
+use crate::job::{Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest};
 use crate::spelling::spelled_otherwise;
 
 /// How to copy.
@@ -196,12 +197,13 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                 .map_err(at_source);
         }
         let metadata = vfs.symlink_metadata(source).await.map_err(at_source)?;
-        let replace = match vfs.symlink_metadata(target).await {
+        let mut target = target.clone();
+        let replace = match vfs.symlink_metadata(&target).await {
             Err(VfsError::NotFound(_)) => false,
             // A hard link, or a directory on the way spelled otherwise: a rename would do nothing.
             Ok(existing) if existing.same_object(&metadata) => {
                 let error = VfsError::SameFile(target.display());
-                return Err(self.at_target(target, error));
+                return Err(self.at_target(&target, error));
             }
             Ok(existing) if existing.kind == FileKind::Dir && metadata.kind == FileKind::Dir => {
                 return Ok(Renamed::Copy);
@@ -214,14 +216,15 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                     metadata,
                     skip: false,
                 };
-                match self.plan(&item, target).await? {
+                match self.plan(&item, &mut target).await? {
                     Plan::New => false,
                     Plan::Skip => return Ok(Renamed::Skipped),
                     Plan::Replace(_) => true,
                 }
             }
-            Err(error) => return Err(self.at_target(target, error)),
+            Err(error) => return Err(self.at_target(&target, error)),
         };
+        let target = &target;
         let error = match vfs.rename(source, target).await {
             Ok(()) => return Ok(Renamed::Done),
             Err(error) if error.is_cross_device() => return Ok(Renamed::Copy),
@@ -299,11 +302,43 @@ enum Plan {
 }
 
 /// What every later taken name gets, after an answer for all of them.
-#[derive(Debug, Clone, Copy)]
-enum Policy {
+#[derive(Debug, Clone)]
+enum Policy<Q> {
     OverwriteAll,
     SkipAll,
+    /// A free name in this directory.
+    RenameAll(Q),
     OverwriteOlder,
+    OverwriteSmaller,
+    OverwriteLarger,
+    OverwriteSizeDiffers,
+}
+
+impl<Q: VfsPath> Policy<Q> {
+    /// What `rest` makes of the answer `this`, given for a target renamed to `renamed`, if it
+    /// was.
+    fn of(this: &Choice, rest: Rest, renamed: Option<&Q>) -> Option<Self> {
+        match rest {
+            Rest::Ask => None,
+            Rest::Same => match this {
+                Choice::Overwrite => Some(Self::OverwriteAll),
+                Choice::Skip => Some(Self::SkipAll),
+                Choice::Rename(_) => renamed.and_then(VfsPath::parent).map(Self::RenameAll),
+                Choice::Abort => None,
+            },
+            Rest::OverwriteOlder => Some(Self::OverwriteOlder),
+            Rest::OverwriteSmaller => Some(Self::OverwriteSmaller),
+            Rest::OverwriteLarger => Some(Self::OverwriteLarger),
+            Rest::OverwriteSizeDiffers => Some(Self::OverwriteSizeDiffers),
+        }
+    }
+}
+
+/// What to do about a taken name, after a question or by a policy.
+enum Next<Q> {
+    Plan(Plan),
+    /// Go to this path instead.
+    To(Q),
 }
 
 /// Why the job stopped early.
@@ -405,7 +440,7 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     /// Bytes that arrived where they were written, for speeds: unlike `bytes_done`, it neither
     /// jumps on a skip nor goes back on a retry.
     bytes_copied: u64,
-    policy: Option<Policy>,
+    policy: Option<Policy<B::Path>>,
 }
 
 impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
@@ -749,67 +784,131 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     }
 
     /// What to do about the name `target` of a copy of `item`: free, or taken by something
-    /// that the answer to a question, or an earlier answer for all, says to replace or keep.
-    /// A directory there is a failure: a file does not replace one; so is the source itself,
-    /// which a copy would empty.
-    async fn plan(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<Plan, Stop<L>> {
-        let existing = match self.to.vfs.symlink_metadata(target).await {
-            Ok(existing) => existing,
-            Err(VfsError::NotFound(_)) => return Ok(Plan::New),
-            Err(error) => return Err(self.at_target(target, error)),
-        };
-        if existing.same_object(&item.metadata) {
-            let error = VfsError::SameFile(target.display());
-            return Err(self.at_target(target, error));
-        }
-        if existing.kind == FileKind::Dir {
-            let error = VfsError::AlreadyExists(target.display());
-            return Err(self.at_target(target, error));
-        }
-        let policy = if let Some(policy) = self.policy {
-            policy
-        } else {
-            let source = (self.from.report)(&item.source);
-            let target = (self.to.report)(target);
-            let (source_metadata, target_metadata) = (item.metadata.clone(), existing.clone());
-            let answer = self
-                .reporter
-                .question(|reply| Event::Exists {
-                    source,
-                    target,
-                    source_metadata,
-                    target_metadata,
-                    reply,
-                })
-                .await;
-            match answer.unwrap_or(Conflict::Abort) {
-                Conflict::Overwrite => return Ok(Plan::Replace(existing.kind)),
-                Conflict::Skip => return Ok(Plan::Skip),
-                Conflict::Abort => return Err(Stop::Aborted),
-                Conflict::OverwriteAll => *self.policy.insert(Policy::OverwriteAll),
-                Conflict::SkipAll => *self.policy.insert(Policy::SkipAll),
-                Conflict::OverwriteOlder => *self.policy.insert(Policy::OverwriteOlder),
+    /// that the answer to a question, or an earlier answer for all, says to replace or keep, or
+    /// to leave for another name, which `target` becomes. A directory there is a failure: a
+    /// file does not replace one; so is the source itself, which a copy would empty.
+    async fn plan(&mut self, item: &Item<A::Path>, target: &mut B::Path) -> Result<Plan, Stop<L>> {
+        loop {
+            let existing = match self.to.vfs.symlink_metadata(target).await {
+                Ok(existing) => existing,
+                Err(VfsError::NotFound(_)) => return Ok(Plan::New),
+                Err(error) => return Err(self.at_target(target, error)),
+            };
+            if existing.same_object(&item.metadata) {
+                let error = VfsError::SameFile(target.display());
+                return Err(self.at_target(target, error));
             }
+            if existing.kind == FileKind::Dir {
+                let error = VfsError::AlreadyExists(target.display());
+                return Err(self.at_target(target, error));
+            }
+            let next = match self.policy.clone() {
+                Some(policy) => self.by_policy(policy, item, target, &existing).await?,
+                None => self.ask_taken(item, target, &existing).await?,
+            };
+            match next {
+                Next::Plan(plan) => return Ok(plan),
+                Next::To(path) => *target = path,
+            }
+        }
+    }
+
+    /// Asks what to do about `existing`, the entry at `target` that a copy of `item` would
+    /// replace, and keeps the answer for the rest.
+    async fn ask_taken(
+        &mut self,
+        item: &Item<A::Path>,
+        target: &B::Path,
+        existing: &Metadata,
+    ) -> Result<Next<B::Path>, Stop<L>> {
+        let name = target.name().unwrap_or_default();
+        let free = match target.parent() {
+            Some(dir) => free_name(self.to.vfs, &dir, name).await.ok(),
+            None => None,
         };
+        let free = free
+            .as_ref()
+            .and_then(VfsPath::name)
+            .map_or_else(|| numbered(name, 2), <[u8]>::to_vec);
+        let source = (self.from.report)(&item.source);
+        let reported = (self.to.report)(target);
+        let (source_metadata, target_metadata) = (item.metadata.clone(), existing.clone());
+        let answer = self
+            .reporter
+            .question(|reply| Event::Exists {
+                source,
+                target: reported,
+                source_metadata,
+                target_metadata,
+                free,
+                reply,
+            })
+            .await;
+        let Conflict { this, rest } = answer.unwrap_or(Conflict::once(Choice::Abort));
+        let renamed = match &this {
+            Choice::Rename(path) => Some(B::Path::from_bytes(path)),
+            _ => None,
+        };
+        self.policy = Policy::of(&this, rest, renamed.as_ref());
+        match (this, renamed) {
+            (Choice::Overwrite, _) => Ok(Next::Plan(Plan::Replace(existing.kind))),
+            (Choice::Skip, _) => Ok(Next::Plan(Plan::Skip)),
+            (Choice::Rename(_), Some(path)) => Ok(Next::To(path)),
+            (Choice::Rename(_) | Choice::Abort, _) => Err(Stop::Aborted),
+        }
+    }
+
+    /// What an earlier answer for all says to do about `existing`, the entry at `target` that a
+    /// copy of `item` would replace.
+    async fn by_policy(
+        &self,
+        policy: Policy<B::Path>,
+        item: &Item<A::Path>,
+        target: &B::Path,
+        existing: &Metadata,
+    ) -> Result<Next<B::Path>, Stop<L>> {
+        let (there, source) = (existing, &item.metadata);
         let replace = match policy {
             Policy::OverwriteAll => true,
             Policy::SkipAll => false,
+            Policy::RenameAll(dir) => {
+                let name = target.name().unwrap_or_default();
+                return match free_name(self.to.vfs, &dir, name).await {
+                    Ok(path) => Ok(Next::To(path)),
+                    Err(error) => Err(self.at_target(target, error)),
+                };
+            }
             // Unknown times keep the target.
             Policy::OverwriteOlder => matches!(
-                (existing.modified, item.metadata.modified),
+                (there.modified, source.modified),
                 (Some(there), Some(source)) if there < source
             ),
+            Policy::OverwriteSmaller => matches!(
+                (there.size, source.size),
+                (Some(there), Some(source)) if there < source
+            ),
+            Policy::OverwriteLarger => matches!(
+                (there.size, source.size),
+                (Some(there), Some(source)) if there > source
+            ),
+            Policy::OverwriteSizeDiffers => matches!(
+                (there.size, source.size),
+                (Some(there), Some(source)) if there != source
+            ),
         };
-        Ok(if replace {
+        Ok(Next::Plan(if replace {
             Plan::Replace(existing.kind)
         } else {
             Plan::Skip
-        })
+        }))
     }
 
     /// Copies a symlink, as a symlink; `false` if the name is taken and stays.
     async fn copy_link(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<bool, Stop<L>> {
-        match self.plan(item, target).await? {
+        let mut target = target.clone();
+        let plan = self.plan(item, &mut target).await?;
+        let target = &target;
+        match plan {
             Plan::New => {}
             Plan::Skip => return Ok(false),
             Plan::Replace(_) => self
@@ -837,7 +936,10 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     /// the name is taken and stays. What it wrote goes again if it does not finish.
     async fn copy_file(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<bool, Stop<L>> {
         let to = self.to.vfs;
-        let replace = match self.plan(item, target).await? {
+        let mut target = target.clone();
+        let plan = self.plan(item, &mut target).await?;
+        let target = &target;
+        let replace = match plan {
             Plan::New => false,
             Plan::Skip => return Ok(false),
             // Written directly, a file would go through a symlink to whatever it points to.
@@ -1053,6 +1155,7 @@ fn temporary_name(name: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::os::unix::ffi::OsStrExt as _;
     use std::os::unix::fs::{PermissionsExt as _, symlink};
     use std::path::{Path, PathBuf};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -1068,6 +1171,19 @@ mod tests {
         path.display()
     }
 
+    /// `this`, and the same for every later taken name.
+    fn all(this: Choice) -> Conflict {
+        Conflict {
+            this,
+            rest: Rest::Same,
+        }
+    }
+
+    /// Renames to `path`, and asks about the next.
+    fn rename_to(path: &Path) -> Conflict {
+        Conflict::once(Choice::Rename(path.as_os_str().as_bytes().to_vec()))
+    }
+
     /// What a copy reported.
     #[derive(Debug, Default)]
     struct Seen {
@@ -1079,6 +1195,8 @@ mod tests {
         copied: u64,
         /// Each taken name: the target, and the sizes of the source and the target.
         exists: Vec<(String, Option<u64>, Option<u64>)>,
+        /// The free name each question offered.
+        free: Vec<String>,
         /// Each report of counting: how many reports of progress came before it, and how many
         /// entries it had found.
         scanned: Vec<(usize, u64)>,
@@ -1209,12 +1327,17 @@ mod tests {
                     target,
                     source_metadata,
                     target_metadata,
+                    free,
                     reply,
                     ..
                 } => {
                     let sizes = (source_metadata.size, target_metadata.size);
                     seen.exists.push((target, sizes.0, sizes.1));
-                    let answer = *conflicts.next().expect("an answer for each taken name");
+                    seen.free.push(String::from_utf8(free).unwrap());
+                    let answer = conflicts
+                        .next()
+                        .expect("an answer for each taken name")
+                        .clone();
                     let _ = reply.send(answer);
                 }
             }
@@ -1460,7 +1583,10 @@ mod tests {
     #[tokio::test]
     async fn a_taken_name_asks_and_directories_merge() {
         let root = tempfile::tempdir().unwrap();
-        let answers = [Conflict::Overwrite, Conflict::Skip];
+        let answers = [
+            Conflict::once(Choice::Overwrite),
+            Conflict::once(Choice::Skip),
+        ];
         let (outcome, seen, dir) = copy_taken(root.path(), &answers).await;
         let a = dir.join("a").to_string_lossy().into_owned();
         assert_eq!(seen.exists[0], (a, Some(10), Some(5)), "with both sizes");
@@ -1476,7 +1602,7 @@ mod tests {
     #[tokio::test]
     async fn answers_for_all_ask_once() {
         let root = tempfile::tempdir().unwrap();
-        let (_, seen, dir) = copy_taken(root.path(), &[Conflict::OverwriteAll]).await;
+        let (_, seen, dir) = copy_taken(root.path(), &[all(Choice::Overwrite)]).await;
         assert_eq!(seen.exists.len(), 1);
         assert_eq!(
             fs::read_to_string(dir.join("sub/b")).unwrap().len(),
@@ -1484,31 +1610,17 @@ mod tests {
         );
 
         let root = tempfile::tempdir().unwrap();
-        let (_, seen, dir) = copy_taken(root.path(), &[Conflict::SkipAll]).await;
+        let (_, seen, dir) = copy_taken(root.path(), &[all(Choice::Skip)]).await;
         assert_eq!(seen.exists.len(), 1);
         assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "older");
         assert_eq!(fs::read_to_string(dir.join("sub/b")).unwrap(), "newer");
-
-        let root = tempfile::tempdir().unwrap();
-        let (_, seen, dir) = copy_taken(root.path(), &[Conflict::OverwriteOlder]).await;
-        assert_eq!(seen.exists.len(), 1);
-        assert_eq!(
-            fs::read_to_string(dir.join("a")).unwrap(),
-            "0123456789",
-            "older"
-        );
-        assert_eq!(
-            fs::read_to_string(dir.join("sub/b")).unwrap(),
-            "newer",
-            "newer"
-        );
 
         // The sources go in the order given, but what a directory holds goes in the order of its
         // listing, which differs between file systems: tmpfs lists the newest first.
         let root = tempfile::tempdir().unwrap();
         let (src, dst) = taken(root.path());
         let script = Script {
-            conflicts: &[Conflict::Abort],
+            conflicts: &[Conflict::once(Choice::Abort)],
             ..Script::default()
         };
         let sources = vec![src.join("dir/a"), src.join("dir/link")];
@@ -1519,6 +1631,163 @@ mod tests {
         assert_eq!(seen.exists.len(), 1);
         assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "older");
         assert!(!dir.join("link").exists(), "stopped there");
+    }
+
+    /// `src` and `dst` in `root`, each with `files`: a name, and what the file holds there.
+    fn both_sides(root: &Path, files: &[(&str, &str, &str)]) -> (PathBuf, PathBuf) {
+        let (src, dst) = (root.join("src"), root.join("dst"));
+        fs::create_dir(&src).unwrap();
+        fs::create_dir(&dst).unwrap();
+        for (name, source, target) in files {
+            fs::write(src.join(name), source).unwrap();
+            if !target.is_empty() {
+                fs::write(dst.join(name), target).unwrap();
+            }
+        }
+        (src, dst)
+    }
+
+    /// Copies `asked`, then files whose targets are older, newer, smaller, and larger than their
+    /// sources, into a directory that has them all; skips the first, with `rest` for the others.
+    /// The names of those replaced.
+    async fn replaced_by(rest: Rest) -> Vec<&'static str> {
+        let root = tempfile::tempdir().unwrap();
+        let files = [
+            ("asked", "s", "t", 1, 1),
+            ("older", "s", "t", 2, 1),
+            ("newer", "s", "t", 1, 2),
+            ("smaller", "ss", "t", 1, 1),
+            ("larger", "s", "tt", 1, 1),
+        ];
+        let contents: Vec<_> = files.iter().map(|file| (file.0, file.1, file.2)).collect();
+        let (src, dst) = both_sides(root.path(), &contents);
+        for (name, _, _, source, target) in files {
+            set_modified(&src.join(name), at(source * 1_000));
+            set_modified(&dst.join(name), at(target * 1_000));
+        }
+        let script = Script {
+            conflicts: &[Conflict {
+                this: Choice::Skip,
+                rest,
+            }],
+            ..Script::default()
+        };
+        let sources = files.iter().map(|file| src.join(file.0)).collect();
+        let (_, seen) =
+            run_script((&LocalFs, sources), (&LocalFs, dst.clone()), BOTH, script).await;
+        assert_eq!(seen.exists.len(), 1, "{rest:?}");
+        files
+            .iter()
+            .map(|file| file.0)
+            .filter(|name| fs::read_to_string(dst.join(name)).unwrap().starts_with('s'))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn the_rest_are_replaced_by_their_times_or_sizes() {
+        assert_eq!(replaced_by(Rest::OverwriteOlder).await, ["older"]);
+        assert_eq!(replaced_by(Rest::OverwriteSmaller).await, ["smaller"]);
+        assert_eq!(replaced_by(Rest::OverwriteLarger).await, ["larger"]);
+        let differ = replaced_by(Rest::OverwriteSizeDiffers).await;
+        assert_eq!(differ, ["smaller", "larger"]);
+        assert_eq!(replaced_by(Rest::Same).await, Vec::<&str>::new());
+    }
+
+    #[tokio::test]
+    async fn rename_copies_to_another_name_and_asks_again_if_it_is_taken() {
+        let root = tempfile::tempdir().unwrap();
+        let files = [("a.txt", "new", "old"), ("a_2.txt", "", "taken")];
+        let (src, dst) = both_sides(root.path(), &files);
+        let script = Script {
+            conflicts: &[
+                rename_to(&dst.join("a_2.txt")),
+                rename_to(&dst.join("b.txt")),
+            ],
+            ..Script::default()
+        };
+        let sources = vec![src.join("a.txt")];
+        let (outcome, seen) =
+            run_script((&LocalFs, sources), (&LocalFs, dst.clone()), BOTH, script).await;
+        assert_eq!((outcome.done, outcome.skipped), (1, 0));
+        let asked: Vec<_> = seen.exists.iter().map(|asked| asked.0.as_str()).collect();
+        let (a, a_2) = (dst.join("a.txt"), dst.join("a_2.txt"));
+        assert_eq!(asked, [a.to_str().unwrap(), a_2.to_str().unwrap()]);
+        assert_eq!(seen.free, ["a_3.txt", "a_2_2.txt"], "free next to each");
+        assert_eq!(fs::read_to_string(a).unwrap(), "old");
+        assert_eq!(fs::read_to_string(a_2).unwrap(), "taken");
+        assert_eq!(fs::read_to_string(dst.join("b.txt")).unwrap(), "new");
+        assert_eq!(leftovers(&dst), Vec::<PathBuf>::new());
+    }
+
+    #[tokio::test]
+    async fn renaming_for_all_gives_the_rest_free_names_where_the_first_went() {
+        let root = tempfile::tempdir().unwrap();
+        let files = [("a", "new", "old"), ("b", "new", "old"), ("c", "new", "")];
+        let (src, dst) = both_sides(root.path(), &files);
+        let other = dst.join("other");
+        fs::create_dir(&other).unwrap();
+        fs::write(other.join("b"), "other").unwrap();
+        let path = other.join("a").as_os_str().as_bytes().to_vec();
+        let script = Script {
+            conflicts: &[all(Choice::Rename(path))],
+            ..Script::default()
+        };
+        let sources = ["a", "b", "c"].map(|name| src.join(name)).to_vec();
+        let (outcome, seen) =
+            run_script((&LocalFs, sources), (&LocalFs, dst.clone()), BOTH, script).await;
+        assert_eq!((outcome.done, outcome.skipped), (3, 0));
+        assert_eq!(seen.exists.len(), 1);
+        let read = |path: PathBuf| fs::read_to_string(path).unwrap();
+        assert_eq!(read(other.join("a")), "new");
+        assert_eq!(read(other.join("b")), "other");
+        assert_eq!(read(other.join("b_2")), "new");
+        assert_eq!(
+            (read(dst.join("a")), read(dst.join("b"))),
+            ("old".into(), "old".into())
+        );
+        assert_eq!(read(dst.join("c")), "new", "a free name stays");
+    }
+
+    #[tokio::test]
+    async fn a_move_renames_to_another_name() {
+        let root = tempfile::tempdir().unwrap();
+        let (src, dst) = both_sides(root.path(), &[("a", "new", "old")]);
+        let script = Script {
+            conflicts: &[rename_to(&dst.join("a_2"))],
+            ..Script::default()
+        };
+        let (outcome, seen) = run_move(&LocalFs, vec![src.join("a")], dst.clone(), script).await;
+        assert_eq!(outcome.done, 1);
+        assert_eq!(seen.free, ["a_2"]);
+        assert!(!src.join("a").exists());
+        assert_eq!(fs::read_to_string(dst.join("a")).unwrap(), "old");
+        assert_eq!(fs::read_to_string(dst.join("a_2")).unwrap(), "new");
+    }
+
+    #[tokio::test]
+    async fn rename_copies_to_another_name_on_a_host() {
+        let root = tempfile::tempdir().unwrap();
+        let (src, dst) = both_sides(root.path(), &[("My Report.pdf", "new", "old")]);
+        let Some((_server, sftp)) = testing::sftp_server(root.path()).await else {
+            return;
+        };
+        let script = Script {
+            conflicts: &[Conflict::once(Choice::Rename(
+                b"dst/My Report 2.pdf".to_vec(),
+            ))],
+            ..Script::default()
+        };
+        let sources = vec![src.join("My Report.pdf")];
+        let target = (&sftp, RemotePath::from("dst"));
+        let (outcome, seen) = run_script((&LocalFs, sources), target, BOTH, script).await;
+        assert_eq!(outcome.done, 1, "{seen:?}");
+        assert_eq!(seen.free, ["My Report 2.pdf"]);
+        let read = |name| fs::read_to_string(dst.join(name)).unwrap();
+        assert_eq!(
+            (read("My Report.pdf"), read("My Report 2.pdf")),
+            ("old".into(), "new".into())
+        );
+        sftp.close().await.unwrap();
     }
 
     #[tokio::test]
@@ -1562,7 +1831,7 @@ mod tests {
             };
             let script = Script {
                 failures: &[Decision::Skip],
-                conflicts: &[Conflict::Overwrite],
+                conflicts: &[Conflict::once(Choice::Overwrite)],
                 cancel_midway: false,
             };
             let sources = vec![src.join("dir")];
@@ -1710,7 +1979,7 @@ mod tests {
         // Again, over what is there: renamed over it with posix-rename.
         let again = vec![src.join("dir")];
         let script = Script {
-            conflicts: &[Conflict::OverwriteAll],
+            conflicts: &[all(Choice::Overwrite)],
             ..Script::default()
         };
         let target = RemotePath::from("up");
@@ -1735,7 +2004,10 @@ mod tests {
             ..BOTH
         };
         let script = Script {
-            conflicts: &[Conflict::Skip, Conflict::Overwrite],
+            conflicts: &[
+                Conflict::once(Choice::Skip),
+                Conflict::once(Choice::Overwrite),
+            ],
             ..Script::default()
         };
         let sources = vec![src.join("dir"), src.join("file")];
@@ -1790,7 +2062,11 @@ mod tests {
         fs::write(dst.join("file"), "there").unwrap();
         // `file` is taken: Overwrite. `dir` merges by copying: `a` is skipped, `b` replaced.
         let script = Script {
-            conflicts: &[Conflict::Overwrite, Conflict::Skip, Conflict::Overwrite],
+            conflicts: &[
+                Conflict::once(Choice::Overwrite),
+                Conflict::once(Choice::Skip),
+                Conflict::once(Choice::Overwrite),
+            ],
             ..Script::default()
         };
         let moving = vec![src.join("file"), src.join("dir")];
@@ -2032,7 +2308,7 @@ mod tests {
                     Event::Exists { reply, .. } => {
                         fs::write(src.join("grows"), vec![7; 300_000]).unwrap();
                         fs::write(src.join("shrinks"), vec![7; 5]).unwrap();
-                        let _ = reply.send(Conflict::Overwrite);
+                        let _ = reply.send(Conflict::once(Choice::Overwrite));
                     }
                     Event::Scanning { .. } => {}
                     Event::Failed { path, .. } => panic!("{path} failed"),
@@ -2230,11 +2506,16 @@ mod tests {
         overwrite: false,
     };
 
+    const ABORT: &[Conflict] = &[Conflict {
+        this: Choice::Abort,
+        rest: Rest::Ask,
+    }];
+
     /// Skips each failure; a copy over its source would ask about a taken name, and abort.
     fn skipping(failures: &[Decision]) -> Script<'_> {
         Script {
             failures,
-            conflicts: &[Conflict::Abort],
+            conflicts: ABORT,
             cancel_midway: false,
         }
     }

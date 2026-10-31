@@ -11,7 +11,7 @@ use noc_config::{
     Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SftpHost, TabBar,
     UiConfig, Wheel, Workspace, Workspaces,
 };
-use noc_ops::{Algorithm, Conflict, CopyOptions, Decision, Sum};
+use noc_ops::{Algorithm, Choice, Conflict, CopyOptions, Decision, Rest, Sum};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
 use noc_tools::zoxide::Scored;
@@ -66,7 +66,7 @@ use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
-use super::tasks::{HostHandle, JobEvent};
+use super::tasks::{HostHandle, JobEvent, TakenName};
 use super::theme::{ColorDepth, Theme};
 use super::transfer::{self, Sources};
 use super::which_key;
@@ -392,6 +392,17 @@ struct Open {
     purpose: Purpose,
 }
 
+impl Open {
+    /// Whether it is a question of the job `id`, or the new name for one.
+    fn asks_for(&self, id: u64) -> bool {
+        match &self.purpose {
+            Purpose::Failure { job, .. } | Purpose::Conflict { job, .. } => *job == id,
+            Purpose::ConflictRename { question } => question.asks_for(id),
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug)]
 enum Purpose {
     /// A prompt from ssh, or a notice, which has no `reply`.
@@ -424,11 +435,18 @@ enum Purpose {
         job: u64,
         reply: oneshot::Sender<Decision>,
     },
-    /// A taken name in the copy job `job`, which waits for `reply`.
+    /// A taken name in the copy job `job`, which waits for `reply`: `source` was to go to
+    /// `target`, where a file is, and `free` is a name free beside it, which Rename… offers.
     Conflict {
         job: u64,
+        source: Location,
+        target: Location,
+        free: Vec<u8>,
         reply: oneshot::Sender<Conflict>,
     },
+    /// The new name for Rename… in `question`, a [`Purpose::Conflict`], which comes back in
+    /// front if it is cancelled.
+    ConflictRename { question: Box<Open> },
     /// F4 on the host `name`, whose settings were `old`. Use Current fills in `current`, the
     /// directory a panel shows on the host, if one does.
     EditHost {
@@ -707,6 +725,9 @@ struct Viewing {
     /// The window of the part read last, full for a moment.
     finished: Option<Reading>,
     cancel: CancellationToken,
+    /// The question about a taken name whose file it views, which waits for it to close; the
+    /// viewer is in front of every window but the dialogs until then.
+    question: Option<Box<Open>>,
 }
 
 impl Viewing {
@@ -1369,6 +1390,12 @@ impl App {
             Front::KeyHints
         } else if let Some(open) = self.dialogs.front() {
             Front::Dialog(open.dialog.id())
+        } else if self.viewer_over() {
+            if self.viewing.as_ref().is_some_and(Viewing::window_shown) {
+                Front::Reading
+            } else {
+                Front::Viewer
+            }
         } else if self.menu.is_some() {
             Front::Menu
         } else if self.tab_menu.is_some() {
@@ -2054,6 +2081,12 @@ impl App {
             } else {
                 open.dialog.context()
             }
+        } else if self.viewer_over() {
+            if self.viewing.as_ref().is_some_and(Viewing::window_shown) {
+                Context::Dialog
+            } else {
+                Context::Viewer
+            }
         } else if self.menu.is_some() {
             Context::LocationMenu
         } else if self.tab_menu.is_some() {
@@ -2113,6 +2146,8 @@ impl App {
             } else {
                 open.dialog.mode()
             }
+        } else if self.viewer_over() {
+            Mode::Normal
         } else if let Some(menu) = &self.menu {
             menu.mode()
         } else if let Some(menu) = &self.tab_menu {
@@ -2838,6 +2873,9 @@ impl App {
         if !self.dialogs.is_empty() {
             return Some(self.handle_dialog(input));
         }
+        if self.viewer_over() {
+            return Some(self.handle_viewer(input));
+        }
         if self.menu.is_some() {
             return Some(self.handle_menu(input));
         }
@@ -3450,7 +3488,11 @@ impl App {
 
     /// Does what the dialog in front was for, if `event` closes it.
     fn dialog_event(&mut self, event: DialogEvent) -> Vec<Effect> {
-        if event == DialogEvent::Pending || self.keeps_open(event) {
+        if let Some(effects) = self.set_question_aside(event) {
+            return effects;
+        }
+        if matches!(event, DialogEvent::Pending | DialogEvent::Opened(_)) || self.keeps_open(event)
+        {
             return Vec::new();
         }
         match self.dialogs.pop_front() {
@@ -4547,9 +4589,16 @@ impl App {
                 self.answered(job);
                 let _ = reply.send(decision_of(event));
             }
-            Purpose::Conflict { job, reply } => {
+            Purpose::Conflict { job, reply, .. } => {
                 self.answered(job);
-                let _ = reply.send(conflict_of(event));
+                let _ = reply.send(conflict_of(event, dialog));
+            }
+            Purpose::ConflictRename { question } => {
+                if ok {
+                    self.rename_conflict(*question, dialog.text());
+                } else {
+                    self.dialogs.push_front(*question);
+                }
             }
             Purpose::EditHost { name, old, .. } if ok => {
                 return save_host(name, old.as_ref(), dialog);
@@ -4626,13 +4675,7 @@ impl App {
 
     /// Views the file at `location`, in `dir`, from `line` if there is one.
     fn view_file(&mut self, location: Location, dir: &Location, line: Option<u64>) -> Vec<Effect> {
-        let host = match &location {
-            Location::Remote { host, .. } => match self.hosts.get(host) {
-                Some(Host::Connected { handle, .. }) => Some(handle.clone()),
-                _ => None,
-            },
-            Location::Local(_) => None,
-        };
+        let host = self.handle_for(&location).ok().flatten();
         let mut viewer = Viewer::new(location_text(&location), self.viewer_sizes());
         if let Some(line) = line {
             let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
@@ -4642,6 +4685,25 @@ impl App {
         let mut effects = self.read_more();
         effects.extend(self.note(dir));
         effects
+    }
+
+    /// Views the file at `location` for `question`, about a taken name, which comes back in
+    /// front once the viewer closes.
+    fn view_for(&mut self, location: Location, question: Open) -> Vec<Effect> {
+        let host = self.handle_for(&location).ok().flatten();
+        let viewer = Viewer::new(location_text(&location), self.viewer_sizes());
+        self.open_viewer(viewer, Source::File { location, host });
+        if let Some(viewing) = &mut self.viewing {
+            viewing.question = Some(Box::new(question));
+        }
+        self.read_more()
+    }
+
+    /// Whether the viewer is in front of the windows, for a question about a taken name.
+    fn viewer_over(&self) -> bool {
+        self.viewing
+            .as_ref()
+            .is_some_and(|viewing| viewing.question.is_some())
     }
 
     /// Views the checksums of the window `results` as the lines of a file of them, under the
@@ -4689,6 +4751,7 @@ impl App {
             reading: None,
             finished: None,
             cancel: CancellationToken::new(),
+            question: None,
         });
     }
 
@@ -5364,8 +5427,15 @@ impl App {
                 let path = viewing.name();
                 let reason = cells::sanitize(reason.as_bytes());
                 if viewing.viewer.loading() {
+                    let asked = viewing.question.is_some();
                     self.close_viewer();
-                    self.show_error(&fl!("viewer-error", path = path, reason = reason));
+                    let message = fl!("viewer-error", path = path, reason = reason);
+                    // Over the question, which is in sight under it.
+                    if asked {
+                        self.show_error_over(&message);
+                    } else {
+                        self.show_error(&message);
+                    }
                 } else {
                     viewing.viewer.stop();
                     self.show_error(&fl!("viewer-read-error", path = path, reason = reason));
@@ -5409,6 +5479,8 @@ impl App {
             return Vec::new();
         };
         match action {
+            // The help would open under it.
+            Action::Help if self.viewer_over() => {}
             Action::Help => {
                 self.help = Some(self.help_screen());
             }
@@ -5425,12 +5497,16 @@ impl App {
         Vec::new()
     }
 
-    /// Closes the viewer; the window of checksums whose lines it showed goes back in front.
+    /// Closes the viewer; the window of checksums whose lines it showed, or the question whose
+    /// file it showed, goes back in front.
     fn close_viewer(&mut self) {
         if let Some(viewing) = self.viewing.take() {
             viewing.cancel.cancel();
             if let Source::Text { results, .. } = viewing.source {
                 self.results.push_front(*results);
+            }
+            if let Some(question) = viewing.question {
+                self.dialogs.push_front(*question);
             }
         }
     }
@@ -5678,39 +5754,113 @@ impl App {
         effects
     }
 
-    /// Asks what to do about a taken name in the copy job `id`, as mc does: in red, with the
-    /// sizes and times of both, and No as the default.
-    fn ask_conflict(
-        &mut self,
-        id: u64,
-        target: &Location,
-        (new, old): (&Metadata, &Metadata),
-        reply: oneshot::Sender<Conflict>,
-    ) {
+    /// Asks what to do about `asked`, a taken name in the copy job `id`, as a warning: the path
+    /// of the file there; the new file and that one, each with its size and time, on a line
+    /// that views it; what to do about the names taken after it; and Skip as the default.
+    fn ask_conflict(&mut self, id: u64, asked: TakenName) {
         let formats = noc_locale::current();
-        let time = |metadata: &Metadata| cells::mtime(metadata.modified, &self.tz, &formats);
-        let message = fl!(
-            "copy-exists",
-            path = location_text(target),
-            new_size = new.size,
-            new_time = time(new),
-            old_size = old.size,
-            old_time = time(old)
-        );
+        let file = |metadata: &Metadata| {
+            let time = cells::mtime(metadata.modified, &self.tz, &formats);
+            fl!("copy-exists-file", size = metadata.size, time = time)
+        };
         let buttons = vec![
-            Button::Yes,
-            Button::No,
-            Button::All,
-            Button::KeepAll,
-            Button::Older,
+            Button::Overwrite,
+            Button::Keep,
+            Button::Rename,
             Button::Abort,
         ];
+        let rests = [
+            fl!("copy-exists-ask"),
+            fl!("copy-exists-same"),
+            fl!("copy-exists-older"),
+            fl!("copy-exists-smaller"),
+            fl!("copy-exists-larger"),
+            fl!("copy-exists-size-differs"),
+        ];
         let title = fl!("copy-exists-title");
-        let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
+        let message = location_text(&asked.target);
+        let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning)
+            .with_line()
+            .with_item(&fl!("copy-exists-new"), &file(&asked.source_metadata))
+            .with_item(&fl!("copy-exists-existing"), &file(&asked.target_metadata))
+            .with_line()
+            .with_combo_box(&fl!("copy-exists-rest"), &rests, 0)
+            .with_focus_on_default();
         self.dialogs.push_back(Open {
             dialog,
-            purpose: Purpose::Conflict { job: id, reply },
+            purpose: Purpose::Conflict {
+                job: id,
+                source: asked.source,
+                target: asked.target,
+                free: asked.free,
+                reply: asked.reply,
+            },
         });
+    }
+
+    /// Takes a press in the question about a taken name in front that leaves it waiting: an item
+    /// views its file, over the windows, and Rename… asks for a new name; the question comes
+    /// back once they close. `None` for any other.
+    fn set_question_aside(&mut self, event: DialogEvent) -> Option<Vec<Effect>> {
+        let Purpose::Conflict {
+            source,
+            target,
+            free,
+            ..
+        } = &self.dialogs.front()?.purpose
+        else {
+            return None;
+        };
+        match event {
+            DialogEvent::Opened(index) => {
+                let location = if index == 0 { source } else { target }.clone();
+                let question = self.dialogs.pop_front()?;
+                Some(self.view_for(location, question))
+            }
+            DialogEvent::Pressed(Button::Rename) => {
+                // A name that is not UTF-8 cannot be edited; one is typed in its place.
+                let name = String::from_utf8(free.clone()).unwrap_or_default();
+                let cursor = panel::stem_chars(&name, false);
+                let (title, prompt) = (fl!("copy-rename-title"), fl!("copy-rename-prompt"));
+                let dialog = Dialog::form(&title, &prompt, &name, &[]).with_cursor(cursor);
+                let question = Box::new(self.dialogs.pop_front()?);
+                self.dialogs.push_front(Open {
+                    dialog,
+                    purpose: Purpose::ConflictRename { question },
+                });
+                Some(Vec::new())
+            }
+            _ => None,
+        }
+    }
+
+    /// Answers `question`, a [`Purpose::Conflict`], with Rename… to `text`, typed from the
+    /// directory of the file there; the directory it names is reloaded once the job ends.
+    fn rename_conflict(&mut self, question: Open, text: &str) {
+        let Purpose::Conflict {
+            job, target, reply, ..
+        } = question.purpose
+        else {
+            return;
+        };
+        let dir = target.parent().unwrap_or(target);
+        let location = panel::resolve(&dir, &self.home, text);
+        let path = match &location {
+            Location::Local(path) => path.as_os_str().as_bytes().to_vec(),
+            Location::Remote { path, .. } => path.as_bytes().to_vec(),
+        };
+        if let Some(dir) = location.parent()
+            && let Some(job) = self.jobs.iter_mut().find(|found| found.id == job)
+            && !job.changes.contains(&dir)
+        {
+            job.changes.push(dir);
+        }
+        self.answered(job);
+        let conflict = Conflict {
+            this: Choice::Rename(path),
+            rest: rest_of(&question.dialog),
+        };
+        let _ = reply.send(conflict);
     }
 
     /// Takes a report from the job `id`, as [`App::job_event`] does, and tells whether the
@@ -5756,16 +5906,9 @@ impl App {
                     job.view.working(location_text(&current), counts, at);
                 }
             }
-            JobEvent::Exists {
-                at,
-                target,
-                source_metadata,
-                target_metadata,
-                reply,
-            } => {
+            JobEvent::Exists { at, taken } => {
                 job.view.ask(at);
-                let metadata = (&source_metadata, &target_metadata);
-                self.ask_conflict(id, &target, metadata, reply);
+                self.ask_conflict(id, *taken);
             }
             JobEvent::Failed {
                 at,
@@ -5818,12 +5961,15 @@ impl App {
     fn end_job(&mut self, id: u64) -> Option<Job> {
         let index = self.jobs.iter().position(|job| job.id == id)?;
         let job = self.jobs.remove(index);
-        self.dialogs.retain(|open| match open.purpose {
-            Purpose::Failure { job: asked, .. } | Purpose::Conflict { job: asked, .. } => {
-                asked != job.id
-            }
-            _ => true,
-        });
+        self.dialogs.retain(|open| !open.asks_for(job.id));
+        if let Some(viewing) = &mut self.viewing
+            && viewing
+                .question
+                .as_ref()
+                .is_some_and(|open| open.asks_for(job.id))
+        {
+            viewing.question = None;
+        }
         Some(job)
     }
 
@@ -6636,6 +6782,11 @@ impl App {
         };
         let current = match purpose {
             Purpose::EditHost { current, .. } => current,
+            // Without a name, OK does nothing.
+            Purpose::ConflictRename { .. } => {
+                return event == DialogEvent::Pressed(Button::Ok)
+                    && dialog.text().trim().is_empty();
+            }
             Purpose::Checksum { expect: true, .. } if event == DialogEvent::Pressed(Button::Ok) => {
                 let typed = dialog.text().trim();
                 if typed.is_empty() || parse_expected(typed, Algorithm::Sha256).is_some() {
@@ -7363,7 +7514,9 @@ impl App {
         if always {
             self.spots.menu_bar = pulldown::render_idle(frame, menu_bar, &self.theme);
         }
-        self.render_pulldown(frame, menu_bar, &mut stage);
+        if !self.viewer_over() {
+            self.render_pulldown(frame, menu_bar, &mut stage);
+        }
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
             self.render_jobs(frame, menu_bar);
@@ -7491,7 +7644,8 @@ impl App {
 
     /// The windows centered over `panels`, those in front last: the workspaces, the
     /// Configuration dialog, the help, the jobs, the checksums, and the dialogs, those for one
-    /// panel too; they grow and shrink on `stage`.
+    /// panel too; they grow and shrink on `stage`. A viewer for a question about a taken name
+    /// has only the dialogs over it.
     fn render_windows(
         &mut self,
         frame: &mut Frame<'_>,
@@ -7499,6 +7653,10 @@ impl App {
         spin: &Spin,
         stage: &mut Stage,
     ) {
+        if self.viewer_over() {
+            self.render_dialogs(frame, panels, stage);
+            return;
+        }
         let middle = |window| (window, Grows::FromMiddle);
         let theme = &self.theme;
         if let Some(window) = &mut self.workspaces_window {
@@ -7544,6 +7702,14 @@ impl App {
                 results.window.render(frame, panels, theme);
             });
         }
+        self.render_dialogs(frame, panels, stage);
+    }
+
+    /// The dialog in front, over the one it is about if it is an error about it, and the list of
+    /// completions of its field.
+    fn render_dialogs(&mut self, frame: &mut Frame<'_>, panels: Rect, stage: &mut Stage) {
+        let middle = |window| (window, Grows::FromMiddle);
+        let theme = &self.theme;
         if let Some(open) = self.dialogs.front() {
             if matches!(open.purpose, Purpose::InfoOver)
                 && let Some(under) = self.dialogs.get(1)
@@ -7962,16 +8128,31 @@ fn decision_of(event: DialogEvent) -> Decision {
     }
 }
 
-/// What a copy does with a taken name, by the button `event` pressed.
-fn conflict_of(event: DialogEvent) -> Conflict {
-    match event {
-        DialogEvent::Pressed(Button::Yes) => Conflict::Overwrite,
-        DialogEvent::Pressed(Button::No) => Conflict::Skip,
-        DialogEvent::Pressed(Button::All) => Conflict::OverwriteAll,
-        DialogEvent::Pressed(Button::KeepAll) => Conflict::SkipAll,
-        DialogEvent::Pressed(Button::Older) => Conflict::OverwriteOlder,
-        _ => Conflict::Abort,
+/// The answer of `dialog`, the question about a taken name, closed by `event`.
+fn conflict_of(event: DialogEvent, dialog: &Dialog) -> Conflict {
+    let this = match event {
+        DialogEvent::Pressed(Button::Overwrite) => Choice::Overwrite,
+        DialogEvent::Pressed(Button::Keep) => Choice::Skip,
+        _ => Choice::Abort,
+    };
+    Conflict {
+        this,
+        rest: rest_of(dialog),
     }
+}
+
+/// What the question about a taken name, `dialog`, says to do about the names taken after it,
+/// by its combo box.
+fn rest_of(dialog: &Dialog) -> Rest {
+    const RESTS: [Rest; 6] = [
+        Rest::Ask,
+        Rest::Same,
+        Rest::OverwriteOlder,
+        Rest::OverwriteSmaller,
+        Rest::OverwriteLarger,
+        Rest::OverwriteSizeDiffers,
+    ];
+    RESTS.get(dialog.chosen(0)).copied().unwrap_or(Rest::Ask)
 }
 
 /// Saves what the dialog of F4 on the host `name` holds, if it changed anything.
@@ -10853,12 +11034,17 @@ mod tests {
         let (reply, _conflict) = oneshot::channel();
         let mut metadata = dir("a").metadata;
         metadata.kind = FileKind::File;
-        let exists = JobEvent::Exists {
-            at: Instant::now(),
+        let taken = TakenName {
+            source: local("/srv/left/a"),
             target: local("/srv/right/a"),
             source_metadata: metadata.clone(),
             target_metadata: metadata,
+            free: b"a_2".to_vec(),
             reply,
+        };
+        let exists = JobEvent::Exists {
+            at: Instant::now(),
+            taken: Box::new(taken),
         };
         app.job_event(second, exists);
         assert!(!ticking(&app, second));
@@ -11147,44 +11333,208 @@ mod tests {
         );
         assert!(screen(&mut app).contains("Counting"), "the job's window");
 
-        // A taken name: No is the default; Left goes to Yes.
-        let mut metadata = dir("left").metadata;
-        metadata.kind = FileKind::File;
-        metadata.size = Some(12_345);
-        let ask = |app: &mut App| {
-            let (reply, answer) = oneshot::channel();
-            let event = JobEvent::Exists {
-                at: Instant::now(),
-                target: local("/srv/right/left/a"),
-                source_metadata: metadata.clone(),
-                target_metadata: metadata.clone(),
-                reply,
-            };
-            app.job_event(id, event);
-            answer
-        };
-        let mut answer = ask(&mut app);
-        let text = screen_of(&mut app, 14);
-        assert!(
-            text.contains("/srv/right/left/a is there already."),
-            "{text}"
-        );
-        assert!(
-            text.contains("New:      12345 bytes, 2023-11-14 19:26"),
-            "{text}"
-        );
-        assert!(text.contains("{ No }"), "{text}");
+        // A taken name: the path of the file there, both files with their sizes and times,
+        // and Skip as the default; Left goes to Overwrite.
+        let mut answer = ask_taken(&mut app, id);
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("/srv/right/left/a"), "{text}");
+        assert!(text.contains("New "), "{text}");
+        assert!(text.contains("12345 bytes  2023-11-14 19:26"), "{text}");
+        assert!(text.contains("Existing "), "{text}");
+        assert!(text.contains("The rest: "), "{text}");
+        assert!(text.contains("Ask each time"), "{text}");
+        assert!(text.contains("{ Skip }"), "{text}");
         app.handle(action(Action::Confirm));
-        assert_eq!(answer.try_recv(), Ok(Conflict::Skip));
-        let mut answer = ask(&mut app);
+        assert_eq!(answer.try_recv(), Ok(Conflict::once(Choice::Skip)));
+        let mut answer = ask_taken(&mut app, id);
         app.handle(action(Action::Left));
         app.handle(action(Action::Confirm));
-        assert_eq!(answer.try_recv(), Ok(Conflict::Overwrite));
+        assert_eq!(answer.try_recv(), Ok(Conflict::once(Choice::Overwrite)));
 
         // The end reads the target and the source's directory again.
         let effects = app.job_event(id, JobEvent::Finished { complete: true });
         assert_eq!(effects.len(), 2);
         assert_eq!(app.context(), Context::Panel);
+    }
+
+    /// A copy of `/srv/left/a` that the job `id` asks about, as `/srv/right/left/a` is there;
+    /// `a_2` is free beside it. The answer comes on what it returns.
+    fn ask_taken(app: &mut App, id: u64) -> oneshot::Receiver<Conflict> {
+        let mut metadata = dir("left").metadata;
+        metadata.kind = FileKind::File;
+        metadata.size = Some(12_345);
+        let (reply, answer) = oneshot::channel();
+        let taken = TakenName {
+            source: local("/srv/left/a"),
+            target: local("/srv/right/left/a"),
+            source_metadata: metadata.clone(),
+            target_metadata: metadata,
+            free: b"a_2".to_vec(),
+            reply,
+        };
+        let event = JobEvent::Exists {
+            at: Instant::now(),
+            taken: Box::new(taken),
+        };
+        app.job_event(id, event);
+        answer
+    }
+
+    /// A copy job from `two_directories`, and its id.
+    fn copying() -> (App, u64) {
+        let mut app = two_directories();
+        app.handle(action(Action::Copy));
+        let (id, ..) = copy_job(app.handle(action(Action::Confirm)));
+        (app, id)
+    }
+
+    #[test]
+    fn the_rest_of_the_taken_names_get_what_the_combo_box_says() {
+        let (mut app, id) = copying();
+        let rests = [
+            Rest::Ask,
+            Rest::Same,
+            Rest::OverwriteOlder,
+            Rest::OverwriteSmaller,
+            Rest::OverwriteLarger,
+            Rest::OverwriteSizeDiffers,
+        ];
+        for (index, rest) in rests.into_iter().enumerate() {
+            let mut answer = ask_taken(&mut app, id);
+            // Alt+t opens the list of the combo box, where j goes down and Enter chooses.
+            app.handle(Resolved::Hotkey('t'));
+            for _ in 0..index {
+                app.handle(action(Action::Down));
+            }
+            app.handle(action(Action::Confirm));
+            app.handle(Resolved::Hotkey('o'));
+            let overwrite = Conflict {
+                this: Choice::Overwrite,
+                rest,
+            };
+            assert_eq!(answer.try_recv(), Ok(overwrite), "{rest:?}");
+        }
+        // Esc, as Abort, stops the job.
+        let mut answer = ask_taken(&mut app, id);
+        app.handle(action(Action::Cancel));
+        assert_eq!(answer.try_recv(), Ok(Conflict::once(Choice::Abort)));
+    }
+
+    #[test]
+    fn a_taken_name_views_either_file_over_the_job_and_comes_back() {
+        let (mut app, id) = copying();
+        let mut answer = ask_taken(&mut app, id);
+        // Alt+x views the file there, over the job's window, and the job waits.
+        let Effect::Read(ReadRequest {
+            id: read, location, ..
+        }) = one(app.handle(Resolved::Hotkey('x')))
+        else {
+            panic!("expected a read");
+        };
+        assert_eq!(location, local("/srv/right/left/a"));
+        app.read(read, Ok(whole(*b"there\n")));
+        assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
+        assert_eq!(app.front(), Front::Viewer);
+        assert!(
+            !screen(&mut app).contains("Counting"),
+            "the job's window is under it"
+        );
+        assert!(answer.try_recv().is_err(), "it waits");
+        app.handle(action(Action::Help));
+        assert_eq!(
+            app.context(),
+            Context::Viewer,
+            "the help would open under it"
+        );
+
+        // Esc brings the question back, the focus where it was: on the line of the file there.
+        app.handle(action(Action::Cancel));
+        assert_eq!(app.context(), Context::Dialog);
+        assert!(screen(&mut app).contains("Existing"));
+        // Enter there views it again; on the line of the new file, Space views that one.
+        let Effect::Read(ReadRequest { location, .. }) = one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected a read");
+        };
+        assert_eq!(location, local("/srv/right/left/a"));
+        app.handle(action(Action::Quit));
+        app.handle(action(Action::Up));
+        let Effect::Read(ReadRequest { location, .. }) = one(app.handle(action(Action::Toggle)))
+        else {
+            panic!("expected a read");
+        };
+        assert_eq!(location, local("/srv/left/a"));
+        app.handle(action(Action::Cancel));
+        app.handle(Resolved::Hotkey('s'));
+        assert_eq!(answer.try_recv(), Ok(Conflict::once(Choice::Skip)));
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_viewed_says_so_over_the_question() {
+        let (mut app, id) = copying();
+        let _answer = ask_taken(&mut app, id);
+        let Effect::Read(ReadRequest { id: read, .. }) = one(app.handle(Resolved::Hotkey('n')))
+        else {
+            panic!("expected a read");
+        };
+        app.read(read, Err("gone".to_owned()));
+        assert!(screen(&mut app).contains("Cannot view /srv/left/a: gone"));
+        assert_eq!(app.dialogs.len(), 2, "over the question");
+        app.handle(action(Action::Confirm));
+        assert!(
+            screen_of(&mut app, 16).contains("The rest: "),
+            "the question again"
+        );
+    }
+
+    #[test]
+    fn a_job_that_ends_takes_its_question_from_the_viewer_and_rename() {
+        let (mut app, id) = copying();
+        let _answer = ask_taken(&mut app, id);
+        app.handle(Resolved::Hotkey('n'));
+        app.job_event(id, JobEvent::Finished { complete: false });
+        app.handle(action(Action::Quit));
+        assert_eq!(app.context(), Context::Panel, "no question comes back");
+
+        let (mut app, id) = copying();
+        let _answer = ask_taken(&mut app, id);
+        app.handle(Resolved::Hotkey('r'));
+        app.job_event(id, JobEvent::Finished { complete: false });
+        assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn rename_offers_a_free_name_and_takes_a_path() {
+        let (mut app, id) = copying();
+        let mut answer = ask_taken(&mut app, id);
+        app.handle(Resolved::Hotkey('r'));
+        let text = screen(&mut app);
+        assert!(text.contains("New name:") && text.contains("a_2"), "{text}");
+        assert_eq!(app.place(), (Mode::Insert, Context::DialogInput));
+        // Cancel goes back to the question, which still waits.
+        app.handle(action(Action::Cancel));
+        assert!(screen_of(&mut app, 16).contains("The rest: "));
+        assert!(answer.try_recv().is_err());
+
+        // Without a name, OK does nothing.
+        app.handle(Resolved::Hotkey('r'));
+        app.dialogs[0].dialog.set_text(0, "");
+        app.handle(action(Action::Confirm));
+        assert!(screen(&mut app).contains("New name:"));
+        assert!(answer.try_recv().is_err());
+
+        // A path goes from the directory of the file there; that directory is read again
+        // once the job ends.
+        app.dialogs[0].dialog.set_text(0, "../kept/b");
+        app.handle(action(Action::Confirm));
+        let renamed = Conflict::once(Choice::Rename(b"/srv/right/left/../kept/b".to_vec()));
+        assert_eq!(answer.try_recv(), Ok(renamed));
+        let job = app.jobs.iter().find(|job| job.id == id).unwrap();
+        assert!(
+            job.changes.contains(&local("/srv/right/left/../kept")),
+            "{:?}",
+            job.changes
+        );
     }
 
     #[test]

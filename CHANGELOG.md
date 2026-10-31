@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A taken name in a copy or a move asks anew: the lines of the new file and the file there show
+  their sizes and times and view them, a combo box says what the later taken names get (the
+  same, or overwrite those older, smaller, larger, or of another size), and Rename… copies under
+  a free name, such as `report_2.txt`, or one typed
+  ([ADR 0060](docs/adr/0060-the-question-about-a-taken-name.md)).
 - The default button of a dialog is drawn bold in braces, `{ OK }`, rather than as mc's
   `[< OK >]`.
 

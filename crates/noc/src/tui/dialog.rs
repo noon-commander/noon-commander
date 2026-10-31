@@ -356,6 +356,9 @@ struct LabelledField {
     /// What shows, faint, while the field is empty, such as the value that then counts; it is
     /// never the field's text. Terminal-safe. Fields that search show none.
     placeholder: Option<String>,
+    /// Shown where it cannot be used: its label faint, the field empty and faint; the focus,
+    /// the mouse, and its letter pass it by.
+    disabled: bool,
 }
 
 impl LabelledField {
@@ -365,6 +368,7 @@ impl LabelledField {
             field,
             search: None,
             placeholder: None,
+            disabled: false,
         }
     }
 }
@@ -399,6 +403,16 @@ impl Colors {
             self.hotkey_focused
         } else {
             self.hotkey
+        }
+    }
+
+    /// The same colors, for what cannot be used: the body faint, its letters too.
+    fn disabled(self, theme: &Theme) -> Self {
+        let faint = self.body.patch(theme.disabled);
+        Self {
+            body: faint,
+            hotkey: faint,
+            ..self
         }
     }
 
@@ -491,6 +505,16 @@ struct LabelledComboBox {
     combo: ComboBox,
 }
 
+/// A part of a dialog under its message, by its index among those of its kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Part {
+    ComboBox(usize),
+    Field(usize),
+    Check(usize),
+    /// A blank row that sets what is above it apart from what is under it.
+    Separator,
+}
+
 /// Rows under the check boxes, which whoever opened the dialog draws at each render
 /// ([`ListView`]); the dialog moves the cursor over them and scrolls them as vim's window.
 #[derive(Debug, Default)]
@@ -545,10 +569,13 @@ pub(crate) struct Dialog {
     title: String,
     /// The text above the rest; a form's marks the letter of its field.
     message: Label,
-    /// Each on a line of its own under the message, the boxes lined up after the labels.
+    /// Each on a line of its own, the boxes lined up after the labels.
     combo_boxes: Vec<LabelledComboBox>,
     fields: Vec<LabelledField>,
     checks: Vec<Check>,
+    /// The combo boxes, the fields, the check boxes, and the separators under the message, top
+    /// to bottom, in the order they were added.
+    parts: Vec<Part>,
     buttons: Vec<Button>,
     /// The button that Enter in the field activates, and that starts with the focus otherwise;
     /// drawn as `[< … >]`, as in mc.
@@ -580,11 +607,8 @@ impl Dialog {
     /// No (with the focus) for questions. `context` is the host alias.
     pub(crate) fn prompt(context: &str, message: &str, kind: PromptKind) -> Self {
         match kind {
-            PromptKind::Secret => Self {
-                fields: vec![LabelledField::unlabelled(Field::secret())],
-                focus: Focus::Field(0),
-                ..Self::new(context, message, vec![Button::Ok, Button::Cancel])
-            },
+            PromptKind::Secret => Self::new(context, message, vec![Button::Ok, Button::Cancel])
+                .with_part_field(LabelledField::unlabelled(Field::secret())),
             PromptKind::HostKey | PromptKind::Confirm => Self {
                 default: 1,
                 focus: Focus::Button(1),
@@ -628,13 +652,12 @@ impl Dialog {
     /// `message`, a text field that opens with `text`, check boxes with their labels and
     /// states, and OK and Cancel. An `&` in `message` marks the letter of the field.
     pub(crate) fn form(title: &str, message: &str, text: &str, checks: &[(String, bool)]) -> Self {
-        Self {
+        let dialog = Self {
             message: Label::parse(message.trim_end()),
-            fields: vec![LabelledField::unlabelled(Field::plain(text))],
-            checks: Self::checks(checks),
-            focus: Focus::Field(0),
             ..Self::new(title, "", vec![Button::Ok, Button::Cancel])
         }
+        .with_part_field(LabelledField::unlabelled(Field::plain(text)));
+        dialog.with_checks(checks)
     }
 
     /// Text fields with their labels and the texts they open with, check boxes with their
@@ -645,36 +668,56 @@ impl Dialog {
         checks: &[(String, bool)],
         buttons: Vec<Button>,
     ) -> Self {
-        let fields: Vec<LabelledField> = fields
+        let dialog = fields
             .iter()
-            .map(|(label, text)| LabelledField {
-                label: Label::parse(&cells::sanitize(label.as_bytes())),
-                field: Field::plain(text),
-                search: None,
-                placeholder: None,
-            })
-            .collect();
-        let focus = if fields.is_empty() {
-            Focus::Button(0)
-        } else {
-            Focus::Field(0)
-        };
-        Self {
-            fields,
-            checks: Self::checks(checks),
-            focus,
-            ..Self::new(title, "", buttons)
-        }
+            .fold(Self::new(title, "", buttons), |dialog, (label, text)| {
+                dialog.with_field(label, text)
+            });
+        dialog.with_checks(checks)
     }
 
-    fn checks(checks: &[(String, bool)]) -> Vec<Check> {
+    /// The same dialog with a text field under the rest, labelled `label`, that opens with
+    /// `text`. The first field starts with the focus.
+    pub(crate) fn with_field(self, label: &str, text: &str) -> Self {
+        self.with_part_field(LabelledField {
+            label: Label::parse(&cells::sanitize(label.as_bytes())),
+            field: Field::plain(text),
+            search: None,
+            placeholder: None,
+            disabled: false,
+        })
+    }
+
+    fn with_part_field(mut self, field: LabelledField) -> Self {
+        if self.fields.is_empty() {
+            self.focus = Focus::Field(0);
+        }
+        self.parts.push(Part::Field(self.fields.len()));
+        self.fields.push(field);
+        self
+    }
+
+    /// The same dialog with a check box under the rest, labelled `label`, checked if `on`.
+    pub(crate) fn with_check(mut self, label: &str, on: bool) -> Self {
+        self.parts.push(Part::Check(self.checks.len()));
+        self.checks.push(Check {
+            label: Label::parse(label),
+            on,
+        });
+        self
+    }
+
+    fn with_checks(self, checks: &[(String, bool)]) -> Self {
         checks
             .iter()
-            .map(|(label, on)| Check {
-                label: Label::parse(label),
-                on: *on,
-            })
-            .collect()
+            .fold(self, |dialog, (label, on)| dialog.with_check(label, *on))
+    }
+
+    /// The same dialog with a blank row under the rest, which sets what is above it apart
+    /// from what comes under it.
+    pub(crate) fn with_separator(mut self) -> Self {
+        self.parts.push(Part::Separator);
+        self
     }
 
     fn new(title: &str, message: &str, buttons: Vec<Button>) -> Self {
@@ -685,6 +728,7 @@ impl Dialog {
             combo_boxes: Vec::new(),
             fields: Vec::new(),
             checks: Vec::new(),
+            parts: Vec::new(),
             buttons,
             default: 0,
             focus: Focus::Button(0),
@@ -885,17 +929,31 @@ impl Dialog {
         self
     }
 
-    /// The same dialog with a combo box of `items` under its message, after those it has,
-    /// labelled `label`, of which `chosen` is chosen. Without fields, its first combo box starts
-    /// with the focus.
+    /// The same dialog with a combo box of `items` under the rest, labelled `label`, of which
+    /// `chosen` is chosen. Without fields, its first combo box starts with the focus.
     pub(crate) fn with_combo_box(mut self, label: &str, items: &[String], chosen: usize) -> Self {
         if self.fields.is_empty() && self.combo_boxes.is_empty() {
             self.focus = Focus::ComboBox(0);
         }
+        self.parts.push(Part::ComboBox(self.combo_boxes.len()));
         self.combo_boxes.push(LabelledComboBox {
             label: Label::parse(&cells::sanitize(label.as_bytes())),
             combo: ComboBox::new(items, chosen),
         });
+        self
+    }
+
+    /// The same dialog, whose field `index` shows, empty and faint, but cannot be used; the
+    /// focus on it goes to the first stop.
+    pub(crate) fn with_disabled(mut self, index: usize) -> Self {
+        if let Some(field) = self.fields.get_mut(index) {
+            field.disabled = true;
+        }
+        if self.focus == Focus::Field(index)
+            && let Some(&first) = self.stops().first()
+        {
+            self.focus = first;
+        }
         self
     }
 
@@ -1197,7 +1255,8 @@ impl Dialog {
     /// switched, and the list of a combo box opened, each with the focus; a field with it, or
     /// under a prompt with it, gets the focus in Insert mode. Nothing else has it.
     fn hotkey(&mut self, c: char) -> DialogEvent {
-        let found = if self.message.has(c) && !self.fields.is_empty() {
+        let usable = self.fields.first().is_some_and(|field| !field.disabled);
+        let found = if self.message.has(c) && usable {
             Some(Focus::Field(0))
         } else {
             self.stops().into_iter().find(|&stop| match stop {
@@ -1229,18 +1288,14 @@ impl Dialog {
     #[cfg(test)]
     pub(crate) fn letters(&self) -> Vec<char> {
         let prompt = (!self.fields.is_empty()).then(|| self.message.letter());
-        let combo_boxes = self.combo_boxes.iter().map(|combo| combo.label.letter());
-        let fields = self.fields.iter().map(|field| field.label.letter());
-        let checks = self.checks.iter().map(|check| check.label.letter());
-        let buttons = self.buttons.iter().map(|button| button.label().letter());
-        prompt
-            .into_iter()
-            .chain(combo_boxes)
-            .chain(fields)
-            .chain(checks)
-            .chain(buttons)
-            .flatten()
-            .collect()
+        let stops = self.stops().into_iter().map(|stop| match stop {
+            Focus::ComboBox(index) => self.combo_boxes[index].label.letter(),
+            Focus::Field(index) => self.fields[index].label.letter(),
+            Focus::Check(index) => self.checks[index].label.letter(),
+            Focus::List => None,
+            Focus::Button(index) => self.buttons[index].label().letter(),
+        });
+        prompt.into_iter().chain(stops).flatten().collect()
     }
 
     /// Takes a press of the mouse, where the dialog was drawn last: a click opens the list of a
@@ -1331,20 +1386,24 @@ impl Dialog {
         DialogEvent::Pending
     }
 
-    /// Where the focus can be: the combo boxes, the fields, the check boxes, the list, and the
-    /// buttons.
+    /// Where the focus can be: the combo boxes, the fields that are not disabled, and the check
+    /// boxes, top to bottom, then the list and the buttons.
     fn stops(&self) -> Vec<Focus> {
-        (0..self.combo_boxes.len())
-            .map(Focus::ComboBox)
-            .chain((0..self.fields.len()).map(Focus::Field))
-            .chain((0..self.checks.len()).map(Focus::Check))
+        self.parts
+            .iter()
+            .filter_map(|&part| match part {
+                Part::ComboBox(index) => Some(Focus::ComboBox(index)),
+                Part::Field(index) if !self.fields[index].disabled => Some(Focus::Field(index)),
+                Part::Check(index) => Some(Focus::Check(index)),
+                Part::Field(_) | Part::Separator => None,
+            })
             .chain(self.list.as_ref().map(|_| Focus::List))
             .chain((0..self.buttons.len()).map(Focus::Button))
             .collect()
     }
 
-    /// Moves the focus through the combo boxes, the fields, the check boxes, the list, and the
-    /// buttons, round; a field it comes to is in `mode`, Insert or Normal.
+    /// Moves the focus through the stops, round; a field it comes to is in `mode`, Insert or
+    /// Normal.
     fn move_focus(&mut self, forward: bool, mode: Mode) {
         let stops = self.stops();
         let current = stops
@@ -1463,17 +1522,10 @@ impl Dialog {
             self.message.wrap(text_width)
         };
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
-        // Borders, the message, the combo boxes, the fields under their labels, the check boxes,
-        // a line, the buttons.
-        let labels = self
-            .fields
-            .iter()
-            .filter(|f| !f.label.text.is_empty())
-            .count();
-        let height = rows(lines.len())
-            .saturating_add(rows(self.combo_boxes.len()))
-            .saturating_add(rows(self.fields.len() + labels))
-            .saturating_add(rows(self.checks.len()));
+        // Borders, the message, the parts under it, a line, the buttons.
+        let height = self.parts.iter().fold(rows(lines.len()), |height, &part| {
+            height.saturating_add(self.part_rows(part))
+        });
         // A line, a row at least, and a line over the status, under the rest.
         let below = list.map_or(0, |list| match list.status.len() {
             0 => 2,
@@ -1500,18 +1552,7 @@ impl Dialog {
             .saturating_add(below);
         let message = (lines.as_slice(), letter);
         let mut index = self.render_message(frame, inner, message, rest, colors, theme);
-        let combo_boxes = self.draw_combo_boxes(frame, (inner, index), (colors, theme), &mut spots);
-        let Some(after) = combo_boxes else {
-            return;
-        };
-        index = after;
-        let Some(after) = self.draw_fields(frame, (inner, index), (colors, theme), &mut spots)
-        else {
-            return;
-        };
-        index = after;
-        let checks = self.draw_checks(frame, (inner, index), (colors, theme), &mut spots);
-        let Some(after) = checks else {
+        let Some(after) = self.draw_body(frame, (inner, index), (colors, theme), &mut spots) else {
             return;
         };
         index = after;
@@ -1537,88 +1578,25 @@ impl Dialog {
 }
 
 impl Dialog {
-    /// Draws the fields under their labels from row `index` of `inner`, the room inside the
-    /// frame, with the terminal cursor in the focused one, and keeps where for the mouse in
-    /// `spots`, and where the glyph of each that switches how it searches is. Returns the row
-    /// after them, or `None` without room.
-    fn draw_fields(
-        &self,
-        frame: &mut Frame<'_>,
-        (inner, mut index): (Rect, u16),
-        (colors, theme): (Colors, &Theme),
-        spots: &mut Vec<(Focus, Rect)>,
-    ) -> Option<u16> {
-        let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        let room = usize::from(inner.width).max(1);
-        let mut glyphs = self.glyphs.borrow_mut();
-        for (number, labelled) in self.fields.iter().enumerate() {
-            let label = &labelled.label;
-            if !label.text.is_empty() {
-                if index >= inner.height {
-                    return None;
-                }
-                frame.render_widget(
-                    Line::from(label_spans(label, room, colors, theme)),
-                    row(index),
-                );
-                index += 1;
-            }
-            if index >= inner.height {
-                return None;
-            }
-            let (column, area, glyph) = draw_field(frame, row(index), labelled, theme);
-            glyphs.extend(glyph.map(|glyph| (number, glyph)));
-            spots.push((Focus::Field(number), area));
-            if number == 0 {
-                self.field_area.set(Some(row(index)));
-            }
-            if self.focus == Focus::Field(number) {
-                let column = u16::try_from(column).unwrap_or(0);
-                frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
-            }
-            index += 1;
+    /// The rows `part` takes: a field's label takes one of its own.
+    fn part_rows(&self, part: Part) -> u16 {
+        match part {
+            Part::Field(index) if !self.fields[index].label.text.is_empty() => 2,
+            Part::ComboBox(_) | Part::Field(_) | Part::Check(_) | Part::Separator => 1,
         }
-        Some(index)
     }
 
-    /// Draws the check boxes from row `index` of `inner`, the room inside the frame, and keeps
-    /// where for the mouse in `spots`. Returns the row after them, or `None` without room.
-    fn draw_checks(
+    /// Draws the parts under the message from row `index` of `inner`, the room inside the
+    /// frame, top to bottom, a separator as a blank row; and keeps where each that takes the
+    /// focus is for the mouse in `spots`. Returns the row after them, or `None` without room.
+    fn draw_body(
         &self,
         frame: &mut Frame<'_>,
         (inner, mut index): (Rect, u16),
-        (colors, theme): (Colors, &Theme),
+        style: (Colors, &Theme),
         spots: &mut Vec<(Focus, Rect)>,
     ) -> Option<u16> {
-        for (number, check) in self.checks.iter().enumerate() {
-            if index >= inner.height {
-                return None;
-            }
-            let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
-            let focused = self.focus == Focus::Check(number);
-            let style = if focused { colors.focused } else { colors.body };
-            let mut spans = colors.check_box(check.on, focused, theme);
-            spans.push(Span::styled(" ", style));
-            let hotkey = colors.hotkey_style(focused);
-            spans.extend(check.label.spans(style, Some(hotkey), colors.mark));
-            frame.render_widget(Line::from(spans), row);
-            spots.push((Focus::Check(number), row));
-            index += 1;
-        }
-        Some(index)
-    }
-
-    /// Draws the combo boxes from row `index` of `inner`, the room inside the frame, each after
-    /// its label, the boxes lined up a blank after the widest label, in the colors of fields,
-    /// the one with the focus apart; and keeps where for the mouse in `spots`, the whole line.
-    /// Returns the row after them, or `None` without room.
-    fn draw_combo_boxes(
-        &self,
-        frame: &mut Frame<'_>,
-        (inner, mut index): (Rect, u16),
-        (colors, theme): (Colors, &Theme),
-        spots: &mut Vec<(Focus, Rect)>,
-    ) -> Option<u16> {
+        // The boxes line up a blank after the widest label.
         let room = usize::from(inner.width);
         let widest = self
             .combo_boxes
@@ -1627,32 +1605,132 @@ impl Dialog {
             .max()
             .unwrap_or(0);
         let label_width = (widest + 1).min(room / 2);
-        let marks = theme.glyphs.marks;
         for labelled in &self.combo_boxes {
             labelled.combo.place(None);
         }
-        for (number, labelled) in self.combo_boxes.iter().enumerate() {
+        for &part in &self.parts {
             if index >= inner.height {
                 return None;
             }
             let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
-            let hotkey = colors.hotkey_style(false);
-            let mut spans = labelled
-                .label
-                .fit(label_width, colors.body_styles(), hotkey, marks);
-            let focused = self.focus == Focus::ComboBox(number);
-            let boxed = labelled.combo.box_spans(room - label_width, focused, theme);
-            let cells = boxed.iter().map(Span::width).sum::<usize>();
-            let x = inner.x + u16::try_from(label_width).unwrap_or(0);
-            let width = u16::try_from(cells).unwrap_or(u16::MAX);
-            let area = Rect::new(x, row.y, width, 1).intersection(row);
-            labelled.combo.place(Some(area));
-            spans.extend(boxed);
-            frame.render_widget(Line::from(spans).style(colors.body), row);
-            spots.push((Focus::ComboBox(number), row));
-            index += 1;
+            match part {
+                Part::ComboBox(number) => {
+                    self.draw_combo_box(frame, (row, number, label_width), style, spots);
+                    index += 1;
+                }
+                Part::Field(number) => {
+                    index =
+                        self.draw_labelled_field(frame, (inner, index), number, style, spots)?;
+                }
+                Part::Check(number) => {
+                    self.draw_check(frame, (row, number), style, spots);
+                    index += 1;
+                }
+                Part::Separator => index += 1,
+            }
         }
         Some(index)
+    }
+
+    /// Draws field `number` under its label from row `index` of `inner`, with the terminal
+    /// cursor in it if it has the focus, and keeps where for the mouse in `spots`, and where
+    /// the glyph that switches how it searches is. A disabled one is faint, label and field,
+    /// and takes no clicks. Returns the row after it, or `None` without room.
+    fn draw_labelled_field(
+        &self,
+        frame: &mut Frame<'_>,
+        (inner, mut index): (Rect, u16),
+        number: usize,
+        (colors, theme): (Colors, &Theme),
+        spots: &mut Vec<(Focus, Rect)>,
+    ) -> Option<u16> {
+        let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
+        let labelled = &self.fields[number];
+        let label = &labelled.label;
+        if !label.text.is_empty() {
+            let colors = if labelled.disabled {
+                colors.disabled(theme)
+            } else {
+                colors
+            };
+            let room = usize::from(inner.width).max(1);
+            frame.render_widget(
+                Line::from(label_spans(label, room, colors, theme)),
+                row(index),
+            );
+            index += 1;
+        }
+        if index >= inner.height {
+            return None;
+        }
+        if labelled.disabled {
+            let style = theme.dialog_input.patch(theme.disabled);
+            frame.buffer_mut().set_style(row(index), style);
+            return Some(index + 1);
+        }
+        let (column, area, glyph) = draw_field(frame, row(index), labelled, theme);
+        self.glyphs
+            .borrow_mut()
+            .extend(glyph.map(|glyph| (number, glyph)));
+        spots.push((Focus::Field(number), area));
+        if number == 0 {
+            self.field_area.set(Some(row(index)));
+        }
+        if self.focus == Focus::Field(number) {
+            let column = u16::try_from(column).unwrap_or(0);
+            frame.set_cursor_position(Position::new(inner.x + column, inner.y + index));
+        }
+        Some(index + 1)
+    }
+
+    /// Draws check box `number` on `row`, and keeps where for the mouse in `spots`.
+    fn draw_check(
+        &self,
+        frame: &mut Frame<'_>,
+        (row, number): (Rect, usize),
+        (colors, theme): (Colors, &Theme),
+        spots: &mut Vec<(Focus, Rect)>,
+    ) {
+        let check = &self.checks[number];
+        let focused = self.focus == Focus::Check(number);
+        let style = if focused { colors.focused } else { colors.body };
+        let mut spans = colors.check_box(check.on, focused, theme);
+        spans.push(Span::styled(" ", style));
+        let hotkey = colors.hotkey_style(focused);
+        spans.extend(check.label.spans(style, Some(hotkey), colors.mark));
+        frame.render_widget(Line::from(spans), row);
+        spots.push((Focus::Check(number), row));
+    }
+
+    /// Draws combo box `number` on `row` after its label, the box `label_width` cells in, in the
+    /// colors of fields, apart with the focus; and keeps where for the mouse in `spots`, the
+    /// whole line.
+    fn draw_combo_box(
+        &self,
+        frame: &mut Frame<'_>,
+        (row, number, label_width): (Rect, usize, usize),
+        (colors, theme): (Colors, &Theme),
+        spots: &mut Vec<(Focus, Rect)>,
+    ) {
+        let labelled = &self.combo_boxes[number];
+        let room = usize::from(row.width);
+        let hotkey = colors.hotkey_style(false);
+        let mut spans = labelled.label.fit(
+            label_width,
+            colors.body_styles(),
+            hotkey,
+            theme.glyphs.marks,
+        );
+        let focused = self.focus == Focus::ComboBox(number);
+        let boxed = labelled.combo.box_spans(room - label_width, focused, theme);
+        let cells = boxed.iter().map(Span::width).sum::<usize>();
+        let x = row.x + u16::try_from(label_width).unwrap_or(0);
+        let width = u16::try_from(cells).unwrap_or(u16::MAX);
+        let area = Rect::new(x, row.y, width, 1).intersection(row);
+        labelled.combo.place(Some(area));
+        spans.extend(boxed);
+        frame.render_widget(Line::from(spans).style(colors.body), row);
+        spots.push((Focus::ComboBox(number), row));
     }
 
     /// Draws the list from row `index` of `inner`, the room inside the frame, to the line over
@@ -2800,14 +2878,12 @@ mod tests {
             ),
             (
                 "checksum",
-                Dialog::fields(
-                    "Checksum",
-                    &[(fl!("checksum-expected"), String::new())],
-                    &[(fl!("checksum-compare", path = "/x"), false)],
-                    ok_cancel(),
-                )
-                .with_message(&fl!("checksum-one", name = "x"))
-                .with_combo_box(&fl!("checksum-algorithm"), &algorithms, 0),
+                Dialog::fields("Checksum", &[], &[], ok_cancel())
+                    .with_message(&fl!("checksum-one", name = "x"))
+                    .with_combo_box(&fl!("checksum-algorithm"), &algorithms, 0)
+                    .with_separator()
+                    .with_field(&fl!("checksum-expected"), "")
+                    .with_check(&fl!("checksum-compare", path = "/x"), false),
             ),
             ("password", secret()),
             (
@@ -2960,11 +3036,11 @@ mod tests {
     }
 
     fn picker() -> Dialog {
-        let checks = [("&Verbose".to_owned(), false)];
         let choices = ["&one".to_owned(), "&two".to_owned(), "t&hree".to_owned()];
-        Dialog::fields("Pick", &[], &checks, vec![Button::Ok, Button::Cancel])
+        Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel])
             .with_width(40)
             .with_combo_box("&Count:", &choices, 0)
+            .with_check("&Verbose", false)
     }
 
     #[test]
@@ -3114,6 +3190,120 @@ mod tests {
         dialog.handle(action(Action::Down));
         let terminal = draw(&dialog, 40, 12);
         insta::assert_snapshot!(terminal.backend());
+    }
+
+    fn hashing(disabled: bool) -> Dialog {
+        let choices = ["&one".to_owned(), "&two".to_owned()];
+        let dialog = Dialog::fields("Hash", &[], &[], vec![Button::Ok, Button::Cancel])
+            .with_width(40)
+            .with_message("Of x")
+            .with_combo_box("&Count:", &choices, 0)
+            .with_separator()
+            .with_field("&Expected:", "")
+            .with_check("&Verbose", false);
+        if disabled {
+            dialog.with_disabled(0)
+        } else {
+            dialog
+        }
+    }
+
+    /// The row of the first line of `terminal` that holds `text`.
+    fn row_of(terminal: &Terminal<TestBackend>, text: &str) -> u16 {
+        let buffer = terminal.backend().buffer();
+        let area = buffer.area;
+        (0..area.height)
+            .find(|&y| {
+                let row: String = (0..area.width).map(|x| buffer[(x, y)].symbol()).collect();
+                row.contains(text)
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn draws_the_parts_in_order_with_a_separator_and_a_disabled_field_faint() {
+        let dialog = hashing(true);
+        let theme = Theme::terminal();
+        let terminal = draw_themed(&dialog, 40, 12, &theme);
+        insta::assert_snapshot!(terminal.backend());
+        let (combo, label) = (row_of(&terminal, "Count:"), row_of(&terminal, "Expected:"));
+        assert_eq!(label, combo + 2, "a blank row between them");
+        let buffer = terminal.backend().buffer();
+        let x = (0..40)
+            .find(|&x| buffer[(x, label)].symbol() == "E")
+            .unwrap();
+        let dim = |style: Style| style.add_modifier.contains(Modifier::DIM);
+        assert!(dim(theme.disabled));
+        assert!(dim(buffer[(x, label)].style()), "its letter too");
+        let field = buffer[(x, label + 1)].style();
+        assert!(dim(field), "the field");
+        assert_eq!(
+            field.add_modifier,
+            theme.dialog_input.add_modifier | Modifier::DIM,
+            "still in the colors of fields"
+        );
+
+        let enabled = draw_themed(&hashing(false), 40, 12, &theme);
+        let buffer = enabled.backend().buffer();
+        assert!(
+            !dim(buffer[(x, label)].style()),
+            "else in its letter's color"
+        );
+    }
+
+    #[test]
+    fn a_disabled_field_takes_no_focus_from_keys_letters_or_the_mouse() {
+        let mut dialog = hashing(true);
+        assert_eq!(dialog.focus, Focus::ComboBox(0), "the first stop");
+        dialog.handle(action(Action::NextField));
+        assert_eq!(dialog.focus, Focus::Check(0), "past the field");
+        dialog.handle(Resolved::Hotkey('e'));
+        assert_eq!(dialog.focus, Focus::Check(0), "its letter does nothing");
+        assert!(!dialog.letters().contains(&'E'));
+        let terminal = draw(&dialog, 40, 12);
+        let buffer = terminal.backend().buffer();
+        let at = (0..12)
+            .find_map(|y| {
+                let x = (0..40).find(|&x| buffer[(x, y)].symbol() == "E")?;
+                Some(Position::new(x, y + 1))
+            })
+            .unwrap();
+        dialog.pointer(Pointer {
+            press: Press::Click,
+            at,
+        });
+        assert_eq!(dialog.focus, Focus::Check(0), "a click on it does nothing");
+        assert_eq!(
+            hashing(false).focus,
+            Focus::Field(0),
+            "else the field first"
+        );
+    }
+
+    #[test]
+    fn a_separator_goes_anywhere_and_takes_neither_the_focus_nor_clicks() {
+        let mut dialog = Dialog::fields("Pick", &[], &[], vec![Button::Ok, Button::Cancel])
+            .with_width(40)
+            .with_check("&Fast", false)
+            .with_separator()
+            .with_check("&Slow", false);
+        let terminal = draw(&dialog, 40, 12);
+        let (fast, slow) = (row_of(&terminal, "Fast"), row_of(&terminal, "Slow"));
+        assert_eq!(slow, fast + 2, "a blank row between the check boxes");
+        assert_eq!(dialog.stops().len(), 4, "two check boxes and two buttons");
+        dialog.focus = Focus::Check(0);
+        dialog.handle(action(Action::Down));
+        assert_eq!(dialog.focus, Focus::Check(1), "straight past it");
+        let blank = Position::new(6, fast + 1);
+        assert_eq!(
+            dialog.pointer(Pointer {
+                press: Press::Click,
+                at: blank,
+            }),
+            DialogEvent::Pending
+        );
+        assert_eq!(dialog.focus, Focus::Check(1), "a click on it does nothing");
+        assert!(!dialog.checked(0) && !dialog.checked(1));
     }
 
     #[test]

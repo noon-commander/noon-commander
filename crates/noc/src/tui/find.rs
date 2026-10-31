@@ -232,16 +232,14 @@ impl FindWindow {
         (text, files): (Input, Input),
         decor: Decor,
     ) -> Self {
-        let fields = [
-            (fl!("find-text"), String::new()),
-            (fl!("find-files"), String::new()),
-        ];
         let title = fl!("find-title", dir = title);
         let modes = [fl!("find-mode-text"), fl!("find-mode-names")];
         let chosen = find.choice();
-        let dialog = Dialog::fields(&title, &fields, &[], buttons(chosen))
+        let dialog = Dialog::fields(&title, &[], &[], buttons(chosen))
             .with_width(WIDTH)
             .with_combo_box(&fl!("find-mode"), &modes, chosen)
+            .with_field(&fl!("find-text"), "")
+            .with_field(&fl!("find-files"), "")
             .with_list()
             .with_search(TEXT, text)
             .with_search(FILES, files_in(chosen, files));

@@ -5801,9 +5801,9 @@ impl App {
     }
 
     /// Opens the checksum dialog for the marked entries of the active panel, or the one under
-    /// the cursor: a combo box of the algorithm, the last one chosen; for one file, a field for
-    /// the checksum it should have, and, if the other panel's cursor is on a file, a check box to
-    /// compare the two, checked if they have the same name.
+    /// the cursor: a combo box of the algorithm, the last one chosen; a field for the checksum
+    /// one file should have, disabled for anything else; and, if the other panel's cursor is on
+    /// a file, a check box to compare the two, checked if they have the same name.
     fn ask_checksum(&mut self) {
         let panel = self.panel(self.active);
         let chosen = panel.chosen();
@@ -5831,11 +5831,6 @@ impl App {
                 (location, names.first() == Some(&entry.name))
             })
             .filter(|(location, _)| child(&dir, &names[0]) != *location);
-        let fields = if single_file {
-            vec![(fl!("checksum-expected"), String::new())]
-        } else {
-            Vec::new()
-        };
         let checks: Vec<(String, bool)> = other
             .iter()
             .map(|(location, same)| {
@@ -5850,9 +5845,17 @@ impl App {
             .unwrap_or(0);
         let buttons = vec![Button::Ok, Button::Cancel];
         let title = fl!("checksum-title");
-        let dialog = Dialog::fields(&title, &fields, &checks, buttons)
+        let mut dialog = Dialog::fields(&title, &[], &[], buttons)
             .with_message(&message)
-            .with_combo_box(&fl!("checksum-algorithm"), &algorithms, chosen);
+            .with_combo_box(&fl!("checksum-algorithm"), &algorithms, chosen)
+            .with_separator()
+            .with_field(&fl!("checksum-expected"), "");
+        for (label, on) in &checks {
+            dialog = dialog.with_check(label, *on);
+        }
+        if !single_file {
+            dialog = dialog.with_disabled(0);
+        }
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Checksum {
@@ -13543,7 +13546,20 @@ mod tests {
             text.contains("Checksums of 1 file and 1 directory"),
             "{text}"
         );
-        assert!(!text.contains("Expected"), "{text}");
+        assert!(
+            text.contains("Expected checksum:"),
+            "shown, disabled: {text}"
+        );
+        assert_eq!(
+            app.place(),
+            (Mode::Normal, Context::Dialog),
+            "on the combo box"
+        );
+        // The disabled field takes no focus, neither from the keys that move it nor from its
+        // letter: Tab goes from the combo box to the buttons.
+        app.handle(action(Action::NextField));
+        app.handle(Resolved::Hotkey('e'));
+        assert_eq!(app.place(), (Mode::Normal, Context::Dialog));
         let (id, targets, _) = checksum_job(app.handle(action(Action::Confirm)));
         assert_eq!(targets, [(vec![local("/srv/sub"), local("/srv/a")], false)]);
         let sums = vec![

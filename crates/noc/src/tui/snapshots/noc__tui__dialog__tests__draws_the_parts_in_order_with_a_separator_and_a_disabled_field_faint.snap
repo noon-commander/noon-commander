@@ -1,0 +1,16 @@
+---
+source: crates/noc/src/tui/dialog.rs
+expression: terminal.backend()
+---
+"                                        "
+"  ╔══════════════ Hash ══════════════╗  "
+"  ║ Of x                             ║  "
+"  ║ Count: [one ▼]                   ║  "
+"  ║                                  ║  "
+"  ║ Expected:                        ║  "
+"  ║                                  ║  "
+"  ║ [ ] Verbose                      ║  "
+"  ╟──────────────────────────────────╢  "
+"  ║       [< OK >] [ Cancel ]        ║  "
+"  ╚══════════════════════════════════╝  "
+"                                        "

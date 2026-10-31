@@ -529,6 +529,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The time of a move no longer runs while it counts what it could not rename, as that of a copy
   does not while it counts before its first file. A question asked as it counted stopped the
   time until the copy started, so the counting was in the time or not by chance.
+- A big file after many small ones of different sizes shows its own time left: the time left
+  took the cost of its bytes from the small files until it ended, so where its data went at
+  another pace, as on a disk once its cache is full, or over a link whose window holds a small
+  file whole, it showed a fifth of the time left when the big file's bytes went five times
+  slower, and nearly four times as much when they went five times faster, for half a minute
+  and more. Now its data streaming tells it, and it is right within a second.
 
 ## [0.2.0] - 2026-10-14
 

@@ -1000,7 +1000,11 @@ before it opens, and close it after their last report. Else a byte costs what it
 stretches in which no entry was done but for those that start with an entry's opening (as do
 the job's first report and a question, after which Retry opens the entry again with no report
 first), and an entry what its stretches took beyond their bytes; among small files only, the
-least squares still give the cost of an entry if it stands clear; else bytes alone count. The
+least squares still give the cost of an entry if it stands clear; else bytes alone count. While
+the entry under way has moved more than ten times the bytes of the largest entry finished
+(`AHEAD`), a byte costs what it does in the stretches of data streaming, whatever the least
+squares say: finished entries tell nothing of what its bytes cost, which may go at another pace,
+as into a cache that a big file fills, or over a link whose window holds a small file whole. The
 time left is the bytes and entries left at those costs and that pace. It is unknown while the
 entries left are on average more than ten times as large as those done since the forecast's
 first report (`AHEAD`), not the renames of a move, until the work has told what a byte costs:

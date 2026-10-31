@@ -67,6 +67,13 @@ are those after the review.
   no longer holds for the rest of the job, so that the time left does not come and go. The
   entries done are those since the first report of the forecast: a move that copies after its
   renames counts the entries it renamed among those done, with no data.
+- **A file far larger than those done goes at the pace of its data.** While the entry under way
+  has moved more than ten times the bytes of the largest entry finished (`AHEAD`), a byte costs
+  what it does as data streams, whatever the least squares say. Their bytes may go at another
+  pace than those of a big file: small files go into a cache that a big file fills, and over a
+  link whose window, 2 MiB in flight, holds a small file whole, a big one goes at the pace of the
+  window. And as no finished entry tells of the big file until it ends, the costs the small
+  files told held for all of it, and only the pace of the work, as it faded, came round to it.
 - **Standing still is unknown.** A job may pause between reports as it works: a link that sends
   a chunk every few seconds, a disk that takes its time now and then to write what it holds
   back. A pause is standing still once it is longer than twice the longest pause of over two and
@@ -306,8 +313,13 @@ are those after the review.
 - The time of a move is that of its renames and its copy, not of the counting between them, as
   the time of a copy leaves out the counting before it. A test checks it, with a question asked
   as the move counts.
+- After 2,000 files of up to 64 KiB, whose least squares told both costs, a file of 2 GiB whose
+  bytes went five times slower than theirs showed a fifth of the time left two seconds into it, a
+  quarter after ten seconds, and 42% after thirty; five times faster, 3.8 times as long, then 2.2
+  and 1.34 times. Now it is within 0.2% from the second second on. A test checks both.
 - The model is two costs and a pace: a link that is fast for big files and slow to open each
-  one is right; one whose pace changes with the size of the files in other ways is not.
+  one is right; one whose pace changes with the size of the files in other ways is not, but for
+  a file far larger than those done, whose own data tells what its bytes cost.
 - What a job does without reports is not in the work left: the time left shows `0:00`, then
   `-:--` once it looks like a stall. Setting the attributes of directories at the end of a copy
   was such work, two round trips to a host for each, two minutes of an upload of 20 minutes,

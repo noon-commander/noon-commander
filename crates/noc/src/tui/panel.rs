@@ -1444,27 +1444,9 @@ impl Panel {
         self.entry_under_cursor().map(|entry| entry.name.as_slice())
     }
 
-    /// Where `text`, typed in a dialog, points from this directory: a name or a relative path,
-    /// an absolute path, or `~` or `~/…` for the home directory (the remote one on a host);
-    /// `\~` stands for a name that starts with `~`, as in mc. Trailing slashes are dropped.
+    /// Where `text`, typed in a dialog, points from this directory, as [`resolve`] reads it.
     pub(crate) fn resolve(&self, text: &str) -> Location {
-        let trimmed = text.trim_end_matches('/');
-        let text = if trimmed.is_empty() { text } else { trimmed };
-        let home_relative = match text.strip_prefix('~') {
-            Some("") => Some(""),
-            Some(rest) => rest.strip_prefix('/'),
-            None => None,
-        };
-        let text = text.strip_prefix("\\~").map_or(text, |_| &text[1..]);
-        match (&self.location, home_relative) {
-            (Location::Local(_), Some(rest)) => Location::Local(self.home.join(rest)),
-            (Location::Remote { host, .. }, Some(rest)) => Location::Remote {
-                host: host.clone(),
-                // Relative remote paths start at the remote home directory.
-                path: RemotePath::from(rest),
-            },
-            (location, None) => child(location, text.as_bytes()),
-        }
+        resolve(&self.location, &self.home, text)
     }
 
     /// What an operation acts on: the marked entries in the order shown, or else the entry
@@ -2853,6 +2835,30 @@ pub(crate) fn child(location: &Location, name: &[u8]) -> Location {
             host: host.clone(),
             path: path.join(name),
         },
+    }
+}
+
+/// Where `text`, typed in a dialog, points from `dir`: a name or a relative path, an absolute
+/// path, or `~` or `~/…` for the home directory, `home` here and the remote one on a host;
+/// `\~` stands for a name that starts with `~`, as in mc. Trailing slashes are dropped. It
+/// stays on the host of `dir`.
+pub(crate) fn resolve(dir: &Location, home: &Path, text: &str) -> Location {
+    let trimmed = text.trim_end_matches('/');
+    let text = if trimmed.is_empty() { text } else { trimmed };
+    let home_relative = match text.strip_prefix('~') {
+        Some("") => Some(""),
+        Some(rest) => rest.strip_prefix('/'),
+        None => None,
+    };
+    let text = text.strip_prefix("\\~").map_or(text, |_| &text[1..]);
+    match (dir, home_relative) {
+        (Location::Local(_), Some(rest)) => Location::Local(home.join(rest)),
+        (Location::Remote { host, .. }, Some(rest)) => Location::Remote {
+            host: host.clone(),
+            // Relative remote paths start at the remote home directory.
+            path: RemotePath::from(rest),
+        },
+        (location, None) => child(location, text.as_bytes()),
     }
 }
 

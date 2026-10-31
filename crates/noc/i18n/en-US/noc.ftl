@@ -985,6 +985,15 @@ mkdir-title = Create a new directory
 mkdir-prompt = &Enter directory name:
 mkdir-error = Cannot create directory { $path }: { $reason }
 
+## Saving a file, as Save… of the checksums does (src/tui/save). Prefix: save-. The title comes
+## from what saves.
+
+# Above the field, with the name offered: a name or a path, from the panel's directory.
+save-prompt = &File name:
+save-exists-title = File exists
+save-exists = { $path } is there already. Overwrite it?
+save-error = Cannot save { $path }: { $reason }
+
 ## The window of a running job (src/tui/progress). Prefix: job-.
 
 # While a job counts what it has to do.
@@ -1182,10 +1191,8 @@ checksum-copy = To &clipboard
 checksum-copy-all = &All to clipboard
 checksum-view = &View
 checksum-save = &Save…
+# The title of the dialog of saving them.
 checksum-save-title = Save checksums
-checksum-save-prompt = &File name:
-checksum-exists = { $path } is there already. Overwrite it?
-checksum-save-error = Cannot save { $path }: { $reason }
 
 ## The viewer, F3 (src/tui/app). Prefix: viewer-. Its own text is in crates/noc-viewer.
 

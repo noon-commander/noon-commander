@@ -1543,10 +1543,18 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   clipboard, All to clipboard every line in the format of `sha256sum` (`<hex>  <name>`; names
   with a backslash or a line break escaped as GNU coreutils does), View (F3) shows those lines
   in the viewer, in place of the window, which comes back when it closes, and Save… writes them
-  to a file in the panel's directory, locally or on the host (`name.sha256` for one file,
-  `SHA256SUMS` for several; `b3`, `md5`, … for the others), after asking before it replaces
-  one. A dialog has no View. No message follows a button; an error saving is a window of its
-  own. Windows of jobs that end while one is open wait their turn.
+  to a file through the dialog of saving, from the panel's directory (`name.sha256` for one
+  file, `SHA256SUMS` for several; `b3`, `md5`, … for the others). A dialog has no View. No
+  message follows a button. Windows of jobs that end while one is open wait their turn.
+- **Saving a file** ([ADR 0059](adr/0059-one-dialog-saves-a-file.md)). What has a file to save,
+  so far Save… of the checksums, gives `tui/save.rs` a `Save`: the title, the directory, the
+  name offered, and the bytes. Its dialog has one field, `File name:`, with that name; it takes a
+  name, a relative path, an absolute one, or `~/…`, as F7 does (`panel::resolve`), on the host
+  of the directory, and Tab completes files and directories from there, not from the panel,
+  which may have gone elsewhere. OK writes the file (`Effect::WriteFile`), locally or through
+  SFTP, never over one: a name that is taken asks first, with No the default, then writes over
+  it. An error is a window of its own; once it is written, the panels on its directory read it
+  again and show it, and nothing else says so.
 - **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
   between frames, and the terminal puts the text on the clipboard of the machine it runs on,
   over ssh too. Nothing tells whether it did, so the UI says nothing after it; the buttons that

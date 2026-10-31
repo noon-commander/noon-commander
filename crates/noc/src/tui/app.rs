@@ -52,14 +52,15 @@ use super::machine::{self, Machine};
 use super::menu::{LocationMenu, MenuEvent};
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::{
-    Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
-    Panel, SearchEnd, View, child, home_text, location_text, stem_chars,
+    self, Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest,
+    Listed, Panel, SearchEnd, View, child, home_text, location_text, stem_chars,
 };
 use super::picker::FULL_ROWS;
 use super::places::{Places, volume_of};
 use super::progress::{JobButton, JobView, Look, RowLook};
 use super::pulldown::{self, Command, PullDown, PullDownEvent, Status};
 use super::reading::{ReadButton, Reading};
+use super::save::{self, Save};
 use super::search::{self, Input, Slot, Switch};
 use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsButton, SumsEvent, SumsWindow, Verdict};
@@ -444,10 +445,11 @@ enum Purpose {
         other: Option<Location>,
         expect: bool,
     },
-    /// Save the checksums, `bytes`, in `dir`, under the name typed.
-    SaveSums { dir: Location, bytes: Vec<u8> },
-    /// `location` is taken: Yes writes the checksums, `bytes`, over it.
-    OverwriteSums { location: Location, bytes: Vec<u8> },
+    /// The dialog that saves a file (ADR 0059): OK writes `bytes` where the name typed points
+    /// from `dir`.
+    SaveFile { dir: Location, bytes: Vec<u8> },
+    /// The file at `location` is there: Yes writes `bytes` over it.
+    OverwriteFile { location: Location, bytes: Vec<u8> },
     /// Go to directory in `panel`: OK opens the path typed there.
     GoToDir { panel: PanelId },
     /// A question about workspaces.
@@ -839,7 +841,7 @@ pub(crate) struct App {
     results: VecDeque<Results>,
     /// Text for the event loop to put on the clipboard.
     clipboard: Option<String>,
-    /// Files of checksums being written, with what goes in them.
+    /// Files that the dialog of saving writes, with what goes in them.
     saving: HashMap<Location, Vec<u8>>,
     /// For the times in questions.
     tz: TimeZone,
@@ -3768,27 +3770,35 @@ impl App {
         }
     }
 
-    /// What the path field of a dialog for `purpose` completes: in which panel, what it takes,
-    /// and which hosts.
-    fn completion_of(purpose: &Purpose) -> Option<(PanelId, Offer, FieldHosts)> {
-        match purpose {
-            Purpose::GoToDir { panel } => Some((*panel, Offer::Dirs, FieldHosts::All)),
-            Purpose::Transfer { panel, .. } => Some((*panel, Offer::Any, FieldHosts::Connected)),
-            Purpose::Mkdir { panel } => Some((*panel, Offer::Dirs, FieldHosts::None)),
-            _ => None,
-        }
+    /// What the path field of a dialog for `purpose` completes: from which directory, what it
+    /// takes, and which hosts.
+    fn completion_of(&self, purpose: &Purpose) -> Option<(Location, Offer, FieldHosts)> {
+        let (panel, offer, hosts) = match purpose {
+            Purpose::GoToDir { panel } => (*panel, Offer::Dirs, FieldHosts::All),
+            Purpose::Transfer { panel, .. } => (*panel, Offer::Any, FieldHosts::Connected),
+            Purpose::Mkdir { panel } => (*panel, Offer::Dirs, FieldHosts::None),
+            Purpose::SaveFile { dir, .. } => {
+                return Some((dir.clone(), Offer::Any, FieldHosts::None));
+            }
+            _ => return None,
+        };
+        let dir = self.panel_of(panel)?.location().clone();
+        Some((dir, offer, hosts))
     }
 
     /// Completes the path before the cursor in the field of the dialog in front: lists the
     /// directory it is in, read as that dialog reads its text, and the hosts it may name.
     fn complete(&mut self) -> Vec<Effect> {
-        let Some(open) = self.dialogs.front_mut() else {
+        let Some(open) = self.dialogs.front() else {
             return Vec::new();
         };
         if !open.dialog.completes() {
             return Vec::new();
         }
-        let Some((panel, offer, hosts)) = Self::completion_of(&open.purpose) else {
+        let Some((here, offer, hosts)) = self.completion_of(&open.purpose) else {
+            return Vec::new();
+        };
+        let Some(open) = self.dialogs.front_mut() else {
             return Vec::new();
         };
         let before = open.dialog.around_cursor().0.to_owned();
@@ -3814,10 +3824,7 @@ impl App {
             }
             _ => 0,
         };
-        let Some(shown) = self.panel_of(panel) else {
-            return Vec::new();
-        };
-        let dir = cd::directory(&split.dir, shown.location(), &self.home, is_host);
+        let dir = cd::directory(&split.dir, &here, &self.home, is_host);
         // A host that is not connected has nothing to list.
         let host = self.handle_for(&dir).unwrap_or(None);
         let list_hosts = split.hosts && hosts == FieldHosts::All;
@@ -4553,14 +4560,14 @@ impl App {
                 other,
                 expect,
             } if ok => return self.start_checksum(dialog, dir, &names, other, expect),
-            Purpose::SaveSums { dir, bytes } if ok && !dialog.text().is_empty() => {
-                let location = child(&dir, dialog.text().as_bytes());
-                return self.write_sums(location, bytes, false);
+            Purpose::SaveFile { dir, bytes } if ok && !dialog.text().is_empty() => {
+                let location = panel::resolve(&dir, &self.home, dialog.text());
+                return self.write_file(location, bytes, false);
             }
-            Purpose::OverwriteSums { location, bytes }
+            Purpose::OverwriteFile { location, bytes }
                 if event == DialogEvent::Pressed(Button::Yes) =>
             {
-                return self.write_sums(location, bytes, true);
+                return self.write_file(location, bytes, true);
             }
             Purpose::RenameOver { panel, from, to }
                 if event == DialogEvent::Pressed(Button::Yes) =>
@@ -4585,8 +4592,8 @@ impl App {
             Purpose::EditHost { .. }
             | Purpose::GoToDir { .. }
             | Purpose::Checksum { .. }
-            | Purpose::SaveSums { .. }
-            | Purpose::OverwriteSums { .. }
+            | Purpose::SaveFile { .. }
+            | Purpose::OverwriteFile { .. }
             | Purpose::RenameOver { .. }
             | Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
@@ -6152,14 +6159,13 @@ impl App {
             }
             SumsEvent::Save => {
                 if let Some(dir) = results.dir.clone() {
-                    let name = sums_name(results);
-                    let bytes = sums_file(&results.lines);
-                    let (title, prompt) = (fl!("checksum-save-title"), fl!("checksum-save-prompt"));
-                    let dialog = Dialog::form(&title, &prompt, &name, &[]);
-                    self.dialogs.push_back(Open {
-                        dialog,
-                        purpose: Purpose::SaveSums { dir, bytes },
-                    });
+                    let save = Save {
+                        title: fl!("checksum-save-title"),
+                        dir,
+                        name: sums_name(results),
+                        bytes: sums_file(&results.lines),
+                    };
+                    self.ask_save(save);
                 }
             }
             SumsEvent::Closed => {
@@ -6169,12 +6175,23 @@ impl App {
         Some(Vec::new())
     }
 
-    /// Writes the checksums, `bytes`, to `location`, over what is there if `replace`.
-    fn write_sums(&mut self, location: Location, bytes: Vec<u8>, replace: bool) -> Vec<Effect> {
+    /// Opens the dialog that saves the file of `save` (ADR 0059).
+    fn ask_save(&mut self, save: Save) {
+        let dialog = save.dialog();
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::SaveFile {
+                dir: save.dir,
+                bytes: save.bytes,
+            },
+        });
+    }
+
+    /// Writes `bytes` to the file at `location`, over what is there if `replace`.
+    fn write_file(&mut self, location: Location, bytes: Vec<u8>, replace: bool) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&location) else {
             let reason = fl!("error-connection-closed");
-            let path = location_text(&location);
-            self.show_error(&fl!("checksum-save-error", path = path, reason = reason));
+            self.show_error(&save::error(&location_text(&location), &reason));
             return Vec::new();
         };
         self.saving.insert(location.clone(), bytes.clone());
@@ -6202,13 +6219,9 @@ impl App {
                 .parent()
                 .map_or_else(Vec::new, |dir| self.reload(&dir)),
             Err(None) => {
-                let message = fl!("checksum-exists", path = path);
-                let buttons = vec![Button::Yes, Button::No];
-                let title = fl!("copy-exists-title");
-                let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
                 self.dialogs.push_back(Open {
-                    dialog,
-                    purpose: Purpose::OverwriteSums {
+                    dialog: save::overwrite(&path),
+                    purpose: Purpose::OverwriteFile {
                         location: location.clone(),
                         bytes,
                     },
@@ -6217,7 +6230,7 @@ impl App {
             }
             Err(Some(reason)) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("checksum-save-error", path = path, reason = reason));
+                self.show_error(&save::error(&path, &reason));
                 Vec::new()
             }
         }
@@ -13667,6 +13680,54 @@ mod tests {
         let sums = vec![sum("/srv/b", "b", Some(1)), sum("/srv/sub/b", "b", Some(2))];
         hashed(&mut app, id, sums);
         assert!(screen_of(&mut app, 24).contains("The files differ."));
+    }
+
+    #[test]
+    fn the_dialog_of_saving_takes_a_path_from_its_directory_and_completes_it_there() {
+        let mut app = on_files();
+        let save = |name: &str| Save {
+            title: "Save notes".to_owned(),
+            dir: local("/data"),
+            name: name.to_owned(),
+            bytes: b"x\n".to_vec(),
+        };
+        let written = |effects: Vec<Effect>| match one(effects) {
+            Effect::WriteFile {
+                location,
+                bytes,
+                replace,
+                ..
+            } => (location, bytes, replace),
+            other => panic!("expected a write, got {other:?}"),
+        };
+        app.ask_save(save("notes.txt"));
+        let text = screen_of(&mut app, 24);
+        assert!(
+            text.contains("Save notes") && text.contains("File name:"),
+            "{text}"
+        );
+        assert!(text.contains("notes.txt"), "{text}");
+        assert_eq!(
+            written(app.handle(action(Action::Confirm))),
+            (local("/data/notes.txt"), b"x\n".to_vec(), false)
+        );
+        // Tab lists the directory of the file, not that of the panel, on no other host.
+        app.ask_save(save(""));
+        type_text(&mut app, "sub/");
+        let (_, dir, host, hosts) = names_request(&app.handle(action(Action::Complete)));
+        assert_eq!((dir, host, hosts), (local("/data/sub"), false, false));
+        type_text(&mut app, "n");
+        let (location, ..) = written(app.handle(action(Action::Confirm)));
+        assert_eq!(location, local("/data/sub/n"));
+        for (typed, location) in [("~/n", "/home/me/n"), ("/tmp/n", "/tmp/n")] {
+            app.ask_save(save(typed));
+            let (written, ..) = written(app.handle(action(Action::Confirm)));
+            assert_eq!(written, local(location), "{typed}");
+        }
+        // Nothing typed saves nothing.
+        app.ask_save(save(""));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(app.dialogs.is_empty());
     }
 
     #[test]

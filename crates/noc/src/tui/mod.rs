@@ -33,6 +33,7 @@ mod places;
 mod progress;
 mod pulldown;
 mod reading;
+mod save;
 mod scroll;
 mod search;
 mod sidebar;

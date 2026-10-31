@@ -214,6 +214,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   apart, between a line under the checksums and the line over the buttons, after ✓ or ✗. Two
   files compared are a dialog, not a list, with both checksums whole
   ([ADR 0058](docs/adr/0058-the-window-of-checksums-filters-and-views-them.md)).
+- Save… of the checksums opens the dialog that saves a file, which takes a name, a relative or
+  absolute path, or `~/…` from the panel's directory, as F7 does, and Tab completes it there; a
+  name that is taken still asks before it is written over
+  ([ADR 0059](docs/adr/0059-one-dialog-saves-a-file.md)).
 - Combo boxes replace radio buttons and the `< … >` choices: the algorithm of `f #`
   (`Algorithm: [SHA-256 ▼]`), the mode of the search of a tree (`Mode: [Text ▼]`), and every
   choice of the Configuration dialog, in the colors of text fields. Space, a click, or Alt and the

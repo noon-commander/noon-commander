@@ -7,48 +7,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-01
+
 ### Changed
 
-- A taken name in a copy or a move asks anew: the lines of the new file and the file there show
-  their sizes and times and view them, a combo box says what the later taken names get (the
-  same, or overwrite those older, smaller, larger, or of another size), and Rename… copies under
-  a free name, such as `report_2.txt`, or one typed
+- The question about a taken name in a copy or a move views both files, chooses for the later
+  taken names, and Rename… copies under a free name, such as `report_2.txt`, or one typed
   ([ADR 0060](docs/adr/0060-the-question-about-a-taken-name.md)).
-- The default button of a dialog is drawn bold in braces, `{ OK }`, rather than as mc's
-  `[< OK >]`.
-- The window of checksums is a dialog: with several files, its rows have the focus, which Tab
-  takes to its buttons, as in every dialog; with one file, or two compared, the arrows move the
-  focus of its buttons; a double click on a row copies its checksum, as Enter does
+- The default button of a dialog is drawn bold in braces, `{ OK }`, rather than as `[< OK >]`.
+- The window of checksums is a dialog: Tab takes the focus from its rows to its buttons, and a
+  double click on a row copies its checksum, as Enter does
   ([ADR 0061](docs/adr/0061-a-picker-is-a-part-of-a-dialog.md)).
 - Space on a row of the search of a tree goes to it, as Enter does.
-- On a narrow screen every window leaves two cells free on either side, as dialogs did, rather
-  than the lists and the windows of jobs reaching its edges.
+- On a narrow screen every window leaves two cells free on either side, as dialogs did.
 - Marked rows keep the colors of their names and are no longer underlined: a bar `▌` in the
-  panel's frame beside them shows the mark, in the theme's color for it, and the Noon and
-  Catppuccin themes tint their background with that color. Under the cursor a marked row looks
-  as any other, beside its bar.
+  panel's frame shows the mark, and the Noon and Catppuccin themes tint the row.
 
 ### Removed
 
-- The `forwarding` build feature: no build forwards ports, the agent, X11, or tunnels, and
-  `noc debug version` and the About page have no `features` line
-  ([ADR 0062](docs/adr/0062-forwarding-is-never-allowed.md)).
+- The `forwarding` build feature: no build forwards ports, the agent, X11, or tunnels
+  ([ADR 0062](docs/adr/0062-forwarding-is-never-allowed.md)). Drop `--features forwarding`
+  from builds; `noc debug version` and the About page have no `features` line.
 
 ### Fixed
 
 - A panel, a list, or the viewer made taller, or the viewer wider, no longer shows empty rows
-  after the end while rows above it hide: it shows them, as it does after a list gets shorter
-  ([ADR 0023](docs/adr/0023-paging-stops-at-the-end.md)).
-- In error dialogs and warnings, text fields, combo boxes and their lists, and the brackets and
-  checks of check boxes have colors of their own: a combo box no longer looks like the button with
-  the focus, and with the focus it takes the colors of the buttons beside it. In the Noon and
-  Catppuccin themes fields and the focus are shades of the dialog's red or orange, no longer the
-  blue or gray of other dialogs
-  ([ADR 0048](docs/adr/0048-errors-and-warnings-in-dialogs.md)).
+  after the end while rows above it hide.
 - In error dialogs and warnings of the Noon and Catppuccin themes the letters for Alt have a
-  color, as in other dialogs, rather than only an underline; on the focus they stay underlined.
-- A move between two local disks asked twice about a taken name: once before it tried to rename
-  the file, and again when it copied it instead.
+  color, as in other dialogs, rather than only an underline.
+- A move between two local disks asked twice about a taken name.
 
 ## [0.3.0] - 2026-10-31
 

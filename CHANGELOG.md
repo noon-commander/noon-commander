@@ -30,6 +30,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A panel, a list, or the viewer made taller, or the viewer wider, no longer shows empty rows
+  after the end while rows above it hide: it shows them, as it does after a list gets shorter
+  ([ADR 0023](docs/adr/0023-paging-stops-at-the-end.md)).
 - In error dialogs and warnings, text fields, combo boxes and their lists, and the brackets and
   checks of check boxes have colors of their own: a combo box no longer looks like the button with
   the focus, and with the focus it takes the colors of the buttons beside it. In the Noon and

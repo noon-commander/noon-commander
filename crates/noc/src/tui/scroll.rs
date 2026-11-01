@@ -187,6 +187,9 @@ impl Win {
     /// vim's `update_topline`.
     fn update_topline(&mut self) {
         self.check_moved();
+        // A taller window or a shorter list shows no empty rows below while rows hide above; the
+        // cursor stays on screen, as the top only comes up.
+        self.top = self.top.min((self.n - self.h + 1).max(1));
         // vim's window never loses its cursor; a list or a window that shrank can.
         let shows = self.top <= self.cur && self.cur < self.top + self.h;
         if self.valid && shows {
@@ -620,5 +623,34 @@ mod tests {
         assert_eq!((cursor, window.top()), (12, 10));
         window.follow(&mut cursor, 8, 5);
         assert_eq!((cursor, window.top()), (7, 3));
+    }
+
+    #[test]
+    fn a_taller_window_shows_the_rows_above_rather_than_empty_ones_below() {
+        let (mut window, mut cursor) = (Window::default(), 39);
+        window.follow(&mut cursor, 40, 12);
+        assert_eq!((cursor, window.top()), (39, 28));
+        window.follow(&mut cursor, 40, 20);
+        assert_eq!((cursor, window.top()), (39, 20));
+        cursor = 30;
+        window.follow(&mut cursor, 40, 20);
+        window.follow(&mut cursor, 40, 30);
+        assert_eq!(
+            (cursor, window.top()),
+            (30, 10),
+            "the cursor stays where it was"
+        );
+        window.follow(&mut cursor, 40, 50);
+        assert_eq!((cursor, window.top()), (30, 0), "all the rows fit");
+    }
+
+    #[test]
+    fn a_shorter_list_shows_the_rows_above_rather_than_empty_ones_below() {
+        let (mut window, mut cursor) = (Window::default(), 0);
+        window.page(true, 1, &mut cursor, 100, 10);
+        window.follow(&mut cursor, 100, 10);
+        assert_eq!((cursor, window.top()), (12, 8));
+        window.follow(&mut cursor, 15, 10);
+        assert_eq!((cursor, window.top()), (12, 5));
     }
 }

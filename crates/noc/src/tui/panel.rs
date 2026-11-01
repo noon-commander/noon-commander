@@ -4845,6 +4845,26 @@ mod tests {
     }
 
     #[test]
+    fn a_taller_panel_shows_the_rows_above_rather_than_empty_ones_below() {
+        let hosts = |_: &str| HostState::default();
+        let files = (0..40).map(|n| entry(&format!("f{n:02}"), FileKind::File, 1));
+        let mut panel = loaded("/srv", files.collect());
+        let last = panel.rows() - 1;
+        panel.cursor = last;
+        render_with(&mut panel, (40, 12), true, &hosts, Decor::new(false));
+        let short = panel.page;
+        assert_eq!(panel.window.top(), last + 1 - short);
+        let taller = render_with(&mut panel, (40, 20), true, &hosts, Decor::new(false));
+        assert!(panel.page > short);
+        assert_eq!(
+            (panel.window.top(), panel.cursor),
+            (last + 1 - panel.page, last)
+        );
+        let text = taller.backend().to_string();
+        assert!(text.contains("f25") && text.contains("f39"), "{text}");
+    }
+
+    #[test]
     fn single_borders_draw_single_lines() {
         let mut panel = loaded("/srv", listing());
         let hosts = |_: &str| HostState::default();

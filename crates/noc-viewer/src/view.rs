@@ -647,6 +647,10 @@ impl Viewer {
         }
         // The width may have changed since the position was taken.
         self.top.1 = self.top.1.min(self.rows_of(self.top.0).saturating_sub(1));
+        // A taller or wider screen shows the text above rather than empty rows after its end.
+        if self.at_file_end() {
+            self.top = self.top.min(self.last_top());
+        }
         // Other lines on screen, or a wider screen, may need less of the scroll.
         self.column = self.column.min(self.last_column());
         let row = |index: u16| Rect::new(area.x, area.y + index, area.width, 1);
@@ -963,6 +967,30 @@ mod tests {
             assert_eq!(press(motion), end, "{motion:?} stops at the end");
         }
         assert!(press(Motion::Home).contains("1/20"));
+    }
+
+    #[test]
+    fn a_taller_or_wider_screen_shows_the_text_above_rather_than_empty_rows() {
+        let mut viewer = Viewer::new("f".to_owned(), SIZES);
+        viewer.show(&numbered(20));
+        draw(&mut viewer, 30, 6);
+        viewer.handle(Command::Scroll(Motion::End));
+        assert!(draw(&mut viewer, 30, 6).contains("17/20 End"));
+        let taller = draw(&mut viewer, 30, 11);
+        assert!(taller.contains("12/20 End"), "{taller}");
+        assert!(
+            taller.contains("line 12") && taller.contains("─ EOF ─"),
+            "{taller}"
+        );
+        let all = draw(&mut viewer, 30, 30);
+        assert!(all.contains("1/20") && all.contains("line 1 "), "{all}");
+
+        viewer.show(&[b'a'; 100]);
+        draw(&mut viewer, 10, 6);
+        viewer.handle(Command::Scroll(Motion::End));
+        draw(&mut viewer, 10, 6);
+        let wide = draw(&mut viewer, 60, 6);
+        assert!(wide.contains(&"a".repeat(59)), "{wide}");
     }
 
     #[test]

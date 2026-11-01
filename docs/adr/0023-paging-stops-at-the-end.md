@@ -33,7 +33,10 @@ scroll bar of the Configuration dialog lived in the binary, out of reach of `noc
 
 ## Consequences
 
-- No screen ends in an empty page; `G` and Ctrl+f at the end show the same rows.
+- No screen ends in an empty page; `G` and Ctrl+f at the end show the same rows. Nor does a
+  screen made taller, a viewer made wider, or a list made shorter: before each frame the rows
+  come down until the end is at the bottom, if it was above it, as the help and the dialogs
+  already did.
 - The viewer moves its thumb in lines of the file, not rows on screen: finding the row on top
   among the rows of the whole file would wrap up to 16 MiB of text on every frame. With long
   wrapped lines its place is approximate. Its length is the share of the rows of the whole text

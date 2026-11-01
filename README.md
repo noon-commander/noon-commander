@@ -52,8 +52,8 @@ The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
 - The system OpenSSH client is the single source of truth for connections and authentication.
   Noon Commander never links an SSH library and never stores passwords.
 - SFTP channels get the same safety options as the stock `sftp(1)` client.
-- Port, agent, and X11 forwarding are compiled out by default
-  ([ADR 0004](docs/adr/0004-forwarding-compile-time-feature.md)).
+- Port, agent, X11, and tunnel forwarding are always off, whatever the ssh config says
+  ([ADR 0062](docs/adr/0062-forwarding-is-never-allowed.md)).
 - The UI never waits on the network: every remote operation is asynchronous, cancellable, and
   shows progress.
 
@@ -154,7 +154,6 @@ report needs, one fact per line: the key, spaces, and the value up to the end of
 ```text
 name         Noon Commander
 version      0.2.0
-features     -forwarding
 commit       1a2b3c4d5e6f
 dirty        no
 commit-time  2026-10-12T14:03:27Z
@@ -174,17 +173,17 @@ ripgrep      ripgrep 15.2.0
 fd           fd 10.5.0
 ```
 
-`features` lists the compile-time features, `+` on and `-` off. `commit-time` is in UTC; `dirty`
-says whether the sources differed from the commit. `terminal` is the name the terminal answers with
-(XTVERSION), else what its environment variables say. `colors` is `truecolor` or `256`. `keyboard`
-is `kitty` where the terminal speaks the kitty keyboard protocol and `legacy` where it does not. The
-terminal is asked on `/dev/tty`, so `noc debug version | pbcopy` asks it too. When stdin is not a
-terminal, or `noc` runs in the background, it is not asked: `keyboard` is `unchecked`, and
-`terminal` comes from the environment alone. `editor` is the command of F4: `$VISUAL`, else
-`$EDITOR`, else `vi`. `zoxide`, `ripgrep`, and `fd` are what the programs of `[zoxide] program`,
-`[search] program`, and `[search] fd` say they are, or `not found`. The About page of the help (F1)
-shows the same facts. Scripts can rely on the keys and their order; new keys are added at the end.
-For example, the commit: `noc debug version | awk '$1 == "commit" { print $2 }'`.
+`commit-time` is in UTC; `dirty` says whether the sources differed from the commit. `terminal` is
+the name the terminal answers with (XTVERSION), else what its environment variables say. `colors` is
+`truecolor` or `256`. `keyboard` is `kitty` where the terminal speaks the kitty keyboard protocol
+and `legacy` where it does not. The terminal is asked on `/dev/tty`, so `noc debug version | pbcopy`
+asks it too. When stdin is not a terminal, or `noc` runs in the background, it is not asked:
+`keyboard` is `unchecked`, and `terminal` comes from the environment alone. `editor` is the command
+of F4: `$VISUAL`, else `$EDITOR`, else `vi`. `zoxide`, `ripgrep`, and `fd` are what the programs of
+`[zoxide] program`, `[search] program`, and `[search] fd` say they are, or `not found`. The About
+page of the help (F1) shows the same facts. Scripts can rely on the keys and their order; new keys
+are added at the end. For example, the commit:
+`noc debug version | awk '$1 == "commit" { print $2 }'`.
 
 ### Install
 
@@ -194,20 +193,10 @@ To put `noc` into `~/.cargo/bin` (make sure it is on your `PATH`):
 cargo install --path crates/noc --locked
 ```
 
-### Optional features
-
-Port, agent, X11, and tunnel forwarding are compiled out by default
-([ADR 0004](docs/adr/0004-forwarding-compile-time-feature.md)). To build with them:
-
-```sh
-cargo build --release --features forwarding
-```
-
 ### Tests
 
 ```sh
 cargo test --workspace
-just test    # with and without the forwarding feature
 ```
 
 The SFTP tests run against the local `sftp-server` over pipes, with no network and no real
@@ -231,7 +220,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just release` | Build the optimized binary into `target/release/noc` |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
 | `just release-tag X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
-| `just test` | Tests with and without the forwarding feature |
+| `just test` | Tests |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just msrv` | Build with the oldest supported Rust (needs rustup) |

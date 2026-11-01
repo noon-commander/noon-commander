@@ -226,7 +226,6 @@ mod tests {
     fn the_report_has_one_key_and_value_per_line() {
         let build = Build {
             version: "1.2.3",
-            features: &[("forwarding", false), ("other", true)],
             commit: "0123456789ab",
             dirty: "no",
             commit_time: "2026-10-12T14:03:27Z",

@@ -19,8 +19,6 @@ use crate::tui::ColorDepth;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Build {
     pub(crate) version: &'static str,
-    /// Cargo features and whether they are on.
-    pub(crate) features: &'static [(&'static str, bool)],
     pub(crate) commit: &'static str,
     pub(crate) dirty: &'static str,
     pub(crate) commit_time: &'static str,
@@ -34,7 +32,6 @@ impl Build {
     pub(crate) fn current() -> Self {
         Self {
             version: env!("CARGO_PKG_VERSION"),
-            features: &[("forwarding", noc_ssh::policy::FORWARDING_ENABLED)],
             commit: env!("NOC_BUILD_COMMIT"),
             dirty: env!("NOC_BUILD_DIRTY"),
             commit_time: env!("NOC_BUILD_COMMIT_TIME"),
@@ -43,15 +40,6 @@ impl Build {
             license: env!("CARGO_PKG_LICENSE"),
             repository: env!("CARGO_PKG_REPOSITORY"),
         }
-    }
-
-    /// The features, each after `+` when it is on and `-` when it is off.
-    pub(crate) fn features_text(&self) -> String {
-        self.features
-            .iter()
-            .map(|&(name, on)| format!("{}{name}", if on { '+' } else { '-' }))
-            .collect::<Vec<_>>()
-            .join(" ")
     }
 }
 
@@ -76,7 +64,6 @@ pub(crate) enum Topic {
 pub(crate) enum Fact {
     Name,
     Version,
-    Features,
     Commit,
     Dirty,
     CommitTime,
@@ -99,10 +86,9 @@ pub(crate) enum Fact {
 }
 
 impl Fact {
-    pub(crate) const ALL: [Self; 22] = [
+    pub(crate) const ALL: [Self; 21] = [
         Self::Name,
         Self::Version,
-        Self::Features,
         Self::Commit,
         Self::Dirty,
         Self::CommitTime,
@@ -129,7 +115,6 @@ impl Fact {
         match self {
             Self::Name => "name",
             Self::Version => "version",
-            Self::Features => "features",
             Self::Commit => "commit",
             Self::Dirty => "dirty",
             Self::CommitTime => "commit-time",
@@ -155,12 +140,9 @@ impl Fact {
     pub(crate) fn topic(self) -> Topic {
         match self {
             Self::Name | Self::Version => Topic::App,
-            Self::Features
-            | Self::Commit
-            | Self::Dirty
-            | Self::CommitTime
-            | Self::Target
-            | Self::Profile => Topic::Build,
+            Self::Commit | Self::Dirty | Self::CommitTime | Self::Target | Self::Profile => {
+                Topic::Build
+            }
             Self::Os | Self::Kernel | Self::Arch => Topic::System,
             Self::Terminal | Self::Term | Self::Multiplexer | Self::Colors | Self::Keyboard => {
                 Topic::Terminal
@@ -253,7 +235,6 @@ impl Report {
         match fact {
             Fact::Name => text("Noon Commander"),
             Fact::Version => text(build.version),
-            Fact::Features => text(&build.features_text()),
             Fact::Commit => text(build.commit),
             Fact::Dirty => text(build.dirty),
             Fact::CommitTime => text(build.commit_time),
@@ -572,26 +553,25 @@ mod tests {
         let place = |fact: Fact| match fact {
             Fact::Name => 0,
             Fact::Version => 1,
-            Fact::Features => 2,
-            Fact::Commit => 3,
-            Fact::Dirty => 4,
-            Fact::CommitTime => 5,
-            Fact::Target => 6,
-            Fact::Profile => 7,
-            Fact::Os => 8,
-            Fact::Kernel => 9,
-            Fact::Arch => 10,
-            Fact::Terminal => 11,
-            Fact::Term => 12,
-            Fact::Multiplexer => 13,
-            Fact::Colors => 14,
-            Fact::Keyboard => 15,
-            Fact::Editor => 16,
-            Fact::Zoxide => 17,
-            Fact::Ripgrep => 18,
-            Fact::Fd => 19,
-            Fact::Language => 20,
-            Fact::Formats => 21,
+            Fact::Commit => 2,
+            Fact::Dirty => 3,
+            Fact::CommitTime => 4,
+            Fact::Target => 5,
+            Fact::Profile => 6,
+            Fact::Os => 7,
+            Fact::Kernel => 8,
+            Fact::Arch => 9,
+            Fact::Terminal => 10,
+            Fact::Term => 11,
+            Fact::Multiplexer => 12,
+            Fact::Colors => 13,
+            Fact::Keyboard => 14,
+            Fact::Editor => 15,
+            Fact::Zoxide => 16,
+            Fact::Ripgrep => 17,
+            Fact::Fd => 18,
+            Fact::Language => 19,
+            Fact::Formats => 20,
         };
         for (index, fact) in Fact::ALL.into_iter().enumerate() {
             assert_eq!(place(fact), index, "{fact:?}");

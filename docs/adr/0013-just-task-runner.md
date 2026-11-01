@@ -1,6 +1,7 @@
 # 0013. just as the task runner, resvg for logo PNGs
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0062](0062-forwarding-is-never-allowed.md): `clippy` and
+  `test` run once, and `clippy-with` and `test-with` are gone
 - Date: 2026-10-03
 
 ## Context

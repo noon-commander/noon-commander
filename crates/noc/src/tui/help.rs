@@ -351,7 +351,6 @@ fn about_entries(about: &About) -> Vec<Entry> {
 fn fact_name(fact: Fact) -> Option<String> {
     Some(match fact {
         Fact::Name | Fact::Version => return None,
-        Fact::Features => fl!("help-about-features"),
         Fact::Commit => fl!("help-about-commit"),
         Fact::Dirty => fl!("help-about-dirty"),
         Fact::CommitTime => fl!("help-about-commit-time"),
@@ -1411,7 +1410,6 @@ mod tests {
     fn build() -> Build {
         Build {
             version: "1.2.3",
-            features: &[("forwarding", false)],
             commit: "0123456789ab",
             dirty: "yes",
             commit_time: "2026-10-12T14:03:27Z",

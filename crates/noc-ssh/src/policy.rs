@@ -1,12 +1,7 @@
-//! Options that Noon Commander forces on `ssh`, and whether this build may forward anything.
-//!
-//! This module is the only place that checks the `forwarding` feature.
-//! See `docs/adr/0004-forwarding-compile-time-feature.md`.
+//! Options that Noon Commander forces on `ssh`. Nothing is ever forwarded (ADR 0004,
+//! ADR 0062).
 
-/// Whether this build was compiled with the `forwarding` feature.
-pub const FORWARDING_ENABLED: bool = cfg!(feature = "forwarding");
-
-/// Options forced on every SFTP channel, in every build.
+/// Options forced on every SFTP channel.
 ///
 /// The first five mirror what `sftp(1)` passes to `ssh`. `RemoteCommand` and
 /// `RequestTTY` from the user's config would otherwise break the subsystem request.
@@ -32,8 +27,8 @@ pub const PROCESS_OPTIONS: &[(&str, &str)] =
 /// silently falls back to a direct connection; that fallback must never prompt.
 pub const MUX_CHANNEL_OPTIONS: &[(&str, &str)] = &[("BatchMode", "yes")];
 
-/// Options forced on the master connection in every build, in addition to
-/// [`session_options`]. `-N` must not pick up a remote command or TTY request from the
+/// Options forced on the master connection, in addition to
+/// [`SESSION_OPTIONS`]. `-N` must not pick up a remote command or TTY request from the
 /// user's config, and like `sftp(1)` the connection runs no `LocalCommand`.
 pub const MASTER_OPTIONS: &[(&str, &str)] = &[
     ("PermitLocalCommand", "no"),
@@ -44,7 +39,7 @@ pub const MASTER_OPTIONS: &[(&str, &str)] = &[
 /// Options forced on a command of the command line, which runs on the host with the terminal
 /// (ADR 0019): the user's command, not a `RemoteCommand` from the config; a terminal for it;
 /// no `LocalCommand`; and never a master of its own. [`PROCESS_OPTIONS`] and
-/// [`session_options`] apply too.
+/// [`SESSION_OPTIONS`] apply too.
 pub const COMMAND_OPTIONS: &[(&str, &str)] = &[
     ("PermitLocalCommand", "no"),
     ("RemoteCommand", "none"),
@@ -56,7 +51,7 @@ pub const COMMAND_OPTIONS: &[(&str, &str)] = &[
 /// such as the search of file contents (ADR 0028): the program given, not a `RemoteCommand`
 /// from the config; no terminal, which would mix its stderr into its stdout and translate line
 /// ends; no `LocalCommand`; and never a master of its own. [`PROCESS_OPTIONS`] and
-/// [`session_options`] apply too, and [`MUX_CHANNEL_OPTIONS`] over a master.
+/// [`SESSION_OPTIONS`] apply too, and [`MUX_CHANNEL_OPTIONS`] over a master.
 pub const EXEC_OPTIONS: &[(&str, &str)] = &[
     ("PermitLocalCommand", "no"),
     ("RemoteCommand", "none"),
@@ -64,24 +59,15 @@ pub const EXEC_OPTIONS: &[(&str, &str)] = &[
     ("ControlMaster", "no"),
 ];
 
-/// Options forced on the master connection and the console when forwarding is compiled out.
-pub const NO_FORWARDING_OPTIONS: &[(&str, &str)] = &[
+/// Options that turn off all forwarding, forced on the master connection, the console,
+/// commands of the command line, and programs run without a terminal.
+pub const SESSION_OPTIONS: &[(&str, &str)] = &[
     ("ClearAllForwardings", "yes"),
     ("ForwardAgent", "no"),
     ("ForwardX11", "no"),
     ("Tunnel", "no"),
     ("GSSAPIDelegateCredentials", "no"),
 ];
-
-/// Forwarding-related options this build forces on the master connection, the console,
-/// commands of the command line, and programs run without a terminal.
-pub const fn session_options() -> &'static [(&'static str, &'static str)] {
-    if FORWARDING_ENABLED {
-        &[]
-    } else {
-        NO_FORWARDING_OPTIONS
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -111,11 +97,14 @@ mod tests {
     }
 
     #[test]
-    fn session_options_follow_the_feature() {
-        if FORWARDING_ENABLED {
-            assert_eq!(session_options(), []);
-        } else {
-            assert_eq!(session_options(), NO_FORWARDING_OPTIONS);
-        }
+    fn sessions_never_forward() {
+        assert_eq!(value(SESSION_OPTIONS, "ClearAllForwardings"), Some("yes"));
+        assert_eq!(value(SESSION_OPTIONS, "ForwardAgent"), Some("no"));
+        assert_eq!(value(SESSION_OPTIONS, "ForwardX11"), Some("no"));
+        assert_eq!(value(SESSION_OPTIONS, "Tunnel"), Some("no"));
+        assert_eq!(
+            value(SESSION_OPTIONS, "GSSAPIDelegateCredentials"),
+            Some("no")
+        );
     }
 }

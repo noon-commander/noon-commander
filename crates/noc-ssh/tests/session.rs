@@ -433,9 +433,7 @@ async fn opens_direct_channels_without_multiplexing() {
     assert!(status.success());
     let channel = &fake.invocations()[0];
     assert!(!channel.iter().any(|arg| arg == "-S" || arg == "-M"));
-    if !noc_ssh::policy::FORWARDING_ENABLED {
-        assert!(contains_pair(channel, "-o", "Tunnel=no"));
-    }
+    assert!(contains_pair(channel, "-o", "Tunnel=no"));
     session.close().await;
 }
 

@@ -10,11 +10,6 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-[features]
-default = []
-# Allow port, agent, X11, and tunnel forwarding. Off by default; see docs/adr/0004.
-forwarding = ["noc-ssh/forwarding"]
-
 [dependencies]
 clap.workspace = true
 color-eyre.workspace = true

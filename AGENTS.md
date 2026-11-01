@@ -7,8 +7,8 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
 
 ## Hard rules
 
-- Forwarding exists only behind the `forwarding` feature, checked only in
-  `crates/noc-ssh/src/policy.rs`. SFTP channels always use `policy::SFTP_CHANNEL_OPTIONS`.
+- Never forward anything (ADR 0062): sessions always get `policy::SESSION_OPTIONS`, SFTP
+  channels `policy::SFTP_CHANNEL_OPTIONS`, and the validator rejects forwarding arguments.
 - Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
 - Spawn `ssh` only from `noc-ssh`. Never through `sh -c`. Always `--` before the destination.
 - Spawn other programs only from `noc-tools` (ADR 0012). Never through a shell. `--` before
@@ -34,7 +34,7 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
 ## Commands
 
 ```sh
-just check   # fmt-check, clippy and tests (with and without forwarding), cargo-deny
+just check   # fmt-check, clippy, tests, cargo-deny
 just lint    # Markdown, shell scripts, spelling, TOML, workflows, unused dependencies
 just all     # check + lint + stale snapshots; run before committing
 just fmt     # format the code
@@ -44,7 +44,7 @@ just run     # run noc from source; arguments go to noc
 - Done means `just check` passes. It changes no files.
 - Iterate on one crate with `cargo test -p <crate> [name]` and
   `cargo clippy -p <crate> --all-targets`. `just test`/`just clippy` always build the whole
-  workspace twice.
+  workspace.
 - Other recipes: `just --list`. `just msrv` needs rustup; `just logo` needs `resvg`.
 - CI runs `justfile` recipes (ADR 0013). Add a new check as a recipe and call it from `ci.yml`;
   never put raw commands in `ci.yml`.

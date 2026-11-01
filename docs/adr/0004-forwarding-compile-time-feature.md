@@ -1,7 +1,10 @@
 # 0004. Forwarding is a compile-time feature, off by default
 
-- Status: Accepted
+- Status: Superseded in part by [ADR 0062](0062-forwarding-is-never-allowed.md)
 - Date: 2026-10-01
+
+The validator and the options forced on sessions and SFTP channels still hold. The `forwarding`
+feature is gone: no build forwards, and forwarding arguments are always rejected.
 
 ## Context
 

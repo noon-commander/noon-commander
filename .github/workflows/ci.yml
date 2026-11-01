@@ -40,16 +40,8 @@ jobs:
       - run: just fmt-check
 
   clippy:
-    name: clippy (${{ matrix.name }})
+    name: clippy
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: default
-            features: ""
-          - name: forwarding
-            features: forwarding
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,24 +51,12 @@ jobs:
           rustup toolchain install stable --profile minimal --component clippy --no-self-update
           rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: ${{ matrix.name }}
       - run: cargo install --locked "just@$JUST_VERSION"
-      - run: just clippy-with "$FEATURES" --locked
-        env:
-          FEATURES: ${{ matrix.features }}
+      - run: just clippy --locked
 
   test:
-    name: test (${{ matrix.name }})
+    name: test
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: default
-            features: ""
-          - name: forwarding
-            features: forwarding
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,14 +66,9 @@ jobs:
           rustup toolchain install stable --profile minimal --no-self-update
           rustup default stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: ${{ matrix.name }}
       - run: cargo install --locked "just@$JUST_VERSION" cargo-insta@1.49.0
-      - run: just test-with "$FEATURES" --locked
-        env:
-          FEATURES: ${{ matrix.features }}
-      - if: matrix.name == 'default'
-        run: just snap-stale
+      - run: just test --locked
+      - run: just snap-stale
 
   release:
     name: release build

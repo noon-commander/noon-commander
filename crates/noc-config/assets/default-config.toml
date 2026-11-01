@@ -19,8 +19,7 @@ program = "ssh"
 
 # Extra arguments for every ssh invocation, for example ["-o", "ServerAliveInterval=15"].
 # Options that Noon Commander manages itself, such as -F (use config_file), -M, or ControlPath,
-# are rejected. So are forwarding options, such as -L, -D, -A, or ForwardAgent, unless Noon
-# Commander was built with the `forwarding` feature.
+# are rejected. So are forwarding options, such as -L, -D, -A, or ForwardAgent.
 args = []
 
 # Share one authenticated connection (ControlMaster) per host between panels and transfers.

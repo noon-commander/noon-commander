@@ -28,6 +28,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Catppuccin themes tint their background with that color. Under the cursor a marked row looks
   as any other, beside its bar.
 
+### Removed
+
+- The `forwarding` build feature: no build forwards ports, the agent, X11, or tunnels, and
+  `noc debug version` and the About page have no `features` line
+  ([ADR 0062](docs/adr/0062-forwarding-is-never-allowed.md)).
+
 ### Fixed
 
 - A panel, a list, or the viewer made taller, or the viewer wider, no longer shows empty rows

@@ -139,7 +139,7 @@ fn forced_options(role: Role<'_>) -> Vec<(&'static str, &'static str)> {
         Role::Master { .. } => &[
             policy::MASTER_OPTIONS,
             policy::PROCESS_OPTIONS,
-            policy::session_options(),
+            policy::SESSION_OPTIONS,
         ],
         Role::MuxSftp { .. } => &[
             policy::SFTP_CHANNEL_OPTIONS,
@@ -149,12 +149,12 @@ fn forced_options(role: Role<'_>) -> Vec<(&'static str, &'static str)> {
         Role::DirectSftp => &[
             policy::SFTP_CHANNEL_OPTIONS,
             policy::PROCESS_OPTIONS,
-            policy::session_options(),
+            policy::SESSION_OPTIONS,
         ],
         Role::Command { .. } => &[
             policy::COMMAND_OPTIONS,
             policy::PROCESS_OPTIONS,
-            policy::session_options(),
+            policy::SESSION_OPTIONS,
         ],
         Role::Exec {
             control_path: Some(_),
@@ -163,14 +163,14 @@ fn forced_options(role: Role<'_>) -> Vec<(&'static str, &'static str)> {
             policy::EXEC_OPTIONS,
             policy::PROCESS_OPTIONS,
             policy::MUX_CHANNEL_OPTIONS,
-            policy::session_options(),
+            policy::SESSION_OPTIONS,
         ],
         Role::Exec {
             control_path: None, ..
         } => &[
             policy::EXEC_OPTIONS,
             policy::PROCESS_OPTIONS,
-            policy::session_options(),
+            policy::SESSION_OPTIONS,
         ],
     };
     let mut options: Vec<(&'static str, &'static str)> = Vec::new();
@@ -410,7 +410,7 @@ mod tests {
         ));
         let mut expected = options(policy::MASTER_OPTIONS);
         expected.extend(options(policy::PROCESS_OPTIONS));
-        expected.extend(options(policy::session_options()));
+        expected.extend(options(policy::SESSION_OPTIONS));
         expected.extend(tail(&[
             "-M",
             "-N",
@@ -463,7 +463,7 @@ mod tests {
             unique.len(),
             "duplicate forced options: {forced:?}"
         );
-        for (key, _) in policy::session_options() {
+        for (key, _) in policy::SESSION_OPTIONS {
             assert!(forced.iter().any(|forced| forced == key), "{key} missing");
         }
         assert!(argv.ends_with(&tail(&["-T", "-s", "--", "web", "sftp"])));
@@ -483,7 +483,7 @@ mod tests {
         ));
         let mut expected = options(policy::COMMAND_OPTIONS);
         expected.extend(options(policy::PROCESS_OPTIONS));
-        expected.extend(options(policy::session_options()));
+        expected.extend(options(policy::SESSION_OPTIONS));
         expected.extend(tail(&["-S", "/run/1/abcd", "--", "web", "ls -l"]));
         assert_eq!(argv, expected);
         let direct = strings(&arguments(
@@ -549,7 +549,7 @@ mod tests {
         let mut expected = options(policy::EXEC_OPTIONS);
         expected.extend(options(policy::PROCESS_OPTIONS));
         expected.extend(options(policy::MUX_CHANNEL_OPTIONS));
-        expected.extend(options(policy::session_options()));
+        expected.extend(options(policy::SESSION_OPTIONS));
         expected.extend(tail(&["-S", "/run/1/abcd", "--", "web", "exec 'rg'"]));
         assert_eq!(argv, expected);
     }
@@ -567,7 +567,7 @@ mod tests {
         ));
         let mut expected = options(policy::EXEC_OPTIONS);
         expected.extend(options(policy::PROCESS_OPTIONS));
-        expected.extend(options(policy::session_options()));
+        expected.extend(options(policy::SESSION_OPTIONS));
         expected.extend(tail(&["--", "web", "exec 'rg'"]));
         assert_eq!(argv, expected);
     }

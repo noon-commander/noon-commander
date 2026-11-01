@@ -5,7 +5,7 @@
 - [x] Cargo workspace and crate layout
 - [x] License, README, AGENTS.md, CHANGELOG, editor and lint configuration
 - [x] Architecture document and ADRs 0001–0004
-- [x] CI: rustfmt, clippy, and tests (default and `forwarding`), MSRV, cargo-deny
+- [x] CI: rustfmt, clippy, and tests, MSRV, cargo-deny
 
 ## M1: Core without UI (done)
 
@@ -312,4 +312,3 @@
 - Plugins for other backends as a group of the location menu.
 - zoxide on a host, over its master connection, for remote directories; it runs remote
   commands, which needs an ADR, as checksums on the server do.
-- Anything behind the `forwarding` feature ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).

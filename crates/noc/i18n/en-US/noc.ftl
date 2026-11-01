@@ -591,7 +591,6 @@ help-about-dirty = Modified
 help-about-commit-time = Commit time
 help-about-target = Target
 help-about-profile = Profile
-help-about-features = Features
 help-about-system = System
 help-about-os = OS
 help-about-kernel = Kernel

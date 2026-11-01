@@ -127,7 +127,8 @@ Every ssh command line is assembled in `noc-ssh`, in this order: program → for
 `ssh.args` → role options → `--` → destination. Per-host options belong in ssh_config
 ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)). ssh keeps the first value it sees
 for an option, so `-o` values in user arguments cannot override forced options; flags are covered
-by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
+by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). Nothing is ever
+forwarded ([ADR 0062](adr/0062-forwarding-is-never-allowed.md)).
 
 ## Locations
 

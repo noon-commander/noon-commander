@@ -202,7 +202,6 @@ fn debug_version_has_one_line_per_key() {
         [
             "name",
             "version",
-            "features",
             "commit",
             "dirty",
             "commit-time",
@@ -228,17 +227,6 @@ fn debug_version_has_one_line_per_key() {
     let value = |key: &str| fields.iter().find(|&&(k, _)| k == key).unwrap().1;
     assert_eq!(value("name"), "Noon Commander");
     assert_eq!(value("version"), env!("CARGO_PKG_VERSION"));
-    let forwarding = if noc_ssh::policy::FORWARDING_ENABLED {
-        "+forwarding"
-    } else {
-        "-forwarding"
-    };
-    assert!(
-        value("features")
-            .split(' ')
-            .any(|feature| feature == forwarding),
-        "{text}"
-    );
     // stdin is not a terminal, so the terminal is not asked.
     assert_eq!(value("keyboard"), "unchecked");
     assert_eq!(value("editor"), "nano -w");
@@ -395,16 +383,12 @@ fn rejects_an_invalid_config() {
 
     sandbox.write_config("args = [\"-L\", \"8080:localhost:80\"]\n");
     let output = sandbox.run(&["debug", "hosts"]);
-    if noc_ssh::policy::FORWARDING_ENABLED {
-        assert!(output.status.success(), "{}", stderr(&output));
-    } else {
-        assert_eq!(output.status.code(), Some(1));
-        assert!(
-            stderr(&output).contains("forwarding"),
-            "{}",
-            stderr(&output)
-        );
-    }
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("forwarding"),
+        "{}",
+        stderr(&output)
+    );
 }
 
 #[test]

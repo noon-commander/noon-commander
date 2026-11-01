@@ -13,7 +13,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Marks};
-use super::dialog::{Colors, Tone};
+use super::dialog::{Colors, Tone, inner_width};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -207,7 +207,7 @@ impl HistoryWindow {
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
         let cursor = self.picker.cursor().min(shown.len().saturating_sub(1));
         let footer = shown.get(cursor).map_or_else(Vec::new, |entry| {
-            let width = usize::from(WIDTH.min(area.width).saturating_sub(4));
+            let width = inner_width(WIDTH, area);
             preview_rows(&entry.command, width)
                 .into_iter()
                 .map(|text| Line::styled(text, theme.dialog))

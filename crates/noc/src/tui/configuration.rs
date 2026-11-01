@@ -1035,10 +1035,7 @@ impl Configuration {
     /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::of(theme, Tone::Plain);
-        let size = (
-            WIDTH.min(area.width.saturating_sub(4)),
-            HEIGHT.min(area.height.saturating_sub(2)),
-        );
+        let size = (WIDTH, HEIGHT.min(area.height.saturating_sub(2)));
         let inner = draw_box(frame, area, size, &fl!("config-title"), colors, theme);
         self.drawn = Drawn::default();
         // The body, a line, and two lines of hint.

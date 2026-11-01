@@ -21,6 +21,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   focus of its buttons; a double click on a row copies its checksum, as Enter does
   ([ADR 0061](docs/adr/0061-a-picker-is-a-part-of-a-dialog.md)).
 - Space on a row of the search of a tree goes to it, as Enter does.
+- On a narrow screen every window leaves two cells free on either side, as dialogs did, rather
+  than the lists and the windows of jobs reaching its edges.
 
 ### Fixed
 

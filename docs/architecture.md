@@ -1963,6 +1963,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
   taller than the screen scrolls between the top and the rest of the dialog, which keeps its
   buttons, with a scroll bar on the frame that the mouse and the wheel move.
+- **Width of a window.** `dialog::draw_box` draws the frame of every window, as wide as the
+  window asks but leaving two cells free on either side of the screen, for the margin and the
+  shadow (`dialog::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is
+  narrower. What lays out text to that width asks `dialog::inner_width`. The key hints along the
+  bottom of the screen span it (`dialog::draw_frame`).
 - **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]`
   after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the
   colors of text fields (`dialog_input`), its brackets faint (`dialog_bracket`) and its arrow in

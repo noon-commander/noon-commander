@@ -14,7 +14,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, Tone};
+use super::dialog::{Colors, Tone, inner_width};
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
@@ -248,7 +248,7 @@ impl WorkspacesWindow {
         let separator = format!(" {} ", glyphs::COLUMN);
         let count_width = count_widths.0 + cells::width(&separator) + count_widths.1;
         // The room inside the box the picker draws.
-        let width = usize::from(WIDTH.min(area.width).saturating_sub(4));
+        let width = inner_width(WIDTH, area);
         // As many for every workspace, so that the box keeps its height as the cursor moves.
         let tab_lines = (self.rows.iter().map(Row::tab_lines).max())
             .unwrap_or(0)

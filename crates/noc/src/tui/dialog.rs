@@ -40,6 +40,12 @@ const SECRET_CAPACITY: usize = 1024;
 pub(crate) const MAX_WIDTH: u16 = 76;
 /// Cells between a dialog's frame and its edge, as mc leaves them.
 const MARGIN: u16 = 1;
+/// Cells a window's frame leaves free on either side of the screen, for its margin and its
+/// shadow.
+const SIDES: u16 = 2;
+/// Fewest cells across a window's frame takes where the screen is too narrow to leave its
+/// sides free, or the whole screen if narrower.
+const MIN_WIDTH: u16 = 20;
 
 /// The id of the last dialog made.
 static LAST_ID: AtomicU64 = AtomicU64::new(0);
@@ -852,7 +858,7 @@ impl Dialog {
 
     /// The width of the box drawn in `area`, borders included.
     fn box_width(&self, area: Rect) -> u16 {
-        self.width.min(area.width.saturating_sub(4)).max(20)
+        box_width(self.width.max(MIN_WIDTH), area)
     }
 
     /// The same dialog with the focus on its default button.
@@ -2192,10 +2198,38 @@ pub(crate) fn pop_up(anchor: Rect, area: Rect, x: u16, (width, height): (u16, u1
     Rect::new(x, y, width, height)
 }
 
-/// Draws an empty dialog box centered in `area`: a frame of `size` in the theme's lines with
-/// its title bold in the middle, a blank cell around it where there is room, and mc's shadow. Returns the room
-/// inside, one column in from the frame on either side.
+/// The width of the frame of a window that would be `width` cells wide, borders included, in
+/// `area`: as wide as that, but leaving [`SIDES`] cells free on either side; where that leaves
+/// too few, [`MIN_WIDTH`], or the whole of `area`. Every window that [`draw_box`] draws has it.
+pub(crate) fn box_width(width: u16, area: Rect) -> u16 {
+    let room = area.width.saturating_sub(2 * SIDES);
+    width.min(room.max(area.width.min(MIN_WIDTH)))
+}
+
+/// The cells of a line inside the frame of a window that would be `width` cells wide in `area`.
+pub(crate) fn inner_width(width: u16, area: Rect) -> usize {
+    usize::from(box_width(width, area).saturating_sub(4))
+}
+
+/// Draws an empty dialog box centered in `area`: a frame of `size` in the theme's lines, as wide
+/// as [`box_width`] lets it be, with its title bold in the middle, a blank cell around it where
+/// there is room, and mc's shadow. Returns the room inside, one column in from the frame on
+/// either side.
 pub(crate) fn draw_box(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    (width, height): (u16, u16),
+    title: &str,
+    colors: Colors,
+    theme: &Theme,
+) -> Rect {
+    let size = (box_width(width, area), height);
+    draw_frame(frame, area, size, title, colors, theme)
+}
+
+/// Draws an empty box as [`draw_box`] does, but of `size` as it is, where the screen has room:
+/// for a strip that spans the screen, such as the key hints at its bottom.
+pub(crate) fn draw_frame(
     frame: &mut Frame<'_>,
     area: Rect,
     (width, height): (u16, u16),

@@ -538,10 +538,10 @@ mod tests {
                 .unwrap();
             terminal.get_cursor_position().unwrap()
         };
-        // The frame is in column 0, a blank in column 1, and `Jump to: ` 9; the glyph of the
-        // mode ends the field.
+        // Two cells free, the frame in column 2, a blank in column 3, and `Jump to: ` 9; the
+        // glyph of the mode ends the field.
         let empty = cursor_after(&mut menu, "");
-        assert_eq!(empty.x, 2 + 9);
+        assert_eq!(empty.x, 4 + 9);
         assert_eq!(cursor_after(&mut menu, "src").x, empty.x + 3);
         assert_eq!(
             cursor_after(&mut menu, " ").x,

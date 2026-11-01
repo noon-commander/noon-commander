@@ -1053,7 +1053,7 @@ mod tests {
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
-        // The hosts follow web, labeled Prod, below their heading; their icons are in column 3.
+        // The hosts follow web, labeled Prod, below their heading; their icons are in column 4.
         let web = (0..buffer.area.height)
             .find(|&y| {
                 let row: String = (0..buffer.area.width)
@@ -1062,7 +1062,7 @@ mod tests {
                 row.contains("Prod")
             })
             .unwrap();
-        let colors = |y: u16| (buffer[(3, y)].fg, buffer[(3, y)].bg);
+        let colors = |y: u16| (buffer[(4, y)].fg, buffer[(4, y)].bg);
         assert_eq!(colors(web), (Color::Green, Color::Gray), "connected");
         assert_eq!(
             colors(web + 1),
@@ -1070,7 +1070,7 @@ mod tests {
             "idle: the dialog's own color"
         );
         assert_eq!(colors(web + 2), (Color::Red, Color::Gray), "failed");
-        assert_eq!(buffer[(3, web + 1)].symbol(), "󰒋");
+        assert_eq!(buffer[(4, web + 1)].symbol(), "󰒋");
     }
 
     #[test]

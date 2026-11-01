@@ -25,13 +25,14 @@ pub(crate) struct Theme {
     /// The row under the cursor in the inactive panel: a background, drawn under the colors of
     /// the row, which keeps them.
     pub(crate) cursor_inactive: Style,
-    /// A marked row, and the total of the marked entries.
+    /// A marked row: a background, drawn under the colors of the row, which keeps them; none
+    /// where the theme has no color between the panel's and the mark's, which leaves the bar.
     pub(crate) marked: Style,
-    /// A marked row under the cursor.
-    pub(crate) marked_cursor: Style,
-    /// `cursor` and `marked_cursor` in a panel where the user is root: on red.
+    /// The bar in the frame beside a marked row, over `marked`, and the total of the marked
+    /// entries.
+    pub(crate) mark: Style,
+    /// `cursor` in a panel where the user is root: on red.
     pub(crate) root_cursor: Style,
-    pub(crate) root_marked_cursor: Style,
     /// What quick search has matched so far.
     pub(crate) quick_search: Style,
     /// What a search found: in the lines of the search of a tree, and in the names that quick
@@ -233,7 +234,6 @@ impl Theme {
     pub(crate) fn for_root(&self) -> Self {
         Self {
             cursor: self.root_cursor,
-            marked_cursor: self.root_marked_cursor,
             ..self.clone()
         }
     }
@@ -271,11 +271,11 @@ impl Theme {
             cursor: on(Color::Black, Color::Cyan),
             // The only one of the 16 colors that stands out from blue and keeps the names'.
             cursor_inactive: Style::new().bg(Color::DarkGray),
-            marked: on(Color::LightYellow, Color::Blue).underlined(),
-            marked_cursor: on(Color::LightYellow, Color::Cyan).underlined(),
+            // No color of the 16 lies between blue and yellow: the bar alone, in mc's yellow.
+            marked: Style::new(),
+            mark: on(Color::LightYellow, Color::Blue),
             // As the titles of error dialogs.
             root_cursor: on(Color::White, Color::Red),
-            root_marked_cursor: on(Color::LightYellow, Color::Red).underlined(),
             quick_search: on(Color::Black, Color::Cyan),
             // As mc's editor shows a bookmark found (`bookmarkfound`).
             find_match: on(Color::Black, Color::Green),
@@ -391,11 +391,10 @@ impl Theme {
             header: plain,
             cursor: reversed,
             cursor_inactive: reversed.dim(),
-            // Not bold as in mc: that is what directories are.
-            marked: Style::new().underlined(),
-            marked_cursor: reversed.underlined(),
+            // Without colors, the bar alone.
+            marked: plain,
+            mark: plain.bold(),
             root_cursor: reversed.bold(),
-            root_marked_cursor: reversed.underlined().bold(),
             quick_search: reversed,
             // Reversed is the cursor; this shows on it.
             find_match: plain.bold().underlined(),
@@ -495,10 +494,9 @@ impl Theme {
             header: on(p.lavender, p.base),
             cursor,
             cursor_inactive: Style::new().bg(p.surface0),
-            marked: on(p.mauve, p.base).underlined(),
-            marked_cursor: on(p.base, p.mauve).underlined(),
+            marked: tint(p.mauve, p.base),
+            mark: on(p.mauve, p.base),
             root_cursor: on(p.base, p.red),
-            root_marked_cursor: on(p.base, p.red).underlined(),
             quick_search: cursor,
             find_match: on(p.base, p.yellow),
             file: fg(p.text),
@@ -604,10 +602,9 @@ impl Theme {
             header: on(p.accent, p.panel).bold(),
             cursor,
             cursor_inactive: Style::new().bg(p.cursor_inactive),
-            marked: on(p.mark, p.panel).underlined(),
-            marked_cursor: on(p.panel, p.mark).underlined(),
+            marked: tint(p.mark, p.panel),
+            mark: on(p.mark, p.panel),
             root_cursor: on(p.ink, p.danger),
-            root_marked_cursor: on(p.ink, p.danger).underlined(),
             quick_search: cursor,
             // The golds are the cursor's and the menu bar's.
             find_match: on(p.panel, p.teal),
@@ -1154,6 +1151,15 @@ pub(crate) fn blend(color: Color, background: Color, (gain, alpha): (u16, u16)) 
     })
 }
 
+/// The background of a marked row: `mark` faint over `panel`, apart from it and from the
+/// inactive cursor in 256 colors too, and quiet enough that names of every kind read on it.
+fn tint(mark: Color, panel: Color) -> Style {
+    match blend(mark, panel, (1000, 180)) {
+        Some(color) => Style::new().bg(color),
+        None => Style::new(),
+    }
+}
+
 /// The red, green, and blue of `color`: of an RGB color, or of one of the 6×6×6 cube or the
 /// gray ramp of the 256-color palette, whose values are fixed.
 fn rgb(color: Color) -> Option<(u8, u8, u8)> {
@@ -1532,6 +1538,44 @@ mod tests {
     }
 
     #[test]
+    fn marked_rows_keep_their_colors_on_a_background_of_their_own() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let marked = theme.marked;
+                assert_eq!(marked.fg, None, "{name}: keeps the names' colors");
+                assert!(marked.add_modifier.is_empty(), "{name}: no underline");
+                let bar = theme.panel_border.patch(theme.mark).patch(marked);
+                assert!(
+                    bar.fg.is_none() || bar.fg != bar.bg,
+                    "{name} {depth:?}: the bar"
+                );
+                let Some(background) = marked.bg else {
+                    assert!(
+                        ["mc-classic", "terminal"].contains(name),
+                        "{name}: the bar alone"
+                    );
+                    continue;
+                };
+                let others = [
+                    ("panel", theme.panel),
+                    ("cursor", theme.cursor),
+                    ("inactive cursor", theme.cursor_inactive),
+                ];
+                for (other, style) in others {
+                    assert_ne!(style.bg, Some(background), "{name} {depth:?}: {other}");
+                }
+                if depth == ColorDepth::Indexed {
+                    assert!(
+                        matches!(background, Color::Indexed(16..)),
+                        "{name}: {background:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn units_of_sizes_stand_out_from_m_on_and_show_on_the_panel_and_the_inactive_cursor() {
         for name in Theme::NAMES {
             for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
@@ -1613,7 +1657,7 @@ mod tests {
                     fg(theme.symlink),
                     fg(theme.stale_link),
                     fg(theme.device),
-                    fg(theme.marked),
+                    fg(theme.mark),
                 ];
                 for (index, kind) in kinds.iter().enumerate() {
                     assert!(!kinds[index + 1..].contains(kind), "{name}: {kind:?}");

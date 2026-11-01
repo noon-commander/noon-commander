@@ -1878,8 +1878,8 @@ impl Panel {
         entries.get(*self.shown.get(index)?).map(Row::Entry)
     }
 
-    /// Draws the panel: the location in the frame, column headers, the rows, the size and number
-    /// of marked entries on the line below them, a status line with the name under the cursor or
+    /// Draws the panel: the location in the frame, column headers, the rows, a bar in the frame
+    /// beside the marked ones, the size and number of marked entries on the line below them, a status line with the name under the cursor or
     /// quick search, and the totals of the directory and its file system on the bottom of the
     /// frame. What the panel kept from a host that is not connected is toned down.
     pub(crate) fn render(
@@ -1943,6 +1943,11 @@ impl Panel {
             );
             let y = inner.y + 1 + u16::try_from(screen_row).unwrap_or(u16::MAX);
             frame.render_widget(self.toned(text), line(y));
+            if marked {
+                let style = theme.panel_border.patch(theme.mark).patch(theme.marked);
+                let bar = Line::styled(glyphs::MARKED_ROW.to_string(), style);
+                frame.render_widget(self.toned(bar), Rect::new(area.x, y, 1, 1));
+            }
         }
 
         self.render_separator(frame, area, inner.bottom() - 2, theme);
@@ -2229,8 +2234,7 @@ impl Panel {
         let total = fl!("panel-marked", size = bytes, count = count);
         let total = format!(" {total} ");
         let width = cells::width(&total).min(usize::from(inside));
-        // An underline would run along the frame.
-        let styles = (theme.marked.not_underlined(), theme.truncated);
+        let styles = (theme.mark, theme.truncated);
         let total = cells::fit(&total, width, Align::Left, styles, theme.glyphs.marks);
         let total_width = u16::try_from(width).unwrap_or(u16::MAX);
         let x = area.x + area.width.saturating_sub(total_width) / 2;
@@ -2926,9 +2930,10 @@ fn typed_at_cursor(field: &Field, c: char) -> String {
 }
 
 /// `shown` as a row under the cursor, `Some(true)` in the active panel, `marked`, and `selected`
-/// by Visual mode. The cursor and marks replace the colors of the row, as in mc, and a selection
-/// reverses them; the cursor of the inactive panel only puts a background under them. The marks
-/// of a name cut short keep an accent over them, and what quick search found its own colors.
+/// by Visual mode. The cursor replaces the colors of the row, as in mc, and a selection reverses
+/// them; a mark and the cursor of the inactive panel only put a background under them, and the
+/// bar in the frame shows the mark. The marks of a name cut short keep an accent over them, and
+/// what quick search found its own colors.
 fn row_style(
     shown: Shown,
     cursor: Option<bool>,
@@ -2940,19 +2945,18 @@ fn row_style(
         marks,
         found,
     } = shown;
-    let style = match (cursor == Some(true), marked, selected) {
-        (true, true, _) => Some(theme.marked_cursor),
-        (true, false, _) => Some(theme.cursor),
-        (false, true, true) => Some(selection(theme.marked)),
-        (false, false, true) => Some(selection(theme.panel)),
-        (false, true, false) => Some(theme.marked),
-        (false, false, false) => None,
+    let style = match (cursor == Some(true), selected) {
+        (true, _) => Some(theme.cursor),
+        (false, true) => Some(selection(theme.panel)),
+        (false, false) => None,
     };
     if let Some(style) = style {
         for span in &mut text.spans {
             span.style = Style::new();
         }
         text = text.style(style);
+    } else if marked {
+        text = text.patch_style(theme.marked);
     }
     if cursor == Some(false) {
         text = text.patch_style(theme.cursor_inactive);
@@ -4739,7 +4743,7 @@ mod tests {
     }
 
     #[test]
-    fn marked_rows_and_their_total_are_yellow() {
+    fn marked_rows_keep_their_colors_beside_a_bar_in_the_frame() {
         use ratatui::style::{Color, Modifier};
 
         let mut panel = loaded("/srv", listing());
@@ -4759,29 +4763,52 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
         // Rows: frame, header, `..`, alpha-link, Beta, bin, .hidden, Alpha.md, zeta.txt.
-        assert_eq!(colors(1, 7), (Color::LightYellow, Color::Blue), "marked");
+        let bar = glyphs::MARKED_ROW.to_string();
+        for y in [7, 8] {
+            assert_eq!(buffer[(0, y)].symbol(), bar, "row {y}");
+            assert_eq!(colors(0, y), (Color::LightYellow, Color::Blue), "row {y}");
+        }
+        assert_eq!(buffer[(0, 6)].symbol(), "║", "not the others");
+        assert_eq!(
+            colors(2, 7),
+            (Color::Gray, Color::Blue),
+            "marked, as a file"
+        );
+        assert_eq!(colors(30, 7), (Color::Gray, Color::Blue), "all of it");
+        assert_eq!(
+            colors(2, 8),
+            (Color::Black, Color::Cyan),
+            "under the cursor"
+        );
         let underlined = |x: u16, y: u16| buffer[(x, y)].modifier.contains(Modifier::UNDERLINED);
-        assert!(underlined(1, 7), "marked, and underlined");
-        assert!(underlined(1, 8), "under the cursor too");
-        assert!(!underlined(1, 6), "not the others");
-        assert!(
-            buffer[(1, 4)].modifier.contains(Modifier::BOLD),
-            "a directory is bold"
-        );
-        assert_eq!(
-            colors(30, 7),
-            (Color::LightYellow, Color::Blue),
-            "all of it"
-        );
-        assert_eq!(
-            colors(1, 8),
-            (Color::LightYellow, Color::Cyan),
-            "marked, under the cursor"
-        );
+        assert!(!underlined(2, 7) && !underlined(2, 8), "never underlined");
         let separator: String = (0..40).map(|x| buffer[(x, 9)].symbol()).collect();
         assert_eq!(separator, "╟─────── 10012345 B in 2 files ────────╢");
         assert_eq!(colors(8, 9), (Color::LightYellow, Color::Blue));
         assert_eq!(colors(7, 9), (Color::Gray, Color::Blue));
+
+        // With a color between the panel's and the mark's, under the row and the bar.
+        let depth = crate::tui::theme::ColorDepth::TrueColor;
+        let theme = Theme::by_name("catppuccin-mocha", depth).unwrap();
+        let terminal = render_themed(
+            &mut panel,
+            (40, 12),
+            true,
+            &hosts,
+            Decor::new(false),
+            &theme,
+        );
+        let buffer = terminal.backend().buffer();
+        let tint = theme.marked.bg.unwrap();
+        let colors = |x: u16, y: u16| (buffer[(x, y)].fg, buffer[(x, y)].bg);
+        assert_eq!(colors(0, 7), (theme.mark.fg.unwrap(), tint), "the bar");
+        assert_eq!(colors(2, 7), (theme.file.fg.unwrap(), tint), "the name");
+        assert_eq!(colors(30, 7).1, tint, "all of it");
+        assert_eq!(colors(2, 6).1, theme.panel.bg.unwrap(), "not the others");
+        assert_eq!(
+            colors(2, 8),
+            (theme.cursor.fg.unwrap(), theme.cursor.bg.unwrap())
+        );
     }
 
     #[test]
@@ -4883,7 +4910,7 @@ mod tests {
                 assert_eq!(buffer[(17, y)].bg, bg, "row {y}, {active}: as the row");
                 assert!(
                     !cell.modifier.contains(Modifier::UNDERLINED),
-                    "row {y}, {active}: the mark's underline stops at the line"
+                    "row {y}, {active}: never underlined"
                 );
             }
         }

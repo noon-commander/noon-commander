@@ -23,6 +23,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Space on a row of the search of a tree goes to it, as Enter does.
 - On a narrow screen every window leaves two cells free on either side, as dialogs did, rather
   than the lists and the windows of jobs reaching its edges.
+- Marked rows keep the colors of their names and are no longer underlined: a bar `▌` in the
+  panel's frame beside them shows the mark, in the theme's color for it, and the Noon and
+  Catppuccin themes tint their background with that color. Under the cursor a marked row looks
+  as any other, beside its bar.
 
 ### Fixed
 

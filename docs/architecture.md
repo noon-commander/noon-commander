@@ -1356,9 +1356,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`#2D4672`) in `noon-dark`, as the dialogs' one is a single step of gray above the panels in
   256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
 - **The cursor where the user is root.** In a local panel while Noon Commander runs as root, and
-  in a panel on a host whose ssh user is root, the cursor is on red: `root_cursor` and
-  `root_marked_cursor` take the place of `cursor` and `marked_cursor` in the theme that panel is
-  drawn with ([ADR 0031](adr/0031-who-and-where-on-screen.md)).
+  in a panel on a host whose ssh user is root, the cursor is on red: `root_cursor` takes the
+  place of `cursor` in the theme that panel is drawn with ([ADR 0031](adr/0031-who-and-where-on-screen.md)).
 - **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
   file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
   read with every listing, so it changes when a job reads the panel again or on `R`; a panel
@@ -1385,8 +1384,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down,
   as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing
   once; `g *` inverts the marks on files, leaving directories as they are; `..`
-  cannot be marked. Marked rows are underlined, and yellow in mc-classic (bold, which mc uses
-  without colors, is for directories); the line below the listing shows the size of the marked files
+  cannot be marked. A marked row keeps the colors of its name, as the inactive cursor does: a bar
+  `▌` in the panel's frame beside it shows the mark, in the theme's `mark` (yellow in mc-classic),
+  and the Noon and Catppuccin themes put `marked` under the row, the color of the mark faint over
+  the panel's, apart from the inactive cursor in 256 colors too; mc-classic, whose 16 colors have
+  none between blue and yellow, and `terminal` have the bar alone. Under the cursor a marked row
+  looks as any other, beside its bar. The line below the listing shows the size of the marked files
   and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they survive
   sorting and `R` (for names still there); another directory starts unmarked, and entries that get
   hidden lose their marks, so that no operation acts on what is not shown. `g +` marks and `g -` unmarks
@@ -2135,8 +2138,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by
   `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
   way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
-  the arrows of the sort order, the checks of checksums, the progress bar, the mark of secrets, and
-  the icons of the Configuration dialog's categories.
+  the arrows of the sort order, the bar beside a marked row, the checks of checksums, the progress
+  bar, the mark of secrets, and the icons of the Configuration dialog's categories.
   `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and
   `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the
   viewer's `Styles`). `just glyphs`, part of `just lint`, fails on a special character written in

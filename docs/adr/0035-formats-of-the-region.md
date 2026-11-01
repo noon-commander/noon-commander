@@ -68,7 +68,7 @@ came before `file2`, and letters with accents after `z`.
   theme (`size_units`): B and K as the text, M bold, G bold in the theme's accent, T and above
   bold in red, so that big files show and the digits keep the row's colors; as
   `eza --color-scale` and `lsd` color sizes, the unit alone. Without colors, in `terminal`, M
-  and above are bold. Under the cursor and on marked rows it takes the row's colors.
+  and above are bold. Under the cursor it takes the row's colors.
 - **Fluent formats its numbers.** Both loaders, the app's and the viewer's, get
   `noc_locale::fluent` as the formatter of their bundles, renewed after every load as the
   isolation marks are. Messages take numbers as numbers, so plural forms work; the language of the

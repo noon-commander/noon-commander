@@ -36,9 +36,9 @@ lf show the user and the host too, root in red; Far puts `(Administrator)` in it
   active panel. While Noon Commander itself runs as root, the line of the mode also shows a glyph
   before `user@host`, whichever panel is active: nf-md-shield_account with icons, `#` without.
 - **The cursor of a panel where the user is root is on red**: a local panel while Noon Commander
-  runs as root, a panel on a host whose ssh user is root. Roles `root_cursor` and
-  `root_marked_cursor` take the place of `cursor` and `marked_cursor` there, the mark of a
-  marked entry still underlined; the cursor of the inactive panel, the title, and quick search
+  runs as root, a panel on a host whose ssh user is root. Role `root_cursor` takes the place of
+  `cursor` there, a marked entry still shown by the bar beside it; the cursor of the inactive
+  panel, the title, and quick search
   keep their colors. The `terminal` theme has no colors and makes that cursor bold.
   The terminal title starts with `[root]` while Noon Commander runs as root or the active panel is
   on a host as root.

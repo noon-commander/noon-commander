@@ -279,6 +279,9 @@ pub(crate) const MATCH: char = '✓';
 pub(crate) const MISMATCH: char = '✗';
 pub(crate) const SKIPPED: char = '-';
 
+/// In the frame of a panel, beside a marked row.
+pub(crate) const MARKED_ROW: char = '▌';
+
 /// The done and the rest of a progress bar.
 pub(crate) const GAUGE_DONE: &str = "█";
 pub(crate) const GAUGE_LEFT: &str = "░";
@@ -400,5 +403,6 @@ mod tests {
         for text in [GAUGE_DONE, GAUGE_LEFT, GAUGE_UNKNOWN] {
             assert_eq!(noc_text::width(text), 1, "{text:?}");
         }
+        assert_eq!(noc_text::width(&MARKED_ROW.to_string()), 1);
     }
 }

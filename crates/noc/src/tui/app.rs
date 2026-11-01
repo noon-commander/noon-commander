@@ -2467,7 +2467,6 @@ impl App {
                 | Context::CommandHistory
                 | Context::KeyHints
                 | Context::Jump
-                | Context::Checksums
         );
         if pages && matches!(action, Action::PageUp | Action::PageDown) {
             return false;
@@ -2504,10 +2503,6 @@ impl App {
             Context::CommandHistory => self.history_window.as_mut().map(HistoryWindow::picker_mut),
             Context::KeyHints => self.key_hints.as_mut().map(KeyHintsWindow::picker_mut),
             Context::Jump => self.jump.as_mut().map(JumpMenu::picker_mut),
-            Context::Checksums => self
-                .results
-                .front_mut()
-                .and_then(|results| results.window.picker_mut()),
             _ => None,
         };
         if let Some(picker) = picker {
@@ -2521,7 +2516,7 @@ impl App {
         if self.key_hints.is_some() {
             return false;
         }
-        if !self.dialogs.is_empty() || self.front() == Front::Find {
+        if !self.dialogs.is_empty() || matches!(self.front(), Front::Find | Front::Results(_)) {
             return true;
         }
         let over = self.menu.is_some()
@@ -6287,7 +6282,11 @@ impl App {
     /// to save them all.
     fn handle_results(&mut self, input: Resolved) -> Option<Vec<Effect>> {
         let results = self.results.front_mut()?;
-        match results.window.handle(input) {
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
+        match results.window.handle(typed) {
             SumsEvent::Pending => {}
             SumsEvent::Copy(row) => {
                 if let Some((_, Some(hex))) = results.lines.get(row) {

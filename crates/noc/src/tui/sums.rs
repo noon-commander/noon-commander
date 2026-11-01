@@ -142,11 +142,6 @@ impl SumsWindow {
         self.dialog.picker().map(Picker::input)
     }
 
-    /// The rows, for the count before a page key.
-    pub(crate) fn picker_mut(&mut self) -> Option<&mut Picker> {
-        self.dialog.picker_mut()
-    }
-
     /// The file under the cursor, by its index among all; none while the filter shows none.
     /// Without a picker, the first: the one file, or that of the active panel.
     fn selected(&self) -> Option<usize> {
@@ -162,15 +157,14 @@ impl SumsWindow {
     /// row or the first to the buttons, which they go through as Tab does, and `/` types in the
     /// filter; Enter or Space presses the button with the focus, or To clipboard on the rows,
     /// Alt and a letter its button; F3 views the checksums, and Esc closes the window.
-    pub(crate) fn handle(&mut self, input: Resolved) -> SumsEvent {
-        if input == Resolved::Action(Action::View) {
+    pub(crate) fn handle(&mut self, typed: Typed) -> SumsEvent {
+        if typed.resolved == Resolved::Action(Action::View) {
             return if self.view {
                 SumsEvent::View
             } else {
                 SumsEvent::Pending
             };
         }
-        let typed = Typed::from(input);
         match self.dialog.handle_typed(typed, &mut Registers::default()) {
             DialogEvent::Pressed(button) => self.press(button),
             DialogEvent::Cancelled => SumsEvent::Closed,
@@ -333,6 +327,7 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::keymap::Extra;
     use crate::tui::mouse::{Press, find};
 
     const ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -351,12 +346,12 @@ mod tests {
     }
 
     fn press(window: &mut SumsWindow, action: Action) -> SumsEvent {
-        window.handle(Resolved::Action(action))
+        window.handle(Typed::from(Resolved::Action(action)))
     }
 
     fn typed(window: &mut SumsWindow, text: &str) {
         for c in text.chars() {
-            window.handle(Resolved::Insert(c));
+            window.handle(Typed::from(Resolved::Insert(c)));
         }
     }
 
@@ -460,7 +455,10 @@ mod tests {
         let mut window = many();
         assert_eq!(window.mode(), Mode::Normal, "it opens on the rows");
         assert_eq!(window.search(), None);
-        assert_eq!(window.handle(Resolved::Insert('c')), SumsEvent::Pending);
+        assert_eq!(
+            window.handle(Typed::from(Resolved::Insert('c'))),
+            SumsEvent::Pending
+        );
         assert_eq!(
             window.selected(),
             Some(0),
@@ -519,6 +517,30 @@ mod tests {
         let mut few = many();
         draw(&mut few, 80, 18);
         assert_eq!(few.bar(), None, "three files fit");
+    }
+
+    #[test]
+    fn a_count_moves_as_many_files_or_pages() {
+        let rows = (1..=30)
+            .map(|n| row(&format!("file{n:02}"), Some(ABC), Mark::None))
+            .collect();
+        let mut window = window(rows, None, vec![Button::Ok]);
+        draw(&mut window, 80, 30);
+        let counted = |action, count| Typed {
+            resolved: Resolved::Action(action),
+            extra: Extra {
+                count: Some(count),
+                ..Extra::default()
+            },
+        };
+        window.handle(counted(Action::Down, 3));
+        assert_eq!(window.selected(), Some(3));
+        window.handle(counted(Action::PageDown, 2));
+        assert_eq!(
+            window.selected(),
+            Some(20),
+            "the top of the page two pages of ten on, as vim's Ctrl+f"
+        );
     }
 
     #[test]
@@ -583,7 +605,7 @@ mod tests {
         let mut window = many();
         press(&mut window, Action::Down);
         press(&mut window, Action::QuickSearch);
-        let mut hotkey = |c| window.handle(Resolved::Hotkey(c));
+        let mut hotkey = |c| window.handle(Typed::from(Resolved::Hotkey(c)));
         assert_eq!(
             hotkey('c'),
             SumsEvent::Copy(1),

@@ -1962,7 +1962,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mode. Long text stays where it is while the cursor shows, and else scrolls to put the cursor in
   the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
   taller than the screen scrolls between the top and the rest of the dialog, which keeps its
-  buttons, with a scroll bar on the frame that the mouse and the wheel move.
+  buttons, with a scroll bar on the frame that the mouse and the wheel move. A dialog counts its
+  own moves, the rows of its picker too (`App::counts_moves`: the dialogs of the queue, the
+  search of a tree, the window of checksums): the app gives it the count with the key, as the
+  editor of a field reads it; elsewhere, in the lists, the app repeats a motion as many times,
+  and gives a list the count before Ctrl+f or Ctrl+b, which scrolls as many pages at once.
 - **Width of a window.** `dialog::draw_box` draws the frame of every window, as wide as the
   window asks but leaving two cells free on either side of the screen, for the margin and the
   shadow (`dialog::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is

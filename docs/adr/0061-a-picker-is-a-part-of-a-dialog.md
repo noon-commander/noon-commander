@@ -2,7 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-10-31
-- Amends: [ADR 0040](0040-one-picker-for-every-list.md),
+- Amends: [ADR 0027](0027-search-of-a-whole-tree.md),
+  [ADR 0040](0040-one-picker-for-every-list.md),
   [ADR 0058](0058-the-window-of-checksums-filters-and-views-them.md)
 
 ## Context
@@ -38,7 +39,16 @@ shows, their cursor and scrolling, headings, and a footer. Neither could be the 
   picker's while its rows have the focus: Insert while its filter takes text. The cursor's row
   dims while the focus is elsewhere, as the list's does.
 - **The mouse**: a click on a row gives the rows the focus and puts the cursor there, and a double
-  click does no more; a click on a glyph of how the filter matches switches it.
+  click presses the default button too, as Enter does there; a click on a glyph of how the filter
+  matches switches it.
+- **A picker may have no filter** (`Picker::without_filter`): a line in place of the filter, every
+  row shown, its rows in Normal mode, and `/` and the keys after Ctrl+s doing nothing there. A
+  count moves as many rows, or pages. Its rows may fill the room the dialog leaves them
+  (`Body.fill`), the dialog as tall as the screen, and a window that waits for them without
+  `Loading` gives the dots, the skeleton, and the shine itself (`Body.waiting`).
+- **The list of a dialog is such a picker.** `Dialog::with_list` and its `ListView` are gone: the
+  rows of the search of a tree are a picker without a filter, whose footer is the status under
+  them; its keys are as they were.
 - **Lines of text are a part too** (`Dialog::with_text`), which do not wrap as the message does:
   a line that loses its middle where too long, as a name; text without blanks, as a checksum, in
   as few lines of equal length as it takes (`Text::Even`); and a verdict, after ✓ or ✗, bold, in
@@ -47,8 +57,8 @@ shows, their cursor and scrolling, headings, and a footer. Neither could be the 
   search of a tree: the picker for several files, and lines of text for one file or two compared.
   Its buttons are the dialog's (`To clipboard`, `All to clipboard`, `View`, `Save…`, `OK`), and a
   picker has no buttons of its own any more (`Body.buttons` is gone).
-- The other lists stay windows of their own, a `Picker` in its box (`Picker::render`); the list of
-  a dialog stays beside the picker.
+- The other lists stay windows of their own, a `Picker` in its box (`Picker::render`): without
+  buttons and with one stop, a dialog would give them nothing but its frame.
 
 ## Consequences
 
@@ -58,6 +68,6 @@ shows, their cursor and scrolling, headings, and a footer. Neither could be the 
   buttons, where they did nothing.
 - What a dialog learns, the window of checksums has; a window that wants a filter and buttons
   takes a picker in a dialog rather than drawing its own.
-- Two kinds of rows remain in dialogs, the list and the picker. Each list window could become a
-  dialog with a picker once a dialog may have no buttons, and the list of the search of a tree a
-  picker without a filter; each needs a decision of its own.
+- One kind of rows remains in dialogs, the picker, with its filter or without.
+- A double click on a row of the checksums copies its checksum, as Enter does, and Space on a row
+  of the search of a tree goes to it, as Enter does.

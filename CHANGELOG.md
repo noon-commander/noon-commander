@@ -18,8 +18,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `[< OK >]`.
 - The window of checksums is a dialog: with several files, its rows have the focus, which Tab
   takes to its buttons, as in every dialog; with one file, or two compared, the arrows move the
-  focus of its buttons
+  focus of its buttons; a double click on a row copies its checksum, as Enter does
   ([ADR 0061](docs/adr/0061-a-picker-is-a-part-of-a-dialog.md)).
+- Space on a row of the search of a tree goes to it, as Enter does.
 
 ### Fixed
 

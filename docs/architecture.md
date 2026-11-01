@@ -558,15 +558,17 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ╚════════════════════════════════════════════════════════════════════╝
 ```
 
-- A `Dialog` (`tui/dialog.rs`) with a list (`Dialog::with_list`): two fields, the text and the
+- A `Dialog` (`tui/dialog.rs`) with rows, a picker without a filter (`Picker::without_filter`,
+  `Dialog::with_picker`): two fields, the text and the
   globs of the files, split at blanks, `!` before one leaving those out; the rows; and four
   buttons. The text is a regular expression in the regex and fzf [search modes](#search-modes) and
   as it is in the plain one, with smart case; the keys after Ctrl+s in its field switch both, and
   the glyphs at the end of the field say which (`Dialog::with_search`). The globs are shell
   patterns, their field's one way, whose case the keys after Ctrl+s switch too. Both fields open
-  as they were last. With no text it lists the files. The dialog keeps
-  the cursor of the rows and scrolls them; `FindWindow` (`tui/find.rs`) keeps what was found and
-  draws each row (`ListView`).
+  as they were last. With no text it lists the files. The picker keeps
+  the cursor of the rows and scrolls them, its rows filling the room the dialog leaves them
+  (`Body.fill`); `FindWindow` (`tui/find.rs`) keeps what was found, gives the picker as many
+  rows, and draws each row.
 - Two modes, in a combo box above the fields (Mode, [ADR 0057](adr/0057-combo-boxes.md)): Text,
   with ripgrep (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons
   are Go to

@@ -1263,7 +1263,8 @@ and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks
 text in a dialog first. Its other mode, Files and dirs, in the combo box Mode above the fields,
 finds files and directories by name with fd, and Go to goes into a directory; f f, or F9 → Command →
 Find files and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to
-`dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them.
+`dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them;
+Enter and Space on a row go to it.
 F3 and F4 work wherever the focus is, but in the open list of the modes (`combo_box`). In the field
 of the text, Ctrl+s and a letter take it as it is or as a
 regular expression and switch its case (`search_input`); in the field of the globs, shell patterns,

@@ -1,5 +1,5 @@
 //! Modal dialogs: prompts from ssh (passwords and passphrases, host keys, confirmations, and
-//! notices), the app's own questions, and the search of a whole tree, whose dialog has a list.
+//! notices), the app's own questions, and the search of a whole tree, whose dialog has rows (a picker without a filter).
 //! As in mc and Far, Alt and the letter that an `&` marks in a label act on what it labels:
 //! press a button, switch a check box, open a combo box, or put the focus in a field.
 
@@ -27,7 +27,6 @@ use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
 use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::picker::{Body, Pick, Picker, ShownRow};
-use super::scroll::Window;
 use super::search::{GlyphSpots, Input, Kind, Switch};
 use super::spinner::Shine;
 use super::theme::{self, Theme};
@@ -94,7 +93,7 @@ pub(crate) enum Button {
     Rename,
     /// Take what the panel shows.
     UseCurrent,
-    /// Go to the row of the list, as in mc's results of Find File; or to a path typed.
+    /// Go to the row, as in mc's results of Find File; or to a path typed.
     GoTo,
     /// View the file of the row.
     View,
@@ -154,8 +153,7 @@ enum Focus {
     Field(usize),
     Check(usize),
     Item(usize),
-    List,
-    /// The rows of the picker, under its filter.
+    /// The rows of the picker.
     Picker,
     Button(usize),
 }
@@ -606,39 +604,6 @@ enum Part {
     Line,
 }
 
-/// Rows under the check boxes, which whoever opened the dialog draws at each render
-/// ([`ListView`]); the dialog moves the cursor over them and scrolls them as vim's window.
-#[derive(Debug, Default)]
-struct List {
-    len: usize,
-    cursor: Cell<usize>,
-    window: Cell<Window>,
-    /// How many rows showed at the last render.
-    page: Cell<usize>,
-    /// Where each row that showed was drawn, by its index, for the mouse.
-    rows: RefCell<Vec<(usize, Rect)>>,
-    bar: Cell<Option<Bar>>,
-}
-
-/// What the list of a dialog shows at a render.
-pub(crate) struct ListView<'a> {
-    /// Draws the row at an index in so many cells, in a style: the dialog's, or the cursor's.
-    pub(crate) row: &'a dyn Fn(usize, usize, Style) -> Line<'static>,
-    /// Shown in place of the rows, such as why there are none.
-    pub(crate) note: Option<String>,
-    /// Lines under the rows, apart from them, cut at their end where too long.
-    pub(crate) status: Vec<String>,
-    /// Whether the first of them is still to come: a skeleton stands in its place, crossed by
-    /// the shine.
-    pub(crate) counting: bool,
-    /// Turning in front of the title while the list waits for more, in their color.
-    pub(crate) dots: Option<(char, Style)>,
-    /// Whether the first rows are still to come: a skeleton stands in their place.
-    pub(crate) waiting: bool,
-    /// The shine that crosses the skeleton.
-    pub(crate) shine: Option<Shine>,
-}
-
 /// What the picker of a dialog draws at a render: the picker, which the dialog lends for it,
 /// its lines and what goes under them, and how each row looks.
 struct PickerDraw<'a, 'b> {
@@ -661,8 +626,8 @@ pub(crate) enum DialogEvent {
     Cancelled,
 }
 
-/// A modal dialog: a message, combo boxes, text fields, check boxes, lines of text, a list or a
-/// picker, and buttons, each of them optional but the buttons. Whoever opens it reads the
+/// A modal dialog: a message, combo boxes, text fields, check boxes, lines of text, a picker,
+/// and buttons, each of them optional but the buttons. Whoever opens it reads the
 /// choices of the combo boxes, the fields, and the check boxes once it closes.
 #[derive(Debug)]
 pub(crate) struct Dialog {
@@ -705,7 +670,6 @@ pub(crate) struct Dialog {
     page: Cell<usize>,
     /// The scroll bar of such a message at the last render, on the right of the frame.
     bar: Cell<Option<Bar>>,
-    list: Option<List>,
     /// While its rows have the focus, the motions move their cursor, which Tab leaves, and what
     /// is typed goes to its filter after `/`.
     picker: Option<Box<Picker>>,
@@ -921,7 +885,6 @@ impl Dialog {
             offset: Cell::new(0),
             page: Cell::new(1),
             bar: Cell::new(None),
-            list: None,
             picker: None,
             picker_area: Cell::new(None),
         }
@@ -1009,100 +972,6 @@ impl Dialog {
         field
             .editor
             .replace(&format!("{before}{after}"), before.chars().count());
-    }
-
-    /// The same dialog with a list under its check boxes, as tall as the room lets it be.
-    pub(crate) fn with_list(mut self) -> Self {
-        self.list = Some(List::default());
-        self
-    }
-
-    /// Makes the list `len` rows long, keeping the cursor inside.
-    pub(crate) fn set_list_len(&mut self, len: usize) {
-        if let Some(list) = &mut self.list {
-            list.len = len;
-            list.cursor
-                .set(list.cursor.get().min(len.saturating_sub(1)));
-        }
-    }
-
-    /// The row of the list under the cursor.
-    pub(crate) fn list_cursor(&self) -> usize {
-        self.list.as_ref().map_or(0, |list| list.cursor.get())
-    }
-
-    /// Puts the cursor of the list on row `index`, where it stays as rows come in before it.
-    pub(crate) fn set_list_cursor(&mut self, index: usize) {
-        if let Some(list) = &mut self.list {
-            list.cursor.set(index.min(list.len.saturating_sub(1)));
-        }
-    }
-
-    /// Shows the list from its cursor again at the next render, as for a new listing.
-    pub(crate) fn unsettle_list(&mut self) {
-        if let Some(list) = &mut self.list {
-            list.window.get_mut().unsettle();
-        }
-    }
-
-    /// The scroll bar of the list at the last render, for the mouse.
-    pub(crate) fn list_bar(&self) -> Option<Bar> {
-        self.list.as_ref().and_then(|list| list.bar.get())
-    }
-
-    /// Shows the rows of the list from `top`, where the thumb of its scroll bar was dragged.
-    pub(crate) fn scroll_list_to(&mut self, top: usize) {
-        self.with_list_window(|window, cursor, len, page| {
-            window.scroll_to(top, cursor, len, page);
-        });
-    }
-
-    /// A step of the wheel over the list: Up and Down scroll it `count` rows, keeping the
-    /// cursor inside, and the page keys move it a page.
-    pub(crate) fn wheel_list(&mut self, action: Action, count: usize) {
-        self.with_list_window(|window, cursor, len, page| match action {
-            Action::Up | Action::Down => {
-                window.scroll(action == Action::Down, count, cursor, len, page);
-            }
-            Action::PageUp | Action::PageDown => {
-                window.page(action == Action::PageDown, count, cursor, len, page);
-            }
-            _ => {}
-        });
-    }
-
-    /// Runs `f` on the window of the list, its cursor, its length, and its page.
-    fn with_list_window(&mut self, f: impl FnOnce(&mut Window, &mut usize, usize, usize)) {
-        let Some(list) = &mut self.list else {
-            return;
-        };
-        let (len, page) = (list.len, list.page.get().max(1));
-        f(list.window.get_mut(), list.cursor.get_mut(), len, page);
-    }
-
-    /// Moves the cursor of the list as `action` says, as many rows or pages as `extra`
-    /// counts; whether `action` moves it.
-    fn move_in_list(&mut self, action: Action, extra: Extra) -> bool {
-        let times = extra.times();
-        let last = self
-            .list
-            .as_ref()
-            .map_or(0, |list| list.len.saturating_sub(1));
-        let mut moves = true;
-        self.with_list_window(|window, cursor, len, page| match action {
-            Action::Up => *cursor = cursor.saturating_sub(times),
-            Action::Down => *cursor = cursor.saturating_add(times).min(last),
-            Action::Home => *cursor = 0,
-            Action::End => *cursor = last,
-            Action::PageUp | Action::PageDown => {
-                window.page(action == Action::PageDown, times, cursor, len, page);
-            }
-            Action::HalfPageUp | Action::HalfPageDown => {
-                window.half_page(action == Action::HalfPageDown, cursor, len, page);
-            }
-            _ => moves = false,
-        });
-        moves && self.list.is_some()
     }
 
     /// The same dialog with `message` above the rest.
@@ -1249,11 +1118,7 @@ impl Dialog {
         match self.focus {
             Focus::Field(index) => Some(self.fields.get(index)?.search?.kind()),
             Focus::Picker => self.picker.as_ref()?.search(),
-            Focus::ComboBox(_)
-            | Focus::Check(_)
-            | Focus::Item(_)
-            | Focus::List
-            | Focus::Button(_) => None,
+            Focus::ComboBox(_) | Focus::Check(_) | Focus::Item(_) | Focus::Button(_) => None,
         }
     }
 
@@ -1285,7 +1150,6 @@ impl Dialog {
             Focus::ComboBox(_)
             | Focus::Check(_)
             | Focus::Item(_)
-            | Focus::List
             | Focus::Picker
             | Focus::Button(_) => Context::Dialog,
         }
@@ -1347,7 +1211,6 @@ impl Dialog {
             Focus::ComboBox(_)
             | Focus::Check(_)
             | Focus::Item(_)
-            | Focus::List
             | Focus::Picker
             | Focus::Button(_) => None,
         }
@@ -1359,7 +1222,6 @@ impl Dialog {
             Focus::ComboBox(_)
             | Focus::Check(_)
             | Focus::Item(_)
-            | Focus::List
             | Focus::Picker
             | Focus::Button(_) => None,
         }
@@ -1394,7 +1256,7 @@ impl Dialog {
         if let Resolved::Hotkey(c) = resolved {
             return self.hotkey(c);
         }
-        if let Some(event) = self.handle_picker(resolved) {
+        if let Some(event) = self.handle_picker(resolved, extra) {
             return event;
         }
         let action = match (resolved, self.focused_field_mut()) {
@@ -1420,10 +1282,6 @@ impl Dialog {
             }
             (Resolved::Action(action), None) => action,
         };
-        // The keys that move the focus move the cursor of the list, which Tab leaves.
-        if self.focus == Focus::List && self.move_in_list(action, extra) {
-            return DialogEvent::Pending;
-        }
         if let Some(switch) = Switch::of(action) {
             if let Focus::Field(index) = self.focus {
                 self.switch_search(index, switch);
@@ -1434,11 +1292,9 @@ impl Dialog {
             Action::Confirm => match self.focus {
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
                 Focus::Item(index) => DialogEvent::Opened(index),
-                Focus::ComboBox(_)
-                | Focus::Field(_)
-                | Focus::Check(_)
-                | Focus::List
-                | Focus::Picker => DialogEvent::Pressed(self.buttons[self.default]),
+                Focus::ComboBox(_) | Focus::Field(_) | Focus::Check(_) | Focus::Picker => {
+                    DialogEvent::Pressed(self.buttons[self.default])
+                }
             },
             Action::Toggle => match self.focus {
                 Focus::ComboBox(index) => {
@@ -1451,7 +1307,7 @@ impl Dialog {
                 }
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),
                 Focus::Item(index) => DialogEvent::Opened(index),
-                Focus::Field(_) | Focus::List => DialogEvent::Pending,
+                Focus::Field(_) => DialogEvent::Pending,
                 // Space on a row takes it, as Enter does.
                 Focus::Picker => DialogEvent::Pressed(self.buttons[self.default]),
             },
@@ -1478,26 +1334,40 @@ impl Dialog {
     }
 
     /// Gives a key to the picker, if there is one. `/` brings the focus to its rows, typing in
-    /// its filter. While they have the focus they take every key but Enter, Space, Tab, and
-    /// Shift+Tab, which leave them as the list's do: the motions move the cursor and stop at the
-    /// first row and the last, Left and Right go to the stop before or after while the filter
-    /// takes nothing, and Esc on the rows closes the dialog. `None` for a key the dialog takes.
-    fn handle_picker(&mut self, resolved: Resolved) -> Option<DialogEvent> {
-        self.picker.as_ref()?;
+    /// its filter, if it has one. While they have the focus they take every key but Enter,
+    /// Space, Tab, and Shift+Tab, which leave them: the motions move the cursor, as many rows as
+    /// a count says, and stop at the first row and the last, Left and Right go to the stop before
+    /// or after while the filter takes nothing, and Esc on the rows closes the dialog. `None`
+    /// for a key the dialog takes.
+    fn handle_picker(&mut self, resolved: Resolved, extra: Extra) -> Option<DialogEvent> {
+        let filters = self.picker.as_ref()?.has_filter();
         if self.focus != Focus::Picker {
-            if resolved != Resolved::Action(Action::QuickSearch) || self.focused_field().is_some() {
+            if resolved != Resolved::Action(Action::QuickSearch)
+                || !filters
+                || self.focused_field().is_some()
+            {
                 return None;
             }
             self.focus_on(Focus::Picker, Mode::Normal);
         }
         let picker = self.picker.as_mut()?;
-        if let Resolved::Action(
-            Action::Confirm | Action::Toggle | Action::NextField | Action::PrevField,
-        ) = resolved
-        {
-            return None;
+        let times = match resolved {
+            Resolved::Action(
+                Action::Confirm | Action::Toggle | Action::NextField | Action::PrevField,
+            ) => return None,
+            // A count moves as many rows, or pages, as vim's `3j` moves three lines.
+            Resolved::Action(Action::Up | Action::Down) => extra.times(),
+            Resolved::Action(Action::PageUp | Action::PageDown) => {
+                picker.count_pages(extra.times());
+                1
+            }
+            _ => 1,
+        };
+        let mut pick = Pick::Pending;
+        for _ in 0..times {
+            pick = picker.handle(resolved);
         }
-        match picker.handle(resolved) {
+        match pick {
             Pick::Closed => Some(DialogEvent::Cancelled),
             Pick::Other(Action::Left | Action::Right) => None,
             Pick::Pending | Pick::Filtered | Pick::Chosen(_) | Pick::Other(_) => {
@@ -1520,7 +1390,7 @@ impl Dialog {
                 Focus::Field(index) => self.fields[index].label.has(c),
                 Focus::Check(index) => self.checks[index].label.has(c),
                 Focus::Item(index) => self.items[index].label.has(c),
-                Focus::List | Focus::Picker => false,
+                Focus::Picker => false,
                 Focus::Button(index) => self.buttons[index].label().has(c),
             })
         };
@@ -1536,7 +1406,7 @@ impl Dialog {
             Focus::ComboBox(index) => self.combo_boxes[index].combo.open(),
             Focus::Check(index) => self.checks[index].on = !self.checks[index].on,
             Focus::Item(index) => return DialogEvent::Opened(index),
-            Focus::Field(_) | Focus::List | Focus::Picker | Focus::Button(_) => {}
+            Focus::Field(_) | Focus::Picker | Focus::Button(_) => {}
         }
         DialogEvent::Pending
     }
@@ -1551,7 +1421,7 @@ impl Dialog {
             Focus::Field(index) => self.fields[index].label.letter(),
             Focus::Check(index) => self.checks[index].label.letter(),
             Focus::Item(index) => self.items[index].label.letter(),
-            Focus::List | Focus::Picker => None,
+            Focus::Picker => None,
             Focus::Button(index) => self.buttons[index].label().letter(),
         });
         prompt.into_iter().chain(stops).flatten().collect()
@@ -1559,9 +1429,8 @@ impl Dialog {
 
     /// Takes a press of the mouse, where the dialog was drawn last: a click opens the list of a
     /// combo box, puts the cursor in a field or on a row of the list, switches a check box,
-    /// opens an item, or presses a button. A double click on a row of the list presses the
-    /// default button too, as Enter does there; on a row of the picker it does no more than a
-    /// click, which puts the cursor there. A click on a glyph at the end of a field that searches gives it the focus and
+    /// opens an item, or presses a button. A click on a row of the picker puts its cursor there,
+    /// and a double click presses the default button too, as Enter does there. A click on a glyph at the end of a field that searches gives it the focus and
     /// switches whether case counts, or how it matches, as the keys after Ctrl+s do there. The
     /// open list of a combo box takes every press, and the second click of a double click that
     /// closed it does nothing.
@@ -1594,42 +1463,8 @@ impl Dialog {
             }
             return DialogEvent::Pending;
         }
-        if self.picker.is_some() && self.picker_area.get().is_some_and(|area| area.contains(at)) {
-            if !matches!(press, Press::Click | Press::DoubleClick) {
-                return DialogEvent::Pending;
-            }
-            if self.focus != Focus::Picker {
-                self.leave_field();
-                self.focus = Focus::Picker;
-            }
-            // A click puts the cursor on a row, and one on a glyph of how the filter matches
-            // switches it; a double click on a row presses no button.
-            if let Some(picker) = &mut self.picker
-                && let Some(action) = picker.pointer(pointer)
-                && Switch::of(action).is_some()
-            {
-                picker.handle(Resolved::Action(action));
-            }
-            return DialogEvent::Pending;
-        }
-        let row = self.list.as_ref().and_then(|list| {
-            let rows = list.rows.borrow();
-            rows.iter()
-                .find(|(_, area)| area.contains(at))
-                .map(|(row, _)| *row)
-        });
-        if let Some(row) = row
-            && matches!(press, Press::Click | Press::DoubleClick)
-        {
-            if self.focus != Focus::List {
-                self.leave_field();
-                self.focus = Focus::List;
-            }
-            self.set_list_cursor(row);
-            if press == Press::DoubleClick {
-                return DialogEvent::Pressed(self.buttons[self.default]);
-            }
-            return DialogEvent::Pending;
+        if self.picker_area.get().is_some_and(|area| area.contains(at)) {
+            return self.press_picker(pointer);
         }
         let spot = self
             .spots
@@ -1656,7 +1491,7 @@ impl Dialog {
                 }
             }
             Focus::Check(index) => self.checks[index].on = !self.checks[index].on,
-            Focus::List | Focus::Picker => {}
+            Focus::Picker => {}
             // The first click pressed it, or opened it.
             Focus::Button(_) | Focus::Item(_) if press == Press::DoubleClick => {}
             Focus::Button(index) => return DialogEvent::Pressed(self.buttons[index]),
@@ -1665,9 +1500,37 @@ impl Dialog {
         DialogEvent::Pending
     }
 
+    /// A press of the mouse on the picker: a click on a row puts the cursor there, and a double
+    /// click presses the default button too, as Enter does there; a click on a glyph of how its
+    /// filter matches switches it. Either gives its rows the focus.
+    fn press_picker(&mut self, pointer: Pointer) -> DialogEvent {
+        if !matches!(pointer.press, Press::Click | Press::DoubleClick) {
+            return DialogEvent::Pending;
+        }
+        let Some(picker) = &mut self.picker else {
+            return DialogEvent::Pending;
+        };
+        let row = picker.row_at(pointer.at);
+        let action = picker.pointer(pointer);
+        let switch = action.and_then(Switch::of);
+        if !row && switch.is_none() {
+            return DialogEvent::Pending;
+        }
+        if self.focus != Focus::Picker {
+            self.leave_field();
+            self.focus = Focus::Picker;
+        }
+        if let (Some(action), Some(_), Some(picker)) = (action, switch, &mut self.picker) {
+            picker.handle(Resolved::Action(action));
+        }
+        if row && pointer.press == Press::DoubleClick && !self.buttons.is_empty() {
+            return DialogEvent::Pressed(self.buttons[self.default]);
+        }
+        DialogEvent::Pending
+    }
+
     /// Where the focus can be: the combo boxes, the fields that are not disabled, the check
-    /// boxes, the items, and the rows of the picker, top to bottom, then the list and the
-    /// buttons.
+    /// boxes, the items, and the rows of the picker, top to bottom, then the buttons.
     fn stops(&self) -> Vec<Focus> {
         self.parts
             .iter()
@@ -1679,7 +1542,6 @@ impl Dialog {
                 Part::Picker => self.picker.as_ref().map(|_| Focus::Picker),
                 Part::Field(_) | Part::Text(_) | Part::Separator | Part::Line => None,
             })
-            .chain(self.list.as_ref().map(|_| Focus::List))
             .chain((0..self.buttons.len()).map(Focus::Button))
             .collect()
     }
@@ -1759,25 +1621,13 @@ impl Dialog {
 
     /// Draws the dialog centered in `area`, with the terminal cursor in the focused field.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        self.render_with(frame, area, theme, None, None);
+        self.render_with(frame, area, theme, None);
     }
 
     /// Draws the dialog as [`render`](Self::render) does, but under another, which has the
     /// keys: without the terminal cursor and the open list of a combo box.
     pub(crate) fn render_under(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        self.draw_parts(frame, area, theme, None, None);
-    }
-
-    /// Draws the dialog as [`render`](Self::render) does, as tall as `area`, with its list
-    /// as `list` shows it.
-    pub(crate) fn render_list(
-        &self,
-        frame: &mut Frame<'_>,
-        area: Rect,
-        theme: &Theme,
-        list: &ListView<'_>,
-    ) {
-        self.render_with(frame, area, theme, Some(list), None);
+        self.draw_parts(frame, area, theme, None);
     }
 
     /// Draws the dialog as [`render`](Self::render) does, with the lines of its picker and
@@ -1800,7 +1650,7 @@ impl Dialog {
             body: Some(body),
             row,
         };
-        self.render_with(frame, area, theme, None, Some(draw));
+        self.render_with(frame, area, theme, Some(draw));
         self.picker = Some(picker);
     }
 
@@ -1811,10 +1661,9 @@ impl Dialog {
         frame: &mut Frame<'_>,
         area: Rect,
         theme: &Theme,
-        list: Option<&ListView<'_>>,
         picker: Option<PickerDraw<'_, '_>>,
     ) {
-        self.draw_parts(frame, area, theme, list, picker);
+        self.draw_parts(frame, area, theme, picker);
         if let Some(cursor) = self.cursor.get() {
             frame.set_cursor_position(cursor);
         }
@@ -1828,7 +1677,6 @@ impl Dialog {
         frame: &mut Frame<'_>,
         area: Rect,
         theme: &Theme,
-        list: Option<&ListView<'_>>,
         mut picker: Option<PickerDraw<'_, '_>>,
     ) {
         let width = self.box_width(area);
@@ -1839,27 +1687,26 @@ impl Dialog {
             self.message.wrap(text_width)
         };
         let rows = |count: usize| u16::try_from(count).unwrap_or(u16::MAX);
-        let picker_rows = (picker.as_ref())
-            .and_then(|draw| draw.body.as_ref())
-            .map_or(0, Body::height);
+        let body = picker
+            .as_ref()
+            .and_then(|draw| Some((&*draw.picker, draw.body.as_ref()?)));
+        let picker_rows = body.map_or(0, |(picker, body)| picker.height(body));
+        let fill = body.is_some_and(|(_, body)| body.fill);
+        let dots = body.and_then(|(_, body)| body.dots());
         // Borders, the message, the parts under it, a line, the buttons.
         let height = self.parts.iter().fold(rows(lines.len()), |height, &part| {
             height.saturating_add(self.part_rows(part, text_width, picker_rows))
         });
-        // A line, a row at least, and a line over the status, under the rest.
-        let below = list.map_or(0, |list| match list.status.len() {
-            0 => 2,
-            status => rows(status).saturating_add(3),
-        });
         let colors = Colors::of(theme, self.tone);
-        let size = if list.is_some() {
+        // Rows that fill the room make the dialog as tall as the screen.
+        let size = if fill {
             (width, u16::MAX)
         } else {
             (width, height + 4)
         };
         let inner = draw_box(frame, area, size, &self.title, colors, theme);
-        if let Some(dots) = list.and_then(|list| list.dots) {
-            draw_title_dots(frame, inner, &self.title, dots, colors);
+        if let Some(dots) = dots {
+            draw_title_dots(frame, inner, &self.title, (dots, theme.busy_dialog), colors);
         }
         let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         let mut spots = self.spots.borrow_mut();
@@ -1868,10 +1715,7 @@ impl Dialog {
         self.cursor.set(None);
         self.picker_area.set(None);
         // The line and the buttons below the rest.
-        let rest = height
-            .saturating_sub(rows(lines.len()))
-            .saturating_add(2)
-            .saturating_add(below);
+        let rest = height.saturating_sub(rows(lines.len())).saturating_add(2);
         let message = (lines.as_slice(), letter);
         let mut index = self.render_message(frame, inner, message, rest, colors, theme);
         let style = (colors, theme);
@@ -1880,12 +1724,6 @@ impl Dialog {
             return;
         };
         index = after;
-        if let Some(view) = list {
-            let Some(end) = self.draw_list_part(frame, (inner, index), view, colors, theme) else {
-                return;
-            };
-            index = end;
-        }
         if index + 1 < inner.height {
             draw_separator(frame, inner, inner.y + index, colors, theme);
             let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
@@ -1895,7 +1733,6 @@ impl Dialog {
                 | Focus::Field(_)
                 | Focus::Check(_)
                 | Focus::Item(_)
-                | Focus::List
                 | Focus::Picker => None,
             };
             let line = button_line(&labels, self.default, focus, colors);
@@ -2020,11 +1857,17 @@ impl Dialog {
                     let Some(body) = draw.body.take() else {
                         continue;
                     };
-                    // Its rows give way to the line and the buttons under it.
-                    let height = body.height().min(inner.height.saturating_sub(index + 2));
+                    // Its rows give way to the line and the buttons under it, or take all the
+                    // room they leave.
+                    let room = inner.height.saturating_sub(index + 2);
+                    let height = if body.fill {
+                        room
+                    } else {
+                        draw.picker.height(&body).min(room)
+                    };
                     let area = Rect::new(inner.x, inner.y + index, inner.width, height);
                     self.picker_area.set(Some(area));
-                    // The cursor's row dims while the focus is elsewhere, as the list's.
+                    // The cursor's row dims while the focus is elsewhere.
                     let focused = self.focus == Focus::Picker;
                     let row = &mut *draw.row;
                     let mut row = |shown: ShownRow| {
@@ -2188,114 +2031,6 @@ impl Dialog {
         spans.extend(boxed);
         frame.render_widget(Line::from(spans).style(colors.body), row);
         spots.push((Focus::ComboBox(number), row));
-    }
-
-    /// Draws the list from row `index` of `inner`, the room inside the frame, to the line over
-    /// the buttons: a line, the rows, and the status of `view` over a line of its own. Returns
-    /// where the buttons go, or `None` without room for a row.
-    fn draw_list_part(
-        &self,
-        frame: &mut Frame<'_>,
-        (inner, index): (Rect, u16),
-        view: &ListView<'_>,
-        colors: Colors,
-        theme: &Theme,
-    ) -> Option<u16> {
-        let row = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        let status = u16::try_from(view.status.len()).unwrap_or(u16::MAX);
-        // The rows take what the buttons and the status leave them.
-        let end = inner.height.saturating_sub(match status {
-            0 => 2,
-            _ => status.saturating_add(3),
-        });
-        if index + 1 >= end {
-            return None;
-        }
-        draw_separator(frame, inner, inner.y + index, colors, theme);
-        let area = Rect::new(inner.x, inner.y + index + 1, inner.width, end - index - 1);
-        self.draw_list(frame, area, view, colors, theme);
-        let mut index = end;
-        if status > 0 {
-            draw_separator(frame, inner, inner.y + index, colors, theme);
-            let cut = (cells::Align::Left, cells::Cut::End);
-            let width = usize::from(inner.width);
-            for (number, text) in view.status.iter().enumerate() {
-                index += 1;
-                let marks = theme.glyphs.marks;
-                let line = if number == 0 && view.counting {
-                    status_skeleton(inner.width, colors.body, theme, view.shine)
-                } else {
-                    cells::fitted(text, width, cut, colors.body_styles(), marks)
-                };
-                frame.render_widget(line.style(colors.body), row(index));
-            }
-            index += 1;
-        }
-        Some(index)
-    }
-
-    /// Draws the rows of the list in `area`, scrolled to the cursor, with a scroll bar on the
-    /// right of the frame; or the skeleton or the note of `view` in place of them. The cursor's
-    /// row is in the color of the focus, dimmed while the focus is elsewhere.
-    fn draw_list(
-        &self,
-        frame: &mut Frame<'_>,
-        area: Rect,
-        view: &ListView<'_>,
-        colors: Colors,
-        theme: &Theme,
-    ) {
-        let Some(list) = &self.list else {
-            return;
-        };
-        let mut drawn = list.rows.borrow_mut();
-        drawn.clear();
-        list.bar.set(None);
-        let page = usize::from(area.height).max(1);
-        list.page.set(page);
-        let width = usize::from(area.width);
-        let line = |offset: usize| {
-            let y = area.y + u16::try_from(offset).unwrap_or(u16::MAX);
-            Rect::new(area.x, y, area.width, 1)
-        };
-        if view.waiting {
-            draw_skeleton(frame, line(0), theme, view.shine);
-            return;
-        }
-        if let Some(note) = &view.note {
-            for (offset, text) in cells::wrap(note, width).into_iter().take(page).enumerate() {
-                frame.render_widget(Line::styled(text, colors.body), line(offset));
-            }
-            return;
-        }
-        let (mut cursor, mut window) = (list.cursor.get(), list.window.get());
-        window.follow(&mut cursor, list.len, page);
-        list.cursor.set(cursor);
-        list.window.set(window);
-        let top = window.top();
-        let bar = right_frame(area, area.y, area.height);
-        let position = (list.len, page, top);
-        list.bar.set(scrollbar::render(
-            frame,
-            bar,
-            position,
-            colors.body,
-            theme.glyphs.scroll_bar,
-        ));
-        let cursor_style = if self.focus == Focus::List {
-            colors.focused
-        } else {
-            colors.focused.add_modifier(Modifier::DIM)
-        };
-        for (offset, index) in (top..list.len).take(page).enumerate() {
-            let style = if index == cursor {
-                cursor_style
-            } else {
-                colors.body
-            };
-            frame.render_widget((view.row)(index, width, style), line(offset));
-            drawn.push((index, line(offset)));
-        }
     }
 }
 
@@ -2536,13 +2271,6 @@ pub(crate) fn draw_title_dots(
     frame.render_widget(line, area);
 }
 
-/// Where the rows go in `inner`, the room inside a window's box: under its first line and the
-/// line under that, above the last `below` lines.
-pub(crate) fn rows_area(inner: Rect, below: u16) -> Rect {
-    let height = inner.height.saturating_sub(2 + below);
-    Rect::new(inner.x, inner.y + 2, inner.width, height)
-}
-
 /// Rows a window shows while its first ones are still to come, the first time it opens; then as
 /// many as came the last time.
 pub(crate) const SKELETON_ROWS: u16 = 1;
@@ -2590,7 +2318,12 @@ pub(crate) fn draw_skeleton(
 /// A skeleton of a line of status over `width` cells, such as how many a search found, in the
 /// colors of `style`: a faint bar from the left edge, as long as the right bar of a skeleton row.
 /// A `shine`, if any, crosses it with the bars of a skeleton row over as many cells.
-fn status_skeleton(width: u16, style: Style, theme: &Theme, shine: Option<Shine>) -> Line<'static> {
+pub(crate) fn status_skeleton(
+    width: u16,
+    style: Style,
+    theme: &Theme,
+    shine: Option<Shine>,
+) -> Line<'static> {
     let length = if width < 8 {
         0
     } else {
@@ -3670,7 +3403,7 @@ mod tests {
     }
 
     #[test]
-    fn a_click_on_a_row_of_the_picker_moves_its_cursor_and_one_on_a_button_presses_it() {
+    fn clicks_on_the_rows_of_a_picker_move_its_cursor_and_press_the_buttons() {
         let mut dialog = with_picker();
         let terminal = draw_picker(&mut dialog);
         let screen = terminal.backend().to_string();
@@ -3692,8 +3425,8 @@ mod tests {
         };
         assert_eq!(
             dialog.pointer(double),
-            DialogEvent::Pending,
-            "no button pressed"
+            DialogEvent::Pressed(Button::Ok),
+            "as Enter there"
         );
         assert_eq!(dialog.picker().unwrap().cursor(), 0);
         assert_eq!(
@@ -4218,53 +3951,55 @@ mod tests {
         assert_eq!(dialog.text_of(2), "");
     }
 
-    /// A dialog with a field, a check box, a list of `len` rows, and OK and Cancel.
+    /// A dialog with a field, a check box, `len` rows without a filter, and OK and Cancel.
     fn with_rows(len: usize) -> Dialog {
         let fields = [("Text:".to_owned(), String::new())];
         let checks = [("Case".to_owned(), false)];
-        let mut dialog = Dialog::fields("Find", &fields, &checks, vec![Button::Ok, Button::Cancel])
+        let mut picker = Picker::without_filter();
+        picker.set_rows(vec![Vec::new(); len]);
+        Dialog::fields("Find", &fields, &checks, vec![Button::Ok, Button::Cancel])
             .with_width(40)
-            .with_list();
-        dialog.set_list_len(len);
-        dialog
+            .with_picker(picker)
     }
 
-    fn draw_rows(dialog: &Dialog, note: Option<&str>) -> Terminal<TestBackend> {
-        let row =
-            |index: usize, _: usize, style: Style| Line::styled(format!("row {index}"), style);
-        let view = ListView {
-            row: &row,
-            note: note.map(str::to_owned),
-            status: vec!["30 rows".to_owned()],
-            counting: false,
-            dots: None,
-            waiting: false,
-            shine: None,
-        };
+    fn draw_rows(dialog: &mut Dialog, message: Option<&str>) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(40, 16)).unwrap();
         terminal
-            .draw(|frame| dialog.render_list(frame, frame.area(), &Theme::terminal(), &view))
+            .draw(|frame| {
+                let len = dialog.picker().unwrap().len();
+                let lines: Vec<_> = (0..len).map(MenuLine::Row).collect();
+                let body = Body {
+                    lines: &lines,
+                    message: message.map(str::to_owned),
+                    footer: vec![Line::raw("30 rows")],
+                    fill: true,
+                    ..Body::default()
+                };
+                let theme = Theme::terminal();
+                dialog.render_picker(frame, frame.area(), &theme, body, &mut |row| {
+                    Line::raw(format!("row {}", row.index))
+                });
+            })
             .unwrap();
         terminal
     }
 
     #[test]
-    fn a_list_is_a_stop_whose_motions_move_its_cursor() {
+    fn rows_without_a_filter_are_a_stop_whose_motions_move_their_cursor() {
         let mut dialog = with_rows(30);
-        let screen = draw_rows(&dialog, None).backend().to_string();
+        let screen = draw_rows(&mut dialog, None).backend().to_string();
         assert!(
             screen.contains("row 0") && screen.contains("30 rows"),
             "{screen}"
         );
+        assert!(!screen.contains("Filter"), "no filter: {screen}");
+        let cursor = |dialog: &Dialog| dialog.picker().unwrap().cursor();
         dialog.handle(action(Action::NextField));
         dialog.handle(action(Action::NextField));
         assert_eq!(dialog.context(), Context::Dialog);
+        assert_eq!(dialog.mode(), Mode::Normal);
         dialog.handle(action(Action::Down));
-        assert_eq!(
-            dialog.list_cursor(),
-            1,
-            "Down moves the cursor, not the focus"
-        );
+        assert_eq!(cursor(&dialog), 1, "Down moves the cursor, not the focus");
         let three = Extra {
             count: Some(3),
             ..Extra::default()
@@ -4274,26 +4009,30 @@ mod tests {
             extra: three,
         };
         dialog.handle_typed(down, &mut Registers::default());
-        assert_eq!(dialog.list_cursor(), 4);
+        assert_eq!(cursor(&dialog), 4);
+        // Nothing to type in, nor a filter to bring the focus to.
+        dialog.handle(Resolved::Insert('x'));
+        dialog.handle(action(Action::QuickSearch));
+        assert_eq!((dialog.focus, dialog.mode()), (Focus::Picker, Mode::Normal));
         dialog.handle(action(Action::End));
-        assert_eq!(dialog.list_cursor(), 29);
-        let screen = draw_rows(&dialog, None).backend().to_string();
+        dialog.handle(action(Action::Down));
+        assert_eq!(cursor(&dialog), 29, "the motions stop at the last row");
+        let screen = draw_rows(&mut dialog, None).backend().to_string();
         assert!(
             screen.contains("row 29") && !screen.contains("row 0 "),
             "{screen}"
         );
         dialog.handle(action(Action::Home));
-        assert_eq!(dialog.list_cursor(), 0);
+        assert_eq!(cursor(&dialog), 0);
         assert_eq!(
             dialog.handle(action(Action::Confirm)),
             DialogEvent::Pressed(Button::Ok),
             "Enter presses the default button"
         );
-        // Fewer rows keep the cursor inside; Tab goes on to the buttons.
-        dialog.set_list_cursor(20);
-        dialog.set_list_len(5);
-        assert_eq!(dialog.list_cursor(), 4);
+        // Tab goes on to the buttons, and `/` there does not come back.
         dialog.handle(action(Action::NextField));
+        dialog.handle(action(Action::QuickSearch));
+        assert_eq!(dialog.focus, Focus::Button(0));
         assert_eq!(
             dialog.handle(action(Action::Toggle)),
             DialogEvent::Pressed(Button::Ok)
@@ -4301,9 +4040,9 @@ mod tests {
     }
 
     #[test]
-    fn the_mouse_and_the_wheel_move_over_the_list() {
+    fn the_mouse_and_the_wheel_move_over_the_rows() {
         let mut dialog = with_rows(30);
-        let terminal = draw_rows(&dialog, None);
+        let terminal = draw_rows(&mut dialog, None);
         let at = super::super::mouse::find(terminal.backend().buffer(), "row 2");
         let click = Pointer {
             press: Press::Click,
@@ -4311,20 +4050,23 @@ mod tests {
         };
         assert_eq!(dialog.pointer(click), DialogEvent::Pending);
         assert_eq!(
-            (dialog.list_cursor(), dialog.context()),
-            (2, Context::Dialog)
+            (dialog.picker().unwrap().cursor(), dialog.focus),
+            (2, Focus::Picker)
         );
         let double = Pointer {
             press: Press::DoubleClick,
             at,
         };
         assert_eq!(dialog.pointer(double), DialogEvent::Pressed(Button::Ok));
-        dialog.wheel_list(Action::Down, 10);
-        assert!(dialog.list_cursor() > 2, "kept inside what shows");
-        draw_rows(&dialog, None);
-        assert!(dialog.list_bar().is_some());
-        // A note shows in place of the rows.
-        let screen = draw_rows(&dialog, Some("Nothing found."))
+        dialog.picker_mut().unwrap().wheel(Action::Down, 10);
+        assert!(
+            dialog.picker().unwrap().cursor() > 2,
+            "kept inside what shows"
+        );
+        draw_rows(&mut dialog, None);
+        assert!(dialog.picker().unwrap().bar().is_some());
+        // A message shows in place of the rows.
+        let screen = draw_rows(&mut dialog, Some("Nothing found."))
             .backend()
             .to_string();
         assert!(

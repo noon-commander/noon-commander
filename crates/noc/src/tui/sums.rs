@@ -600,6 +600,7 @@ mod tests {
 
     #[test]
     fn clicks_choose_a_file_and_press_a_button_but_close_nothing() {
+        // A double click on a row copies its checksum, as Enter does there.
         let mut window = many();
         let terminal = terminal(&mut window, 80, 18);
         let buffer = terminal.backend().buffer();
@@ -613,8 +614,8 @@ mod tests {
             press: Press::DoubleClick,
             ..click(find(buffer, "dir/a.txt"))
         };
-        assert_eq!(window.pointer(double), None, "no button pressed");
-        assert_eq!(window.selected(), Some(0));
+        assert_eq!(window.pointer(double), Some(Action::Confirm));
+        assert_eq!(press(&mut window, Action::Confirm), SumsEvent::Copy(0));
         let view = find(buffer, "View");
         assert_eq!(window.pointer(click(view)), Some(Action::Confirm));
         assert_eq!(press(&mut window, Action::Confirm), SumsEvent::View);

@@ -16,7 +16,7 @@ use ratatui::text::{Line, Span};
 use super::cells::{self, Align, Cut};
 use super::dialog::{
     Colors, Field, Tone, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
-    right_frame, rows_area,
+    right_frame,
 };
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
@@ -24,7 +24,7 @@ use super::loading::Loading;
 use super::mouse::{Drawn, Pointer, Press};
 use super::scroll::Window;
 use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
-use super::spinner::Spin;
+use super::spinner::{Shine, Spin};
 use super::theme::Theme;
 use crate::i18n::fl;
 
@@ -100,20 +100,58 @@ pub(crate) struct Body<'a> {
     /// The whole text of the row under the cursor, which always shows under the rows while
     /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
+    /// The rows take all the room the window leaves them, rather than as many lines as they
+    /// are, as the rows of the search of a tree do.
+    pub(crate) fill: bool,
+    /// Rows still to come, for a window that waits for them without `loading`.
+    pub(crate) waiting: Option<Waiting>,
+}
+
+/// What a window that waits for its rows without [`Loading`] shows meanwhile.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Waiting {
+    /// The dots that turn in front of the title, if they show yet.
+    pub(crate) dots: Option<char>,
+    /// The lines of the skeleton in place of the first rows, if they are still to come.
+    pub(crate) skeleton: Option<u16>,
+    /// The shine that crosses the skeleton.
+    pub(crate) shine: Option<Shine>,
 }
 
 impl Body<'_> {
     /// Lines the box has for the rows: those of the skeleton while they are still to come.
     fn shown(&self) -> u16 {
         let lines = self
-            .waiting()
+            .skeleton()
             .unwrap_or_else(|| u16::try_from(self.lines.len()).unwrap_or(u16::MAX));
         lines.max(1).min(self.max_lines.unwrap_or(u16::MAX))
     }
 
     /// Lines of the skeleton, while rows are still to come.
-    fn waiting(&self) -> Option<u16> {
-        self.loading.and_then(|(loading, _)| loading.skeleton())
+    fn skeleton(&self) -> Option<u16> {
+        match (self.loading, self.waiting) {
+            (Some((loading, _)), _) => loading.skeleton(),
+            (None, Some(waiting)) => waiting.skeleton,
+            (None, None) => None,
+        }
+    }
+
+    /// The dots that turn in front of the title while the window waits.
+    pub(crate) fn dots(&self) -> Option<char> {
+        match (self.loading, self.waiting) {
+            (Some((loading, spin)), _) => spin.wait_dots(loading.wait()?),
+            (None, Some(waiting)) => waiting.dots,
+            (None, None) => None,
+        }
+    }
+
+    /// The shine that crosses the skeleton.
+    fn shine(&self) -> Option<Shine> {
+        match (self.loading, self.waiting) {
+            (Some((loading, spin)), _) => spin.shine(loading.wait()?),
+            (None, Some(waiting)) => waiting.shine,
+            (None, None) => None,
+        }
     }
 
     /// Lines the skeleton takes past the rows of the last list, where the whole row under the
@@ -131,7 +169,7 @@ impl Body<'_> {
     /// The whole text of the row under the cursor, while it shows under the rows.
     fn full(&self) -> Option<&str> {
         (self.full.as_deref()).filter(|_| {
-            self.waiting().is_none() && self.footer.is_empty() && !self.lines.is_empty()
+            self.skeleton().is_none() && self.footer.is_empty() && !self.lines.is_empty()
         })
     }
 
@@ -142,14 +180,6 @@ impl Body<'_> {
             (0, None) => 0,
             (footer, _) => u16::try_from(footer + 1).unwrap_or(u16::MAX),
         }
-    }
-
-    /// Lines it takes inside a frame: the filter, the line under it, the rows, and what is
-    /// under them; or the skeleton, in place of the rows and of the whole row under them.
-    pub(crate) fn height(&self) -> u16 {
-        (self.shown().saturating_add(2))
-            .saturating_add(self.below())
-            .saturating_add(self.waiting_full())
     }
 }
 
@@ -173,6 +203,8 @@ pub(crate) struct Picker {
     shows: Vec<Shows>,
     /// The filter, a text field.
     filter: Field,
+    /// It has a filter; without one it shows every row, and a line in place of the filter.
+    filters_rows: bool,
     /// How the filter matches, and whether case counts, as they were last until the keys after
     /// Ctrl+s switch them.
     input: Input,
@@ -212,6 +244,7 @@ impl Picker {
             texts: Vec::new(),
             shows: Vec::new(),
             filter: Field::plain(""),
+            filters_rows: true,
             input,
             plain_keywords: false,
             error: None,
@@ -228,6 +261,16 @@ impl Picker {
         }
     }
 
+    /// A picker without rows and without a filter, as the rows of the search of a tree, which
+    /// whoever holds it finds: it shows every row, and its rows take the keys, in Normal mode.
+    pub(crate) fn without_filter() -> Self {
+        Self {
+            filters_rows: false,
+            filtering: false,
+            ..Self::new(Input::new(Kind::FILTER, Way::Plain))
+        }
+    }
+
     /// The same picker, whose filter in the plain mode is keywords that a program picks the
     /// rows by: the window asks it again on [`Pick::Filtered`], and the picker shows every row.
     pub(crate) fn plain_keywords(mut self) -> Self {
@@ -241,6 +284,11 @@ impl Picker {
     pub(crate) fn on_rows(mut self) -> Self {
         self.filtering = false;
         self
+    }
+
+    /// Whether it has a filter.
+    pub(crate) fn has_filter(&self) -> bool {
+        self.filters_rows
     }
 
     /// Whether the picker picks the rows by the filter itself, rather than a program by the
@@ -382,6 +430,12 @@ impl Picker {
     /// filter, and the keys of text fields edit it, until Esc goes back to the rows; `/` types
     /// in it again. Other keys are the window's.
     pub(crate) fn handle(&mut self, input: Resolved) -> Pick {
+        if !self.filters_rows
+            && let Resolved::Action(action) = input
+            && (action == Action::QuickSearch || Switch::of(action).is_some())
+        {
+            return Pick::Pending;
+        }
         if let Resolved::Action(action) = input
             && let Some(switch) = Switch::of(action)
         {
@@ -494,6 +548,35 @@ impl Picker {
     /// Shows the lines from `top`, where the thumb of the scroll bar was dragged, and puts the
     /// cursor on the row nearest to where the window left it, the way the lines went.
     pub(crate) fn scroll_to(&mut self, top: usize) {
+        let down = top > self.window.top();
+        self.shift(down, |window, line, lines, page| {
+            window.scroll_to(top, line, lines, page);
+        });
+    }
+
+    /// A step of the wheel, as `action` `count` times: Up and Down scroll the lines `count`
+    /// lines, keeping the cursor among them, and the page keys move them a page.
+    pub(crate) fn wheel(&mut self, action: Action, count: usize) {
+        let down = matches!(action, Action::Down | Action::PageDown);
+        match action {
+            Action::Up | Action::Down => self.shift(down, |window, line, lines, page| {
+                window.scroll(down, count, line, lines, page);
+            }),
+            Action::PageUp | Action::PageDown => self.shift(down, |window, line, lines, page| {
+                window.page(down, count, line, lines, page);
+            }),
+            _ => {}
+        }
+    }
+
+    /// Shows the lines from the cursor again at the next render, as for a new listing.
+    pub(crate) fn unsettle(&mut self) {
+        self.window.unsettle();
+    }
+
+    /// Moves the lines of the last render as `shift` moves the window, with the line of the
+    /// cursor, and puts the cursor on the row nearest to that line, the way they went.
+    fn shift(&mut self, down: bool, shift: impl FnOnce(&mut Window, &mut usize, usize, usize)) {
         let lines = self.rows_drawn.len();
         if lines == 0 {
             return;
@@ -503,9 +586,7 @@ impl Picker {
             .iter()
             .position(|&row| row == Some(self.cursor))
             .unwrap_or(0);
-        let down = top > self.window.top();
-        self.window
-            .scroll_to(top, &mut line, lines, self.page.max(1));
+        shift(&mut self.window, &mut line, lines, self.page.max(1));
         let row = |line: usize| self.rows_drawn.get(line).copied().flatten();
         let after = (line..lines).find_map(row);
         let before = (0..=line).rev().find_map(row);
@@ -515,6 +596,11 @@ impl Picker {
             before.or(after)
         };
         self.cursor = found.unwrap_or(self.cursor);
+    }
+
+    /// Whether a row of the last render is at `at`.
+    pub(crate) fn row_at(&self, at: Position) -> bool {
+        self.drawn.row_at(at).is_some()
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click puts the cursor on
@@ -545,12 +631,9 @@ impl Picker {
     ) {
         let colors = Colors::of(theme, Tone::Plain);
         // Borders, and what is inside them.
-        let height = body.height().saturating_add(2);
+        let height = self.height(&body).saturating_add(2);
         let boxed = draw_box(frame, area, (body.width, height), body.title, colors, theme);
-        let wait = body
-            .loading
-            .and_then(|(loading, spin)| Some((loading.wait()?, spin)));
-        if let Some(dots) = wait.and_then(|(wait, spin)| spin.wait_dots(wait)) {
+        if let Some(dots) = body.dots() {
             draw_title_dots(frame, boxed, body.title, (dots, theme.busy_dialog), colors);
         }
         self.drawn = Drawn {
@@ -565,10 +648,24 @@ impl Picker {
         self.draw_inside(frame, boxed, theme, body, row);
     }
 
+    /// Lines it takes inside a frame for `body`: the filter and the line under it, or a line
+    /// alone without a filter; the rows, and what is under them; or the skeleton, in place of
+    /// the rows and of the whole row under them.
+    pub(crate) fn height(&self, body: &Body<'_>) -> u16 {
+        (body.shown().saturating_add(self.top()))
+            .saturating_add(body.below())
+            .saturating_add(body.waiting_full())
+    }
+
+    /// Lines over the rows: the filter and the line under it, or the line alone.
+    fn top(&self) -> u16 {
+        if self.filters_rows { 2 } else { 1 }
+    }
+
     /// Draws the picker as a part of a dialog, in `area`, as many lines as
-    /// [`Body::height`] says, as [`render`](Self::render) draws it inside its frame; the
-    /// dialog draws the frame, its title, and its buttons, and the title and the width of
-    /// `body` go unused.
+    /// [`height`](Self::height) says or, if its rows fill the room, as the dialog leaves it, as
+    /// [`render`](Self::render) draws it inside its frame; the dialog draws the frame, its
+    /// title, and its buttons, and the title and the width of `body` go unused.
     pub(crate) fn render_in(
         &mut self,
         frame: &mut Frame<'_>,
@@ -583,14 +680,15 @@ impl Picker {
         };
         self.bar = None;
         self.glyphs = None;
-        if area.height < 3 || area.width < 4 {
+        if area.height < self.top() + 1 || area.width < 4 {
             return;
         }
         self.draw_inside(frame, area, theme, body, row);
     }
 
-    /// Draws the filter at the top of `inner`, then the lines of `body`, or the skeleton, its
-    /// message, or a note that nothing matches, then what goes under them.
+    /// Draws the filter at the top of `inner`, or a line without one, then the lines of
+    /// `body`, or the skeleton, its message, or a note that nothing matches, then what goes
+    /// under them.
     fn draw_inside(
         &mut self,
         frame: &mut Frame<'_>,
@@ -600,27 +698,39 @@ impl Picker {
         row: &mut dyn FnMut(ShownRow) -> Line<'static>,
     ) {
         let lines = body.lines;
-        let waiting = body.waiting();
+        let skeleton = body.skeleton();
+        let shine = body.shine();
         let below = body.below();
+        let top = self.top();
         let full = (body.full.as_deref())
-            .filter(|_| waiting.is_none() && body.footer.is_empty() && !lines.is_empty());
-        let wait = body
-            .loading
-            .and_then(|(loading, spin)| Some((loading.wait()?, spin)));
+            .filter(|_| skeleton.is_none() && body.footer.is_empty() && !lines.is_empty());
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        self.glyphs = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
-
-        self.page = usize::from(inner.height.saturating_sub(2 + below)).max(1);
+        if self.filters_rows {
+            self.glyphs = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
+        } else {
+            draw_separator(frame, inner, inner.y, Colors::of(theme, Tone::Plain), theme);
+        }
+        let room = inner.height.saturating_sub(top + below);
+        self.page = usize::from(room).max(1);
         let rows = self.len();
-        if waiting.is_some() {
-            let shine = wait.and_then(|(wait, spin)| spin.shine(wait));
-            draw_skeleton(frame, rows_area(inner, below), theme, shine);
+        if let Some(skeleton) = skeleton {
+            let mut area = Rect::new(inner.x, inner.y + top, inner.width, room);
+            // Rows that fill the room stand for as many as there will be with the skeleton's.
+            if body.fill {
+                area.height = area.height.min(skeleton);
+            }
+            draw_skeleton(frame, area, theme, shine);
+            if body.fill {
+                let footer = (full, body.footer, body.footer_column);
+                draw_below(frame, inner, below, footer, theme);
+            }
             return;
         }
         let message = body.message.or_else(|| self.nothing(body.nothing));
-        if let Some(message) = message {
-            let room = 2..inner.height.saturating_sub(below);
+        if message.is_some() || rows == 0 {
+            let room = top..inner.height.saturating_sub(below);
+            let message = message.unwrap_or_default();
             for (index, text) in room.zip(cells::wrap(&message, width)) {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
@@ -644,11 +754,11 @@ impl Picker {
         self.window.follow(&mut at, lines.len(), self.page);
         let offset = self.window.top();
         let height = u16::try_from(self.page).unwrap_or(u16::MAX);
-        let bar = right_frame(inner, inner.y + 2, height);
+        let bar = right_frame(inner, inner.y + top, height);
         let position = (lines.len(), self.page, offset);
         self.bar = scrollbar::render(frame, bar, position, theme.dialog, theme.glyphs.scroll_bar);
         for (index, shown) in lines.iter().skip(offset).take(self.page).enumerate() {
-            let y = u16::try_from(index + 2).unwrap_or(u16::MAX);
+            let y = u16::try_from(index).unwrap_or(u16::MAX).saturating_add(top);
             let text = match shown {
                 MenuLine::Heading(heading) => heading_line(heading, width, theme),
                 MenuLine::Row(index) => {
@@ -670,7 +780,7 @@ impl Picker {
     /// What shows in place of the rows once none shows: why the filter is no regular
     /// expression, or `nothing`, that nothing matches.
     fn nothing(&self, nothing: Option<String>) -> Option<String> {
-        (self.len() == 0).then(|| match &self.error {
+        (self.filters_rows && self.len() == 0).then(|| match &self.error {
             Some(reason) => fl!(
                 "picker-not-regex",
                 reason = cells::sanitize(reason.as_bytes())

@@ -23,11 +23,12 @@ use tokio_util::sync::CancellationToken;
 use super::cells::{self, Align};
 use super::combo_box::ComboBox;
 use super::decor::Decor;
-use super::dialog::{Button, Dialog, DialogEvent, Field, ListView};
+use super::dialog::{Button, Colors, Dialog, DialogEvent, Field, Tone, status_skeleton};
 use super::edit::Registers;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::panel::child;
+use super::picker::{Body, MenuLine, Picker, Waiting};
 use super::search::{Case, Input, Kind, Way};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
@@ -162,7 +163,7 @@ struct EntryRow {
     parts: Vec<(String, bool)>,
 }
 
-/// A row of the list: a file, or one of its lines, by their indexes.
+/// A row: a file, or one of its lines, by their indexes.
 type Item = (usize, Option<usize>);
 
 /// How the search goes.
@@ -183,7 +184,7 @@ type Settings = (usize, String, String, Way, Case, Case);
 pub(crate) struct FindWindow {
     /// Where it searches.
     root: Location,
-    /// The text and the globs of the files in its fields, the rows in its list, and its
+    /// The text and the globs of the files in its fields, the rows in its picker, and its
     /// buttons.
     dialog: Dialog,
     /// The globs as ripgrep takes them, whose case the field shows in the text mode: fd tells
@@ -240,7 +241,7 @@ impl FindWindow {
             .with_combo_box(&fl!("find-mode"), &modes, chosen)
             .with_field(&fl!("find-text"), "")
             .with_field(&fl!("find-files"), "")
-            .with_list()
+            .with_picker(Picker::without_filter())
             .with_search(TEXT, text)
             .with_search(FILES, files_in(chosen, files));
         Self {
@@ -329,7 +330,9 @@ impl FindWindow {
             self.shown = generation;
             self.rows.clear();
             self.current = None;
-            self.dialog.unsettle_list();
+            if let Some(picker) = self.dialog.picker_mut() {
+                picker.unsettle();
+            }
         }
         true
     }
@@ -533,17 +536,24 @@ impl FindWindow {
             .unwrap_or(0)
     }
 
-    /// Gives the list of the dialog its rows, with the cursor on the row it was on.
+    /// The row under the cursor of the rows, among them all.
+    fn rows_cursor(&self) -> usize {
+        self.dialog.picker().map_or(0, Picker::cursor)
+    }
+
+    /// Gives the picker of the dialog its rows, with the cursor on the row it was on.
     fn put_cursor(&mut self) {
         let items = self.items();
         let cursor = self.cursor_in(&items);
-        self.dialog.set_list_len(items.len());
-        self.dialog.set_list_cursor(cursor);
+        if let Some(picker) = self.dialog.picker_mut() {
+            picker.set_rows(vec![Vec::new(); items.len()]);
+            picker.set_cursor(cursor);
+        }
     }
 
-    /// Keeps the row that the cursor of the list is on, if it moved from `before`.
+    /// Keeps the row that the cursor of the rows is on, if it moved from `before`.
     fn take_cursor(&mut self, before: usize) {
-        let index = self.dialog.list_cursor();
+        let index = self.rows_cursor();
         if index == before {
             return;
         }
@@ -556,7 +566,7 @@ impl FindWindow {
     /// The file and line of the row under the cursor.
     fn chosen(&self) -> Option<(&FileRow, Option<u64>)> {
         let items = self.items();
-        let &(file, line) = items.get(self.dialog.list_cursor())?;
+        let &(file, line) = items.get(self.rows_cursor())?;
         let row = &self.rows[file];
         let line = match line {
             Some(line) => Some(row.lines[line].number),
@@ -607,12 +617,12 @@ impl FindWindow {
     }
 
     /// Takes a key as a dialog does: the fields edit, Tab and the motions move the focus, and
-    /// over the list they move its cursor; Enter presses Go to, the default, and Alt and a
+    /// over the rows they move their cursor; Enter presses Go to, the default, and Alt and a
     /// letter act on what has it. F3 and F4 view and edit the file of the row; in the field of
     /// the text, the keys after Ctrl+s switch how it matches and whether case counts.
     pub(crate) fn handle(&mut self, typed: Typed, registers: &mut Registers) -> FindEvent {
         let before = self.settings();
-        let cursor = self.dialog.list_cursor();
+        let cursor = self.rows_cursor();
         let event = match typed.resolved {
             Resolved::Action(Action::View) => return self.press(Button::View),
             Resolved::Action(Action::Edit) => return self.press(Button::Edit),
@@ -648,29 +658,33 @@ impl FindWindow {
         }
     }
 
-    /// The scroll bar of the list at the last render, for the mouse.
+    /// The scroll bar of the rows at the last render, for the mouse.
     pub(crate) fn bar(&self) -> Option<Bar> {
-        self.dialog.list_bar()
+        self.dialog.picker().and_then(Picker::bar)
     }
 
     /// Shows the rows from `top`, where the thumb of the scroll bar was dragged.
     pub(crate) fn scroll_to(&mut self, top: usize) {
-        let cursor = self.dialog.list_cursor();
-        self.dialog.scroll_list_to(top);
+        let cursor = self.rows_cursor();
+        if let Some(picker) = self.dialog.picker_mut() {
+            picker.scroll_to(top);
+        }
         self.take_cursor(cursor);
     }
 
     /// A step of the wheel, as `action` `count` times: it scrolls the rows.
     pub(crate) fn wheel(&mut self, action: Action, count: usize) {
-        let cursor = self.dialog.list_cursor();
-        self.dialog.wheel_list(action, count);
+        let cursor = self.rows_cursor();
+        if let Some(picker) = self.dialog.picker_mut() {
+            picker.wheel(action, count);
+        }
         self.take_cursor(cursor);
     }
 
     /// Takes a press of the mouse, as a dialog does: a double click on a row goes to its file.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> FindEvent {
         let before = self.settings();
-        let cursor = self.dialog.list_cursor();
+        let cursor = self.rows_cursor();
         let event = self.dialog.pointer(pointer);
         self.take_cursor(cursor);
         self.event(event, &before)
@@ -731,35 +745,61 @@ impl FindWindow {
     }
 
     /// Draws the dialog centered over `area`, the panels, as tall as they are: the rows in its
-    /// list, scrolled to the cursor, and under them how many it found, a skeleton crossed by
+    /// picker, scrolled to the cursor, and under them how many it found, a skeleton crossed by
     /// the shine of `spin` while it searches, and what kept it from finding all.
-    pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
+    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let items = self.items();
-        let row = |index: usize, width: usize, style: Style| {
-            let Some(&(file, number)) = items.get(index) else {
-                return Line::default();
-            };
-            let row = &self.rows[file];
-            let spans = match (number, &row.entry) {
-                (None, Some(entry)) => entry_spans(entry, width, style, theme),
-                (None, None) => file_spans(row, (width, self.max_per_file), style, theme),
-                (Some(number), _) => line_spans(row, number, width, style, theme),
-            };
-            Line::from(spans).style(style)
-        };
+        let colors = Colors::of(theme, Tone::Plain);
         let wait = self.wait();
-        let view = ListView {
-            row: &row,
-            note: self.message(),
-            status: self.status(),
-            counting: wait.is_some(),
-            dots: wait
-                .and_then(|wait| spin.wait_dots(wait))
-                .map(|dots| (dots, theme.busy_dialog)),
-            waiting: wait.is_some() && self.rows.is_empty(),
-            shine: wait.and_then(|wait| spin.shine(wait)),
+        let shine = wait.and_then(|wait| spin.shine(wait));
+        let width = self.dialog.text_width(area);
+        let cut = (Align::Left, cells::Cut::End);
+        let footer = (self.status().iter().enumerate())
+            .map(|(number, text)| {
+                let line = if number == 0 && wait.is_some() {
+                    let cells = u16::try_from(width).unwrap_or(u16::MAX);
+                    status_skeleton(cells, colors.body_styles().0, theme, shine)
+                } else {
+                    let styles = colors.body_styles();
+                    cells::fitted(text, width, cut, styles, theme.glyphs.marks)
+                };
+                line.style(colors.body_styles().0)
+            })
+            .collect();
+        let waiting = wait.map(|wait| Waiting {
+            dots: spin.wait_dots(wait),
+            skeleton: self.rows.is_empty().then_some(1),
+            shine,
+        });
+        let lines: Vec<MenuLine> = (0..items.len()).map(MenuLine::Row).collect();
+        let body = Body {
+            lines: &lines,
+            message: self.message(),
+            footer,
+            fill: true,
+            waiting,
+            ..Body::default()
         };
-        self.dialog.render_list(frame, area, theme, &view);
+        let (rows, max_per_file) = (&self.rows, self.max_per_file);
+        self.dialog
+            .render_picker(frame, area, theme, body, &mut |shown| {
+                let Some(&(file, number)) = items.get(shown.index) else {
+                    return Line::default();
+                };
+                let style = if shown.selected {
+                    colors.focused_style()
+                } else {
+                    colors.body_styles().0
+                };
+                let row = &rows[file];
+                let width = shown.width;
+                let spans = match (number, &row.entry) {
+                    (None, Some(entry)) => entry_spans(entry, width, style, theme),
+                    (None, None) => file_spans(row, (width, max_per_file), style, theme),
+                    (Some(number), _) => line_spans(row, number, width, style, theme),
+                };
+                Line::from(spans).style(style)
+            });
     }
 }
 

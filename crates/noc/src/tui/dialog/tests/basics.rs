@@ -226,6 +226,30 @@ fn draws_a_host_key_question_wrapped_and_terminal_safe() {
 }
 
 #[test]
+fn draws_the_picture_of_a_host_key_and_the_indent_of_its_other_names_as_ssh_sends_them() {
+    // ssh's question with `VisualHostKey=yes`, and the key known by other names.
+    let message = "The authenticity of host 'web (10.0.0.5)' can't be established.\n\
+        ED25519 key fingerprint is: SHA256:I2Qyh3EchdNafS9x6yNSUeVFGG/8Pf+147hcBDWmkZk\n\
+        +--[ED25519 256]--+\n\
+        |    ..o=..   o*O+|\n\
+        |     ++ o . +EB+o|\n\
+        |    + ++   . B .=|\n\
+        |     *.     o +.o|\n\
+        |      . S  . o oo|\n\
+        |       . .. . + o|\n\
+        |           . . oo|\n\
+        |            . o.+|\n\
+        |             +ooo|\n\
+        +----[SHA256]-----+\n\
+        This host key is known by the following other names/addresses:\n    \
+            ~/.ssh/known_hosts:3: web2\n    \
+            ~/.ssh/known_hosts:7: 10.0.0.6\n\
+        Are you sure you want to continue connecting (yes/no/[fingerprint])? ";
+    let dialog = Dialog::prompt("web", message, PromptKind::HostKey);
+    insta::assert_snapshot!(draw(&dialog, 80, 26).backend());
+}
+
+#[test]
 fn lines_of_text_are_cut_short_or_broken_even_and_the_verdict_stands_apart() {
     let hex = "0123456789".repeat(2) + &"abcdef0123".repeat(2);
     let dialog = Dialog::question("Sums", "", vec![Button::Ok], 0, Tone::Plain)

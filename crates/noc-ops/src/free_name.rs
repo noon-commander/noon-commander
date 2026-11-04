@@ -4,11 +4,7 @@
 use noc_vfs::{Vfs, VfsError, VfsPath};
 
 /// The first of `name`, then `name` with 2, 3, and so on, that nothing has in `dir`.
-pub(crate) async fn free_name<V: Vfs>(
-    vfs: &V,
-    dir: &V::Path,
-    name: &[u8],
-) -> Result<V::Path, VfsError> {
+pub async fn free_name<V: Vfs>(vfs: &V, dir: &V::Path, name: &[u8]) -> Result<V::Path, VfsError> {
     let mut path = dir.join_name(name);
     let mut number = 2;
     loop {

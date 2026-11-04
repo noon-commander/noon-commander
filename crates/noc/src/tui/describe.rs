@@ -143,19 +143,19 @@ mod tests {
     fn describes_file_system_errors() {
         assert_eq!(
             vfs_error(&VfsError::PermissionDenied("/x".to_owned())),
-            "permission denied"
+            "Permission denied"
         );
         assert_eq!(
             vfs_error(&VfsError::NotFound("/x".to_owned())),
-            "no such file or directory"
+            "No such file or directory"
         );
         assert_eq!(
             vfs_error(&VfsError::AlreadyExists("/x".to_owned())),
-            "already exists"
+            "Already exists"
         );
         assert_eq!(
             vfs_error(&VfsError::SameFile("/x".to_owned())),
-            "it is the source itself"
+            "It is the source itself"
         );
         let unsupported = VfsError::Io(io::ErrorKind::Unsupported.into());
         assert_eq!(vfs_error(&unsupported), "unsupported");
@@ -183,7 +183,7 @@ mod tests {
         };
         assert_eq!(
             ssh_error(&closed).as_deref(),
-            Some("the connection is closed")
+            Some("The connection is closed")
         );
         let missing = SshError::Spawn {
             program: PathBuf::from("/no/ssh"),
@@ -191,7 +191,7 @@ mod tests {
         };
         assert_eq!(
             ssh_error(&missing).as_deref(),
-            Some("cannot run /no/ssh: entity not found")
+            Some("Cannot run /no/ssh: entity not found")
         );
         assert_eq!(ssh_error(&SshError::Cancelled), None);
     }
@@ -230,7 +230,7 @@ mod tests {
         };
         assert_eq!(
             open_error(&missing),
-            "cannot run xdg-open: entity not found"
+            "Cannot run xdg-open: entity not found"
         );
         let failed = ToolError::Failed {
             program: PathBuf::from("xdg-open"),

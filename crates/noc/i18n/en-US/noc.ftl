@@ -133,37 +133,36 @@ size-giga = G
 size-tera = T
 size-peta = P
 size-exa = E
-error-not-found = no such file or directory
-error-permission-denied = permission denied
-error-already-exists = already exists
+# Why something failed, on a line of its own under what failed.
+error-not-found = No such file or directory
+error-permission-denied = Permission denied
+error-already-exists = Already exists
 # A copy or a move whose target leads to its source: the same name in another case, where the
 # file system ignores case, or a hard link.
-error-same-file = it is the source itself
+error-same-file = It is the source itself
 
 ## The dialog after a failed connection (src/tui/app): Retry tries again, Cancel leaves the
-## panels where they were. Prefix: reconnect-.
+## panels where they were. Prefix: reconnect-. Why it failed goes on a line of its own.
 
 reconnect-title = Connection
-reconnect-failed = Cannot connect to { $host }: { $reason }
-reconnect-lost = Lost the connection to { $host }: { $reason }
+reconnect-failed = Cannot connect to { $host }
+reconnect-lost = Lost the connection to { $host }
 # A key in a panel on a host that is not connected, which shows none of its entries. Its
 # buttons: Connect reads the directory again, Local goes to the panel's last local directory.
 reconnect-not-connected = Not connected to { $host }
 
-## The dialog after a directory could not be read (src/tui/app): OK stays, Retry reads it again,
-## Up goes to the nearest parent that is there, Go to opens Go to directory with its path.
-## Prefix: list-.
+## The dialog after a directory could not be read (src/tui/app): Retry reads it again, Up goes
+## to the nearest parent that is there, Go to opens Go to directory with its path, Cancel stays.
+## Prefix: list-. The path, and why, go on lines of their own.
 
-# A subdirectory of the panel's directory is named by its name alone, as the title shows the
-# directory.
-list-failed = Cannot open { $path }: { $reason }
+list-failed = Cannot open the directory
 
 ## Connection errors (src/tui/describe). Prefix: error-. Most of the time ssh's own words are
 ## shown instead.
 
-error-connection-closed = the connection is closed
+error-connection-closed = The connection is closed
 error-ssh-exited = ssh ended with { $status }
-error-ssh-spawn = cannot run { $program }: { $reason }
+error-ssh-spawn = Cannot run { $program }: { $reason }
 error-ssh-too-old = OpenSSH { $found } is too old; Noon Commander needs { $required } or newer
 error-not-openssh = { $program } is not OpenSSH
 
@@ -307,9 +306,9 @@ workspaces-delete-title = Delete workspace
 workspaces-delete = Delete workspace "{ $name }"? Its tabs stay as they are.
 # A workspace chosen in the menu was removed meanwhile, by another Noon Commander.
 workspaces-gone = Workspace "{ $name }" is not saved any more.
-# The reason names the file.
-workspaces-save-error = Cannot save the workspaces: { $reason }
-workspaces-load-error = Cannot read the workspaces: { $reason }
+# Over why, on a line of its own, which names the file.
+workspaces-save-error = Cannot save the workspaces
+workspaces-load-error = Cannot read the workspaces
 
 ## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
 ## letter that, typed with Alt, opens a menu from the bar, or runs a command while its menu is
@@ -507,8 +506,8 @@ config-viewer-window-hint = F3 holds at most so many MiB of a file, and at least
 config-viewer-window-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 1 or more.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
-# The reason names the file.
-config-save-error = Cannot save the configuration: { $reason }
+# Over why, on a line of its own, which names the file.
+config-save-error = Cannot save the configuration
 # The language field holds something else.
 config-language-invalid = "{ $text }" is not auto or a language tag such as en-US.
 # The formats field holds something else.
@@ -524,16 +523,15 @@ dialog-ok = &OK
 dialog-cancel = Cancel
 dialog-yes = &Yes
 dialog-no = &No
-# Buttons of a failed file operation, as in mc: leave this entry, leave every failing one
-# without asking again, try again, stop.
-dialog-skip = &Ignore
-dialog-skip-all = Ignore a&ll
+# Buttons of a failed file operation, in this order: try again, leave this entry, leave every
+# failing one without asking again, stop. Skip also keeps the file there for a taken name.
 dialog-retry = &Retry
+dialog-skip = &Skip
+dialog-skip-all = Skip a&ll
 dialog-abort = &Abort
-# Buttons of a taken name: replace the file there, keep it and leave the new one, give the new
-# one a name of its own. They show with Abort.
+# Buttons of a taken name: replace the file there, give the new one a name of its own. They show
+# with Skip and Abort, or Cancel.
 dialog-overwrite = &Overwrite
-dialog-keep = &Skip
 dialog-rename = &Rename…
 # Title of error dialogs.
 dialog-error = Error
@@ -961,8 +959,8 @@ host-remember-dir = Re&member the last directory in this session
 host-run = Run commands of ! and : &with:
 # The reason is one of the config-run- errors.
 host-run-invalid = Run with: { $reason }
-# The reason names the file.
-host-save-error = Cannot save the host settings: { $reason }
+# Over why, on a line of its own, which names the file.
+host-save-error = Cannot save the host settings
 # The other panel directory must be a local path.
 host-other-dir-invalid = The other panel directory must start with / or ~/
 
@@ -988,16 +986,16 @@ goto-prompt = &Path:
 mkdir-title = Create a new directory
 # Above the name field; the name under the cursor is filled in.
 mkdir-prompt = &Enter directory name:
-mkdir-error = Cannot create directory { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+mkdir-error = Cannot create the directory
 
 ## Saving a file, as Save… of the checksums does (src/tui/save). Prefix: save-. The title comes
 ## from what saves.
 
 # Above the field, with the name offered: a name or a path, from the panel's directory.
 save-prompt = &File name:
-save-exists-title = File exists
-save-exists = { $path } is there already. Overwrite it?
-save-error = Cannot save { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+save-error = Cannot save the file
 
 ## The window of a running job (src/tui/progress). Prefix: job-.
 
@@ -1084,7 +1082,8 @@ delete-directory = Delete directory "{ $name }" and everything in it?
 delete-many = Delete { marked-entries }?
 # Above the entry the job works on.
 delete-deleting = Deleting
-delete-error = Cannot delete { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+delete-error = Cannot delete
 
 ## Copying and moving, F5, F6, and Shift+F5 (src/tui/transfer, src/tui/app): one dialog, as in
 ## mc, whose words alone differ. Prefix: transfer-. $kind is copy or move.
@@ -1110,14 +1109,28 @@ transfer-working = { $kind ->
         [move] Moving
        *[copy] Copying
     }
+# Over the target and why a copy or a move cannot start, each on a line of its own.
 transfer-error = { $kind ->
-        [move] Cannot move to { $path }: { $reason }
-       *[copy] Cannot copy to { $path }: { $reason }
+        [move] Cannot move to
+       *[copy] Cannot copy to
     }
-# Why a copy or a move cannot start.
-transfer-same = the source and the target are the same
+transfer-same = The source and the target are the same
 # The target is in a source directory.
-transfer-into-itself = it is in { $path }
+transfer-into-itself = It is in { $path }
+
+## What a job could not do to a path, over the path and why, each on a line of its own
+## (src/tui/app). Prefix: step-.
+
+# Find what the entry is: its kind, size, and times.
+step-inspect = Cannot read the attributes of
+step-list = Cannot read the directory
+step-read = Cannot read
+step-create = Cannot create
+step-write = Cannot write to
+# Its permissions or times.
+step-set-attributes = Cannot set the attributes of
+step-rename = Cannot rename
+step-remove = Cannot delete
 
 ## A taken name in a copy or a move (src/tui/app). Prefix: copy-.
 
@@ -1154,12 +1167,9 @@ duplicate-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; 
 
 ## Renaming in place, Shift+F6 (src/tui/app, src/tui/tasks). Prefix: rename-.
 
-rename-error = Cannot rename { $path }: { $reason }
-# The new name is a file's: the question whether to rename over it, which removes that file.
-rename-exists =
-    "{ $name }" is there already.
-    Overwrite it?
-rename-dir-exists = a directory has that name
+# Over the path and why, each on a line of its own.
+rename-error = Cannot rename
+rename-dir-exists = A directory has that name
 # A name with a slash, or . or ..: renaming only gives a new name in the same directory.
 rename-invalid = "{ $name }" cannot be a name: renaming does not move
 rename-not-utf8 = "{ $name }" cannot be edited: the name is not valid UTF-8; F6 can rename it
@@ -1192,7 +1202,8 @@ checksum-blake3 = &BLAKE3
 checksum-expected-invalid = "{ $text }" is not a checksum: it takes the hex digits of an MD5, SHA-1, SHA-256, BLAKE3, or SHA-512 checksum.
 # Above the file the job reads.
 checksum-hashing = Hashing
-checksum-error = Cannot read { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+checksum-error = Cannot read
 checksum-no-files = There are no files to hash.
 # In place of the checksum of a file that was skipped after a failure.
 checksum-skipped = skipped
@@ -1205,9 +1216,10 @@ checksum-save-title = Save checksums
 
 ## The viewer, F3 (src/tui/app). Prefix: viewer-. Its own text is in crates/noc-viewer.
 
-viewer-error = Cannot view { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+viewer-error = Cannot view
 # A part after the first could not be read; the viewer keeps what it holds.
-viewer-read-error = Cannot read more of { $path }: { $reason }
+viewer-read-error = Cannot read more of
 # The file changed between two parts the viewer read; it reads it again from the start.
 viewer-changed = { $path } changed; reading it again.
 # The window over the viewer while it reads a part of the file that takes a while.
@@ -1223,18 +1235,20 @@ viewer-read-close = &Close
 
 ## Editing, F4 (src/tui). Prefix: edit-. The editor of $VISUAL or $EDITOR, or vi.
 
-edit-error = Cannot edit { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+edit-error = Cannot edit
 # The edited copy of a remote file could not go back; it stays where the user can find it.
 edit-kept = The changes to { $path } did not go back; they are in { $copy }
 # Why the editor did not run.
-edit-cannot-run = cannot run { $program }: { $reason }
+edit-cannot-run = Cannot run { $program }: { $reason }
 
 ## Opening externally, g x (src/tui). Prefix: open-. The program the desktop has for the file:
 ## open on macOS, xdg-open on Linux.
 
-open-error = Cannot open { $path }: { $reason }
+# Over the path and why, each on a line of its own.
+open-error = Cannot open
 # Why the opener did not run.
-open-cannot-run = cannot run { $program }: { $reason }
+open-cannot-run = Cannot run { $program }: { $reason }
 
 ## The command line of ! and : (src/tui). Prefix: command-. Commands run with shell.run, or a
 ## host's run, by default $SHELL -i -c.
@@ -1269,5 +1283,6 @@ history-more-lines = +{ $count }
 history-none = No commands yet. Commands run with ! and : come here.
 # When the filter leaves no command.
 history-nothing = No command matches.
-# history.toml could not be read or written; the reason names the file.
-history-error = Cannot keep the command history: { $reason }
+# history.toml could not be read or written; over why, on a line of its own, which names the
+# file.
+history-error = Cannot keep the command history

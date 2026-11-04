@@ -21,7 +21,7 @@ use noc_config::{
 use noc_locale::Formats;
 use noc_ops::{
     Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
-    RenameError, Reporter, Sum,
+    RenameError, Reporter, Step, Sum,
 };
 use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
@@ -119,17 +119,17 @@ pub(crate) enum Done {
         connection: u64,
         reason: Option<String>,
     },
-    /// The entry of [`Effect::Rename`] is renamed, or why not: `None` if a file has the name.
+    /// The entry of [`Effect::Rename`] is renamed, or why not.
     Renamed {
         panel: PanelId,
         from: Location,
         to: Location,
-        result: Result<(), Option<String>>,
+        result: Result<(), Refused>,
     },
-    /// The file of [`Effect::WriteFile`] is written, or why not: `None` if the name is taken.
+    /// The file of [`Effect::WriteFile`] is written, or why not.
     Written {
         location: Location,
-        result: Result<(), Option<String>>,
+        result: Result<(), Refused>,
     },
     /// The settings of [`Effect::SaveHost`] are saved, and these are all the host settings
     /// now; or why not.
@@ -195,11 +195,14 @@ pub(crate) enum JobEvent {
         current: Location,
         reports: Vec<(Instant, Counts)>,
     },
-    /// Something failed at `path`; the job waits for `reply`.
+    /// `step` failed at `path`, for `error`; the job waits for `reply`. Retry would fail
+    /// again unless `retry`, as when the target is the source itself.
     Failed {
         at: Instant,
         path: Location,
+        step: Step,
         error: String,
+        retry: bool,
         reply: oneshot::Sender<Decision>,
     },
     /// The name of a copy is taken; the job waits for the answer.
@@ -220,6 +223,24 @@ pub(crate) struct TakenName {
     pub(crate) target_metadata: Metadata,
     pub(crate) free: Vec<u8>,
     pub(crate) reply: oneshot::Sender<Conflict>,
+}
+
+/// Why a rename or a write of a file left everything as it was.
+#[derive(Debug)]
+pub(crate) enum Refused {
+    /// A file has the name.
+    Taken(Box<TakenFile>),
+    /// Anything else, in words.
+    Failed(String),
+}
+
+/// A file that has the name a rename or a write was to give: what the entry renamed is, if
+/// anything is, what the file there is, and `free`, a name free beside it.
+#[derive(Debug)]
+pub(crate) struct TakenFile {
+    pub(crate) source: Option<Metadata>,
+    pub(crate) target: Metadata,
+    pub(crate) free: Vec<u8>,
 }
 
 impl JobEvent {
@@ -1392,10 +1413,15 @@ async fn forward<P>(
                 continue;
             }
             Some(Event::Failed {
-                path, error, reply, ..
+                path,
+                step,
+                error,
+                reply,
             }) => JobEvent::Failed {
                 at,
                 path: location(path),
+                step,
+                retry: !matches!(error, VfsError::SameFile(_)),
                 error: describe::vfs_error(&error),
                 reply,
             },
@@ -1536,25 +1562,19 @@ fn remote_location(host: String) -> impl Fn(&RemotePath) -> Location + Send + Sy
     }
 }
 
-/// Writes `bytes` to the file at `location`; `Err(None)` if the name is taken and not
-/// `replace`.
+/// Writes `bytes` to the file at `location`, over a file there only if `replace`.
 async fn write_file(
     location: &Location,
     bytes: Vec<u8>,
     replace: bool,
     host: Option<HostHandle>,
-) -> Result<(), Option<String>> {
-    let result = match (location, share(host).await) {
+) -> Result<(), Refused> {
+    match (location, share(host).await) {
         (Location::Local(path), _) => write_all(&LocalFs, path, bytes, replace).await,
         (Location::Remote { path, .. }, Some(Some(fs))) => {
             write_all(&*fs, path, bytes, replace).await
         }
-        _ => return Err(Some(fl!("error-connection-closed"))),
-    };
-    match result {
-        Ok(()) => Ok(()),
-        Err(VfsError::AlreadyExists(_)) => Err(None),
-        Err(error) => Err(Some(describe::vfs_error(&error))),
+        _ => Err(Refused::Failed(fl!("error-connection-closed"))),
     }
 }
 
@@ -1563,36 +1583,79 @@ async fn write_all<V: Vfs>(
     path: &V::Path,
     bytes: Vec<u8>,
     replace: bool,
-) -> Result<(), VfsError> {
-    let mut writer = vfs.create_file(path, replace).await?;
-    writer.write(bytes).await?;
-    writer.finish().await
+) -> Result<(), Refused> {
+    let written = async {
+        let mut writer = vfs.create_file(path, replace).await?;
+        writer.write(bytes).await?;
+        writer.finish().await
+    };
+    match written.await {
+        Ok(()) => Ok(()),
+        Err(VfsError::AlreadyExists(_)) => Err(taken(vfs, None, path).await),
+        Err(error) => Err(Refused::Failed(describe::vfs_error(&error))),
+    }
 }
 
-/// Renames `from` to `to`, in the same directory; `Err(None)` if a file has the name and not
-/// `replace`.
+/// Renames `from` to `to`, in the same directory, over a file there only if `replace`.
 async fn rename(
     from: &Location,
     to: &Location,
     replace: bool,
     host: Option<HostHandle>,
-) -> Result<(), Option<String>> {
-    let result = match (from, to, share(host).await) {
+) -> Result<(), Refused> {
+    match (from, to, share(host).await) {
         (Location::Local(from), Location::Local(to), _) => {
-            noc_ops::rename(&LocalFs, from, to, replace).await
+            rename_on(&LocalFs, from, to, replace).await
         }
         (
             Location::Remote { path: from, .. },
             Location::Remote { path: to, .. },
             Some(Some(fs)),
-        ) => noc_ops::rename(&*fs, from, to, replace).await,
-        _ => return Err(Some(fl!("error-connection-closed"))),
-    };
-    match result {
+        ) => rename_on(&*fs, from, to, replace).await,
+        _ => Err(Refused::Failed(fl!("error-connection-closed"))),
+    }
+}
+
+async fn rename_on<V: Vfs>(
+    vfs: &V,
+    from: &V::Path,
+    to: &V::Path,
+    replace: bool,
+) -> Result<(), Refused> {
+    match noc_ops::rename(vfs, from, to, replace).await {
         Ok(()) => Ok(()),
-        Err(RenameError::Exists(FileKind::Dir)) => Err(Some(fl!("rename-dir-exists"))),
-        Err(RenameError::Exists(_)) => Err(None),
-        Err(RenameError::Vfs(error)) => Err(Some(describe::vfs_error(&error))),
+        Err(RenameError::Exists(FileKind::Dir)) => Err(Refused::Failed(fl!("rename-dir-exists"))),
+        Err(RenameError::Exists(_)) => Err(taken(vfs, Some(from), to).await),
+        Err(RenameError::Vfs(error)) => Err(Refused::Failed(describe::vfs_error(&error))),
+    }
+}
+
+/// What the question about the name of `target`, which a file has, shows: what `source`, the
+/// entry renamed, if any, and that file are, and a name free beside it; or why it cannot be
+/// told.
+async fn taken<V: Vfs>(vfs: &V, source: Option<&V::Path>, target: &V::Path) -> Refused {
+    let found = async {
+        let source = match source {
+            Some(source) => Some(vfs.symlink_metadata(source).await?),
+            None => None,
+        };
+        let metadata = vfs.symlink_metadata(target).await?;
+        let free = match (target.parent(), target.name()) {
+            (Some(dir), Some(name)) => {
+                let free = noc_ops::free_name(vfs, &dir, name).await?;
+                free.name().unwrap_or_default().to_vec()
+            }
+            _ => Vec::new(),
+        };
+        Ok::<_, VfsError>(TakenFile {
+            source,
+            target: metadata,
+            free,
+        })
+    };
+    match found.await {
+        Ok(taken) => Refused::Taken(Box::new(taken)),
+        Err(error) => Refused::Failed(describe::vfs_error(&error)),
     }
 }
 

@@ -11,7 +11,7 @@ use noc_config::{
     Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SftpHost, TabBar,
     UiConfig, Wheel, Workspace, Workspaces,
 };
-use noc_ops::{Algorithm, Choice, Conflict, CopyOptions, Decision, Rest, Sum};
+use noc_ops::{Algorithm, Choice, Conflict, CopyOptions, Decision, Rest, Step, Sum};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
 use noc_tools::zoxide::Scored;
@@ -35,7 +35,7 @@ use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration, run_of, run_text};
 use super::decor::Decor;
-use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Reply, Tone};
+use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Problem, Reply, Tone};
 use super::edit::{Editor, Registers};
 use super::find::{FindEvent, FindMode, FindQuery, FindSummary, FindWindow, Finding};
 use super::glyphs::{self, Glyphs};
@@ -66,7 +66,7 @@ use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
-use super::tasks::{HostHandle, JobEvent, TakenName};
+use super::tasks::{HostHandle, JobEvent, Refused, TakenFile, TakenName};
 use super::theme::{ColorDepth, Theme};
 use super::transfer::{self, Sources};
 use super::which_key;
@@ -396,7 +396,11 @@ impl Open {
     /// Whether it is a question of the job `id`, or the new name for one.
     fn asks_for(&self, id: u64) -> bool {
         match &self.purpose {
-            Purpose::Failure { job, .. } | Purpose::Conflict { job, .. } => *job == id,
+            Purpose::Failure { job, .. }
+            | Purpose::Conflict {
+                answer: Answer::Job { job, .. },
+                ..
+            } => *job == id,
             Purpose::ConflictRename { question } => question.asks_for(id),
             _ => false,
         }
@@ -413,13 +417,6 @@ enum Purpose {
     Mkdir { panel: PanelId },
     /// F8 in a panel on `dir`, for the entries `names`.
     Delete { dir: Location, names: Vec<Vec<u8>> },
-    /// The new name of `from`, which `panel` renamed in its row, is `to`, a file's: Yes
-    /// renames it, and the file goes.
-    RenameOver {
-        panel: PanelId,
-        from: Location,
-        to: Location,
-    },
     /// F5, F6, or Shift+F5 (by `kind`) in `panel`, which shows `dir`, for the entries `names`.
     /// The field opened with `offered`, the text for the other panel's location, if it shows
     /// one.
@@ -435,14 +432,12 @@ enum Purpose {
         job: u64,
         reply: oneshot::Sender<Decision>,
     },
-    /// A taken name in the copy job `job`, which waits for `reply`: `source` was to go to
-    /// `target`, where a file is, and `free` is a name free beside it, which Rename… offers.
+    /// A taken name (ADR 0060): a new file was to go to `target`, where a file is, and `free`
+    /// is a name free beside it, which Rename… offers; `answer` says who waits for the answer.
     Conflict {
-        job: u64,
-        source: Location,
+        answer: Answer,
         target: Location,
         free: Vec<u8>,
-        reply: oneshot::Sender<Conflict>,
     },
     /// The new name for Rename… in `question`, a [`Purpose::Conflict`], which comes back in
     /// front if it is cancelled.
@@ -466,8 +461,6 @@ enum Purpose {
     /// The dialog that saves a file (ADR 0059): OK writes `bytes` where the name typed points
     /// from `dir`.
     SaveFile { dir: Location, bytes: Vec<u8> },
-    /// The file at `location` is there: Yes writes `bytes` over it.
-    OverwriteFile { location: Location, bytes: Vec<u8> },
     /// Go to directory in `panel`: OK opens the path typed there.
     GoToDir { panel: PanelId },
     /// A question about workspaces.
@@ -476,7 +469,7 @@ enum Purpose {
     /// again for the panels that wait for it.
     Reconnect { host: String, reason: String },
     /// `panel` could not read a directory: Retry reads it again, Up goes to the nearest parent
-    /// that is there, Go to opens Go to directory with its path; OK stays.
+    /// that is there, Go to opens Go to directory with its path; Cancel stays.
     ListFailed { panel: PanelId, failure: Failure },
     /// A key in `panel`, which is on a host that is not connected: Connect reads its directory
     /// again, Local goes to the last local directory of the panel.
@@ -488,6 +481,23 @@ enum Purpose {
     /// An error about the dialog after it, which shows under it and has the keys again once
     /// it closes.
     InfoOver,
+}
+
+/// Who waits for the answer to the question about a taken name, and what the new file is.
+#[derive(Debug)]
+enum Answer {
+    /// The copy job `job`, whose `source` was to go there, waits for `reply`.
+    Job {
+        job: u64,
+        source: Location,
+        reply: oneshot::Sender<Conflict>,
+    },
+    /// `panel` renamed `from` in its row: Overwrite renames it, and the file there goes;
+    /// Rename… renames it to another name in its directory.
+    Rename { panel: PanelId, from: Location },
+    /// The dialog that saves a file: Overwrite writes `bytes` over the file there; Rename…
+    /// writes them under another name.
+    Save { bytes: Vec<u8> },
 }
 
 /// What a dialog about workspaces is for.
@@ -636,7 +646,6 @@ enum Shown {
 #[derive(Debug)]
 struct Job {
     id: u64,
-    kind: JobKind,
     background: bool,
     /// What starts the job when its turn comes, while it waits.
     queued: Option<Effect>,
@@ -673,7 +682,6 @@ impl Job {
         };
         Self {
             id,
-            kind,
             background: false,
             queued: None,
             then: None,
@@ -704,11 +712,12 @@ enum Source {
         host: Option<HostHandle>,
     },
     /// Text that the app holds, under a name of its own, such as the lines of the checksums of
-    /// a window of them, which goes back in front when the viewer closes (ADR 0058).
+    /// a window of them, `results`, which goes back in front when the viewer closes (ADR
+    /// 0058), or a file that a save would write.
     Text {
         name: String,
         bytes: Vec<u8>,
-        results: Box<Results>,
+        results: Option<Box<Results>>,
     },
 }
 
@@ -3581,7 +3590,7 @@ impl App {
             );
             let buttons = vec![Button::Yes, Button::No];
             let title = fl!("workspaces-replace-title");
-            let dialog = Dialog::question(&title, &message, buttons, 0, Tone::Warning);
+            let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
             self.dialogs.push_back(Open {
                 dialog,
                 purpose: Purpose::Workspace(WorkspaceQuestion::Replace { workspace }),
@@ -3797,12 +3806,12 @@ impl App {
             }
             Err(reason) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                let message = if changed {
-                    fl!("workspaces-save-error", reason = reason)
+                let head = if changed {
+                    fl!("workspaces-save-error")
                 } else {
-                    fl!("workspaces-load-error", reason = reason)
+                    fl!("workspaces-load-error")
                 };
-                self.show_error(&message);
+                self.show_problem(&Problem::new(head, reason));
             }
         }
     }
@@ -4393,7 +4402,7 @@ impl App {
     pub(crate) fn config_saved(&mut self, result: Result<(), String>) {
         if let Err(reason) = result {
             let reason = cells::sanitize(reason.as_bytes());
-            self.show_error(&fl!("config-save-error", reason = reason));
+            self.show_problem(&Problem::new(fl!("config-save-error"), reason));
         }
     }
 
@@ -4584,16 +4593,14 @@ impl App {
                 self.answered(job);
                 let _ = reply.send(decision_of(event));
             }
-            Purpose::Conflict { job, reply, .. } => {
-                self.answered(job);
-                let _ = reply.send(conflict_of(event, dialog));
+            Purpose::Conflict { answer, target, .. } => {
+                return self.conflict_answered(answer, target, event, dialog);
             }
             Purpose::ConflictRename { question } => {
                 if ok {
-                    self.rename_conflict(*question, dialog.text());
-                } else {
-                    self.dialogs.push_front(*question);
+                    return self.rename_conflict(*question, dialog.text());
                 }
+                self.dialogs.push_front(*question);
             }
             Purpose::EditHost { name, old, .. } if ok => {
                 return save_host(name, old.as_ref(), dialog);
@@ -4607,16 +4614,6 @@ impl App {
             Purpose::SaveFile { dir, bytes } if ok && !dialog.text().is_empty() => {
                 let location = panel::resolve(&dir, &self.home, dialog.text());
                 return self.write_file(location, bytes, false);
-            }
-            Purpose::OverwriteFile { location, bytes }
-                if event == DialogEvent::Pressed(Button::Yes) =>
-            {
-                return self.write_file(location, bytes, true);
-            }
-            Purpose::RenameOver { panel, from, to }
-                if event == DialogEvent::Pressed(Button::Yes) =>
-            {
-                return self.rename_entry(panel, from, to, true);
             }
             Purpose::GoToDir { panel } if ok => return self.cd(panel, dialog.text()),
             Purpose::Workspace(question) => {
@@ -4637,8 +4634,6 @@ impl App {
             | Purpose::GoToDir { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveFile { .. }
-            | Purpose::OverwriteFile { .. }
-            | Purpose::RenameOver { .. }
             | Purpose::Pattern { .. }
             | Purpose::Mkdir { .. }
             | Purpose::Delete { .. }
@@ -4694,6 +4689,22 @@ impl App {
         self.read_more()
     }
 
+    /// Views `bytes`, the file a save would write, under `name`, for `question`, about a taken
+    /// name, which comes back in front once the viewer closes.
+    fn view_text_for(&mut self, name: String, bytes: Vec<u8>, question: Open) -> Vec<Effect> {
+        let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes());
+        let source = Source::Text {
+            name,
+            bytes,
+            results: None,
+        };
+        self.open_viewer(viewer, source);
+        if let Some(viewing) = &mut self.viewing {
+            viewing.question = Some(Box::new(question));
+        }
+        self.read_more()
+    }
+
     /// Whether the viewer is in front of the windows, for a question about a taken name.
     fn viewer_over(&self) -> bool {
         self.viewing
@@ -4707,7 +4718,7 @@ impl App {
         let name = sums_name(&results);
         let bytes = sums_file(&results.lines);
         let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes());
-        let results = Box::new(results);
+        let results = Some(Box::new(results));
         self.open_viewer(
             viewer,
             Source::Text {
@@ -4820,12 +4831,9 @@ impl App {
             return Vec::new();
         };
         let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
-            let reason = fl!("error-connection-closed");
-            self.show_error(&fl!(
-                "edit-error",
-                path = location_text(&location),
-                reason = reason
-            ));
+            let problem = Problem::new(fl!("edit-error"), fl!("error-connection-closed"))
+                .at(location_text(&location));
+            self.show_problem(&problem);
             return Vec::new();
         };
         let (handle, on) = (handle.clone(), host.clone());
@@ -4895,7 +4903,7 @@ impl App {
     pub(crate) fn open_failed(&mut self, path: &Path, reason: &str) {
         let path = location_text(&Location::Local(path.to_path_buf()));
         let reason = cells::sanitize(reason.as_bytes());
-        self.show_error(&fl!("open-error", path = path, reason = reason));
+        self.show_problem(&Problem::new(fl!("open-error"), reason).at(path));
     }
 
     /// Takes the end of the editor: whether the file changed, or why it could not run. A
@@ -4912,7 +4920,7 @@ impl App {
             Ok(changed) => changed,
             Err(reason) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("edit-error", path = path.clone(), reason = reason));
+                self.show_problem(&Problem::new(fl!("edit-error"), reason).at(path.clone()));
                 false
             }
         };
@@ -5205,7 +5213,7 @@ impl App {
             }
             Err(reason) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("history-error", reason = reason));
+                self.show_problem(&Problem::new(fl!("history-error"), reason));
             }
         }
     }
@@ -5424,16 +5432,17 @@ impl App {
                 if viewing.viewer.loading() {
                     let asked = viewing.question.is_some();
                     self.close_viewer();
-                    let message = fl!("viewer-error", path = path, reason = reason);
+                    let problem = Problem::new(fl!("viewer-error"), reason).at(path);
                     // Over the question, which is in sight under it.
                     if asked {
-                        self.show_error_over(&message);
+                        self.show_problem_over(&problem);
                     } else {
-                        self.show_error(&message);
+                        self.show_problem(&problem);
                     }
                 } else {
                     viewing.viewer.stop();
-                    self.show_error(&fl!("viewer-read-error", path = path, reason = reason));
+                    let problem = Problem::new(fl!("viewer-read-error"), reason).at(path);
+                    self.show_problem(&problem);
                 }
                 return Vec::new();
             }
@@ -5497,7 +5506,11 @@ impl App {
     fn close_viewer(&mut self) {
         if let Some(viewing) = self.viewing.take() {
             viewing.cancel.cancel();
-            if let Source::Text { results, .. } = viewing.source {
+            if let Source::Text {
+                results: Some(results),
+                ..
+            } = viewing.source
+            {
                 self.results.push_front(*results);
             }
             if let Some(question) = viewing.question {
@@ -5544,8 +5557,8 @@ impl App {
                     Some(handle.clone())
                 } else {
                     let reason = fl!("error-connection-closed");
-                    let path = location_text(&dir);
-                    self.show_error(&fl!("delete-error", path = path, reason = reason));
+                    let problem = Problem::new(fl!("delete-error"), reason).at(location_text(&dir));
+                    self.show_problem(&problem);
                     return Vec::new();
                 }
             }
@@ -5697,14 +5710,14 @@ impl App {
         target: Location,
     ) -> Vec<Effect> {
         let sources: Vec<Location> = names.iter().map(|name| child(&dir, name)).collect();
-        let error = |reason: String| kind.error(&location_text(&target), &reason);
+        let error = |reason: String| Problem::new(kind.error(), reason).at(location_text(&target));
         if target == dir || sources.contains(&target) {
-            self.show_error(&error(fl!("transfer-same")));
+            self.show_problem(&error(fl!("transfer-same")));
             return Vec::new();
         }
         if let Some(source) = sources.iter().find(|source| within(source, &target)) {
             let reason = fl!("transfer-into-itself", path = location_text(source));
-            self.show_error(&error(reason));
+            self.show_problem(&error(reason));
             return Vec::new();
         }
         let handle = |location: &Location| match location {
@@ -5715,7 +5728,7 @@ impl App {
             Location::Local(_) => Ok(None),
         };
         let (Ok(from), Ok(to)) = (handle(&dir), handle(&target)) else {
-            self.show_error(&error(fl!("error-connection-closed")));
+            self.show_problem(&error(fl!("error-connection-closed")));
             return Vec::new();
         };
         // The source, and the target if a panel shows it.
@@ -5749,48 +5762,118 @@ impl App {
         effects
     }
 
-    /// Asks what to do about `asked`, a taken name in the copy job `id`, as a warning: the path
-    /// of the file there; the new file and that one, each with its size and time, on a line
-    /// that views it; what to do about the names taken after it; and Skip as the default.
+    /// Asks what to do about `asked`, a taken name in the copy job `id` (ADR 0060), with Skip as
+    /// the default. A job of one entry has no Skip, which would do what Abort does, and Abort is
+    /// the default; at its last entry, no combo box asks about the names taken after it.
     fn ask_conflict(&mut self, id: u64, asked: TakenName) {
-        let formats = noc_locale::current();
-        let file = |metadata: &Metadata| {
-            let time = cells::mtime(metadata.modified, &self.tz, &formats);
-            fl!("copy-exists-file", size = metadata.size, time = time)
+        let (single, more) = self
+            .jobs
+            .iter()
+            .find(|job| job.id == id)
+            .map_or((false, true), |job| (job.view.single(), job.view.more()));
+        let mut buttons = vec![Button::Overwrite];
+        if !single {
+            buttons.push(Button::Skip);
+        }
+        buttons.extend([Button::Rename, Button::Abort]);
+        let default = if single { buttons.len() - 1 } else { 1 };
+        let source = &asked.source_metadata;
+        let new = self.file_text(source.size, source.modified);
+        let mut dialog = self.taken_dialog(
+            &asked.target,
+            &new,
+            &asked.target_metadata,
+            buttons,
+            default,
+        );
+        if more {
+            let rests = [
+                fl!("copy-exists-ask"),
+                fl!("copy-exists-same"),
+                fl!("copy-exists-older"),
+                fl!("copy-exists-smaller"),
+                fl!("copy-exists-larger"),
+                fl!("copy-exists-size-differs"),
+            ];
+            dialog = dialog
+                .with_line()
+                .with_combo_box(&fl!("copy-exists-rest"), &rests, 0);
+        }
+        let answer = Answer::Job {
+            job: id,
+            source: asked.source,
+            reply: asked.reply,
         };
-        let buttons = vec![
-            Button::Overwrite,
-            Button::Keep,
-            Button::Rename,
-            Button::Abort,
-        ];
-        let rests = [
-            fl!("copy-exists-ask"),
-            fl!("copy-exists-same"),
-            fl!("copy-exists-older"),
-            fl!("copy-exists-smaller"),
-            fl!("copy-exists-larger"),
-            fl!("copy-exists-size-differs"),
-        ];
-        let title = fl!("copy-exists-title");
-        let message = location_text(&asked.target);
-        let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning)
-            .with_line()
-            .with_item(&fl!("copy-exists-new"), &file(&asked.source_metadata))
-            .with_item(&fl!("copy-exists-existing"), &file(&asked.target_metadata))
-            .with_line()
-            .with_combo_box(&fl!("copy-exists-rest"), &rests, 0)
+        self.dialogs.push_back(Open {
+            dialog: dialog.with_focus_on_default(),
+            purpose: Purpose::Conflict {
+                answer,
+                target: asked.target,
+                free: asked.free,
+            },
+        });
+    }
+
+    /// Asks what to do about `taken`, the file at `target`, where a rename or a save, as
+    /// `answer` says, was to put a file of `new`, its size and time: the question of a job about
+    /// a taken name, for one file, with Overwrite, Rename…, and Cancel, the default.
+    fn ask_taken(
+        &mut self,
+        answer: Answer,
+        target: Location,
+        new: (Option<u64>, Option<SystemTime>),
+        taken: TakenFile,
+    ) {
+        let new = self.file_text(new.0, new.1);
+        let buttons = vec![Button::Overwrite, Button::Rename, Button::Cancel];
+        let dialog = self
+            .taken_dialog(&target, &new, &taken.target, buttons, 2)
             .with_focus_on_default();
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Conflict {
-                job: id,
-                source: asked.source,
-                target: asked.target,
-                free: asked.free,
-                reply: asked.reply,
+                answer,
+                target,
+                free: taken.free,
             },
         });
+    }
+
+    /// The question about the taken name `target`, as a warning: its path; then, between lines,
+    /// the line of the new file, which says `new`, and that of the file there, `existing`, each
+    /// with its size and time, and each viewing its file; then `buttons`, of which `default`
+    /// is the default.
+    fn taken_dialog(
+        &self,
+        target: &Location,
+        new: &str,
+        existing: &Metadata,
+        buttons: Vec<Button>,
+        default: usize,
+    ) -> Dialog {
+        let title = fl!("copy-exists-title");
+        let existing = self.file_text(existing.size, existing.modified);
+        Dialog::question(
+            &title,
+            &location_text(target),
+            buttons,
+            default,
+            Tone::Warning,
+        )
+        .with_line()
+        .with_item(&fl!("copy-exists-new"), new)
+        .with_item(&fl!("copy-exists-existing"), &existing)
+    }
+
+    /// The size and the time of a file, as the question about a taken name shows them. An
+    /// unknown time leaves its cells blank, so that the sizes line up.
+    fn file_text(&self, size: Option<u64>, modified: Option<SystemTime>) -> String {
+        let formats = noc_locale::current();
+        let mut time = cells::mtime(modified, &self.tz, &formats);
+        if time.is_empty() {
+            time = " ".repeat(formats.time_width());
+        }
+        fl!("copy-exists-file", size = size, time = time)
     }
 
     /// Takes a press in the question about a taken name in front that leaves it waiting: an item
@@ -5798,19 +5881,31 @@ impl App {
     /// back once they close. `None` for any other.
     fn set_question_aside(&mut self, event: DialogEvent) -> Option<Vec<Effect>> {
         let Purpose::Conflict {
-            source,
+            answer,
             target,
             free,
-            ..
         } = &self.dialogs.front()?.purpose
         else {
             return None;
         };
         match event {
             DialogEvent::Opened(index) => {
-                let location = if index == 0 { source } else { target }.clone();
+                let new = match answer {
+                    Answer::Job { source, .. } => Ok(source.clone()),
+                    Answer::Rename { from, .. } => Ok(from.clone()),
+                    Answer::Save { bytes } => Err(bytes.clone()),
+                };
+                let target = target.clone();
                 let question = self.dialogs.pop_front()?;
-                Some(self.view_for(location, question))
+                Some(match (index, new) {
+                    (0, Ok(location)) => self.view_for(location, question),
+                    (0, Err(bytes)) => {
+                        let name = file_name(&target).unwrap_or_default();
+                        let name = String::from_utf8_lossy(&name).into_owned();
+                        self.view_text_for(name, bytes, question)
+                    }
+                    _ => self.view_for(target, question),
+                })
             }
             DialogEvent::Pressed(Button::Rename) => {
                 // A name that is not UTF-8 cannot be edited; one is typed in its place.
@@ -5829,33 +5924,63 @@ impl App {
         }
     }
 
+    /// Does what the question about the taken name `target`, `dialog`, was for, once `event`
+    /// closed it: a job hears the answer; a rename or a save goes over the file there after
+    /// Overwrite, and does nothing after Cancel.
+    fn conflict_answered(
+        &mut self,
+        answer: Answer,
+        target: Location,
+        event: DialogEvent,
+        dialog: &Dialog,
+    ) -> Vec<Effect> {
+        let overwrite = event == DialogEvent::Pressed(Button::Overwrite);
+        match answer {
+            Answer::Job { job, reply, .. } => {
+                self.answered(job);
+                let _ = reply.send(conflict_of(event, dialog));
+            }
+            Answer::Rename { panel, from } if overwrite => {
+                return self.rename_entry(panel, from, target, true);
+            }
+            Answer::Save { bytes } if overwrite => return self.write_file(target, bytes, true),
+            Answer::Rename { .. } | Answer::Save { .. } => {}
+        }
+        Vec::new()
+    }
+
     /// Answers `question`, a [`Purpose::Conflict`], with Rename… to `text`, typed from the
-    /// directory of the file there; the directory it names is reloaded once the job ends.
-    fn rename_conflict(&mut self, question: Open, text: &str) {
-        let Purpose::Conflict {
-            job, target, reply, ..
-        } = question.purpose
-        else {
-            return;
+    /// directory of the file there: a job copies there, and reads the directory it names again
+    /// once it ends; a rename or a save goes there, and asks again if that name is taken too.
+    fn rename_conflict(&mut self, question: Open, text: &str) -> Vec<Effect> {
+        let Purpose::Conflict { answer, target, .. } = question.purpose else {
+            return Vec::new();
         };
         let dir = target.parent().unwrap_or(target);
         let location = panel::resolve(&dir, &self.home, text);
-        let path = match &location {
-            Location::Local(path) => path.as_os_str().as_bytes().to_vec(),
-            Location::Remote { path, .. } => path.as_bytes().to_vec(),
-        };
-        if let Some(dir) = location.parent()
-            && let Some(job) = self.jobs.iter_mut().find(|found| found.id == job)
-            && !job.changes.contains(&dir)
-        {
-            job.changes.push(dir);
+        match answer {
+            Answer::Job { job, reply, .. } => {
+                let path = match &location {
+                    Location::Local(path) => path.as_os_str().as_bytes().to_vec(),
+                    Location::Remote { path, .. } => path.as_bytes().to_vec(),
+                };
+                if let Some(dir) = location.parent()
+                    && let Some(job) = self.jobs.iter_mut().find(|found| found.id == job)
+                    && !job.changes.contains(&dir)
+                {
+                    job.changes.push(dir);
+                }
+                self.answered(job);
+                let conflict = Conflict {
+                    this: Choice::Rename(path),
+                    rest: rest_of(&question.dialog),
+                };
+                let _ = reply.send(conflict);
+                Vec::new()
+            }
+            Answer::Rename { panel, from } => self.rename_entry(panel, from, location, false),
+            Answer::Save { bytes } => self.write_file(location, bytes, false),
         }
-        self.answered(job);
-        let conflict = Conflict {
-            this: Choice::Rename(path),
-            rest: rest_of(&question.dialog),
-        };
-        let _ = reply.send(conflict);
     }
 
     /// Takes a report from the job `id`, as [`App::job_event`] does, and tells whether the
@@ -5908,19 +6033,28 @@ impl App {
             JobEvent::Failed {
                 at,
                 path,
+                step,
                 error,
+                retry,
                 reply,
             } => {
                 job.view.failed(at);
-                let path = location_text(&path);
                 let reason = cells::sanitize(error.as_bytes());
-                let message = match job.kind {
-                    JobKind::Delete => fl!("delete-error", path = path, reason = reason),
-                    JobKind::Transfer(kind) => kind.error(&path, &reason),
-                    JobKind::Checksum => fl!("checksum-error", path = path, reason = reason),
-                };
-                let buttons = vec![Button::Skip, Button::SkipAll, Button::Retry, Button::Abort];
-                let dialog = Dialog::failure(&message, buttons, 0);
+                let problem = Problem::new(step_text(step), reason).at(location_text(&path));
+                // Skip would do what Abort does for the only entry, and Skip all what Skip does
+                // for the last.
+                let mut buttons = Vec::new();
+                if retry {
+                    buttons.push(Button::Retry);
+                }
+                if !job.view.single() {
+                    buttons.push(Button::Skip);
+                    if job.view.more() {
+                        buttons.push(Button::SkipAll);
+                    }
+                }
+                buttons.push(Button::Abort);
+                let dialog = Dialog::failure(&problem, buttons, 0);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::Failure { job: id, reply },
@@ -6139,8 +6273,8 @@ impl App {
             let Some(first) = group.first() else { continue };
             let Ok(handle) = self.handle_for(first) else {
                 let reason = fl!("error-connection-closed");
-                let path = location_text(first);
-                self.show_error(&fl!("checksum-error", path = path, reason = reason));
+                let problem = Problem::new(fl!("checksum-error"), reason).at(location_text(first));
+                self.show_problem(&problem);
                 return Vec::new();
             };
             if let Location::Remote { host, .. } = first {
@@ -6336,7 +6470,7 @@ impl App {
     fn write_file(&mut self, location: Location, bytes: Vec<u8>, replace: bool) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&location) else {
             let reason = fl!("error-connection-closed");
-            self.show_error(&save::error(&location_text(&location), &reason));
+            self.show_problem(&save::error(location_text(&location), reason));
             return Vec::new();
         };
         self.saving.insert(location.clone(), bytes.clone());
@@ -6349,33 +6483,28 @@ impl App {
     }
 
     /// Takes the end of an [`Effect::WriteFile`]: panels on its directory read it again, where
-    /// the file shows; a taken name asks whether to replace it. `Err(None)` is a taken name.
+    /// the file shows; a taken name asks what to do, as a copy does.
     pub(crate) fn written(
         &mut self,
         location: &Location,
-        result: Result<(), Option<String>>,
+        result: Result<(), Refused>,
     ) -> Vec<Effect> {
         let Some(bytes) = self.saving.remove(location) else {
             return Vec::new();
         };
-        let path = location_text(location);
         match result {
             Ok(()) => location
                 .parent()
                 .map_or_else(Vec::new, |dir| self.reload(&dir)),
-            Err(None) => {
-                self.dialogs.push_back(Open {
-                    dialog: save::overwrite(&path),
-                    purpose: Purpose::OverwriteFile {
-                        location: location.clone(),
-                        bytes,
-                    },
-                });
+            Err(Refused::Taken(taken)) => {
+                let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+                let answer = Answer::Save { bytes };
+                self.ask_taken(answer, location.clone(), (Some(size), None), *taken);
                 Vec::new()
             }
-            Err(Some(reason)) => {
+            Err(Refused::Failed(reason)) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&save::error(&path, &reason));
+                self.show_problem(&save::error(location_text(location), reason));
                 Vec::new()
             }
         }
@@ -6466,7 +6595,7 @@ impl App {
             Err(reason) => {
                 let path = location_text(location);
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("mkdir-error", path = path, reason = reason));
+                self.show_problem(&Problem::new(fl!("mkdir-error"), reason).at(path));
                 Vec::new()
             }
         };
@@ -6580,7 +6709,7 @@ impl App {
         else {
             return Vec::new();
         };
-        if text == "." || text == ".." || text.contains(['/', '\0']) {
+        if !names_an_entry(&text) {
             let name = cells::sanitize(text.as_bytes());
             self.show_error(&fl!("rename-invalid", name = name));
             return Vec::new();
@@ -6606,9 +6735,9 @@ impl App {
         replace: bool,
     ) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&from) else {
-            let path = location_text(&from);
             let reason = fl!("error-connection-closed");
-            self.show_error(&fl!("rename-error", path = path, reason = reason));
+            let problem = Problem::new(fl!("rename-error"), reason).at(location_text(&from));
+            self.show_problem(&problem);
             return Vec::new();
         };
         let noted = from.parent().map_or_else(Vec::new, |dir| self.note(&dir));
@@ -6625,14 +6754,14 @@ impl App {
     }
 
     /// Takes the result of an [`Effect::Rename`]: panels on the directory read it again, the
-    /// one that renamed with the cursor on the new name. A file with that name asks whether to
-    /// rename over it; an error shows in a dialog.
+    /// one that renamed with the cursor on the new name. A file with that name asks what to do,
+    /// as a copy does; an error shows in a dialog.
     pub(crate) fn entry_renamed(
         &mut self,
         panel: PanelId,
         from: &Location,
         to: &Location,
-        result: Result<(), Option<String>>,
+        result: Result<(), Refused>,
     ) -> Vec<Effect> {
         let effects = self.take_renamed(panel, from, to, result);
         self.end_work(panel, to);
@@ -6644,30 +6773,26 @@ impl App {
         panel: PanelId,
         from: &Location,
         to: &Location,
-        result: Result<(), Option<String>>,
+        result: Result<(), Refused>,
     ) -> Vec<Effect> {
         match result {
             Ok(()) => self.show_new(panel, to),
-            Err(None) => {
-                let name = file_name(to).unwrap_or_default();
-                let message = fl!("rename-exists", name = cells::sanitize(&name));
-                let buttons = vec![Button::Yes, Button::No];
-                let title = fl!("copy-exists-title");
-                let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
-                self.dialogs.push_back(Open {
-                    dialog,
-                    purpose: Purpose::RenameOver {
-                        panel,
-                        from: from.clone(),
-                        to: to.clone(),
-                    },
-                });
+            Err(Refused::Taken(taken)) => {
+                let new = taken
+                    .source
+                    .as_ref()
+                    .map_or((None, None), |source| (source.size, source.modified));
+                let answer = Answer::Rename {
+                    panel,
+                    from: from.clone(),
+                };
+                self.ask_taken(answer, to.clone(), new, *taken);
                 Vec::new()
             }
-            Err(Some(reason)) => {
-                let path = location_text(from);
+            Err(Refused::Failed(reason)) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("rename-error", path = path, reason = reason));
+                let problem = Problem::new(fl!("rename-error"), reason).at(location_text(from));
+                self.show_problem(&problem);
                 Vec::new()
             }
         }
@@ -6686,6 +6811,23 @@ impl App {
     fn show_error_over(&mut self, message: &str) {
         self.dialogs.push_front(Open {
             dialog: Dialog::error(message),
+            purpose: Purpose::InfoOver,
+        });
+    }
+
+    /// Shows `problem` in an error dialog, after the dialogs open before it.
+    fn show_problem(&mut self, problem: &Problem) {
+        self.dialogs.push_back(Open {
+            dialog: Dialog::problem(problem),
+            purpose: Purpose::Info,
+        });
+    }
+
+    /// Shows `problem` in an error dialog over the dialog in front, which stays open, and in
+    /// sight, under it.
+    fn show_problem_over(&mut self, problem: &Problem) {
+        self.dialogs.push_front(Open {
+            dialog: Dialog::problem(problem),
             purpose: Purpose::InfoOver,
         });
     }
@@ -6781,10 +6923,28 @@ impl App {
         };
         let current = match purpose {
             Purpose::EditHost { current, .. } => current,
-            // Without a name, OK does nothing.
-            Purpose::ConflictRename { .. } => {
-                return event == DialogEvent::Pressed(Button::Ok)
-                    && dialog.text().trim().is_empty();
+            // Without a name, OK does nothing; a rename takes a name in its directory alone.
+            Purpose::ConflictRename { question } => {
+                if event != DialogEvent::Pressed(Button::Ok) {
+                    return false;
+                }
+                let text = dialog.text();
+                if text.trim().is_empty() {
+                    return true;
+                }
+                let renames = matches!(
+                    question.purpose,
+                    Purpose::Conflict {
+                        answer: Answer::Rename { .. },
+                        ..
+                    }
+                );
+                if !renames || names_an_entry(text) {
+                    return false;
+                }
+                let name = cells::sanitize(text.as_bytes());
+                self.show_error_over(&fl!("rename-invalid", name = name));
+                return true;
             }
             Purpose::Checksum { expect: true, .. } if event == DialogEvent::Pressed(Button::Ok) => {
                 let typed = dialog.text().trim();
@@ -6831,7 +6991,7 @@ impl App {
             }
             Err(reason) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.show_error(&fl!("host-save-error", reason = reason));
+                self.show_problem(&Problem::new(fl!("host-save-error"), reason));
                 Vec::new()
             }
         }
@@ -7056,26 +7216,24 @@ impl App {
             .parent
             .as_ref()
             .is_some_and(|parent| parent.location() != shown.location());
-        let mut buttons = vec![Button::Ok, Button::Retry];
+        let mut buttons = vec![Button::Retry];
         if up {
             buttons.push(Button::Up);
         }
-        buttons.push(Button::GoTo);
-        let first = match failure.error.kind {
-            ListErrorKind::NotFound if up && failure.stranded => Button::Up,
-            ListErrorKind::NotFound | ListErrorKind::Denied => Button::Ok,
-            ListErrorKind::Other => Button::Retry,
+        buttons.extend([Button::GoTo, Button::Cancel]);
+        // A panel left with nothing to show goes up; any other tries again.
+        let first = if up && failure.stranded {
+            Button::Up
+        } else {
+            Button::Retry
         };
         let default = buttons
             .iter()
             .position(|&button| button == first)
             .unwrap_or_default();
-        let message = fl!(
-            "list-failed",
-            path = failure.shown.as_str(),
-            reason = failure.error.reason.as_str()
-        );
-        let dialog = Dialog::failure(&message, buttons, default);
+        let problem = Problem::new(fl!("list-failed"), failure.error.reason.clone())
+            .at(failure.shown.clone());
+        let dialog = Dialog::failure(&problem, buttons, default);
         let open = Open {
             dialog,
             purpose: Purpose::ListFailed { panel, failure },
@@ -7265,13 +7423,14 @@ impl App {
     fn ask_reconnect(&mut self, host: &str, reason: &str, lost: bool) {
         let shown = cells::sanitize(host.as_bytes());
         let why = cells::sanitize(reason.as_bytes());
-        let message = if lost {
-            fl!("reconnect-lost", host = shown, reason = why)
+        let head = if lost {
+            fl!("reconnect-lost", host = shown)
         } else {
-            fl!("reconnect-failed", host = shown, reason = why)
+            fl!("reconnect-failed", host = shown)
         };
         let buttons = vec![Button::Retry, Button::Cancel];
-        let dialog = Dialog::question(&fl!("reconnect-title"), &message, buttons, 0, Tone::Error);
+        let problem = Problem::new(head, why);
+        let dialog = Dialog::failure_titled(&fl!("reconnect-title"), &problem, buttons, 0);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Reconnect {
@@ -8117,6 +8276,26 @@ fn theme_of(ui: &UiConfig, depth: ColorDepth) -> Theme {
         .with_glyphs(Glyphs::of(ui.icons))
 }
 
+/// Whether `text` can be the name of an entry in a directory, which a rename gives: not `.` or
+/// `..`, and without a slash or a NUL. Empty text is a name nothing has.
+fn names_an_entry(text: &str) -> bool {
+    text != "." && text != ".." && !text.contains(['/', '\0'])
+}
+
+/// What a job could not do, over the path it could not do it to.
+fn step_text(step: Step) -> String {
+    match step {
+        Step::Inspect => fl!("step-inspect"),
+        Step::List => fl!("step-list"),
+        Step::Read => fl!("step-read"),
+        Step::Create => fl!("step-create"),
+        Step::Write => fl!("step-write"),
+        Step::SetAttributes => fl!("step-set-attributes"),
+        Step::Rename => fl!("step-rename"),
+        Step::Remove => fl!("step-remove"),
+    }
+}
+
 /// What a job does after a failure, by the button `event` pressed.
 fn decision_of(event: DialogEvent) -> Decision {
     match event {
@@ -8131,7 +8310,7 @@ fn decision_of(event: DialogEvent) -> Decision {
 fn conflict_of(event: DialogEvent, dialog: &Dialog) -> Conflict {
     let this = match event {
         DialogEvent::Pressed(Button::Overwrite) => Choice::Overwrite,
-        DialogEvent::Pressed(Button::Keep) => Choice::Skip,
+        DialogEvent::Pressed(Button::Skip) => Choice::Skip,
         _ => Choice::Abort,
     };
     Conflict {
@@ -8501,6 +8680,31 @@ mod tests {
         entry.metadata.kind = FileKind::File;
         entry.metadata.size = Some(size);
         entry
+    }
+
+    /// Whether `text`, a screen, shows a problem as its dialog does: `head`, then `path` on the
+    /// next line, if any, then `reason` under a line across the frame.
+    fn shows_problem(text: &str, head: &str, path: Option<&str>, reason: &str) -> bool {
+        let lines: Vec<&str> = text.lines().collect();
+        let Some(at) = lines.iter().position(|line| line.contains(head)) else {
+            return false;
+        };
+        let has =
+            |index: usize, part: &str| lines.get(index).is_some_and(|line| line.contains(part));
+        match path {
+            Some(path) => has(at + 1, path) && has(at + 3, reason),
+            None => has(at + 2, reason),
+        }
+    }
+
+    /// A file of `size` bytes in the way of a rename, or of a save if `source` is `None`, with
+    /// `free` free beside it.
+    fn taken(source: Option<u64>, size: u64, free: &str) -> Result<(), Refused> {
+        Err(Refused::Taken(Box::new(TakenFile {
+            source: source.map(|size| file("new", size).metadata),
+            target: file("there", size).metadata,
+            free: free.as_bytes().to_vec(),
+        })))
     }
 
     /// Settings with mc's markers in the interface, and without zoxide, which tests of its
@@ -10628,7 +10832,12 @@ mod tests {
         let text = screen(&mut app);
         assert!(text.contains("Error"), "{text}");
         assert!(
-            text.contains("Cannot create directory /srv/left: already exists"),
+            shows_problem(
+                &text,
+                "Cannot create the directory",
+                Some("/srv/left"),
+                "already exists"
+            ),
             "{text}"
         );
         app.handle(action(Action::Confirm));
@@ -10730,21 +10939,33 @@ mod tests {
             "{text}"
         );
 
-        // A failure waits for an answer: Ignore all is next to Ignore.
+        // A failure waits for an answer: what failed, the path, and why, each on a line of its
+        // own; Retry first, the default, then Skip and Skip all.
         let (reply, mut decision) = oneshot::channel();
         let failed = JobEvent::Failed {
             at: Instant::now(),
             path: local("/srv/left/b"),
-            error: "permission denied".to_owned(),
+            step: Step::Remove,
+            error: "Permission denied".to_owned(),
+            retry: true,
             reply,
         };
         app.job_event(id, failed);
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Cannot delete /srv/left/b: permission denied"),
+            shows_problem(
+                &text,
+                "Cannot delete",
+                Some("/srv/left/b"),
+                "Permission denied"
+            ),
             "{text}"
         );
-        assert!(text.contains("{ Ignore }"), "{text}");
+        assert!(
+            text.contains("{ Retry } [ Skip ] [ Skip all ] [ Abort ]"),
+            "{text}"
+        );
+        app.handle(action(Action::Right));
         app.handle(action(Action::Right));
         app.handle(action(Action::Confirm));
         assert_eq!(decision.try_recv(), Ok(Decision::SkipAll));
@@ -10849,7 +11070,7 @@ mod tests {
         app.job_event(second, failed(path, error, reply));
         assert_eq!(app.context(), Context::Dialog);
         app.handle(action(Action::Confirm));
-        assert_eq!(decision.try_recv(), Ok(Decision::Skip));
+        assert_eq!(decision.try_recv(), Ok(Decision::Retry));
 
         // F10 asks while jobs run; No, the default, goes on.
         app.handle(action(Action::Quit));
@@ -11020,7 +11241,7 @@ mod tests {
         assert!(app.spin_due(now).is_none(), "nothing moves while they wait");
 
         app.handle(action(Action::Confirm));
-        assert_eq!(decisions[0].try_recv(), Ok(Decision::Skip));
+        assert_eq!(decisions[0].try_recv(), Ok(Decision::Retry));
         assert!(ticking(&app, first), "the first goes on");
         assert!(
             !ticking(&app, second),
@@ -11089,7 +11310,9 @@ mod tests {
         let failed = JobEvent::Failed {
             at: at(25_000),
             path: local("/srv/left/a"),
+            step: Step::Read,
             error: "busy".to_owned(),
+            retry: true,
             reply,
         };
         app.job_event(id, failed);
@@ -11103,7 +11326,9 @@ mod tests {
         JobEvent::Failed {
             at: Instant::now(),
             path,
+            step: Step::Remove,
             error,
+            retry: true,
             reply,
         }
     }
@@ -11388,6 +11613,93 @@ mod tests {
     }
 
     #[test]
+    fn a_taken_name_offers_skip_and_the_rest_only_where_entries_come_after_it() {
+        let (mut app, id) = copying();
+        let at = |app: &mut App, done, total| {
+            let counts = Counts {
+                done,
+                total,
+                ..Counts::default()
+            };
+            app.job_event(id, report(local("/srv/left/a"), counts));
+        };
+        // At the last entry, nothing comes after it.
+        at(&mut app, 1, 2);
+        let mut answer = ask_taken(&mut app, id);
+        let text = screen_of(&mut app, 16);
+        assert!(!text.contains("The rest"), "{text}");
+        assert!(
+            text.contains("[ Overwrite ] { Skip } [ Rename… ] [ Abort ]"),
+            "{text}"
+        );
+        app.handle(action(Action::Confirm));
+        assert_eq!(answer.try_recv(), Ok(Conflict::once(Choice::Skip)));
+
+        // For the only entry, Skip would do what Abort does.
+        at(&mut app, 0, 1);
+        let mut answer = ask_taken(&mut app, id);
+        let text = screen_of(&mut app, 16);
+        assert!(
+            text.contains("[ Overwrite ] [ Rename… ] { Abort }"),
+            "{text}"
+        );
+        app.handle(action(Action::Confirm));
+        assert_eq!(answer.try_recv(), Ok(Conflict::once(Choice::Abort)));
+    }
+
+    #[test]
+    fn a_failure_offers_only_the_buttons_that_do_something() {
+        let mut app = loaded();
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        let (id, ..) = delete_job(app.handle(action(Action::Confirm)));
+        let mut buttons = |done, total, retry| {
+            let counts = Counts {
+                done,
+                total,
+                ..Counts::default()
+            };
+            app.job_event(id, report(local("/srv/left/a"), counts));
+            let (reply, mut decision) = oneshot::channel();
+            app.job_event(
+                id,
+                JobEvent::Failed {
+                    at: Instant::now(),
+                    path: local("/srv/left/a"),
+                    step: Step::Remove,
+                    error: "Busy".to_owned(),
+                    retry,
+                    reply,
+                },
+            );
+            let text = screen_of(&mut app, 16);
+            let line = text
+                .lines()
+                .find(|line| line.contains(" Abort "))
+                .unwrap_or_default()
+                .to_owned();
+            app.handle(action(Action::Confirm));
+            (line, decision.try_recv())
+        };
+        let (line, decision) = buttons(1, 3, true);
+        assert!(
+            line.contains("{ Retry } [ Skip ] [ Skip all ] [ Abort ]"),
+            "{line}"
+        );
+        assert_eq!(decision, Ok(Decision::Retry));
+        // At the last entry, Skip all would do what Skip does.
+        let (line, _) = buttons(2, 3, true);
+        assert!(line.contains("{ Retry } [ Skip ] [ Abort ]"), "{line}");
+        // For the only entry, Skip would do what Abort does.
+        let (line, _) = buttons(0, 1, true);
+        assert!(line.contains("{ Retry } [ Abort ]"), "{line}");
+        // Where trying again would fail again, Skip is the default.
+        let (line, decision) = buttons(1, 3, false);
+        assert!(line.contains("{ Skip } [ Skip all ] [ Abort ]"), "{line}");
+        assert_eq!(decision, Ok(Decision::Skip));
+    }
+
+    #[test]
     fn the_rest_of_the_taken_names_get_what_the_combo_box_says() {
         let (mut app, id) = copying();
         let rests = [
@@ -11477,7 +11789,11 @@ mod tests {
             panic!("expected a read");
         };
         app.read(read, Err("gone".to_owned()));
-        assert!(screen(&mut app).contains("Cannot view /srv/left/a: gone"));
+        let text = screen_of(&mut app, 16);
+        assert!(
+            shows_problem(&text, "Cannot view", Some("/srv/left/a"), "gone"),
+            "{text}"
+        );
         assert_eq!(app.dialogs.len(), 2, "over the question");
         app.handle(action(Action::Confirm));
         assert!(
@@ -11627,9 +11943,14 @@ mod tests {
         app.handle(action(Action::Down));
         app.handle(action(Action::Move));
         assert!(app.handle(action(Action::Confirm)).is_empty());
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot move to /srv: the source and the target are the same"),
+            shows_problem(
+                &text,
+                "Cannot move to",
+                Some("/srv"),
+                "The source and the target are the same"
+            ),
             "{text}"
         );
     }
@@ -11693,9 +12014,14 @@ mod tests {
             app.handle(action(Action::Confirm)).is_empty(),
             "the other panel is here too"
         );
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot copy to /srv: the source and the target are the same"),
+            shows_problem(
+                &text,
+                "Cannot copy to",
+                Some("/srv"),
+                "The source and the target are the same"
+            ),
             "{text}"
         );
         app.handle(action(Action::Confirm));
@@ -11703,8 +12029,16 @@ mod tests {
         app.handle(action(Action::Copy));
         retype(&mut app, "left/inner");
         assert!(app.handle(action(Action::Confirm)).is_empty());
-        let text = screen(&mut app);
-        assert!(text.contains("it is in /srv/left"), "{text}");
+        let text = screen_of(&mut app, 12);
+        assert!(
+            shows_problem(
+                &text,
+                "Cannot copy to",
+                Some("/srv/left/inner"),
+                "It is in /srv/left"
+            ),
+            "{text}"
+        );
         assert!(remote_within(
             &RemotePath::from("/a"),
             &RemotePath::from("/a/b/")
@@ -11772,9 +12106,14 @@ mod tests {
         // The same name: the source itself.
         app.handle(action(Action::Duplicate));
         assert!(app.handle(action(Action::Confirm)).is_empty());
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot copy to /srv/report.pdf: the source and the target are the same"),
+            shows_problem(
+                &text,
+                "Cannot copy to",
+                Some("/srv/report.pdf"),
+                "The source and the target are the same"
+            ),
             "{text}"
         );
         app.handle(action(Action::Confirm));
@@ -11981,9 +12320,14 @@ mod tests {
         app.handle(action(Action::Edit));
         app.take_edit();
         app.edited(Err("cannot run nano: not found".to_owned()));
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot edit /srv/notes: cannot run nano: not found"),
+            shows_problem(
+                &text,
+                "Cannot edit",
+                Some("/srv/notes"),
+                "cannot run nano: not found"
+            ),
             "{text}"
         );
     }
@@ -12007,9 +12351,14 @@ mod tests {
         assert_eq!(chosen_names(&app, Side::Left), ["c", "d"]);
 
         app.open_failed(Path::new("/srv/c"), "xdg-open exited with exit status: 3");
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot open /srv/c: xdg-open exited with exit status: 3"),
+            shows_problem(
+                &text,
+                "Cannot open",
+                Some("/srv/c"),
+                "xdg-open exited with exit status: 3"
+            ),
             "{text}"
         );
     }
@@ -12184,9 +12533,14 @@ mod tests {
         };
         app.read(id, Err("permission denied".to_owned()));
         assert_eq!(app.context(), Context::Dialog);
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot view /srv/secret: permission denied"),
+            shows_problem(
+                &text,
+                "Cannot view",
+                Some("/srv/secret"),
+                "permission denied"
+            ),
             "{text}"
         );
     }
@@ -12319,7 +12673,12 @@ mod tests {
         assert!(app.read(id, Err("broken pipe".to_owned())).is_empty());
         let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("Cannot read more of /srv/big: broken pipe"),
+            shows_problem(
+                &text,
+                "Cannot read more of",
+                Some("/srv/big"),
+                "broken pipe"
+            ),
             "{text}"
         );
         app.handle(action(Action::Cancel));
@@ -12762,9 +13121,15 @@ mod tests {
             "the panel waits for the answer, not for work: nothing turns"
         );
         assert!(
-            text.contains("Cannot connect to db: deploy@db: Permission denied (publickey)."),
+            shows_problem(
+                &text,
+                "Cannot connect to db",
+                None,
+                "deploy@db: Permission denied (publickey)."
+            ),
             "{text}"
         );
+        assert!(text.contains("{ Retry } [ Cancel ]"), "{text}");
         assert!(!text.contains("Retry or Cancel"), "the dialog asks: {text}");
 
         // Retry, the default, connects again for the panel that still waits.
@@ -12849,7 +13214,7 @@ mod tests {
         let text = screen_of(&mut app, 20);
         assert!(text.contains("www"), "the entries stay: {text}");
         assert!(
-            text.contains("Lost the connection to web: Broken pipe"),
+            shows_problem(&text, "Lost the connection to web", None, "Broken pipe"),
             "{text}"
         );
         assert_eq!(app.dialogs.len(), 1);
@@ -14148,12 +14513,41 @@ mod tests {
             (&local("/srv/SHA256SUMS"), &all, false)
         );
 
-        // Taken: No is the default, and Yes writes over it.
-        assert!(app.written(&location, Err(None)).is_empty());
-        assert!(screen_of(&mut app, 24).contains("/srv/SHA256SUMS is there already"));
+        // Taken: the question of a copy, for one file, with Cancel the default; New views what
+        // would be written, Rename… writes under the free name it offers, and Overwrite over
+        // the file there.
+        assert!(
+            app.written(&location, taken(None, 5, "SHA256SUMS_2"))
+                .is_empty()
+        );
+        let text = screen_of(&mut app, 24);
+        assert!(
+            text.contains("File exists") && text.contains("/srv/SHA256SUMS"),
+            "{text}"
+        );
+        assert!(text.contains("New") && text.contains("Existing"), "{text}");
+        assert!(text.contains("5 bytes"), "{text}");
+        assert!(
+            text.contains("[ Overwrite ] [ Rename… ] { Cancel }"),
+            "{text}"
+        );
+        assert!(!text.contains("The rest"), "one file: {text}");
+        app.handle(Resolved::Hotkey('n'));
+        assert!(screen_of(&mut app, 24).contains("01010101"), "the new file");
+        app.handle(action(Action::Quit));
+        assert!(screen_of(&mut app, 24).contains("File exists"), "back");
+        app.handle(Resolved::Hotkey('r'));
+        let (location, _, replace) = written(app.handle(action(Action::Confirm)));
+        assert_eq!((&location, replace), (&local("/srv/SHA256SUMS_2"), false));
+        // That name is taken too: the question again.
+        assert!(
+            app.written(&location, taken(None, 5, "SHA256SUMS_3"))
+                .is_empty()
+        );
         app.handle(action(Action::Left));
-        let (_, _, replace) = written(app.handle(action(Action::Confirm)));
-        assert!(replace);
+        app.handle(action(Action::Left));
+        let (overwritten, _, replace) = written(app.handle(action(Action::Confirm)));
+        assert_eq!((&overwritten, replace), (&location, true));
         let effects = app.written(&location, Ok(()));
         assert_eq!(effects.len(), 2, "both panels show /srv, where it is");
         assert!(!screen_of(&mut app, 24).contains("Saved to"), "no status");
@@ -14566,9 +14960,11 @@ mod tests {
         app.handle(action(Action::SaveWorkspace));
         typed(&mut app, "noon");
         assert!(app.handle(action(Action::Confirm)).is_empty(), "asks first");
-        assert!(screen_of(&mut app, 16).contains("Replace it"));
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("Replace it"), "{text}");
+        assert!(text.contains("[ Yes ] { No }"), "No is the default: {text}");
         let Effect::Workspaces(WorkspaceChange::Save(workspace)) =
-            one(app.handle(action(Action::Confirm)))
+            one(app.handle(Resolved::Hotkey('y')))
         else {
             panic!("expected a workspace to save");
         };
@@ -14946,6 +15342,36 @@ mod tests {
     }
 
     #[test]
+    fn rename_in_the_question_of_shift_f6_takes_a_name_in_the_directory() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        let listing = Listing::Dir(vec![file("report.pdf", 1), file("taken.pdf", 2)]);
+        answer(&mut app, effects, &listing);
+        let panel = app.shown(Side::Left);
+        let (from, to) = (local("/srv/report.pdf"), local("/srv/taken.pdf"));
+        app.entry_renamed(panel, &from, &to, taken(Some(1), 2, "taken_2.pdf"));
+        // It offers a free name; one with a slash would move it.
+        app.handle(Resolved::Hotkey('r'));
+        assert!(screen_of(&mut app, 24).contains("taken_2.pdf"));
+        retype(&mut app, "x/y");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert!(screen_of(&mut app, 24).contains("cannot be a name"));
+        app.handle(action(Action::Confirm));
+        retype(&mut app, "other");
+        let other = one(app.handle(action(Action::Confirm)));
+        assert!(
+            matches!(&other, Effect::Rename { replace: false, to: target, .. }
+                if *target == local("/srv/other.pdf")),
+            "{other:?}"
+        );
+        // Cancel there goes back to the question.
+        app.entry_renamed(panel, &from, &local("/srv/other.pdf"), Ok(()));
+        app.entry_renamed(panel, &from, &to, taken(Some(1), 2, "taken_2.pdf"));
+        app.handle(Resolved::Hotkey('r'));
+        app.handle(action(Action::Cancel));
+        assert!(screen_of(&mut app, 24).contains("File exists"));
+    }
+
+    #[test]
     fn shift_f6_renames_in_the_row_and_asks_before_replacing_a_file() {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         let listing = Listing::Dir(vec![file("report.pdf", 1), file("taken.pdf", 2)]);
@@ -14974,13 +15400,35 @@ mod tests {
         assert_eq!(app.context(), Context::Panel, "the field is gone");
         assert!(app.panel(Side::Left).wait().is_some(), "its dots turn");
 
-        // A file has the name: No is the default; Left goes to Yes.
-        assert!(app.entry_renamed(panel, &from, &to, Err(None)).is_empty());
+        // A file has the name: the question of a copy, for one file, with Cancel the default.
+        let taken_name = || taken(Some(1), 2, "taken_2.pdf");
+        assert!(
+            app.entry_renamed(panel, &from, &to, taken_name())
+                .is_empty()
+        );
         assert!(
             app.panel(Side::Left).wait().is_none(),
             "while the question waits"
         );
-        assert!(screen(&mut app).contains("\"taken.pdf\" is there already."));
+        let text = screen_of(&mut app, 24);
+        assert!(
+            text.contains("File exists") && text.contains("/srv/taken.pdf"),
+            "{text}"
+        );
+        assert!(
+            text.contains("1 byte") && text.contains("2 bytes"),
+            "{text}"
+        );
+        assert!(
+            text.contains("[ Overwrite ] [ Rename… ] { Cancel }"),
+            "{text}"
+        );
+        assert!(app.handle(action(Action::Confirm)).is_empty(), "Cancel");
+        assert!(app.dialogs.is_empty());
+
+        // Overwrite renames over it.
+        app.entry_renamed(panel, &from, &to, taken_name());
+        app.handle(action(Action::Left));
         app.handle(action(Action::Left));
         let again = one(app.handle(action(Action::Confirm)));
         assert!(
@@ -14995,9 +15443,15 @@ mod tests {
             Some(&b"taken.pdf"[..])
         );
 
-        let effects = app.entry_renamed(panel, &from, &to, Err(Some("no space".to_owned())));
+        let failed = Err(Refused::Failed("No space".to_owned()));
+        let effects = app.entry_renamed(panel, &from, &to, failed);
         assert!(effects.is_empty());
-        assert!(screen(&mut app).contains("Cannot rename /srv/report.pdf: no space"));
+        let text = screen(&mut app);
+        assert!(
+            text.contains("Cannot rename") && text.contains("/srv/report.pdf"),
+            "{text}"
+        );
+        assert!(text.contains("No space"), "{text}");
         app.handle(action(Action::Confirm));
 
         // A slash would move it: the error goes, and the field stays.
@@ -16206,28 +16660,43 @@ mod tests {
         let effects = go_to_dir(&mut app, "/nowhere");
         fail(&mut app, effects, ListErrorKind::NotFound);
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"), "it stays");
-        let text = screen(&mut app);
-        assert!(text.contains("Cannot open /nowhere"), "{text}");
+        let text = screen_of(&mut app, 12);
+        assert!(
+            shows_problem(
+                &text,
+                "Cannot open the directory",
+                Some("/nowhere"),
+                "no such"
+            ),
+            "{text}"
+        );
     }
 
     #[test]
     fn a_directory_that_cannot_be_read_asks_what_to_do() {
         let mut app = loaded();
-        // OK, the default when it is not allowed, stays; Up would lead where the panel is.
+        // Cancel, last, stays; Up would lead where the panel is.
         let effects = go_to_dir(&mut app, "left");
         assert!(fail(&mut app, effects, ListErrorKind::Denied).is_empty());
         let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot open left: permission denied"),
+            shows_problem(
+                &text,
+                "Cannot open the directory",
+                Some("left"),
+                "permission denied"
+            ),
             "{text}"
         );
-        assert!(text.contains("Retry") && text.contains("Go to"), "{text}");
+        assert!(text.contains("{ Retry } [ Go to ] [ Cancel ]"), "{text}");
         assert!(!text.contains(" Up "), "{text}");
+        app.handle(action(Action::Right));
+        app.handle(action(Action::Right));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         assert!(app.dialogs.is_empty());
         assert_eq!(app.panel(Side::Left).location(), &local("/srv"));
 
-        // Retry, the default for other errors, reads it again.
+        // Retry, the default, reads it again.
         let effects = go_to_dir(&mut app, "left");
         assert!(fail(&mut app, effects, ListErrorKind::Other).is_empty());
         let Effect::List { request, .. } = one(app.handle(action(Action::Confirm))) else {
@@ -16245,7 +16714,10 @@ mod tests {
         app.listed(panel, request.generation, Err(error("second")));
         assert_eq!(app.dialogs.len(), 1);
         let text = screen_of(&mut app, 12);
-        assert!(text.contains("Cannot open /srv: second"), "{text}");
+        assert!(
+            shows_problem(&text, "Cannot open the directory", Some("/srv"), "second"),
+            "{text}"
+        );
 
         // Go to opens Go to directory with the path, to mend it.
         app.handle(action(Action::Cancel));
@@ -16270,7 +16742,16 @@ mod tests {
         assert!(fail(&mut app, effects, ListErrorKind::NotFound).is_empty());
         let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot open /srv/x/y/z: no such file or directory"),
+            shows_problem(
+                &text,
+                "Cannot open the directory",
+                Some("/srv/x/y/z"),
+                "no such file or directory"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains("[ Retry ] { Up } [ Go to ] [ Cancel ]"),
             "{text}"
         );
         let effects = app.handle(action(Action::Confirm));
@@ -16287,7 +16768,12 @@ mod tests {
         assert!(fail(&mut app, effects, ListErrorKind::Denied).is_empty());
         let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot open /srv/x: permission denied"),
+            shows_problem(
+                &text,
+                "Cannot open the directory",
+                Some("/srv/x"),
+                "permission denied"
+            ),
             "{text}"
         );
 
@@ -16322,7 +16808,12 @@ mod tests {
         fail_at_start_dir(&mut app, effects);
         let text = screen_of(&mut app, 12);
         assert!(
-            text.contains("Cannot open web:/var/www/gone: no such file or directory"),
+            shows_problem(
+                &text,
+                "Cannot open the directory",
+                Some("web:/var/www/gone"),
+                "no such file or directory"
+            ),
             "{text}"
         );
         assert!(text.contains(" Up "), "{text}");

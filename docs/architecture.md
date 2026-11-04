@@ -187,12 +187,13 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   host, or stops connecting to it. Panels on a connected host stay there with their entries
   toned down, as after a lost connection, and no dialog asks; a panel that only waited for the
   host stays where it was.
-- A directory that cannot be read opens a dialog, Error, `Cannot open dir: reason`, and the
-  panel keeps what it showed. OK stays; Retry reads it again; Up, where it leads elsewhere, goes
-  to the nearest parent, on the directory it came from, past parents that are not there either;
-  Go to opens Go to directory with the path. The default is Up for a directory gone under the panel,
-  OK for one not there or not allowed, Retry for other errors. A panel has one such dialog at a
-  time, the last failure's.
+- A directory that cannot be read opens a dialog, Error, as every error dialog shows a problem:
+  `Cannot open the directory`, the path on a line of its own, and the reason under a line across
+  the frame (`Dialog::failure`, `Problem`). The panel keeps what it showed. Retry reads it again;
+  Up, where it leads elsewhere, goes to the nearest parent, on the directory it came from, past
+  parents that are not there either; Go to opens Go to directory with the path; Cancel stays. The
+  default is Up where the panel has nothing to show, its directory gone or never shown, and Retry
+  otherwise. A panel has one such dialog at a time, the last failure's.
 - F4 in the location menu edits the settings of a host in a dialog (label, remote directory,
   other panel directory, remember the last directory); Use Current fills in the directory a
   panel shows on the host. They are saved to `hosts.toml` in the background, and the menu reads
@@ -967,8 +968,9 @@ a host's task ends while a copy holds its session, the session goes with the cop
 fails soon with the channel gone; the UI ends the job at once. A job talks
 to the UI through a `Reporter`: it sends `Event`s (`Scanning` with the entries found, after
 each entry it was given and each directory it lists; `Progress` with the entry at hand and
-done/total counts; `Failed`), and when an operation fails it waits for a `Decision`:
-Retry, Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
+done/total counts; `Failed` with the path, the `Step` that failed on it, such as listing, reading,
+or creating, and the error), and when an operation fails it waits for a `Decision`: Retry,
+Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
 operations and while it waits for a decision, for data, or for a host to open a file or set its
 attributes; so does a UI that stops listening. A request to a host that stopped answering never
 ends, so the task that runs a job gives it two seconds once cancelled (`noc_ops::in_time`), then
@@ -1442,9 +1444,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks as a
   warning (ADR 0060): the path of the file there; New and Existing, each with its size and
   time, on a line that views the file, over every window but the dialogs, the question back in
-  front once the viewer closes; a combo box for the rest of the taken names; and Overwrite,
-  Skip (the default), Rename…, and Abort. Rename… asks for a name or a path from the file's
-  directory, offering the free name. Copies are written under a temporary name and renamed when
+  front once the viewer closes; a combo box for the rest of the taken names, but at the last
+  entry; and Overwrite, Skip (the default), Rename…, and Abort, without Skip for the only entry,
+  where Abort is the default. Rename… asks for a name or a path from the file's directory,
+  offering the free name. A rename and a save ask the same question, for one file
+  (`App::taken_dialog`). Copies are written under a temporary name and renamed when
   complete, unless `transfer.atomic_upload` is off.
   When the job ends, panels on the target, its parent, and the source directory read them
   again.
@@ -1521,8 +1525,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   An empty or unchanged name
   renames nothing; one with `/` or NUL, or `.` or `..`, is an error and the field stays. A name
   that is not UTF-8 cannot be edited, which an error says: F6 renames it. `noc_ops::rename`
-  checks the new name first: a directory's is an error, a file's asks in a red question with No
-  as the default, and the entry's own name spelled otherwise, differing only in case or
+  checks the new name first: a directory's is an error, a file's asks the question of a copy
+  about a taken name, for one file (Overwrite, Rename… to another name in the directory, and
+  Cancel, the default), and the entry's own name spelled otherwise, differing only in case or
   normalization where the file system ignores them (see File operations), renames it; spelled
   so, another entry's name is taken. Without `posix-rename` the file there goes first. A reload
   keeps the field on its entry; the field goes with the entry or when the panel goes elsewhere.
@@ -1531,8 +1536,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `Delete 2 files and 1 directory?`. mc asks a second time before it goes into a directory that is
   not empty; Noon Commander says so in the first question instead. The job runs in a task of its
   own, or in the host's task, with a window that shows what it counts, the entry at hand, a gauge,
-  and done/total; Esc or Abort stops it. A failure asks in a red dialog, with mc's buttons: Ignore,
-  Ignore all, Retry, and Abort. When the job ends, panels on the directory read it again, and a
+  and done/total; Esc or Abort stops it. A failure asks in a red dialog what the job could not do
+  by its `Step` (`Cannot delete`, `Cannot read`, `Cannot create`, …), the path on a line of its
+  own, and the reason under a line; then Retry, the default, Skip, Skip all, and Abort. Only the
+  buttons that do something show: no Retry where it would fail again (the target is the source
+  itself), no Skip all at the last entry, no Skip for the only one, whose Skip is Abort; the
+  window of the job knows how far it is (`JobView::more`, `JobView::single`). When the job ends,
+  panels on the directory read it again, and a
   cursor whose entry is gone stays on its row. If the host's connection is lost, the job ends with
   it.
 - **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
@@ -1583,8 +1593,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   name, a relative path, an absolute one, or `~/…`, as F7 does (`panel::resolve`), on the host
   of the directory, and Tab completes files and directories from there, not from the panel,
   which may have gone elsewhere. OK writes the file (`Effect::WriteFile`), locally or through
-  SFTP, never over one: a name that is taken asks first, with No the default, then writes over
-  it. An error is a window of its own; once it is written, the panels on its directory read it
+  SFTP, never over one: a name that is taken asks the question of a copy about a taken name, for
+  one file, where New views what would be written; Overwrite writes over it, Rename… under another
+  name, and Cancel is the default. An error is a window of its own; once it is written, the panels
+  on its directory read it
   again and show it, and nothing else says so.
 - **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
   between frames, and the terminal puts the text on the clipboard of the machine it runs on,

@@ -34,14 +34,9 @@ impl Kind {
         fl!("transfer-working", kind = self.arg())
     }
 
-    /// Why it cannot write to `path`.
-    pub(crate) fn error(self, path: &str, reason: &str) -> String {
-        fl!(
-            "transfer-error",
-            kind = self.arg(),
-            path = path,
-            reason = reason
-        )
+    /// What cannot be done, over the target and why it cannot start.
+    pub(crate) fn error(self) -> String {
+        fl!("transfer-error", kind = self.arg())
     }
 
     fn prompt(self, sources: &Sources) -> String {
@@ -98,9 +93,7 @@ mod tests {
         );
         assert_eq!(Kind::Copy.title(), "Copy");
         assert_eq!(Kind::Move.working(), "Moving");
-        assert_eq!(
-            Kind::Copy.error("/x", "denied"),
-            "Cannot copy to /x: denied"
-        );
+        assert_eq!(Kind::Copy.error(), "Cannot copy to");
+        assert_eq!(Kind::Move.error(), "Cannot move to");
     }
 }

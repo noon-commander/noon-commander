@@ -1,12 +1,13 @@
 //! The dialog that saves a file (ADR 0059), for whatever has one to save: a field with the name
 //! it offers, which takes a path from a directory, completed as F7 completes one, on the host of
-//! that directory; a question before it writes over a file; an error if it cannot. What saves
+//! that directory; the question of a copy about a taken name before it writes over a file; an
+//! error if it cannot. What saves
 //! gives the title, the directory, the name, and the bytes; the app writes them, and the panels
 //! on the directory show the file.
 
 use noc_vfs::Location;
 
-use super::dialog::{Button, Dialog, Tone};
+use super::dialog::{Dialog, Problem};
 use crate::i18n::fl;
 
 /// A file to save: what the dialog asks, and what goes in the file.
@@ -28,22 +29,9 @@ impl Save {
     }
 }
 
-/// Asks before the file at `path`, which is there, is written over; No is the default.
-pub(crate) fn overwrite(path: &str) -> Dialog {
-    let message = fl!("save-exists", path = path);
-    let buttons = vec![Button::Yes, Button::No];
-    Dialog::question(
-        &fl!("save-exists-title"),
-        &message,
-        buttons,
-        1,
-        Tone::Warning,
-    )
-}
-
-/// Why the file at `path` was not saved.
-pub(crate) fn error(path: &str, reason: &str) -> String {
-    fl!("save-error", path = path, reason = reason)
+/// The file at `path` was not saved, for `reason`.
+pub(crate) fn error(path: String, reason: String) -> Problem {
+    Problem::new(fl!("save-error"), reason).at(path)
 }
 
 #[cfg(test)]

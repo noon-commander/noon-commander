@@ -1079,6 +1079,20 @@ impl JobView {
         }
     }
 
+    /// Whether the job has entries after the one it is at, as far as it knows: while it counts,
+    /// it may.
+    pub(crate) fn more(&self) -> bool {
+        match &self.stage {
+            Stage::Working { counts, .. } => counts.done + 1 < counts.total,
+            Stage::Waiting | Stage::Scanning { .. } => true,
+        }
+    }
+
+    /// Whether the job works on one entry alone, which it counted.
+    pub(crate) fn single(&self) -> bool {
+        matches!(&self.stage, Stage::Working { counts, .. } if counts.total <= 1)
+    }
+
     /// Whether its time runs, so that what shows it needs drawing as time passes.
     pub(crate) fn ticking(&self) -> bool {
         self.clock.running()

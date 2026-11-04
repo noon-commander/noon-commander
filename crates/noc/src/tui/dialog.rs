@@ -87,14 +87,14 @@ pub(crate) enum Button {
     Cancel,
     Yes,
     No,
+    /// Leave this entry, or keep the file there and leave the one that would replace it.
     Skip,
+    /// Leave this entry and every later one that fails, without asking again.
     SkipAll,
     Retry,
     Abort,
     /// Replace the file there.
     Overwrite,
-    /// Keep the file there, and leave the one that would replace it.
-    Keep,
     /// Give the file that would replace another a name of its own.
     Rename,
     /// Take what the panel shows.
@@ -136,7 +136,6 @@ impl Button {
             Self::Retry => fl!("dialog-retry"),
             Self::Abort => fl!("dialog-abort"),
             Self::Overwrite => fl!("dialog-overwrite"),
-            Self::Keep => fl!("dialog-keep"),
             Self::Rename => fl!("dialog-rename"),
             Self::UseCurrent => fl!("dialog-use-current"),
             Self::GoTo => fl!("dialog-go-to"),
@@ -587,11 +586,40 @@ struct Item {
 pub(crate) enum Text {
     /// A line that loses its middle where too long, such as the name of a file.
     Line(String),
+    /// Text that wraps at its blanks as the message does, such as why something failed.
+    Wrap(String),
     /// Text without blanks, such as a checksum, in as few lines of equal length as it takes.
     Even(String),
     /// What the dialog comes to, after ✓ if `good` and ✗ if not, bold, in the color of titles
     /// if good and of errors if not.
     Verdict { text: String, good: bool },
+}
+
+/// Something that went wrong, as a dialog shows it: what could not be done, what it was done
+/// to, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Problem {
+    /// What could not be done, such as `Cannot delete`.
+    head: String,
+    /// The path, or nothing where it is in `reason` or there is none.
+    path: Option<String>,
+    reason: String,
+}
+
+impl Problem {
+    pub(crate) fn new(head: String, reason: String) -> Self {
+        Self {
+            head,
+            path: None,
+            reason,
+        }
+    }
+
+    /// The same problem, on `path`.
+    pub(crate) fn at(mut self, path: String) -> Self {
+        self.path = Some(path);
+        self
+    }
 }
 
 /// A part of a dialog under its message, by its index among those of its kind.
@@ -726,13 +754,42 @@ impl Dialog {
 
     /// Something that went wrong, titled Error, with OK.
     pub(crate) fn error(message: &str) -> Self {
-        Self::failure(message, vec![Button::Ok], 0)
+        Self::question(
+            &fl!("dialog-error"),
+            message,
+            vec![Button::Ok],
+            0,
+            Tone::Error,
+        )
     }
 
-    /// Something that went wrong, titled Error, with `buttons` for what to do now, of which
-    /// `default` has the focus.
-    pub(crate) fn failure(message: &str, buttons: Vec<Button>, default: usize) -> Self {
-        Self::question(&fl!("dialog-error"), message, buttons, default, Tone::Error)
+    /// `problem`, titled Error, with OK.
+    pub(crate) fn problem(problem: &Problem) -> Self {
+        Self::failure(problem, vec![Button::Ok], 0)
+    }
+
+    /// `problem`, titled Error, with `buttons` for what to do now, of which `default` has the
+    /// focus.
+    pub(crate) fn failure(problem: &Problem, buttons: Vec<Button>, default: usize) -> Self {
+        Self::failure_titled(&fl!("dialog-error"), problem, buttons, default)
+    }
+
+    /// `problem` in the colors of errors, titled `title`: what could not be done, the path it
+    /// was done to on a line of its own, then, under a line across the frame, why; with
+    /// `buttons`, of which `default` has the focus.
+    pub(crate) fn failure_titled(
+        title: &str,
+        problem: &Problem,
+        buttons: Vec<Button>,
+        default: usize,
+    ) -> Self {
+        let mut dialog = Self::question(title, &problem.head, buttons, default, Tone::Error);
+        if let Some(path) = &problem.path {
+            dialog = dialog.with_text(Text::Line(path.clone()));
+        }
+        dialog
+            .with_line()
+            .with_text(Text::Wrap(problem.reason.clone()))
     }
 
     /// `message`, a text field that opens with `text`, check boxes with their labels and
@@ -1759,6 +1816,9 @@ impl Dialog {
                 Text::Even(text) => {
                     u16::try_from(even_lines(text, width).len()).unwrap_or(u16::MAX)
                 }
+                Text::Wrap(text) => {
+                    u16::try_from(cells::wrap(text, width).len()).unwrap_or(u16::MAX)
+                }
                 Text::Line(_) | Text::Verdict { .. } => 1,
             },
             Part::Picker => picker,
@@ -1785,6 +1845,10 @@ impl Dialog {
                 let cut = cells::fit(text, width, cells::Align::Left, colors.body_styles(), marks);
                 vec![Line::from(cut)]
             }
+            Text::Wrap(text) => cells::wrap(text, width)
+                .into_iter()
+                .map(|line| Line::styled(line, colors.body))
+                .collect(),
             Text::Even(text) => even_lines(text, width).into_iter().map(Line::raw).collect(),
             Text::Verdict { text, good } => {
                 let (style, sign) = if *good {
@@ -3103,6 +3167,22 @@ mod tests {
     }
 
     #[test]
+    fn the_buttons_of_every_question_have_a_letter_each() {
+        let questions = [
+            vec![Button::Yes, Button::No],
+            vec![Button::Retry, Button::Skip, Button::SkipAll, Button::Abort],
+            vec![Button::Retry, Button::Up, Button::GoTo, Button::Cancel],
+            vec![Button::Overwrite, Button::Rename, Button::Cancel],
+            vec![Button::Connect, Button::Local, Button::Cancel],
+        ];
+        for buttons in questions {
+            let name = format!("{buttons:?}");
+            let dialog = Dialog::question("Title", "?", buttons, 0, Tone::Error);
+            assert_letters(&name, &dialog);
+        }
+    }
+
+    #[test]
     fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
         use crate::i18n::fl;
 
@@ -3168,12 +3248,11 @@ mod tests {
                 "host key",
                 Dialog::prompt("web", "yes?", PromptKind::HostKey),
             ),
-            ("yes or no", question(vec![Button::Yes, Button::No])),
             (
                 "file exists",
                 question(vec![
                     Button::Overwrite,
-                    Button::Keep,
+                    Button::Skip,
                     Button::Rename,
                     Button::Abort,
                 ])
@@ -3185,16 +3264,6 @@ mod tests {
                     0,
                 ),
             ),
-            (
-                "failure",
-                question(vec![
-                    Button::Skip,
-                    Button::SkipAll,
-                    Button::Retry,
-                    Button::Abort,
-                ]),
-            ),
-            ("reconnect", question(vec![Button::Retry, Button::Cancel])),
             ("error", Dialog::error("No.")),
         ];
         for (name, dialog) in &dialogs {
@@ -3663,9 +3732,35 @@ mod tests {
             .unwrap()
     }
 
+    #[test]
+    fn a_failure_shows_what_failed_the_path_and_why_under_a_line() {
+        let path = "/home/user/projects/far/too/deep/for/the/dialog/to/show/whole/report.pdf";
+        let problem = Problem::new(
+            "Cannot read".to_owned(),
+            "Permission denied (os error 13)".to_owned(),
+        )
+        .at(path.to_owned());
+        let buttons = vec![Button::Retry, Button::Skip, Button::SkipAll, Button::Abort];
+        let dialog = Dialog::failure(&problem, buttons, 0);
+        insta::assert_snapshot!(draw(&dialog, 60, 11).backend());
+    }
+
+    #[test]
+    fn a_long_reason_wraps_under_the_line() {
+        let reason = "ssh: connect to host db.example.com port 22: Operation timed out";
+        let problem = Problem::new("Cannot connect to db".to_owned(), reason.to_owned());
+        let dialog = Dialog::failure_titled(
+            "Connection",
+            &problem,
+            vec![Button::Retry, Button::Cancel],
+            0,
+        );
+        insta::assert_snapshot!(draw(&dialog, 40, 11).backend());
+    }
+
     /// A question with two items between lines, and a combo box.
     fn with_items() -> Dialog {
-        let buttons = vec![Button::Overwrite, Button::Keep, Button::Abort];
+        let buttons = vec![Button::Overwrite, Button::Skip, Button::Abort];
         Dialog::question("File exists", "/srv/a", buttons, 1, Tone::Warning)
             .with_line()
             .with_item("&New", "10 bytes  2026-01-02 03:04:05")

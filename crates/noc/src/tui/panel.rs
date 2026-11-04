@@ -114,7 +114,8 @@ impl ListError {
     }
 }
 
-/// What kind of failure a [`ListError`] is, which decides the way out its dialog offers first.
+/// What kind of failure a [`ListError`] is: a directory that is not there is passed by on the
+/// way up.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ListErrorKind {
     /// The directory is not there.

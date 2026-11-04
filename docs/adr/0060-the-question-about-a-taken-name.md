@@ -1,6 +1,7 @@
 # 0060. The question about a taken name
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0063](0063-errors-in-parts-and-the-order-of-buttons.md)
 - Date: 2026-10-31
 
 ## Context

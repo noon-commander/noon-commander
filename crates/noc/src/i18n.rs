@@ -88,10 +88,7 @@ mod tests {
 
     #[test]
     fn arguments_have_no_isolation_marks() {
-        assert_eq!(
-            fl!("list-failed", path = "docs", reason = "denied"),
-            "Cannot open docs: denied"
-        );
+        assert_eq!(fl!("transfer-into-itself", path = "docs"), "It is in docs");
     }
 
     #[test]

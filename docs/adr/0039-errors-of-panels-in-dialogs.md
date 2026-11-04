@@ -1,6 +1,7 @@
 # 0039. Errors of panels in dialogs
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0063](0063-errors-in-parts-and-the-order-of-buttons.md)
 - Date: 2026-10-18
 - Amends: [ADR 0021](0021-location-menu-replaces-the-virtual-root.md),
   [ADR 0037](0037-spinners.md)

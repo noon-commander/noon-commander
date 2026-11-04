@@ -7,6 +7,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Error dialogs say what failed, then the path on a line of its own, then, under a line, why
+  ([ADR 0063](docs/adr/0063-errors-in-parts-and-the-order-of-buttons.md)).
+- A failed copy, move, delete, or checksum names the step that failed, such as `Cannot read` or
+  `Cannot create`, and its buttons are Retry (the default), Skip, Skip all, and Abort; Ignore is
+  now Skip, as in the question about a taken name. Buttons that would change nothing do not show:
+  Retry where the target is the source itself, Skip all at the last entry, Skip for the only one.
+- The question about a taken name has no The rest at the last entry, and no Skip for the only
+  one.
+- Renaming or saving onto a file asks the question of a copy about a taken name: both files with
+  their sizes and times, Overwrite, Rename… to a free name, and Cancel, the default.
+- The dialog after a directory could not be read has Retry, Up, Go to, and Cancel in place of OK;
+  Retry is the default, or Up where the panel has nothing to show.
+- Replacing a workspace by Save as has No as the default.
+
+### Fixed
+
+- A copy or a move that could not read its source said `Cannot copy to` the source.
+
 ## [0.3.1] - 2026-11-01
 
 ### Changed

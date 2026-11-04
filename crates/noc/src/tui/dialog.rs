@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
 use noc_ssh::askpass::PromptKind;
+use noc_vfs::Code;
 use ratatui::Frame;
 use ratatui::layout::{Margin, Position, Rect};
 use ratatui::style::{Modifier, Style};
@@ -21,6 +22,7 @@ use unicode_width::UnicodeWidthChar as _;
 
 use super::cells;
 use super::combo_box::{ComboBox, ComboEvent};
+use super::describe::Reason;
 use super::edit::{Editor, Registers};
 use super::glyphs;
 use super::keymap::{Action, Context, Extra, Mode, Resolved, Typed};
@@ -89,8 +91,6 @@ pub(crate) enum Button {
     No,
     /// Leave this entry, or keep the file there and leave the one that would replace it.
     Skip,
-    /// Leave this entry and every later one that fails, without asking again.
-    SkipAll,
     Retry,
     Abort,
     /// Replace the file there.
@@ -132,7 +132,6 @@ impl Button {
             Self::Yes => fl!("dialog-yes"),
             Self::No => fl!("dialog-no"),
             Self::Skip => fl!("dialog-skip"),
-            Self::SkipAll => fl!("dialog-skip-all"),
             Self::Retry => fl!("dialog-retry"),
             Self::Abort => fl!("dialog-abort"),
             Self::Overwrite => fl!("dialog-overwrite"),
@@ -588,6 +587,8 @@ pub(crate) enum Text {
     Line(String),
     /// Text that wraps at its blanks as the message does, such as why something failed.
     Wrap(String),
+    /// A label and its value, in bold after it, such as the code of a failure.
+    Pair { label: String, value: String },
     /// Text without blanks, such as a checksum, in as few lines of equal length as it takes.
     Even(String),
     /// What the dialog comes to, after ✓ if `good` and ✗ if not, bold, in the color of titles
@@ -596,23 +597,28 @@ pub(crate) enum Text {
 }
 
 /// Something that went wrong, as a dialog shows it: what could not be done, what it was done
-/// to, and why.
+/// to, why, and the code the system gave it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Problem {
     /// What could not be done, such as `Cannot delete`.
     head: String,
     /// The path, or nothing where it is in `reason` or there is none.
     path: Option<String>,
-    reason: String,
+    reason: Reason,
 }
 
 impl Problem {
-    pub(crate) fn new(head: String, reason: String) -> Self {
+    pub(crate) fn new(head: String, reason: impl Into<Reason>) -> Self {
         Self {
             head,
             path: None,
-            reason,
+            reason: reason.into(),
         }
+    }
+
+    /// The code of the failure, if the system or the server gave one.
+    pub(crate) fn code(&self) -> Option<Code> {
+        self.reason.code
     }
 
     /// The same problem, on `path`.
@@ -775,8 +781,9 @@ impl Dialog {
     }
 
     /// `problem` in the colors of errors, titled `title`: what could not be done, the path it
-    /// was done to on a line of its own, then, under a line across the frame, why; with
-    /// `buttons`, of which `default` has the focus.
+    /// was done to on a line of its own, then, under a line across the frame, why, and the code
+    /// the system gave it, its number in bold, or a dash; with `buttons`, of which `default` has
+    /// the focus.
     pub(crate) fn failure_titled(
         title: &str,
         problem: &Problem,
@@ -787,9 +794,15 @@ impl Dialog {
         if let Some(path) = &problem.path {
             dialog = dialog.with_text(Text::Line(path.clone()));
         }
+        let (label, value) = match problem.reason.code {
+            Some(Code::Os(code)) => (fl!("dialog-code"), code.to_string()),
+            Some(Code::Sftp(code)) => (fl!("dialog-code-sftp"), code.to_string()),
+            None => (fl!("dialog-code"), fl!("dialog-code-none")),
+        };
         dialog
             .with_line()
-            .with_text(Text::Wrap(problem.reason.clone()))
+            .with_text(Text::Wrap(problem.reason.text.clone()))
+            .with_text(Text::Pair { label, value })
     }
 
     /// `message`, a text field that opens with `text`, check boxes with their labels and
@@ -1819,7 +1832,7 @@ impl Dialog {
                 Text::Wrap(text) => {
                     u16::try_from(cells::wrap(text, width).len()).unwrap_or(u16::MAX)
                 }
-                Text::Line(_) | Text::Verdict { .. } => 1,
+                Text::Line(_) | Text::Pair { .. } | Text::Verdict { .. } => 1,
             },
             Part::Picker => picker,
             Part::ComboBox(_)
@@ -1844,6 +1857,11 @@ impl Dialog {
                 let marks = theme.glyphs.marks;
                 let cut = cells::fit(text, width, cells::Align::Left, colors.body_styles(), marks);
                 vec![Line::from(cut)]
+            }
+            Text::Pair { label, value } => {
+                let value = Span::styled(format!(" {value}"), colors.body.bold());
+                let line = Line::from(vec![Span::styled(label.clone(), colors.body), value]);
+                vec![line]
             }
             Text::Wrap(text) => cells::wrap(text, width)
                 .into_iter()
@@ -3170,7 +3188,7 @@ mod tests {
     fn the_buttons_of_every_question_have_a_letter_each() {
         let questions = [
             vec![Button::Yes, Button::No],
-            vec![Button::Retry, Button::Skip, Button::SkipAll, Button::Abort],
+            vec![Button::Retry, Button::Skip, Button::Abort],
             vec![Button::Retry, Button::Up, Button::GoTo, Button::Cancel],
             vec![Button::Overwrite, Button::Rename, Button::Cancel],
             vec![Button::Connect, Button::Local, Button::Cancel],
@@ -3735,14 +3753,34 @@ mod tests {
     #[test]
     fn a_failure_shows_what_failed_the_path_and_why_under_a_line() {
         let path = "/home/user/projects/far/too/deep/for/the/dialog/to/show/whole/report.pdf";
-        let problem = Problem::new(
-            "Cannot read".to_owned(),
-            "Permission denied (os error 13)".to_owned(),
-        )
-        .at(path.to_owned());
-        let buttons = vec![Button::Retry, Button::Skip, Button::SkipAll, Button::Abort];
+        let reason = Reason {
+            text: "Permission denied".to_owned(),
+            code: Some(Code::Os(13)),
+        };
+        let problem = Problem::new("Cannot read".to_owned(), reason).at(path.to_owned());
+        let buttons = vec![Button::Retry, Button::Skip, Button::Abort];
         let dialog = Dialog::failure(&problem, buttons, 0);
-        insta::assert_snapshot!(draw(&dialog, 60, 11).backend());
+        insta::assert_snapshot!(draw(&dialog, 60, 12).backend());
+    }
+
+    #[test]
+    fn a_failure_of_a_job_asks_about_the_rest_between_lines() {
+        let reason = Reason {
+            text: "No space left on device".to_owned(),
+            code: Some(Code::Os(28)),
+        };
+        let problem = Problem::new("Cannot write to".to_owned(), reason).at("/mnt/a".to_owned());
+        let buttons = vec![Button::Retry, Button::Skip, Button::Abort];
+        let rests = [
+            "Ask each time".to_owned(),
+            "Skip every failure".to_owned(),
+            "Skip failures with the same code".to_owned(),
+        ];
+        let dialog = Dialog::failure(&problem, buttons, 0)
+            .with_line()
+            .with_combo_box("&The rest:", &rests, 0)
+            .with_focus_on_default();
+        insta::assert_snapshot!(draw(&dialog, 60, 14).backend());
     }
 
     #[test]
@@ -3755,7 +3793,7 @@ mod tests {
             vec![Button::Retry, Button::Cancel],
             0,
         );
-        insta::assert_snapshot!(draw(&dialog, 40, 11).backend());
+        insta::assert_snapshot!(draw(&dialog, 40, 12).backend());
     }
 
     /// A question with two items between lines, and a combo box.

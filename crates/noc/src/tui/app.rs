@@ -11,7 +11,9 @@ use noc_config::{
     Config, HistoryEntry, HostConfig, Hosts, MenuBar, PanelSide, Recent, SftpHost, TabBar,
     UiConfig, Wheel, Workspace, Workspaces,
 };
-use noc_ops::{Algorithm, Choice, Conflict, CopyOptions, Decision, Rest, Step, Sum};
+use noc_ops::{
+    Algorithm, Choice, Conflict, CopyOptions, Decision, Later, Resolution, Rest, Step, Sum,
+};
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Part};
 use noc_tools::zoxide::Scored;
@@ -35,6 +37,7 @@ use super::command::{self, CommandEvent, CommandLine, Place, Run};
 use super::complete::{self, Candidate, Choices, ChoicesEvent, Kind, Offer, Outcome, Quote};
 use super::configuration::{ConfigEvent, Configuration, run_of, run_text};
 use super::decor::Decor;
+use super::describe::Reason;
 use super::dialog::{Ask, Button, Dialog, DialogEvent, Field, Problem, Reply, Tone};
 use super::edit::{Editor, Registers};
 use super::find::{FindEvent, FindMode, FindQuery, FindSummary, FindWindow, Finding};
@@ -430,7 +433,7 @@ enum Purpose {
     /// A failure in the job `job`, which waits for `reply`.
     Failure {
         job: u64,
-        reply: oneshot::Sender<Decision>,
+        reply: oneshot::Sender<Resolution>,
     },
     /// A taken name (ADR 0060): a new file was to go to `target`, where a file is, and `free`
     /// is a name free beside it, which Rename… offers; `answer` says who waits for the answer.
@@ -3796,7 +3799,7 @@ impl App {
 
     /// Takes the end of an [`Effect::Workspaces`]: the workspaces as `workspaces.toml` holds
     /// them now, or why it could not be read, or changed if `changed`.
-    pub(crate) fn workspaces_changed(&mut self, changed: bool, result: Result<Workspaces, String>) {
+    pub(crate) fn workspaces_changed(&mut self, changed: bool, result: Result<Workspaces, Reason>) {
         match result {
             Ok(workspaces) => {
                 self.workspaces = workspaces;
@@ -3805,7 +3808,7 @@ impl App {
                 }
             }
             Err(reason) => {
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 let head = if changed {
                     fl!("workspaces-save-error")
                 } else {
@@ -4399,9 +4402,9 @@ impl App {
     }
 
     /// Takes the result of an [`Effect::SaveConfig`].
-    pub(crate) fn config_saved(&mut self, result: Result<(), String>) {
+    pub(crate) fn config_saved(&mut self, result: Result<(), Reason>) {
         if let Err(reason) = result {
-            let reason = cells::sanitize(reason.as_bytes());
+            let reason = reason.sanitized();
             self.show_problem(&Problem::new(fl!("config-save-error"), reason));
         }
     }
@@ -4591,7 +4594,7 @@ impl App {
             }
             Purpose::Failure { job, reply } => {
                 self.answered(job);
-                let _ = reply.send(decision_of(event));
+                let _ = reply.send(resolution_of(event, dialog));
             }
             Purpose::Conflict { answer, target, .. } => {
                 return self.conflict_answered(answer, target, event, dialog);
@@ -4900,15 +4903,15 @@ impl App {
     }
 
     /// Takes the failure of an [`Effect::Open`]: the path that did not open, and why.
-    pub(crate) fn open_failed(&mut self, path: &Path, reason: &str) {
+    pub(crate) fn open_failed(&mut self, path: &Path, reason: Reason) {
         let path = location_text(&Location::Local(path.to_path_buf()));
-        let reason = cells::sanitize(reason.as_bytes());
+        let reason = reason.sanitized();
         self.show_problem(&Problem::new(fl!("open-error"), reason).at(path));
     }
 
     /// Takes the end of the editor: whether the file changed, or why it could not run. A
     /// changed copy of a remote file goes back.
-    pub(crate) fn edited(&mut self, result: Result<bool, String>) -> Vec<Effect> {
+    pub(crate) fn edited(&mut self, result: Result<bool, Reason>) -> Vec<Effect> {
         let Some(editing) = self.editing.take() else {
             return Vec::new();
         };
@@ -4919,7 +4922,7 @@ impl App {
         let changed = match result {
             Ok(changed) => changed,
             Err(reason) => {
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 self.show_problem(&Problem::new(fl!("edit-error"), reason).at(path.clone()));
                 false
             }
@@ -5203,7 +5206,7 @@ impl App {
 
     /// Takes the commands as `history.toml` holds them after a change, or why it could not
     /// be read or written.
-    pub(crate) fn history_changed(&mut self, result: Result<Vec<HistoryEntry>, String>) {
+    pub(crate) fn history_changed(&mut self, result: Result<Vec<HistoryEntry>, Reason>) {
         match result {
             Ok(history) => {
                 self.history = history;
@@ -5212,7 +5215,7 @@ impl App {
                 }
             }
             Err(reason) => {
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 self.show_problem(&Problem::new(fl!("history-error"), reason));
             }
         }
@@ -5411,7 +5414,7 @@ impl App {
     /// Takes the part [`Effect::Read`] read for the viewer `id`, and reads the next one it
     /// wants. A file that changed is read again from the start. An error closes the viewer
     /// while it has nothing to show; after that, the viewer keeps what it holds.
-    pub(crate) fn read(&mut self, id: u64, result: Result<ViewerPart, String>) -> Vec<Effect> {
+    pub(crate) fn read(&mut self, id: u64, result: Result<ViewerPart, Reason>) -> Vec<Effect> {
         let Some(viewing) = self.viewing.as_mut().filter(|viewing| viewing.id == id) else {
             return Vec::new();
         };
@@ -5428,7 +5431,7 @@ impl App {
             }
             Err(reason) => {
                 let path = viewing.name();
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 if viewing.viewer.loading() {
                     let asked = viewing.question.is_some();
                     self.close_viewer();
@@ -5983,6 +5986,41 @@ impl App {
         }
     }
 
+    /// Asks what to do about `problem`, a failure in the job `id`, which waits for `reply`:
+    /// Retry, the default, unless it would fail again, as `retry` says; Skip, unless the entry
+    /// is the `single` one, where it would do what Abort does; and Abort. Where `more` entries
+    /// come after it, a combo box asks about the failures after it too.
+    fn ask_failure(
+        &mut self,
+        id: u64,
+        problem: &Problem,
+        (retry, single, more): (bool, bool, bool),
+        reply: oneshot::Sender<Resolution>,
+    ) {
+        let mut buttons = Vec::new();
+        if retry {
+            buttons.push(Button::Retry);
+        }
+        if !single {
+            buttons.push(Button::Skip);
+        }
+        buttons.push(Button::Abort);
+        let mut dialog = Dialog::failure(problem, buttons, 0);
+        if more {
+            let mut rests = vec![fl!("copy-exists-ask"), fl!("failure-skip-all")];
+            if problem.code().is_some() {
+                rests.push(fl!("failure-skip-same"));
+            }
+            dialog = dialog
+                .with_line()
+                .with_combo_box(&fl!("copy-exists-rest"), &rests, 0);
+        }
+        self.dialogs.push_back(Open {
+            dialog: dialog.with_focus_on_default(),
+            purpose: Purpose::Failure { job: id, reply },
+        });
+    }
+
     /// Takes a report from the job `id`, as [`App::job_event`] does, and tells whether the
     /// screen changes with it. A job reports every chunk it moves, which come in batches up to
     /// 50 a second, while its window, or its row in the list of jobs, changes only when what it
@@ -6034,31 +6072,18 @@ impl App {
                 at,
                 path,
                 step,
-                error,
+                reason,
                 retry,
                 reply,
             } => {
                 job.view.failed(at);
-                let reason = cells::sanitize(error.as_bytes());
+                let reason = Reason {
+                    text: cells::sanitize(reason.text.as_bytes()),
+                    ..reason
+                };
                 let problem = Problem::new(step_text(step), reason).at(location_text(&path));
-                // Skip would do what Abort does for the only entry, and Skip all what Skip does
-                // for the last.
-                let mut buttons = Vec::new();
-                if retry {
-                    buttons.push(Button::Retry);
-                }
-                if !job.view.single() {
-                    buttons.push(Button::Skip);
-                    if job.view.more() {
-                        buttons.push(Button::SkipAll);
-                    }
-                }
-                buttons.push(Button::Abort);
-                let dialog = Dialog::failure(&problem, buttons, 0);
-                self.dialogs.push_back(Open {
-                    dialog,
-                    purpose: Purpose::Failure { job: id, reply },
-                });
+                let (single, more) = (job.view.single(), job.view.more());
+                self.ask_failure(id, &problem, (retry, single, more), reply);
             }
             JobEvent::Sums(sums) => {
                 if let Some(hashing) = &mut job.hashing {
@@ -6503,7 +6528,7 @@ impl App {
                 Vec::new()
             }
             Err(Refused::Failed(reason)) => {
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 self.show_problem(&save::error(location_text(location), reason));
                 Vec::new()
             }
@@ -6588,13 +6613,13 @@ impl App {
         &mut self,
         panel: PanelId,
         location: &Location,
-        result: Result<(), String>,
+        result: Result<(), Reason>,
     ) -> Vec<Effect> {
         let effects = match result {
             Ok(()) => self.show_new(panel, location),
             Err(reason) => {
                 let path = location_text(location);
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 self.show_problem(&Problem::new(fl!("mkdir-error"), reason).at(path));
                 Vec::new()
             }
@@ -6790,7 +6815,7 @@ impl App {
                 Vec::new()
             }
             Err(Refused::Failed(reason)) => {
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 let problem = Problem::new(fl!("rename-error"), reason).at(location_text(from));
                 self.show_problem(&problem);
                 Vec::new()
@@ -6983,14 +7008,14 @@ impl App {
 
     /// Takes the end of an [`Effect::SaveHost`]: the host settings now, which the location menu
     /// shows at once, or why they could not be saved.
-    pub(crate) fn host_saved(&mut self, result: Result<Arc<Hosts>, String>) -> Vec<Effect> {
+    pub(crate) fn host_saved(&mut self, result: Result<Arc<Hosts>, Reason>) -> Vec<Effect> {
         match result {
             Ok(hosts) => {
                 self.host_settings = hosts;
                 self.reload_menu()
             }
             Err(reason) => {
-                let reason = cells::sanitize(reason.as_bytes());
+                let reason = reason.sanitized();
                 self.show_problem(&Problem::new(fl!("host-save-error"), reason));
                 Vec::new()
             }
@@ -7231,8 +7256,11 @@ impl App {
             .iter()
             .position(|&button| button == first)
             .unwrap_or_default();
-        let problem = Problem::new(fl!("list-failed"), failure.error.reason.clone())
-            .at(failure.shown.clone());
+        let reason = Reason {
+            text: failure.error.reason.clone(),
+            code: failure.error.code,
+        };
+        let problem = Problem::new(fl!("list-failed"), reason).at(failure.shown.clone());
         let dialog = Dialog::failure(&problem, buttons, default);
         let open = Open {
             dialog,
@@ -8296,13 +8324,18 @@ fn step_text(step: Step) -> String {
     }
 }
 
-/// What a job does after a failure, by the button `event` pressed.
-fn decision_of(event: DialogEvent) -> Decision {
-    match event {
+/// What a job does after a failure, `dialog`, closed by `event`: about this one by the button
+/// pressed, about the later ones by its combo box, if it has one.
+fn resolution_of(event: DialogEvent, dialog: &Dialog) -> Resolution {
+    const LATER: [Later; 3] = [Later::Ask, Later::SkipAll, Later::SkipSame];
+    let this = match event {
         DialogEvent::Pressed(Button::Skip) => Decision::Skip,
-        DialogEvent::Pressed(Button::SkipAll) => Decision::SkipAll,
         DialogEvent::Pressed(Button::Retry) => Decision::Retry,
         _ => Decision::Abort,
+    };
+    Resolution {
+        this,
+        rest: LATER.get(dialog.chosen(0)).copied().unwrap_or(Later::Ask),
     }
 }
 
@@ -8643,7 +8676,7 @@ mod tests {
 
     use noc_config::{AnimationsConfig, SearchMode, TransferConfig, ZoxideConfig};
     use noc_ssh::askpass::PromptKind;
-    use noc_vfs::{DirEntry, FileKind, Metadata, RemotePath};
+    use noc_vfs::{Code, DirEntry, FileKind, Metadata, RemotePath};
     use noc_viewer::Stamp;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -8859,10 +8892,10 @@ mod tests {
 
     /// Fails every listing in `effects` for `kind`, and returns what that leads to.
     fn fail(app: &mut App, effects: Vec<Effect>, kind: ListErrorKind) -> Vec<Effect> {
-        let reason = match kind {
-            ListErrorKind::NotFound => "no such file or directory",
-            ListErrorKind::Denied => "permission denied",
-            ListErrorKind::Other => "connection reset",
+        let (reason, code) = match kind {
+            ListErrorKind::NotFound => ("no such file or directory", Some(Code::Os(2))),
+            ListErrorKind::Denied => ("permission denied", Some(Code::Os(13))),
+            ListErrorKind::Other => ("connection reset", None),
         };
         let mut next = Vec::new();
         for effect in effects {
@@ -8872,6 +8905,7 @@ mod tests {
             let error = ListError {
                 kind,
                 reason: reason.to_owned(),
+                code,
                 location: None,
             };
             next.extend(app.listed(panel, request.generation, Err(error)));
@@ -10776,7 +10810,7 @@ mod tests {
         // A directory that is not made ends the wait as well, in an error.
         app.created(panel, &local("/srv/x"), Ok(()));
         assert!(
-            app.created(panel, &location, Err("taken".into()))
+            app.created(panel, &location, Err("taken".to_owned().into()))
                 .is_empty()
         );
         for side in Side::BOTH {
@@ -10825,7 +10859,10 @@ mod tests {
         let effects = app.created(
             app.shown(Side::Left),
             &local("/srv/left"),
-            Err("already exists".into()),
+            Err(Reason {
+                text: "already exists".to_owned(),
+                code: Some(Code::Os(17)),
+            }),
         );
         assert!(effects.is_empty());
         assert_eq!(app.context(), Context::Dialog);
@@ -10940,18 +10977,22 @@ mod tests {
         );
 
         // A failure waits for an answer: what failed, the path, and why, each on a line of its
-        // own; Retry first, the default, then Skip and Skip all.
+        // own, with the code of the system; what to do about the failures after it; and Retry
+        // first, the default, then Skip and Abort.
         let (reply, mut decision) = oneshot::channel();
         let failed = JobEvent::Failed {
             at: Instant::now(),
             path: local("/srv/left/b"),
             step: Step::Remove,
-            error: "Permission denied".to_owned(),
+            reason: Reason {
+                text: "Permission denied".to_owned(),
+                code: Some(Code::Os(13)),
+            },
             retry: true,
             reply,
         };
         app.job_event(id, failed);
-        let text = screen_of(&mut app, 16);
+        let text = screen_of(&mut app, 20);
         assert!(
             shows_problem(
                 &text,
@@ -10961,14 +11002,24 @@ mod tests {
             ),
             "{text}"
         );
+        assert!(text.contains("Code: 13"), "{text}");
+        assert!(text.contains("The rest: "), "{text}");
+        assert!(text.contains("{ Retry } [ Skip ] [ Abort ]"), "{text}");
+        // Alt+t opens the list of the rest, where j goes down and Enter chooses.
+        app.handle(Resolved::Hotkey('t'));
         assert!(
-            text.contains("{ Retry } [ Skip ] [ Skip all ] [ Abort ]"),
-            "{text}"
+            screen_of(&mut app, 20).contains("Skip failures with the same code"),
+            "a code to skip by"
         );
-        app.handle(action(Action::Right));
-        app.handle(action(Action::Right));
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Down));
         app.handle(action(Action::Confirm));
-        assert_eq!(decision.try_recv(), Ok(Decision::SkipAll));
+        app.handle(Resolved::Hotkey('s'));
+        let skip_same = Resolution {
+            this: Decision::Skip,
+            rest: Later::SkipSame,
+        };
+        assert_eq!(decision.try_recv(), Ok(skip_same));
 
         // Reports of other jobs change nothing; the end reads /srv again in both panels.
         assert!(
@@ -11031,7 +11082,7 @@ mod tests {
         let error = "busy".to_owned();
         app.job_event(id, failed(path, error, reply));
         app.handle(action(Action::Cancel));
-        assert_eq!(decision.try_recv(), Ok(Decision::Abort));
+        assert_eq!(decision.try_recv(), Ok(Resolution::once(Decision::Abort)));
     }
 
     #[test]
@@ -11070,7 +11121,7 @@ mod tests {
         app.job_event(second, failed(path, error, reply));
         assert_eq!(app.context(), Context::Dialog);
         app.handle(action(Action::Confirm));
-        assert_eq!(decision.try_recv(), Ok(Decision::Retry));
+        assert_eq!(decision.try_recv(), Ok(Resolution::once(Decision::Retry)));
 
         // F10 asks while jobs run; No, the default, goes on.
         app.handle(action(Action::Quit));
@@ -11241,7 +11292,10 @@ mod tests {
         assert!(app.spin_due(now).is_none(), "nothing moves while they wait");
 
         app.handle(action(Action::Confirm));
-        assert_eq!(decisions[0].try_recv(), Ok(Decision::Retry));
+        assert_eq!(
+            decisions[0].try_recv(),
+            Ok(Resolution::once(Decision::Retry))
+        );
         assert!(ticking(&app, first), "the first goes on");
         assert!(
             !ticking(&app, second),
@@ -11311,7 +11365,7 @@ mod tests {
             at: at(25_000),
             path: local("/srv/left/a"),
             step: Step::Read,
-            error: "busy".to_owned(),
+            reason: "busy".to_owned().into(),
             retry: true,
             reply,
         };
@@ -11322,12 +11376,12 @@ mod tests {
     }
 
     /// A failure of a job at `path`, now, that waits for `reply`.
-    fn failed(path: Location, error: String, reply: oneshot::Sender<Decision>) -> JobEvent {
+    fn failed(path: Location, error: String, reply: oneshot::Sender<Resolution>) -> JobEvent {
         JobEvent::Failed {
             at: Instant::now(),
             path,
             step: Step::Remove,
-            error,
+            reason: error.into(),
             retry: true,
             reply,
         }
@@ -11648,12 +11702,14 @@ mod tests {
     }
 
     #[test]
-    fn a_failure_offers_only_the_buttons_that_do_something() {
+    fn a_failure_offers_only_the_buttons_and_choices_that_do_something() {
         let mut app = loaded();
         app.handle(action(Action::Down));
         app.handle(action(Action::Delete));
         let (id, ..) = delete_job(app.handle(action(Action::Confirm)));
-        let mut buttons = |done, total, retry| {
+        // The screen with the question about a failure at entry `done` of `total`, and the
+        // answer that Enter gives it, after Alt+t opens the list of the rest, if `list`.
+        let mut ask = |(done, total): (u64, u64), retry, code, list| {
             let counts = Counts {
                 done,
                 total,
@@ -11661,42 +11717,58 @@ mod tests {
             };
             app.job_event(id, report(local("/srv/left/a"), counts));
             let (reply, mut decision) = oneshot::channel();
-            app.job_event(
-                id,
-                JobEvent::Failed {
-                    at: Instant::now(),
-                    path: local("/srv/left/a"),
-                    step: Step::Remove,
-                    error: "Busy".to_owned(),
-                    retry,
-                    reply,
-                },
-            );
-            let text = screen_of(&mut app, 16);
-            let line = text
-                .lines()
-                .find(|line| line.contains(" Abort "))
-                .unwrap_or_default()
-                .to_owned();
+            let reason = Reason {
+                text: "Busy".to_owned(),
+                code,
+            };
+            let path = local("/srv/left/a");
+            let (step, at) = (Step::Remove, Instant::now());
+            let failed = JobEvent::Failed {
+                at,
+                path,
+                step,
+                reason,
+                retry,
+                reply,
+            };
+            app.job_event(id, failed);
+            if list {
+                app.handle(Resolved::Hotkey('t'));
+            }
+            let text = screen_of(&mut app, 20);
+            if list {
+                app.handle(action(Action::Cancel));
+            }
             app.handle(action(Action::Confirm));
-            (line, decision.try_recv())
+            (text, decision.try_recv())
         };
-        let (line, decision) = buttons(1, 3, true);
+        let busy = Some(Code::Os(16));
+        let (text, decision) = ask((1, 3), true, busy, false);
+        assert!(text.contains("{ Retry } [ Skip ] [ Abort ]"), "{text}");
         assert!(
-            line.contains("{ Retry } [ Skip ] [ Skip all ] [ Abort ]"),
-            "{line}"
+            text.contains("The rest: ") && text.contains("Code: 16"),
+            "{text}"
         );
-        assert_eq!(decision, Ok(Decision::Retry));
-        // At the last entry, Skip all would do what Skip does.
-        let (line, _) = buttons(2, 3, true);
-        assert!(line.contains("{ Retry } [ Skip ] [ Abort ]"), "{line}");
+        assert_eq!(decision, Ok(Resolution::once(Decision::Retry)));
+        let (text, _) = ask((1, 3), true, busy, true);
+        assert!(text.contains("Skip every failure"), "{text}");
+        assert!(text.contains("Skip failures with the same code"), "{text}");
+        // Without a code, a dash, and no failures to skip by it.
+        let (text, _) = ask((1, 3), true, None, true);
+        assert!(text.contains("Code: —"), "{text}");
+        assert!(text.contains("Skip every failure"), "{text}");
+        assert!(!text.contains("the same code"), "{text}");
+        // At the last entry, no failures come after it.
+        let (text, _) = ask((2, 3), true, busy, false);
+        assert!(!text.contains("The rest"), "{text}");
+        assert!(text.contains("{ Retry } [ Skip ] [ Abort ]"), "{text}");
         // For the only entry, Skip would do what Abort does.
-        let (line, _) = buttons(0, 1, true);
-        assert!(line.contains("{ Retry } [ Abort ]"), "{line}");
+        let (text, _) = ask((0, 1), true, busy, false);
+        assert!(text.contains("{ Retry } [ Abort ]"), "{text}");
         // Where trying again would fail again, Skip is the default.
-        let (line, decision) = buttons(1, 3, false);
-        assert!(line.contains("{ Skip } [ Skip all ] [ Abort ]"), "{line}");
-        assert_eq!(decision, Ok(Decision::Skip));
+        let (text, decision) = ask((1, 3), false, None, false);
+        assert!(text.contains("{ Skip } [ Abort ]"), "{text}");
+        assert_eq!(decision, Ok(Resolution::once(Decision::Skip)));
     }
 
     #[test]
@@ -11788,7 +11860,7 @@ mod tests {
         else {
             panic!("expected a read");
         };
-        app.read(read, Err("gone".to_owned()));
+        app.read(read, Err("gone".to_owned().into()));
         let text = screen_of(&mut app, 16);
         assert!(
             shows_problem(&text, "Cannot view", Some("/srv/left/a"), "gone"),
@@ -12319,7 +12391,7 @@ mod tests {
 
         app.handle(action(Action::Edit));
         app.take_edit();
-        app.edited(Err("cannot run nano: not found".to_owned()));
+        app.edited(Err("cannot run nano: not found".to_owned().into()));
         let text = screen_of(&mut app, 12);
         assert!(
             shows_problem(
@@ -12350,7 +12422,10 @@ mod tests {
         assert_eq!(app.mode(), Mode::Normal);
         assert_eq!(chosen_names(&app, Side::Left), ["c", "d"]);
 
-        app.open_failed(Path::new("/srv/c"), "xdg-open exited with exit status: 3");
+        app.open_failed(
+            Path::new("/srv/c"),
+            "xdg-open exited with exit status: 3".to_owned().into(),
+        );
         let text = screen_of(&mut app, 12);
         assert!(
             shows_problem(
@@ -12531,7 +12606,7 @@ mod tests {
         let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
             panic!("expected a read");
         };
-        app.read(id, Err("permission denied".to_owned()));
+        app.read(id, Err("permission denied".to_owned().into()));
         assert_eq!(app.context(), Context::Dialog);
         let text = screen_of(&mut app, 12);
         assert!(
@@ -12670,7 +12745,10 @@ mod tests {
             panic!("expected the next part");
         };
         assert_eq!((want.offset, want.new), (8, true));
-        assert!(app.read(id, Err("broken pipe".to_owned())).is_empty());
+        assert!(
+            app.read(id, Err("broken pipe".to_owned().into()))
+                .is_empty()
+        );
         let text = screen_of(&mut app, 16);
         assert!(
             shows_problem(
@@ -13026,7 +13104,9 @@ mod tests {
         };
         assert_eq!(host, None);
 
-        app.host_saved(Err("cannot write /cfg/hosts.toml: denied".to_owned()));
+        app.host_saved(Err("cannot write /cfg/hosts.toml: denied"
+            .to_owned()
+            .into()));
         let text = screen_of(&mut app, 20);
         assert!(text.contains("Cannot save the host settings"), "{text}");
     }
@@ -13563,7 +13643,7 @@ mod tests {
             panic!("expected the menu bar to be saved: {effects:?}");
         };
         assert_eq!(old.ui.theme, "terminal", "after the theme");
-        app.config_saved(Err("cannot write config.toml".to_owned()));
+        app.config_saved(Err("cannot write config.toml".to_owned().into()));
         assert!(app.dialogs.front().is_some(), "a failure says so");
         app.handle(action(Action::Cancel));
         assert!(app.configuration.is_some());
@@ -15160,10 +15240,10 @@ mod tests {
     #[test]
     fn a_file_that_cannot_be_read_or_written_says_why() {
         let mut app = loaded();
-        app.workspaces_changed(false, Err("invalid workspace".to_owned()));
+        app.workspaces_changed(false, Err("invalid workspace".to_owned().into()));
         assert!(screen_of(&mut app, 16).contains("Cannot read the workspaces"));
         app.handle(action(Action::Confirm));
-        app.workspaces_changed(true, Err("cannot write".to_owned()));
+        app.workspaces_changed(true, Err("cannot write".to_owned().into()));
         assert!(screen_of(&mut app, 16).contains("Cannot save the workspaces"));
     }
 
@@ -15443,7 +15523,7 @@ mod tests {
             Some(&b"taken.pdf"[..])
         );
 
-        let failed = Err(Refused::Failed("No space".to_owned()));
+        let failed = Err(Refused::Failed("No space".to_owned().into()));
         let effects = app.entry_renamed(panel, &from, &to, failed);
         assert!(effects.is_empty());
         let text = screen(&mut app);
@@ -15759,7 +15839,7 @@ mod tests {
 
         app.config.shell.history_size = 0;
         assert!(run(&mut app, "make").is_empty(), "no history at all");
-        app.history_changed(Err("history.toml: invalid".to_owned()));
+        app.history_changed(Err("history.toml: invalid".to_owned().into()));
         assert!(screen_of(&mut app, 12).contains("Cannot keep the command history"));
     }
 
@@ -16801,6 +16881,7 @@ mod tests {
             let error = ListError {
                 kind: ListErrorKind::NotFound,
                 reason: "no such file or directory".to_owned(),
+                code: Some(Code::Sftp(2)),
                 location: Some(remote("web", "/var/www/gone")),
             };
             assert!(app.listed(panel, request.generation, Err(error)).is_empty());

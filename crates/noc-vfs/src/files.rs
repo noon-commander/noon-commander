@@ -133,7 +133,7 @@ mod tests {
                 tokio::task::yield_now().await;
                 counter.lock().unwrap().0 -= 1;
                 if fail_at.is_some_and(|at| offset >= at) {
-                    return Err(VfsError::PermissionDenied("fake".to_owned()));
+                    return Err(VfsError::PermissionDenied("fake".to_owned(), None));
                 }
                 let start = usize::try_from(offset).unwrap();
                 if start >= source.len() {
@@ -182,7 +182,7 @@ mod tests {
         let (_, fetch, _) = fake(1000, Some(320));
         let mut pipeline = ReadPipeline::new(fetch, 0, 64, 4);
         let err = read_all(&mut pipeline).await.unwrap_err();
-        assert!(matches!(err, VfsError::PermissionDenied(_)), "{err:?}");
+        assert!(matches!(err, VfsError::PermissionDenied(..)), "{err:?}");
         assert!(pipeline.read().await.unwrap().is_none(), "nothing after it");
     }
 }

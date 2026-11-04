@@ -263,7 +263,7 @@ mod tests {
                 ControlFlow::Continue(())
             })
             .await,
-            Err(VfsError::NotFound(_))
+            Err(VfsError::NotFound(..))
         ));
     }
 }

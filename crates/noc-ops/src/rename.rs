@@ -27,7 +27,7 @@ pub async fn rename<V: Vfs>(
 ) -> Result<(), RenameError> {
     let source = vfs.symlink_metadata(from).await?;
     let taken = match vfs.symlink_metadata(to).await {
-        Err(VfsError::NotFound(_)) => None,
+        Err(VfsError::NotFound(..)) => None,
         Ok(existing) if spelled_otherwise(vfs, (from, &source), (to, &existing)).await? => None,
         Ok(existing) => Some(existing.kind),
         Err(error) => return Err(error.into()),
@@ -40,7 +40,7 @@ pub async fn rename<V: Vfs>(
     }
     match vfs.rename(from, to).await {
         // Without posix-rename the target goes first.
-        Err(VfsError::AlreadyExists(_)) if taken.is_some() => {
+        Err(VfsError::AlreadyExists(..)) if taken.is_some() => {
             vfs.remove_file(to).await?;
             vfs.rename(from, to).await?;
         }

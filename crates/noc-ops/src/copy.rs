@@ -121,7 +121,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                         let path = (self.to.report)(&target);
                         match self.reporter.ask(path, Step::Create, error).await {
                             Decision::Retry => {}
-                            Decision::Skip | Decision::SkipAll => {
+                            Decision::Skip => {
                                 self.outcome.skipped = 1;
                                 return Ok(());
                             }
@@ -145,7 +145,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         let vfs = self.to.vfs;
         loop {
             let error = match vfs.symlink_metadata(target).await {
-                Err(VfsError::NotFound(_)) => return Ok(Some(false)),
+                Err(VfsError::NotFound(..)) => return Ok(Some(false)),
                 Err(error) => error,
                 Ok(there) => match vfs.symlink_metadata(source).await {
                     Err(error) => error,
@@ -160,7 +160,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
             let path = (self.from.report)(source);
             match self.reporter.ask(path, Step::Inspect, error).await {
                 Decision::Retry => {}
-                Decision::Skip | Decision::SkipAll => return Ok(None),
+                Decision::Skip => return Ok(None),
                 Decision::Abort => return Err(Aborted),
             }
         }
@@ -179,7 +179,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                 Err(Stop::Failed(path, step, error)) => {
                     match self.reporter.ask(path, step, error).await {
                         Decision::Retry => {}
-                        Decision::Skip | Decision::SkipAll => return Ok(Renamed::Skipped),
+                        Decision::Skip => return Ok(Renamed::Skipped),
                         Decision::Abort => return Err(Aborted),
                     }
                 }
@@ -210,7 +210,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
             .map_err(|error| self.at_source(source, Step::Inspect, error))?;
         let mut target = target.clone();
         let replace = match vfs.symlink_metadata(&target).await {
-            Err(VfsError::NotFound(_)) => false,
+            Err(VfsError::NotFound(..)) => false,
             // A hard link, or a directory on the way spelled otherwise: a rename would do nothing.
             Ok(existing) if existing.same_object(&metadata) => {
                 let error = VfsError::SameFile(target.display());
@@ -247,7 +247,7 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                 return Ok(Renamed::Copy(Some(answered)));
             }
             // Without posix-rename the target goes first.
-            Err(VfsError::AlreadyExists(_)) if replace => match vfs.remove_file(target).await {
+            Err(VfsError::AlreadyExists(..)) if replace => match vfs.remove_file(target).await {
                 Ok(()) => vfs.rename(source, target).await.err().map(renaming),
                 Err(error) => Some(self.at_target(target, Step::Remove, error)),
             },
@@ -576,7 +576,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                         (self.bytes_done, self.bytes_total) = (before, total);
                         match self.reporter.ask(path, step, error).await {
                             Decision::Retry => {}
-                            Decision::Skip | Decision::SkipAll => break false,
+                            Decision::Skip => break false,
                             Decision::Abort => return Err(Aborted),
                         }
                     }
@@ -662,13 +662,13 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 from.remove_file(&item.source).await
             };
             let error = match result {
-                Ok(()) | Err(VfsError::NotFound(_)) => return Ok(true),
+                Ok(()) | Err(VfsError::NotFound(..)) => return Ok(true),
                 Err(error) => error,
             };
             let path = (self.from.report)(&item.source);
             match self.reporter.ask(path, Step::Remove, error).await {
                 Decision::Retry => {}
-                Decision::Skip | Decision::SkipAll => return Ok(false),
+                Decision::Skip => return Ok(false),
                 Decision::Abort => return Err(Aborted),
             }
         }
@@ -686,7 +686,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 Ok(metadata) if metadata.kind == FileKind::Dir => {
                     return Ok(Some(Destination::Into(target)));
                 }
-                Ok(_) | Err(VfsError::NotFound(_)) if count == 1 => {
+                Ok(_) | Err(VfsError::NotFound(..)) if count == 1 => {
                     return Ok(Some(match (target.parent(), target.name()) {
                         (Some(dir), Some(name)) => Destination::As {
                             name: name.to_vec(),
@@ -695,11 +695,14 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                         _ => Destination::Into(target),
                     }));
                 }
-                Err(VfsError::NotFound(_)) => match to.create_dir(&target).await {
+                Err(VfsError::NotFound(..)) => match to.create_dir(&target).await {
                     Ok(()) => return Ok(Some(Destination::Into(target))),
                     Err(error) => (Step::Create, error),
                 },
-                Ok(_) => (Step::Create, VfsError::AlreadyExists(target.display())),
+                Ok(_) => (
+                    Step::Create,
+                    VfsError::AlreadyExists(target.display(), None),
+                ),
                 Err(error) => (Step::Inspect, error),
             };
             match self
@@ -708,7 +711,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .await
             {
                 Decision::Retry => {}
-                Decision::Skip | Decision::SkipAll => return Ok(None),
+                Decision::Skip => return Ok(None),
                 Decision::Abort => return Err(Aborted),
             }
         }
@@ -732,7 +735,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                         let path = (self.from.report)(&source);
                         match self.reporter.ask(path, Step::Inspect, error).await {
                             Decision::Retry => {}
-                            Decision::Skip | Decision::SkipAll => break None,
+                            Decision::Skip => break None,
                             Decision::Abort => return Err(Aborted),
                         }
                     }
@@ -759,7 +762,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                             let path = (self.from.report)(&dir.source);
                             match self.reporter.ask(path, Step::List, error).await {
                                 Decision::Retry => {}
-                                Decision::Skip | Decision::SkipAll => {
+                                Decision::Skip => {
                                     items[index].skip = true;
                                     break Vec::new();
                                 }
@@ -829,12 +832,15 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         let to = self.to.vfs;
         match to.create_dir(target).await {
             Ok(()) => Ok(true),
-            Err(VfsError::AlreadyExists(name)) => match to.metadata(target).await {
+            Err(VfsError::AlreadyExists(name, code)) => match to.metadata(target).await {
                 Ok(metadata) if metadata.same_object(&item.metadata) => {
                     Err(self.at_target(target, Step::Create, VfsError::SameFile(name)))
                 }
                 Ok(metadata) if metadata.kind == FileKind::Dir => Ok(false),
-                _ => Err(self.at_target(target, Step::Create, VfsError::AlreadyExists(name))),
+                _ => {
+                    let error = VfsError::AlreadyExists(name, code);
+                    Err(self.at_target(target, Step::Create, error))
+                }
             },
             Err(error) => Err(self.at_target(target, Step::Create, error)),
         }
@@ -848,7 +854,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         loop {
             let existing = match self.to.vfs.symlink_metadata(target).await {
                 Ok(existing) => existing,
-                Err(VfsError::NotFound(_)) => return Ok(Plan::New),
+                Err(VfsError::NotFound(..)) => return Ok(Plan::New),
                 Err(error) => return Err(self.at_target(target, Step::Inspect, error)),
             };
             if existing.same_object(&item.metadata) {
@@ -856,7 +862,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 return Err(self.at_target(target, Step::Create, error));
             }
             if existing.kind == FileKind::Dir {
-                let error = VfsError::AlreadyExists(target.display());
+                let error = VfsError::AlreadyExists(target.display(), None);
                 return Err(self.at_target(target, Step::Create, error));
             }
             if self.granted.as_ref() == Some(&*target) {
@@ -1044,7 +1050,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         let to = self.to.vfs;
         match to.rename(written, target).await {
             Ok(()) => return Ok(()),
-            Err(VfsError::AlreadyExists(_)) if replace => {
+            Err(VfsError::AlreadyExists(..)) if replace => {
                 if let Err(error) = to.remove_file(target).await {
                     return Err(self.at_target(target, Step::Remove, error));
                 }
@@ -1087,7 +1093,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                     return Err(Stop::Aborted);
                 }
                 Some(Ok(writer)) => return Ok((writer, temporary)),
-                Some(Err(VfsError::AlreadyExists(_))) => {}
+                Some(Err(VfsError::AlreadyExists(..))) => {}
                 Some(Err(error)) => return Err(self.at_target(target, Step::Create, error)),
             }
         }
@@ -1189,7 +1195,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .await
             {
                 Decision::Retry => {}
-                Decision::Skip | Decision::SkipAll => return Ok(()),
+                Decision::Skip => return Ok(()),
                 Decision::Abort => return Err(Aborted),
             }
         }
@@ -1230,6 +1236,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
+    use crate::job::Resolution;
     use crate::testing;
 
     fn report<P: VfsPath>(path: &P) -> String {
@@ -1391,7 +1398,7 @@ mod tests {
                     seen.steps.push(step);
                     seen.copied_at_failures.push(seen.copied);
                     let answer = *failures.next().expect("an answer for each failure");
-                    let _ = reply.send(answer);
+                    let _ = reply.send(Resolution::once(answer));
                 }
                 Event::Exists {
                     target,

@@ -1,6 +1,6 @@
 ---
 source: crates/noc/src/tui/dialog.rs
-expression: "draw(&dialog, 40, 11).backend()"
+expression: "draw(&dialog, 40, 12).backend()"
 ---
 "                                        "
 "  ╔═══════════ Connection ═══════════╗  "
@@ -9,6 +9,7 @@ expression: "draw(&dialog, 40, 11).backend()"
 "  ║ ssh: connect to host             ║  "
 "  ║ db.example.com port 22:          ║  "
 "  ║ Operation timed out              ║  "
+"  ║ Code: —                          ║  "
 "  ╟──────────────────────────────────╢  "
 "  ║       { Retry } [ Cancel ]       ║  "
 "  ╚══════════════════════════════════╝  "

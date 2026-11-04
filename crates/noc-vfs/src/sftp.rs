@@ -15,7 +15,7 @@ use tokio::io::{AsyncRead, AsyncSeekExt as _, AsyncWrite};
 
 use crate::files::{Fetch, ReadPipeline};
 use crate::{
-    DirEntry, FileKind, FileReader, FileWriter, Metadata, RemotePath, Space, Vfs, VfsError,
+    Code, DirEntry, FileKind, FileReader, FileWriter, Metadata, RemotePath, Space, Vfs, VfsError,
 };
 
 /// Symlinks a listing resolves at a time, as many as the requests `sftp(1)` keeps in flight;
@@ -212,7 +212,7 @@ impl SftpFs {
         if matches!(err, Error::SftpError(SftpErrorKind::Failure, _))
             && self.symlink_metadata(path).await.is_ok()
         {
-            return VfsError::AlreadyExists(path.display().into_owned());
+            return VfsError::AlreadyExists(path.display().into_owned(), Code::of_sftp(&err));
         }
         VfsError::remote(err, path)
     }
@@ -666,7 +666,7 @@ mod tests {
 
         let err = server.fs.metadata(&"dangling".into()).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if p == "dangling"),
+            matches!(&err, VfsError::NotFound(p, _) if p == "dangling"),
             "{err:?}"
         );
         server.stop().await;
@@ -855,7 +855,7 @@ mod tests {
         assert!(server.fs.space(&"".into()).await.unwrap().is_some(), "home");
 
         let err = server.fs.space(&"missing".into()).await.unwrap_err();
-        assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+        assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
         server.stop().await;
     }
 
@@ -899,18 +899,18 @@ mod tests {
 
         let err = server.fs.list_dir(&"missing".into()).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if p == "missing"),
+            matches!(&err, VfsError::NotFound(p, _) if p == "missing"),
             "{err:?}"
         );
         let err = server.fs.metadata(&"missing".into()).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if p == "missing"),
+            matches!(&err, VfsError::NotFound(p, _) if p == "missing"),
             "{err:?}"
         );
         // sftp-server reports ENOTDIR as "no such file".
         let err = server.fs.list_dir(&"file.txt".into()).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if p == "file.txt"),
+            matches!(&err, VfsError::NotFound(p, _) if p == "file.txt"),
             "{err:?}"
         );
         // ENAMETOOLONG is a "bad message".
@@ -927,7 +927,7 @@ mod tests {
             let path = remote(&locked.path);
             let err = server.fs.list_dir(&path).await.unwrap_err();
             assert!(
-                matches!(&err, VfsError::PermissionDenied(p) if *p == path.display()),
+                matches!(&err, VfsError::PermissionDenied(p, _) if *p == path.display()),
                 "{err:?}"
             );
         }

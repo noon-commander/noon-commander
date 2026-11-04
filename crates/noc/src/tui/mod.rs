@@ -73,6 +73,7 @@ use tokio::signal::unix::{Signal, SignalKind, signal};
 use tokio::sync::mpsc;
 
 use app::{App, Handover};
+use describe::Reason;
 use help::{About, Files};
 use keymap::{KeyState, Keyboard, Keymap, Mode};
 use mouse::{Clicks, Press};
@@ -81,7 +82,6 @@ use told::Told;
 
 use crate::about::{self, Build, Report, System, Tool};
 use crate::context::Context;
-use crate::i18n::fl;
 
 pub(crate) use places::read_volumes;
 pub(crate) use theme::ColorDepth;
@@ -167,7 +167,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
         Done::Jumps { generation, result } => app.jumps(generation, result),
         Done::Found { generation, found } => app.found(generation, found),
         Done::FindEnded { generation, result } => app.find_ended(generation, result),
-        Done::OpenFailed { path, reason } => app.open_failed(&path, &reason),
+        Done::OpenFailed { path, reason } => app.open_failed(&path, reason),
         Done::Names {
             generation,
             entries,
@@ -468,30 +468,20 @@ async fn edit(
     file: &Path,
     line: Option<u64>,
     (keymap, told): (&Keymap, &mut Told),
-) -> Result<bool, String> {
+) -> Result<bool, Reason> {
     let stamp = |metadata: std::fs::Metadata| (metadata.len(), metadata.modified().ok());
     let before = tokio::fs::metadata(file)
         .await
         .map(stamp)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| describe::reason(&error))?;
     let editor = Editor::from_env();
-    let cannot_run = |error: ToolError| {
-        let reason = match &error {
-            ToolError::Spawn { source, .. } => source.to_string(),
-            other => describe::chain(other),
-        };
-        fl!(
-            "edit-cannot-run",
-            program = editor.program().display().to_string(),
-            reason = reason
-        )
-    };
+    let cannot_run = |error: ToolError| describe::cannot_run(editor.program(), &error);
     let mut running = editor.start(file, line).map_err(cannot_run)?;
     output::finish(&mut running, (keymap, told), cannot_run).await?;
     let after = tokio::fs::metadata(file)
         .await
         .map(stamp)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| describe::reason(&error))?;
     Ok(before != after)
 }
 
@@ -540,7 +530,7 @@ async fn hand_over(
                     let editor = pin!(edit(&file, line, (&keymap, told)));
                     meanwhile(editor, done, &mut held, &mut take).await
                 }
-                Err(error) => Err(error),
+                Err(error) => Err(error.into()),
             };
             (told.events()?, app.edited(result))
         }

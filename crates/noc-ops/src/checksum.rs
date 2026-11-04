@@ -317,7 +317,7 @@ impl<'r, L> Checksum<'r, L> {
                 Ok(value) => return Ok(Some(value)),
                 Err(error) => match self.reporter.ask((side.report)(path), step, error).await {
                     Decision::Retry => {}
-                    Decision::Skip | Decision::SkipAll => {
+                    Decision::Skip => {
                         self.outcome.skipped += 1;
                         self.items_total += 1;
                         return Ok(None);
@@ -356,7 +356,7 @@ impl<'r, L> Checksum<'r, L> {
                         let path = (side.report)(&file.path);
                         match self.reporter.ask(path, Step::Read, error).await {
                             Decision::Retry => {}
-                            Decision::Skip | Decision::SkipAll => break None,
+                            Decision::Skip => break None,
                             Decision::Abort => return Err(Aborted),
                         }
                     }
@@ -475,6 +475,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
+    use crate::job::Resolution;
     use crate::testing;
 
     fn report<P: VfsPath>(path: &P) -> String {
@@ -535,7 +536,7 @@ mod tests {
                     seen.failed.push(path);
                     seen.steps.push(step);
                     let answer = *answers.next().expect("an answer for each failure");
-                    let _ = reply.send(answer);
+                    let _ = reply.send(Resolution::once(answer));
                 }
                 Event::Exists { .. } => panic!("checksums take no names"),
             }

@@ -29,19 +29,30 @@ had No.
 - **An error shows a problem in parts** (`Problem`, `Dialog::failure`). First what could not be
   done, such as `Cannot delete`. Then the path on a line of its own, cut in the middle where too
   long. Then, under a line across the frame, as over The rest of the question about a taken name,
-  the reason, which wraps. Every dialog of an error that has a path, a host, or a file and a
-  reason shows it so. An error with no reason apart, such as a name that cannot be a name, stays
-  one sentence. Reasons start with a capital, as they start a line.
+  the reason, which wraps, and under it always the code the system gave the failure, its number
+  in bold: `Code: 13` for an `errno`, `SFTP code: 3` for a status of SFTP, which does not tell the
+  `errno` on the host. Where neither gave one, as for what Noon Commander found itself or what ssh
+  said, the code is a dash, `Code: —`, so that its place is always there. The number alone shows,
+  not its name, such as `EACCES`, which would take a table for each system or `nix`; the words of
+  the reason leave out the `(os error 13)` that the system puts after them. `VfsError` keeps the
+  code (`VfsError::code`), and a `Reason` carries it with its words to the dialog. Every dialog
+  of an error that has a path, a host, or a file and a reason shows it so. An error with no reason
+  apart, such as a name that cannot be a name, stays one sentence. Reasons start with a capital,
+  as they start a line.
 - **A job says what it could not do.** `noc_ops::Event::Failed` carries the `Step` that failed:
   inspect, list, read, create, write, set attributes, rename, or remove. The dialog says it:
   `Cannot read`, `Cannot create`, `Cannot set the attributes of`.
-- **The buttons of a failed job are Retry, Skip, Skip all, and Abort**, Retry first and the
-  default. Skip is the word of the question about a taken name too: one button, one word.
-- **A button that would do nothing new does not show.** No Retry where it would fail again, as
-  when the target is the source itself; Skip is then the default. No Skip all at the last entry,
-  where it is Skip. No Skip for the only entry, where it is Abort. The question about a taken name
-  drops The rest at the last entry and Skip for the only one, where Abort is the default. Where
-  the job still counts, it does not know what is left, and every button shows.
+- **A failed job asks as the question about a taken name does**: the buttons are for this
+  failure, Retry first and the default, Skip, and Abort; under a line, a combo box, The rest, is
+  for the failures after it: Ask each time, Skip every failure, and Skip failures with the same
+  code, which leaves each failure with that code without asking and asks about the others. A
+  failure without a code has no such choice. The answer is a `noc_ops::Resolution`: a `Decision`
+  and a `Later`. Skip is the word of the question about a taken name too: one button, one word.
+- **What would do nothing new does not show.** No Retry where it would fail again, as when the
+  target is the source itself; Skip is then the default. No The rest at the last entry. No Skip
+  for the only entry, where it is Abort. The question about a taken name drops The rest at the
+  last entry and Skip for the only one, where Abort is the default. Where the job still counts,
+  it does not know what is left, and everything shows.
 - **The main way on comes first, the way out last.** Cancel or Abort is the last button. The
   dialog after a directory could not be read has Retry, Up, Go to, and Cancel, which takes the
   place of OK. Its default is Up where the panel has nothing to show, and Retry otherwise.
@@ -58,5 +69,8 @@ had No.
 - The buttons of one failure may differ from the next, by where the job is. Enter always
   does the first one shown.
 - A failure with no Retry has Skip as the default, so Enter goes on with the job.
-- An error dialog is two lines taller than before.
+- An error dialog is three lines taller than before, and the failure of a job two more with The
+  rest.
+- A run of failures of one kind, such as files that may not be read among many, can be passed
+  by while the others still ask.
 - On a terminal too short for the dialog, its buttons are cut off first, as before.

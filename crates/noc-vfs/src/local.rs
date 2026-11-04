@@ -353,7 +353,7 @@ mod tests {
 
         let err = LocalFs.metadata(&path("dangling")).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if *p == path("dangling").display().to_string()),
+            matches!(&err, VfsError::NotFound(p, _) if *p == path("dangling").display().to_string()),
             "{err:?}"
         );
     }
@@ -370,7 +370,7 @@ mod tests {
 
         let missing = dir.path().join("missing");
         let err = LocalFs.space(&missing).await.unwrap_err();
-        assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+        assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     }
 
     #[tokio::test]
@@ -463,17 +463,17 @@ mod tests {
 
         let err = LocalFs.list_dir(&missing).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if *p == expected),
+            matches!(&err, VfsError::NotFound(p, _) if *p == expected),
             "{err:?}"
         );
         let err = LocalFs.metadata(&missing).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if *p == expected),
+            matches!(&err, VfsError::NotFound(p, _) if *p == expected),
             "{err:?}"
         );
         let err = LocalFs.canonicalize(&missing).await.unwrap_err();
         assert!(
-            matches!(&err, VfsError::NotFound(p) if *p == expected),
+            matches!(&err, VfsError::NotFound(p, _) if *p == expected),
             "{err:?}"
         );
     }
@@ -487,7 +487,7 @@ mod tests {
         let err = LocalFs.list_dir(&locked.path).await.unwrap_err();
         let expected = locked.path.display().to_string();
         assert!(
-            matches!(&err, VfsError::PermissionDenied(p) if *p == expected),
+            matches!(&err, VfsError::PermissionDenied(p, _) if *p == expected),
             "{err:?}"
         );
     }

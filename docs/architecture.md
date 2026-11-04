@@ -969,8 +969,10 @@ fails soon with the channel gone; the UI ends the job at once. A job talks
 to the UI through a `Reporter`: it sends `Event`s (`Scanning` with the entries found, after
 each entry it was given and each directory it lists; `Progress` with the entry at hand and
 done/total counts; `Failed` with the path, the `Step` that failed on it, such as listing, reading,
-or creating, and the error), and when an operation fails it waits for a `Decision`: Retry,
-Skip, Skip all (no more questions), or Abort. A `CancellationToken` stops it between
+or creating, and the error), and when an operation fails it waits for a `Resolution`: Retry,
+Skip, or Abort for this failure, and for the later ones, ask, skip all, or skip those with the
+`Code` of this one (`VfsError::code`: the `errno`, or the SFTP status), which the `Reporter`
+then skips without asking. A `CancellationToken` stops it between
 operations and while it waits for a decision, for data, or for a host to open a file or set its
 attributes; so does a UI that stops listening. A request to a host that stopped answering never
 ends, so the task that runs a job gives it two seconds once cancelled (`noc_ops::in_time`), then
@@ -1538,10 +1540,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   own, or in the host's task, with a window that shows what it counts, the entry at hand, a gauge,
   and done/total; Esc or Abort stops it. A failure asks in a red dialog what the job could not do
   by its `Step` (`Cannot delete`, `Cannot read`, `Cannot create`, …), the path on a line of its
-  own, and the reason under a line; then Retry, the default, Skip, Skip all, and Abort. Only the
-  buttons that do something show: no Retry where it would fail again (the target is the source
-  itself), no Skip all at the last entry, no Skip for the only one, whose Skip is Abort; the
-  window of the job knows how far it is (`JobView::more`, `JobView::single`). When the job ends,
+  own, and under a line the reason and its code (`Code: 13`, `SFTP code: 3`, or `Code: —` where
+  the system gave none); then, under a line, the combo box The rest (ask each time, skip every
+  failure, skip failures with the same code, where there is a code), and Retry, the default,
+  Skip, and Abort. Only what does something shows: no Retry where it would fail again (the
+  target is the source itself), no The rest at the last entry, no Skip for the only one, whose
+  Skip is Abort; the window of the job knows how far it is (`JobView::more`,
+  `JobView::single`). When the job ends,
   panels on the directory read it again, and a
   cursor whose entry is gone stays on its row. If the host's connection is lost, the job ends with
   it.

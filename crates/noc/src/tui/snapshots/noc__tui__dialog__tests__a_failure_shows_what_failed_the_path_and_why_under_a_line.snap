@@ -1,15 +1,16 @@
 ---
 source: crates/noc/src/tui/dialog.rs
-expression: "draw(&dialog, 60, 11).backend()"
+expression: "draw(&dialog, 60, 12).backend()"
 ---
 "                                                            "
 "  ╔═══════════════════════ Error ════════════════════════╗  "
 "  ║ Cannot read                                          ║  "
 "  ║ /home/user/projects/far/to»/to/show/whole/report.pdf ║  "
 "  ╟──────────────────────────────────────────────────────╢  "
-"  ║ Permission denied (os error 13)                      ║  "
+"  ║ Permission denied                                    ║  "
+"  ║ Code: 13                                             ║  "
 "  ╟──────────────────────────────────────────────────────╢  "
-"  ║      { Retry } [ Skip ] [ Skip all ] [ Abort ]       ║  "
+"  ║             { Retry } [ Skip ] [ Abort ]             ║  "
 "  ╚══════════════════════════════════════════════════════╝  "
 "                                                            "
 "                                                            "

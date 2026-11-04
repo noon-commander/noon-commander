@@ -110,9 +110,9 @@ pub(crate) async fn check_changes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&s
     vfs.create_dir(&path("new")).await.unwrap();
     assert!(on_disk("new").is_dir());
     let err = vfs.create_dir(&path("new")).await.unwrap_err();
-    assert!(matches!(err, VfsError::AlreadyExists(_)), "{err:?}");
+    assert!(matches!(err, VfsError::AlreadyExists(..)), "{err:?}");
     let err = vfs.create_dir(&path("missing/new")).await.unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
 
     fs::write(on_disk("new/file"), "first").unwrap();
     let err = vfs.remove_dir(&path("new")).await.unwrap_err();
@@ -131,7 +131,7 @@ pub(crate) async fn check_changes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&s
         .rename(&path("missing"), &path("anywhere"))
         .await
         .unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
 
     symlink("new", on_disk("link")).unwrap();
     let link = vfs.symlink_metadata(&path("link")).await.unwrap();
@@ -143,7 +143,7 @@ pub(crate) async fn check_changes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&s
     vfs.remove_file(&path("moved")).await.unwrap();
     vfs.remove_dir(&path("new")).await.unwrap();
     let err = vfs.remove_file(&path("moved")).await.unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     assert_eq!(fs::read_dir(root).unwrap().count(), 0);
 }
 
@@ -177,9 +177,9 @@ pub(crate) async fn check_attributes<V: Vfs>(vfs: &V, root: &Path, path: impl Fn
         .set_permissions(&path("missing"), 0o600)
         .await
         .unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     let err = vfs.set_modified(&path("missing"), time).await.unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
 }
 
 /// Makes and reads symlinks through `vfs` in `root`, an empty local directory that `path`
@@ -208,9 +208,9 @@ pub(crate) async fn check_links<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str
         .create_symlink(b"file", &path("file"))
         .await
         .unwrap_err();
-    assert!(matches!(err, VfsError::AlreadyExists(_)), "{err:?}");
+    assert!(matches!(err, VfsError::AlreadyExists(..)), "{err:?}");
     let err = vfs.read_link(&path("missing")).await.unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     assert!(vfs.read_link(&path("file")).await.is_err(), "not a link");
 }
 
@@ -270,7 +270,7 @@ pub(crate) async fn check_files<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str
 
     fs::write(on_disk("taken"), "old and long").unwrap();
     let err = vfs.create_file(&path("taken"), false).await.unwrap_err();
-    assert!(matches!(err, VfsError::AlreadyExists(_)), "{err:?}");
+    assert!(matches!(err, VfsError::AlreadyExists(..)), "{err:?}");
     let mut writer = vfs.create_file(&path("taken"), true).await.unwrap();
     writer.write(b"new".to_vec()).await.unwrap();
     writer.finish().await.unwrap();
@@ -281,12 +281,12 @@ pub(crate) async fn check_files<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str
     );
 
     let err = read_all(vfs, &path("missing")).await.unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     let err = vfs
         .create_file(&path("missing/new"), false)
         .await
         .unwrap_err();
-    assert!(matches!(err, VfsError::NotFound(_)), "{err:?}");
+    assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     fs::create_dir(on_disk("dir")).unwrap();
     assert!(
         read_all(vfs, &path("dir")).await.is_err(),

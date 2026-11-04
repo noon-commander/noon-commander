@@ -134,11 +134,11 @@ const LAST_WORDS: Duration = Duration::from_secs(1);
 /// what next each time it is stopped, as by Ctrl+z. What ends Noon Commander meanwhile goes on
 /// to it, as a shell passes SIGHUP on to its jobs; one that goes on after a while is let go,
 /// and its status is `None`. `cannot` says why it could not be waited for.
-pub(super) async fn finish(
+pub(super) async fn finish<E: From<String>>(
     running: &mut Running,
     (keymap, told): (&Keymap, &mut Told),
-    cannot: impl Fn(ToolError) -> String,
-) -> Result<Option<ExitStatus>, String> {
+    cannot: impl Fn(ToolError) -> E,
+) -> Result<Option<ExitStatus>, E> {
     let mut out = io::stdout();
     loop {
         let waited = tokio::select! {

@@ -20,8 +20,8 @@ use noc_config::{
 };
 use noc_locale::Formats;
 use noc_ops::{
-    Algorithm, Checksum, Conflict, CopyOptions, Decision, Endpoint, Event, Files, Outcome,
-    RenameError, Reporter, Step, Sum,
+    Algorithm, Checksum, Conflict, CopyOptions, Endpoint, Event, Files, Outcome, RenameError,
+    Reporter, Resolution, Step, Sum,
 };
 use noc_ssh::askpass::{AskpassEnv, AskpassEvent, AskpassServer};
 use noc_ssh::resolve::resolve;
@@ -43,7 +43,7 @@ use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
 use super::app::{Effect, FindRequest, HistoryChange, ReadRequest, RecentChange, WorkspaceChange};
-use super::describe;
+use super::describe::{self, Reason};
 use super::dialog::{Ask, Reply};
 use super::find::{FindQuery, FindSummary, Finding};
 use super::panel::{ListError, ListRequest, Listed, Listing};
@@ -80,7 +80,7 @@ pub(crate) enum Done {
     /// The part of the file of [`Effect::Read`], or why not.
     Read {
         id: u64,
-        result: Result<Part, String>,
+        result: Result<Part, Reason>,
     },
     /// How far [`Effect::Read`] is with its part.
     ReadProgress { id: u64, progress: Progress },
@@ -88,7 +88,7 @@ pub(crate) enum Done {
     Created {
         panel: PanelId,
         location: Location,
-        result: Result<(), String>,
+        result: Result<(), Reason>,
     },
     /// The host of [`Effect::Connect`] is connected; its listings go through `handle`.
     Connected {
@@ -133,18 +133,18 @@ pub(crate) enum Done {
     },
     /// The settings of [`Effect::SaveHost`] are saved, and these are all the host settings
     /// now; or why not.
-    HostSaved(Result<Arc<Hosts>, String>),
+    HostSaved(Result<Arc<Hosts>, Reason>),
     /// The settings of [`Effect::SaveConfig`] are written, or why not.
-    ConfigSaved(Result<(), String>),
+    ConfigSaved(Result<(), Reason>),
     /// The workspaces as `workspaces.toml` holds them after an [`Effect::Workspaces`], or why
     /// it could not be read, or changed if `changed`.
     Workspaces {
         changed: bool,
-        result: Result<Workspaces, String>,
+        result: Result<Workspaces, Reason>,
     },
     /// The commands of `history.toml`, oldest first, after a change, or why it could not be
     /// read or written.
-    History(Result<Vec<HistoryEntry>, String>),
+    History(Result<Vec<HistoryEntry>, Reason>),
     /// The hosts and volumes of `recent.toml`, of [`RecentChange::Load`], or why they could not
     /// be read.
     Recent(Result<Recent, String>),
@@ -177,7 +177,7 @@ pub(crate) enum Done {
     },
     /// The path of [`Effect::Open`] that did not open, and why; the ones after it were not
     /// tried.
-    OpenFailed { path: PathBuf, reason: String },
+    OpenFailed { path: PathBuf, reason: Reason },
 }
 
 /// A report from a job, with its paths as locations and its errors in words. Reports of how
@@ -195,15 +195,15 @@ pub(crate) enum JobEvent {
         current: Location,
         reports: Vec<(Instant, Counts)>,
     },
-    /// `step` failed at `path`, for `error`; the job waits for `reply`. Retry would fail
+    /// `step` failed at `path`, for `reason`; the job waits for `reply`. Retry would fail
     /// again unless `retry`, as when the target is the source itself.
     Failed {
         at: Instant,
         path: Location,
         step: Step,
-        error: String,
+        reason: Reason,
         retry: bool,
-        reply: oneshot::Sender<Decision>,
+        reply: oneshot::Sender<Resolution>,
     },
     /// The name of a copy is taken; the job waits for the answer.
     Exists { at: Instant, taken: Box<TakenName> },
@@ -230,8 +230,8 @@ pub(crate) struct TakenName {
 pub(crate) enum Refused {
     /// A file has the name.
     Taken(Box<TakenFile>),
-    /// Anything else, in words.
-    Failed(String),
+    /// Anything else.
+    Failed(Reason),
 }
 
 /// A file that has the name a rename or a write was to give: what the entry renamed is, if
@@ -714,8 +714,8 @@ impl Tasks {
             })
             .await;
             let result = match saved {
-                Ok(result) => result.map_err(|error| describe::chain(&error)),
-                Err(error) => Err(error.to_string()),
+                Ok(result) => result.map_err(|error| describe::reason(&error)),
+                Err(error) => Err(error.to_string().into()),
             };
             let _ = done.send(Done::HostSaved(result));
         });
@@ -792,7 +792,7 @@ impl Tasks {
                     let result = LocalFs
                         .create_dir(&path)
                         .await
-                        .map_err(|error| describe::vfs_error(&error));
+                        .map_err(|error| describe::vfs_reason(&error));
                     let _ = done.send(Done::Created {
                         panel,
                         location,
@@ -801,7 +801,7 @@ impl Tasks {
                 });
             }
             (Location::Remote { .. }, None) => {
-                let result = Err(fl!("error-connection-closed"));
+                let result = Err(fl!("error-connection-closed").into());
                 let _ = self.done.send(Done::Created {
                     panel,
                     location,
@@ -961,8 +961,8 @@ fn save_configs(
             let path = path.clone();
             let saved = tokio::task::spawn_blocking(move || save_config(&path, &old, &new)).await;
             let result = match saved {
-                Ok(result) => result.map_err(|error| describe::chain(&error)),
-                Err(error) => Err(error.to_string()),
+                Ok(result) => result.map_err(|error| describe::reason(&error)),
+                Err(error) => Err(error.to_string().into()),
             };
             if done.send(Done::ConfigSaved(result)).is_err() {
                 break;
@@ -991,8 +991,8 @@ fn change_workspaces(
             })
             .await;
             let result = match result {
-                Ok(result) => result.map_err(|error| describe::chain(&error)),
-                Err(error) => Err(error.to_string()),
+                Ok(result) => result.map_err(|error| describe::reason(&error)),
+                Err(error) => Err(error.to_string().into()),
             };
             if done.send(Done::Workspaces { changed, result }).is_err() {
                 break;
@@ -1023,8 +1023,8 @@ fn change_history(
             let result = match result {
                 Ok(result) => result
                     .map(|history| history.commands)
-                    .map_err(|error| describe::chain(&error)),
-                Err(error) => Err(error.to_string()),
+                    .map_err(|error| describe::reason(&error)),
+                Err(error) => Err(error.to_string().into()),
             };
             if done.send(Done::History(result)).is_err() {
                 break;
@@ -1422,7 +1422,7 @@ async fn forward<P>(
                 path: location(path),
                 step,
                 retry: !matches!(error, VfsError::SameFile(_)),
-                error: describe::vfs_error(&error),
+                reason: describe::vfs_reason(&error),
                 reply,
             },
             Some(Event::Exists {
@@ -1574,7 +1574,7 @@ async fn write_file(
         (Location::Remote { path, .. }, Some(Some(fs))) => {
             write_all(&*fs, path, bytes, replace).await
         }
-        _ => Err(Refused::Failed(fl!("error-connection-closed"))),
+        _ => Err(Refused::Failed(fl!("error-connection-closed").into())),
     }
 }
 
@@ -1591,8 +1591,8 @@ async fn write_all<V: Vfs>(
     };
     match written.await {
         Ok(()) => Ok(()),
-        Err(VfsError::AlreadyExists(_)) => Err(taken(vfs, None, path).await),
-        Err(error) => Err(Refused::Failed(describe::vfs_error(&error))),
+        Err(VfsError::AlreadyExists(..)) => Err(taken(vfs, None, path).await),
+        Err(error) => Err(Refused::Failed(describe::vfs_reason(&error))),
     }
 }
 
@@ -1612,7 +1612,7 @@ async fn rename(
             Location::Remote { path: to, .. },
             Some(Some(fs)),
         ) => rename_on(&*fs, from, to, replace).await,
-        _ => Err(Refused::Failed(fl!("error-connection-closed"))),
+        _ => Err(Refused::Failed(fl!("error-connection-closed").into())),
     }
 }
 
@@ -1624,9 +1624,11 @@ async fn rename_on<V: Vfs>(
 ) -> Result<(), Refused> {
     match noc_ops::rename(vfs, from, to, replace).await {
         Ok(()) => Ok(()),
-        Err(RenameError::Exists(FileKind::Dir)) => Err(Refused::Failed(fl!("rename-dir-exists"))),
+        Err(RenameError::Exists(FileKind::Dir)) => {
+            Err(Refused::Failed(fl!("rename-dir-exists").into()))
+        }
         Err(RenameError::Exists(_)) => Err(taken(vfs, Some(from), to).await),
-        Err(RenameError::Vfs(error)) => Err(Refused::Failed(describe::vfs_error(&error))),
+        Err(RenameError::Vfs(error)) => Err(Refused::Failed(describe::vfs_reason(&error))),
     }
 }
 
@@ -1655,7 +1657,7 @@ async fn taken<V: Vfs>(vfs: &V, source: Option<&V::Path>, target: &V::Path) -> R
     };
     match found.await {
         Ok(taken) => Refused::Taken(Box::new(taken)),
-        Err(error) => Refused::Failed(describe::vfs_error(&error)),
+        Err(error) => Refused::Failed(describe::vfs_reason(&error)),
     }
 }
 
@@ -1685,15 +1687,15 @@ async fn read(
     host: Option<HostHandle>,
     want: Want,
     report: impl FnMut(Progress) -> ControlFlow<()>,
-) -> Result<Part, String> {
+) -> Result<Part, Reason> {
     let result = match (location, share(host).await) {
         (Location::Local(path), _) => read_part(&LocalFs, &path, want, report).await,
         (Location::Remote { path, .. }, Some(Some(fs))) => {
             read_part(&*fs, &path, want, report).await
         }
-        _ => return Err(fl!("error-connection-closed")),
+        _ => return Err(fl!("error-connection-closed").into()),
     };
-    result.map_err(|error| describe::vfs_error(&error))
+    result.map_err(|error| describe::vfs_reason(&error))
 }
 
 /// The session of a connected host, from its task; `None` if the host is gone.
@@ -2319,7 +2321,7 @@ impl HostTask {
         let result = fs
             .create_dir(&path)
             .await
-            .map_err(|error| describe::vfs_error(&error));
+            .map_err(|error| describe::vfs_reason(&error));
         let location = Location::Remote {
             host: self.host.clone(),
             path,

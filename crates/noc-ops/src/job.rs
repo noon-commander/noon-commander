@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use noc_vfs::{Metadata, VfsError};
+use noc_vfs::{Code, Metadata, VfsError};
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -37,10 +37,37 @@ pub enum Decision {
     Retry,
     /// Leave it and go on.
     Skip,
-    /// Leave it and every later one that fails, without asking again.
-    SkipAll,
     /// Stop the job.
     Abort,
+}
+
+/// The answer to a failure: what to do about this one, and about the failures after it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Resolution {
+    pub this: Decision,
+    pub rest: Later,
+}
+
+impl Resolution {
+    /// `this` for this failure; the next one asks again.
+    pub fn once(this: Decision) -> Self {
+        Self {
+            this,
+            rest: Later::Ask,
+        }
+    }
+}
+
+/// What to do about the failures that come later.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Later {
+    /// Ask about each.
+    Ask,
+    /// Leave every one, without asking.
+    SkipAll,
+    /// Leave each with the [`Code`] of this failure, without asking, and ask about the others.
+    /// A failure without a code leaves no others so.
+    SkipSame,
 }
 
 /// What a job was doing to a path when an operation on it failed.
@@ -148,7 +175,7 @@ pub enum Event<P> {
         path: P,
         step: Step,
         error: VfsError,
-        reply: oneshot::Sender<Decision>,
+        reply: oneshot::Sender<Resolution>,
     },
     /// The name of a copy is taken; the job waits for an answer on `reply`. Dropping `reply`
     /// aborts the job.
@@ -182,6 +209,8 @@ pub struct Reporter<P> {
     events: mpsc::UnboundedSender<Event<P>>,
     cancel: CancellationToken,
     skip_all: bool,
+    /// The codes of the failures to leave without asking.
+    skip_codes: Vec<Code>,
 }
 
 impl<P> Reporter<P> {
@@ -190,6 +219,7 @@ impl<P> Reporter<P> {
             events,
             cancel,
             skip_all: false,
+            skip_codes: Vec::new(),
         }
     }
 
@@ -227,13 +257,15 @@ impl<P> Reporter<P> {
         }
     }
 
-    /// Asks what to do about `error` on `path` at `step`. After [`Decision::SkipAll`] every
-    /// failure is skipped without asking; cancellation, and a reply that never comes, abort.
+    /// Asks what to do about `error` on `path` at `step`, unless an earlier answer said to skip
+    /// it: after [`Later::SkipAll`] every failure, after [`Later::SkipSame`] each with that
+    /// code. Cancellation, and a reply that never comes, abort.
     pub(crate) async fn ask(&mut self, path: P, step: Step, error: VfsError) -> Decision {
-        if self.skip_all {
+        let code = error.code();
+        if self.skip_all || code.is_some_and(|code| self.skip_codes.contains(&code)) {
             return Decision::Skip;
         }
-        let decision = self
+        let answer = self
             .question(|reply| Event::Failed {
                 path,
                 step,
@@ -241,14 +273,13 @@ impl<P> Reporter<P> {
                 reply,
             })
             .await
-            .unwrap_or(Decision::Abort);
-        match decision {
-            Decision::SkipAll => {
-                self.skip_all = true;
-                Decision::Skip
-            }
-            other => other,
+            .unwrap_or(Resolution::once(Decision::Abort));
+        match (answer.rest, code) {
+            (Later::SkipAll, _) => self.skip_all = true,
+            (Later::SkipSame, Some(code)) => self.skip_codes.push(code),
+            (Later::Ask | Later::SkipSame, _) => {}
         }
+        answer.this
     }
 }
 
@@ -298,5 +329,61 @@ mod tests {
         assert_eq!(waited, None);
         // Once cancelled, what is ready already counts for nothing either.
         assert_eq!(reporter.unless_cancelled(async { 3 }).await, None);
+    }
+
+    #[tokio::test]
+    async fn the_rest_of_the_failures_get_what_an_answer_said() {
+        let (events, mut incoming) = mpsc::unbounded_channel::<Event<u8>>();
+        let mut reporter = Reporter::new(events, CancellationToken::new());
+        let denied = || VfsError::PermissionDenied("x".to_owned(), Some(Code::Os(13)));
+        let full = || VfsError::Io(std::io::Error::from_raw_os_error(28));
+        let uncoded = || VfsError::SameFile("x".to_owned());
+        let answers = [
+            Resolution {
+                this: Decision::Skip,
+                rest: Later::SkipSame,
+            },
+            Resolution::once(Decision::Retry),
+            Resolution {
+                this: Decision::Skip,
+                rest: Later::SkipSame,
+            },
+            Resolution {
+                this: Decision::Skip,
+                rest: Later::SkipAll,
+            },
+        ];
+        let listen = async {
+            let mut asked = Vec::new();
+            for answer in answers {
+                let Some(Event::Failed { path, reply, .. }) = incoming.recv().await else {
+                    panic!("expected a failure");
+                };
+                asked.push(path);
+                reply.send(answer).unwrap();
+            }
+            asked
+        };
+        let job = async {
+            let mut decisions = Vec::new();
+            let failures = [
+                (1, denied()),
+                (2, denied()),
+                (3, full()),
+                (4, denied()),
+                (5, uncoded()),
+                (6, uncoded()),
+                (7, full()),
+            ];
+            for (path, error) in failures {
+                decisions.push(reporter.ask(path, Step::Read, error).await);
+            }
+            decisions
+        };
+        let (asked, decisions) = tokio::join!(listen, job);
+        // The second denial is skipped unasked; a failure without a code skips no others.
+        assert_eq!(asked, [1, 3, 5, 6]);
+        let (retry, skip) = (Decision::Retry, Decision::Skip);
+        assert_eq!(decisions, [skip, skip, retry, skip, skip, skip, skip]);
     }
 }

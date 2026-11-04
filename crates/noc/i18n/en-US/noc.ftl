@@ -523,11 +523,10 @@ dialog-ok = &OK
 dialog-cancel = Cancel
 dialog-yes = &Yes
 dialog-no = &No
-# Buttons of a failed file operation, in this order: try again, leave this entry, leave every
-# failing one without asking again, stop. Skip also keeps the file there for a taken name.
+# Buttons of a failed file operation, in this order: try again, leave this entry, stop. Skip also
+# keeps the file there for a taken name.
 dialog-retry = &Retry
 dialog-skip = &Skip
-dialog-skip-all = Skip a&ll
 dialog-abort = &Abort
 # Buttons of a taken name: replace the file there, give the new one a name of its own. They show
 # with Skip and Abort, or Cancel.
@@ -535,6 +534,12 @@ dialog-overwrite = &Overwrite
 dialog-rename = &Rename…
 # Title of error dialogs.
 dialog-error = Error
+# Under why something failed: the number the system gave it, or the status of SFTP on a host,
+# in bold after the label; a dash where neither gave one, as for what Noon Commander found
+# itself.
+dialog-code = Code:
+dialog-code-sftp = SFTP code:
+dialog-code-none = —
 # Fills a field of a form with what a panel shows, such as the directory open on a host.
 dialog-use-current = &Use current
 # Buttons of a list of files found, as in mc's results of Find File: go to the file in the
@@ -1131,6 +1136,13 @@ step-write = Cannot write to
 step-set-attributes = Cannot set the attributes of
 step-rename = Cannot rename
 step-remove = Cannot delete
+
+## The failures that come after one in a job, in the combo box The rest of its dialog, which
+## comes only where entries come after it (src/tui/app). Prefix: failure-. Ask each time is
+## copy-exists-ask. The same code is the number under the reason.
+
+failure-skip-all = Skip every failure
+failure-skip-same = Skip failures with the same code
 
 ## A taken name in a copy or a move (src/tui/app). Prefix: copy-.
 

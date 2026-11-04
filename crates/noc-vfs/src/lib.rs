@@ -15,7 +15,7 @@ mod volumes;
 mod fixture;
 
 pub use entry::{DirEntry, FileKind, Metadata};
-pub use error::VfsError;
+pub use error::{Code, VfsError};
 pub use files::{FileReader, FileWriter};
 pub use local::{LocalFs, LocalReader, LocalWriter};
 pub use location::Location;

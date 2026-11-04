@@ -9,7 +9,7 @@ pub async fn free_name<V: Vfs>(vfs: &V, dir: &V::Path, name: &[u8]) -> Result<V:
     let mut number = 2;
     loop {
         match vfs.symlink_metadata(&path).await {
-            Err(VfsError::NotFound(_)) => return Ok(path),
+            Err(VfsError::NotFound(..)) => return Ok(path),
             Ok(_) => {}
             Err(error) => return Err(error),
         }

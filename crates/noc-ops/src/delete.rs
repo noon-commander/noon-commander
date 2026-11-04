@@ -58,10 +58,10 @@ async fn scan<V: Vfs>(
             }
             match vfs.symlink_metadata(&path).await {
                 Ok(metadata) => break Some(metadata),
-                Err(VfsError::NotFound(_)) => break None,
+                Err(VfsError::NotFound(..)) => break None,
                 Err(error) => match reporter.ask(path.clone(), Step::Inspect, error).await {
                     Decision::Retry => {}
-                    Decision::Skip | Decision::SkipAll => {
+                    Decision::Skip => {
                         outcome.skipped += 1;
                         break None;
                     }
@@ -91,12 +91,12 @@ async fn scan<V: Vfs>(
                 match vfs.list_dir(&items[index].path).await {
                     Ok(entries) => break entries,
                     // Gone already; removing it will find that out.
-                    Err(VfsError::NotFound(_)) => break Vec::new(),
+                    Err(VfsError::NotFound(..)) => break Vec::new(),
                     Err(error) => {
                         let path = items[index].path.clone();
                         match reporter.ask(path, Step::List, error).await {
                             Decision::Retry => {}
-                            Decision::Skip | Decision::SkipAll => {
+                            Decision::Skip => {
                                 items[index].kept = true;
                                 break Vec::new();
                             }
@@ -155,11 +155,11 @@ async fn remove<V: Vfs>(
                     vfs.remove_file(&item.path).await
                 };
                 match result {
-                    Ok(()) | Err(VfsError::NotFound(_)) => break,
+                    Ok(()) | Err(VfsError::NotFound(..)) => break,
                     Err(error) => {
                         match reporter.ask(item.path.clone(), Step::Remove, error).await {
                             Decision::Retry => {}
-                            Decision::Skip | Decision::SkipAll => {
+                            Decision::Skip => {
                                 removed = false;
                                 break;
                             }
@@ -192,6 +192,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
+    use crate::job::{Later, Resolution};
     use crate::testing;
 
     /// Deletes `targets` with `vfs`, answering failures with `answers` in turn, and returns
@@ -200,7 +201,7 @@ mod tests {
     async fn run<V: Vfs>(
         vfs: &V,
         targets: Vec<V::Path>,
-        answers: &[Decision],
+        answers: &[Resolution],
         cancel: CancellationToken,
     ) -> (Outcome, Vec<(V::Path, Step)>, Vec<u64>, Vec<u64>) {
         let (events, mut incoming) = mpsc::unbounded_channel();
@@ -309,7 +310,7 @@ mod tests {
         let (outcome, failed, ..) = run(
             &LocalFs,
             vec![dir.clone()],
-            &[Decision::Skip],
+            &[Resolution::once(Decision::Skip)],
             CancellationToken::new(),
         )
         .await;
@@ -338,7 +339,11 @@ mod tests {
             return;
         }
         // Retry fails again while `sub` is locked; then skip that and everything after.
-        let answers = [Decision::Retry, Decision::SkipAll];
+        let skip_all = Resolution {
+            this: Decision::Skip,
+            rest: Later::SkipAll,
+        };
+        let answers = [Resolution::once(Decision::Retry), skip_all];
         let (outcome, failed, ..) = run(
             &LocalFs,
             vec![dir.clone()],
@@ -374,7 +379,7 @@ mod tests {
         let (outcome, ..) = run(
             &LocalFs,
             vec![dir.clone()],
-            &[Decision::Abort],
+            &[Resolution::once(Decision::Abort)],
             CancellationToken::new(),
         )
         .await;

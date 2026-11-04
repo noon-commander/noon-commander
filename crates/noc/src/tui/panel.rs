@@ -13,7 +13,7 @@ use noc_config::Wheel;
 use noc_locale::Formats;
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
-use noc_vfs::{DirEntry, FileKind, Location, RemotePath, Space, VfsError};
+use noc_vfs::{Code, DirEntry, FileKind, Location, RemotePath, Space, VfsError};
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -77,6 +77,8 @@ pub(crate) struct ListError {
     pub(crate) kind: ListErrorKind,
     /// The reason in words.
     pub(crate) reason: String,
+    /// The number the system or the server gave the failure, if any.
+    pub(crate) code: Option<Code>,
     /// Where the listing failed, if more exact than the request: the directory a host opens
     /// in, as a path.
     pub(crate) location: Option<Location>,
@@ -85,13 +87,15 @@ pub(crate) struct ListError {
 impl ListError {
     pub(crate) fn vfs(error: &VfsError) -> Self {
         let kind = match error {
-            VfsError::NotFound(_) => ListErrorKind::NotFound,
-            VfsError::PermissionDenied(_) => ListErrorKind::Denied,
+            VfsError::NotFound(..) => ListErrorKind::NotFound,
+            VfsError::PermissionDenied(..) => ListErrorKind::Denied,
             _ => ListErrorKind::Other,
         };
+        let reason = describe::vfs_reason(error);
         Self {
             kind,
-            reason: describe::vfs_error(error),
+            reason: reason.text,
+            code: reason.code,
             location: None,
         }
     }
@@ -100,6 +104,7 @@ impl ListError {
         Self {
             kind: ListErrorKind::Other,
             reason,
+            code: None,
             location: None,
         }
     }
@@ -4035,6 +4040,7 @@ mod tests {
         let denied = ListError {
             kind: ListErrorKind::Denied,
             reason: "permission denied".to_owned(),
+            code: None,
             location: None,
         };
         let failure = panel.listed(request.generation, Err(denied)).unwrap();
@@ -4054,6 +4060,7 @@ mod tests {
         let missing = ListError {
             kind: ListErrorKind::NotFound,
             reason: "no such file or directory".to_owned(),
+            code: None,
             location: None,
         };
         let failure = panel.listed(request.generation, Err(missing)).unwrap();

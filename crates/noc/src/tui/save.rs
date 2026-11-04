@@ -7,6 +7,7 @@
 
 use noc_vfs::Location;
 
+use super::describe::Reason;
 use super::dialog::{Dialog, Problem};
 use crate::i18n::fl;
 
@@ -30,7 +31,7 @@ impl Save {
 }
 
 /// The file at `path` was not saved, for `reason`.
-pub(crate) fn error(path: String, reason: String) -> Problem {
+pub(crate) fn error(path: String, reason: impl Into<Reason>) -> Problem {
     Problem::new(fl!("save-error"), reason).at(path)
 }
 

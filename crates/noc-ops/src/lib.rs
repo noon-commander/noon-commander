@@ -18,6 +18,7 @@ pub use copy::{CopyOptions, Endpoint, copy, copy_within, move_within};
 pub use delete::delete;
 pub use free_name::free_name;
 pub use job::{
-    Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest, Step, in_time,
+    Choice, Conflict, Decision, Event, Later, Outcome, Progress, Reporter, Resolution, Rest, Step,
+    in_time,
 };
 pub use rename::{RenameError, rename};

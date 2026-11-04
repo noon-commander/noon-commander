@@ -1,19 +1,94 @@
 //! Errors in words, for messages and dialogs.
 
 use std::error::Error;
+use std::io;
 
 use noc_ssh::SshError;
 use noc_tools::ToolError;
-use noc_vfs::VfsError;
+use noc_vfs::{Code, VfsError};
 
 use crate::i18n::fl;
+
+/// Why something failed, in words, with the number the system or an SFTP server gave it, which
+/// its words then leave out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Reason {
+    pub(crate) text: String,
+    pub(crate) code: Option<Code>,
+}
+
+impl Reason {
+    /// The same reason, its text safe for the terminal.
+    pub(crate) fn sanitized(self) -> Self {
+        Self {
+            text: super::cells::sanitize(self.text.as_bytes()),
+            ..self
+        }
+    }
+}
+
+impl From<String> for Reason {
+    fn from(text: String) -> Self {
+        Self { text, code: None }
+    }
+}
+
+/// Why a file system operation failed, with its code.
+pub(crate) fn vfs_reason(error: &VfsError) -> Reason {
+    let text = match error {
+        VfsError::Io(error) => io_text(error),
+        VfsError::Sftp(error) => reason(error).text,
+        other => vfs_error(other),
+    };
+    Reason {
+        text,
+        code: error.code(),
+    }
+}
+
+/// An error and its sources, as [`chain`] joins them, with the code of the first that the
+/// system gave one.
+pub(crate) fn reason(error: &(dyn Error + 'static)) -> Reason {
+    let mut parts = Vec::new();
+    let mut code = None;
+    let mut next = Some(error);
+    while let Some(cause) = next {
+        match cause.downcast_ref::<io::Error>() {
+            // It says what the error it wraps says, and passes over that error for its source.
+            Some(error) if error.raw_os_error().is_none() && error.get_ref().is_some() => {
+                next = error.get_ref().map(|inner| inner as &(dyn Error + 'static));
+                continue;
+            }
+            Some(error) => {
+                code = code.or_else(|| Code::of_io(error));
+                parts.push(io_text(error));
+            }
+            None => parts.push(cause.to_string()),
+        }
+        next = cause.source();
+    }
+    Reason {
+        text: parts.join(": "),
+        code,
+    }
+}
+
+/// What the system says of `error`, without the code it puts after it, which the dialog shows
+/// on a line of its own.
+fn io_text(error: &io::Error) -> String {
+    let text = error.to_string();
+    error
+        .raw_os_error()
+        .and_then(|code| text.strip_suffix(&format!(" (os error {code})")))
+        .map_or_else(|| text.clone(), str::to_owned)
+}
 
 /// Why a file system operation failed.
 pub(crate) fn vfs_error(error: &VfsError) -> String {
     match error {
-        VfsError::NotFound(_) => fl!("error-not-found"),
-        VfsError::PermissionDenied(_) => fl!("error-permission-denied"),
-        VfsError::AlreadyExists(_) => fl!("error-already-exists"),
+        VfsError::NotFound(..) => fl!("error-not-found"),
+        VfsError::PermissionDenied(..) => fl!("error-permission-denied"),
+        VfsError::AlreadyExists(..) => fl!("error-already-exists"),
         VfsError::SameFile(_) => fl!("error-same-file"),
         VfsError::Io(error) => error.to_string(),
         VfsError::Sftp(error) => chain(error),
@@ -102,14 +177,33 @@ pub(crate) fn fd_error(error: &ToolError) -> String {
 
 /// Why the desktop's opener did not open a file: it could not run, or how it exited, since its
 /// output goes nowhere.
-pub(crate) fn open_error(error: &ToolError) -> String {
+pub(crate) fn open_error(error: &ToolError) -> Reason {
     match error {
-        ToolError::Spawn { program, source } => fl!(
-            "open-cannot-run",
+        ToolError::Spawn { program, source } => Reason {
+            text: fl!(
+                "open-cannot-run",
+                program = program.display().to_string(),
+                reason = io_text(source)
+            ),
+            code: Code::of_io(source),
+        },
+        other => reason(other),
+    }
+}
+
+/// Why `program` could not run, or be waited for, as `error` says: the editor of F4.
+pub(crate) fn cannot_run(program: &std::path::Path, error: &ToolError) -> Reason {
+    let why = match error {
+        ToolError::Spawn { source, .. } => reason(source),
+        other => reason(other),
+    };
+    Reason {
+        text: fl!(
+            "edit-cannot-run",
             program = program.display().to_string(),
-            reason = source.to_string()
+            reason = why.text
         ),
-        other => chain(other),
+        code: why.code,
     }
 }
 
@@ -142,15 +236,15 @@ mod tests {
     #[test]
     fn describes_file_system_errors() {
         assert_eq!(
-            vfs_error(&VfsError::PermissionDenied("/x".to_owned())),
+            vfs_error(&VfsError::PermissionDenied("/x".to_owned(), None)),
             "Permission denied"
         );
         assert_eq!(
-            vfs_error(&VfsError::NotFound("/x".to_owned())),
+            vfs_error(&VfsError::NotFound("/x".to_owned(), None)),
             "No such file or directory"
         );
         assert_eq!(
-            vfs_error(&VfsError::AlreadyExists("/x".to_owned())),
+            vfs_error(&VfsError::AlreadyExists("/x".to_owned(), None)),
             "Already exists"
         );
         assert_eq!(
@@ -229,15 +323,48 @@ mod tests {
             source: io::ErrorKind::NotFound.into(),
         };
         assert_eq!(
-            open_error(&missing),
+            open_error(&missing).text,
             "Cannot run xdg-open: entity not found"
         );
+        let gone = ToolError::Spawn {
+            program: PathBuf::from("xdg-open"),
+            source: io::Error::from_raw_os_error(2),
+        };
+        let reason = open_error(&gone);
+        assert!(!reason.text.contains("os error"), "{}", reason.text);
+        assert_eq!(reason.code, Some(Code::Os(2)));
         let failed = ToolError::Failed {
             program: PathBuf::from("xdg-open"),
             status: ExitStatus::from_raw(3 << 8),
             stderr: String::new(),
         };
-        assert_eq!(open_error(&failed), "xdg-open exited with exit status: 3");
+        assert_eq!(
+            open_error(&failed),
+            Reason::from("xdg-open exited with exit status: 3".to_owned())
+        );
+    }
+
+    #[test]
+    fn reasons_keep_the_code_of_the_system_apart_from_its_words() {
+        let full = VfsError::Io(io::Error::from_raw_os_error(28));
+        let reason = vfs_reason(&full);
+        assert!(!reason.text.contains("os error"), "{}", reason.text);
+        assert_eq!(reason.code, Some(Code::Os(28)));
+        let denied = VfsError::PermissionDenied("/x".to_owned(), Some(Code::Sftp(3)));
+        assert_eq!(
+            vfs_reason(&denied),
+            Reason {
+                text: "Permission denied".to_owned(),
+                code: Some(Code::Sftp(3)),
+            }
+        );
+        let same = vfs_reason(&VfsError::SameFile("/x".to_owned()));
+        assert_eq!(same.code, None);
+        // Through the sources of an error, as of the configuration.
+        let wrapped = io::Error::other(io::Error::from_raw_os_error(13));
+        let reason = super::reason(&wrapped);
+        assert_eq!(reason.code, Some(Code::Os(13)));
+        assert!(!reason.text.contains("os error"), "{}", reason.text);
     }
 
     #[test]

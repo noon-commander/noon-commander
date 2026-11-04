@@ -1016,6 +1016,8 @@ job-count = { $done } of { $total }
 # 1.5M of 4.2G.
 job-count-bytes = { $done } of { $total }, { $bytes_done } of { $bytes_total }
 job-aborting = Aborting…
+# In place of what the job does while it waits for a host whose connection was lost.
+job-away = Waiting for { $host } to connect…
 # The time a job has worked, without the time it waited for answers: M:SS or H:MM:SS.
 job-elapsed = Time { $elapsed }
 # The same, for jobs that move data, with the time left and the average speed; each is shown
@@ -1040,6 +1042,8 @@ jobs-show = &Show
 jobs-state-waiting = waiting
 jobs-state-counting = counting
 jobs-state-aborting = aborting
+# A job that waits for a host whose connection was lost.
+jobs-state-away = offline
 jobs-state-percent = { $percent }%
 # The time left of a job that moves data, in a column of 12, once it is known.
 jobs-left = ETA { $left }

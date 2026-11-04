@@ -839,6 +839,8 @@ struct Left {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Look {
     aborting: bool,
+    /// The host it waits for, whose connection was lost.
+    away: Option<String>,
     stage: Seen,
 }
 
@@ -881,6 +883,7 @@ impl Look {
         };
         RowLook {
             aborting: self.aborting,
+            away: self.away.is_some(),
             phase,
             left,
             current,
@@ -893,6 +896,7 @@ impl Look {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RowLook {
     aborting: bool,
+    away: bool,
     phase: Phase,
     /// The time left, for jobs that move data, once it is known.
     left: Option<Duration>,
@@ -972,6 +976,8 @@ pub(crate) struct JobView {
     doing: String,
     stage: Stage,
     aborting: bool,
+    /// The host it waits for, whose connection was lost.
+    away: Option<String>,
     /// The job waits for an answer to a question.
     asking: bool,
     clock: Stopwatch,
@@ -995,6 +1001,7 @@ impl JobView {
             doing,
             stage: Stage::Scanning { items: 0 },
             aborting: false,
+            away: None,
             asking: false,
             clock: Stopwatch::default(),
             samples: Samples::default(),
@@ -1192,6 +1199,7 @@ impl JobView {
         };
         Look {
             aborting: self.aborting,
+            away: self.away.clone(),
             stage,
         }
     }
@@ -1241,6 +1249,7 @@ impl JobView {
         let row = self.look(now).row();
         let state = match row.phase {
             _ if row.aborting => fl!("jobs-state-aborting"),
+            _ if row.away => fl!("jobs-state-away"),
             Phase::Waiting => fl!("jobs-state-waiting"),
             Phase::Counting => fl!("jobs-state-counting"),
             Phase::Working { percent } => fl!("jobs-state-percent", percent = percent),
@@ -1297,6 +1306,12 @@ impl JobView {
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
         let drawn = self.drawn.borrow().clone();
         drawn.button_press(pointer, &mut self.focus)
+    }
+
+    /// The job waits for `host`, shown as given, whose connection was lost; `None` once it
+    /// goes on.
+    pub(crate) fn away(&mut self, host: Option<String>) {
+        self.away = host;
     }
 
     /// Shows that the job was asked to stop.
@@ -1362,10 +1377,10 @@ impl JobView {
                 )
             }
         };
-        let doing = if look.aborting {
-            fl!("job-aborting")
-        } else {
-            doing
+        let doing = match &look.away {
+            _ if look.aborting => fl!("job-aborting"),
+            Some(host) => fl!("job-away", host = host.as_str()),
+            None => doing,
         };
         let text = |text: &str| {
             let styles = colors.body_styles();

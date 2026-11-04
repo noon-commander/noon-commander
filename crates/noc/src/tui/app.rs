@@ -69,7 +69,7 @@ use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
-use super::tasks::{HostHandle, JobEvent, Refused, TakenFile, TakenName, Unmade};
+use super::tasks::{HostHandle, HostLink, JobEvent, Refused, Relink, TakenFile, TakenName, Unmade};
 use super::theme::{ColorDepth, Theme};
 use super::transfer::{self, Sources};
 use super::which_key;
@@ -157,7 +157,7 @@ pub(crate) enum Effect {
     Delete {
         id: u64,
         targets: Vec<Location>,
-        host: Option<HostHandle>,
+        host: Option<HostLink>,
         cancel: CancellationToken,
     },
     /// Run the copy job `id` of `sources`, all local or all on one host, to `target`, or the
@@ -167,7 +167,7 @@ pub(crate) enum Effect {
         id: u64,
         sources: Vec<Location>,
         target: Location,
-        hosts: (Option<HostHandle>, Option<HostHandle>),
+        hosts: (Option<HostLink>, Option<HostLink>),
         options: CopyOptions,
         cancel: CancellationToken,
     },
@@ -175,7 +175,7 @@ pub(crate) enum Effect {
     /// the host of their handle, and report to [`App::job_event`]; `cancel` stops it.
     Checksum {
         id: u64,
-        targets: Vec<(Vec<Location>, Option<HostHandle>)>,
+        targets: Vec<(Vec<Location>, Option<HostLink>)>,
         algorithm: Algorithm,
         cancel: CancellationToken,
     },
@@ -814,8 +814,12 @@ struct Job {
     hashing: Option<Hashing>,
     /// Directories it changes, which panels read again when it ends.
     changes: Vec<Location>,
-    /// Hosts it works on; it ends with their connections.
+    /// Hosts it works on. It waits while one is lost, and goes on once the host connects
+    /// again; it ends when the user gives the host up (ADR 0064).
     hosts: Vec<String>,
+    /// The answer to the failure it asked about while a host it works on was away, which
+    /// Retry gives once the host connects again.
+    held: Option<oneshot::Sender<Resolution>>,
     cancel: CancellationToken,
     view: JobView,
 }
@@ -849,6 +853,7 @@ impl Job {
             hashing: None,
             changes,
             hosts,
+            held: None,
             cancel,
             view,
         }
@@ -1039,6 +1044,8 @@ pub(crate) struct App {
     /// Running jobs: at most one in front, over the panels and the help and under the
     /// dialogs, and any number in the background.
     jobs: Vec<Job>,
+    /// How the jobs on each host reach it, through each of its connections in turn.
+    links: HashMap<String, Relink>,
     /// What waits for its hosts to connect, after Connect in an error, and runs once they are.
     pending: Vec<Again>,
     /// Instead of the panels.
@@ -1220,8 +1227,7 @@ impl App {
             panel.set_natural_sort(ui.natural_sort);
             (panel, request)
         };
-        let (left, left_request) = panel();
-        let (right, right_request) = panel();
+        let [(left, left_request), (right, right_request)] = [panel(), panel()];
         let [left_id, right_id] =
             [(Side::Left, 1), (Side::Right, 2)].map(|(side, tab)| PanelId { side, tab });
         let mut app = Self {
@@ -1260,6 +1266,7 @@ impl App {
             saving: HashMap::new(),
             tz: TimeZone::UTC,
             jobs: Vec::new(),
+            links: HashMap::new(),
             pending: Vec::new(),
             viewing: None,
             editing: None,
@@ -3209,7 +3216,7 @@ impl App {
                 self.whole = Whole::Cut;
             }
             Action::Cancel => self.cancel(self.active),
-            Action::Disconnect => self.disconnect_chosen(),
+            Action::Disconnect => return self.disconnect_chosen(),
             Action::EditHost => {
                 if let Some(host) = self.chosen_host() {
                     self.ask_edit_host(host);
@@ -3710,10 +3717,7 @@ impl App {
                 self.menu = None;
                 self.go(self.shown(side), Destination::to(location))
             }
-            MenuEvent::Disconnect(host) => {
-                self.disconnect(&host);
-                Vec::new()
-            }
+            MenuEvent::Disconnect(host) => self.disconnect(&host),
             MenuEvent::EditHost(host) => {
                 self.ask_edit_host(host);
                 Vec::new()
@@ -4459,12 +4463,10 @@ impl App {
                 self.open_tab_menu(side);
                 Vec::new()
             }
-            Command::DisconnectPanel(side) => {
-                if let Some(host) = self.host_of(side) {
-                    self.disconnect(&host);
-                }
-                Vec::new()
-            }
+            Command::DisconnectPanel(side) => match self.host_of(side) {
+                Some(host) => self.disconnect(&host),
+                None => Vec::new(),
+            },
             Command::Configuration => {
                 let icons = self.decor.icons();
                 let configuration =
@@ -4805,7 +4807,7 @@ impl App {
                 if event == DialogEvent::Pressed(Button::Retry) {
                     return self.reconnect(&host);
                 }
-                self.give_up(&host, &reason);
+                return self.give_up(&host, &reason);
             }
             Purpose::ListFailed { panel, failure } => {
                 return self.list_failed_closed(panel, failure, event);
@@ -5013,7 +5015,8 @@ impl App {
             }
             return Vec::new();
         };
-        let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
+        let on = host.clone();
+        let Ok(Some(handle)) = self.link_for(&location) else {
             let again = Again::EditFile {
                 dir: dir.clone(),
                 name: name.to_vec(),
@@ -5022,7 +5025,6 @@ impl App {
             self.show_not_connected(fl!("edit-error"), &location, again);
             return Vec::new();
         };
-        let (handle, on) = (handle.clone(), host.clone());
         self.last_job += 1;
         let id = self.last_job;
         // Its own name last, so that the editor knows what kind of file it is.
@@ -5127,14 +5129,7 @@ impl App {
     /// Copies `copy`, the edited copy of `remote`, back over it, and removes it then; panels on
     /// `dir` read it again.
     fn send_back(&mut self, copy: PathBuf, remote: Location, dir: Location) -> Vec<Effect> {
-        let handle = match &remote {
-            Location::Remote { host, .. } => match self.hosts.get(host) {
-                Some(Host::Connected { handle, .. }) => Some(handle.clone()),
-                _ => None,
-            },
-            Location::Local(_) => None,
-        };
-        let Some(handle) = handle else {
+        let Ok(Some(handle)) = self.link_for(&remote) else {
             self.keep_edit(copy, remote, dir, &fl!("error-connection-closed"));
             return Vec::new();
         };
@@ -5776,20 +5771,13 @@ impl App {
 
     /// Starts deleting `names` in `dir`, and shows its progress.
     fn start_delete(&mut self, dir: Location, names: &[Vec<u8>]) -> Vec<Effect> {
-        let host = match &dir {
-            Location::Remote { host, .. } => {
-                if let Some(Host::Connected { handle, .. }) = self.hosts.get(host) {
-                    Some(handle.clone())
-                } else {
-                    let again = Again::Delete {
-                        dir: dir.clone(),
-                        names: names.to_vec(),
-                    };
-                    self.show_not_connected(fl!("delete-error"), &dir, again);
-                    return Vec::new();
-                }
-            }
-            Location::Local(_) => None,
+        let Ok(host) = self.link_for(&dir) else {
+            let again = Again::Delete {
+                dir: dir.clone(),
+                names: names.to_vec(),
+            };
+            self.show_not_connected(fl!("delete-error"), &dir, again);
+            return Vec::new();
         };
         let targets = names.iter().map(|name| child(&dir, name)).collect();
         let noted = self.note(&dir);
@@ -5963,15 +5951,12 @@ impl App {
             self.show_problem_way(&error(reason), Way::Change(typed));
             return Vec::new();
         }
-        let handle = |location: &Location| match location {
-            Location::Remote { host, .. } => match self.hosts.get(host) {
-                Some(Host::Connected { handle, .. }) => Ok(Some(handle.clone())),
-                _ => Err(()),
-            },
-            Location::Local(_) => Ok(None),
-        };
-        let (Ok(from), Ok(to)) = (handle(&dir), handle(&target)) else {
-            let away = if handle(&dir).is_err() { &dir } else { &target };
+        let (Ok(from), Ok(to)) = (self.link_for(&dir), self.link_for(&target)) else {
+            let away = if self.link_for(&dir).is_err() {
+                &dir
+            } else {
+                &target
+            };
             let away = away.clone();
             let again = Again::Transfer {
                 kind,
@@ -6326,6 +6311,11 @@ impl App {
                 reply,
             } => {
                 job.view.failed(at);
+                if let Some(host) = away_of(&self.hosts, &job.hosts) {
+                    job.view.away(Some(cells::sanitize(host.as_bytes())));
+                    job.held = Some(reply);
+                    return Vec::new();
+                }
                 let reason = Reason {
                     text: cells::sanitize(reason.text.as_bytes()),
                     ..reason
@@ -6376,6 +6366,68 @@ impl App {
         Some(job)
     }
 
+    /// Lets the jobs on `host`, whose connection is lost, wait for its next one: a failure one
+    /// of them asks about meanwhile, or asked about already, waits too, for Retry then.
+    fn hold_jobs(&mut self, host: &str) {
+        let shown = cells::sanitize(host.as_bytes());
+        for job in &mut self.jobs {
+            if !job.hosts.iter().any(|on| on == host) {
+                continue;
+            }
+            job.view.away(Some(shown.clone()));
+            let id = job.id;
+            let asked = self.dialogs.iter().position(
+                |open| matches!(&open.purpose, Purpose::Failure { job, .. } if *job == id),
+            );
+            if let Some(Open {
+                purpose: Purpose::Failure { reply, .. },
+                ..
+            }) = asked.and_then(|index| self.dialogs.remove(index))
+            {
+                job.held = Some(reply);
+            }
+        }
+    }
+
+    /// Lets the jobs whose hosts are all connected again go on, trying again what failed as
+    /// one was lost.
+    fn resume_jobs(&mut self) {
+        let now = Instant::now();
+        for job in &mut self.jobs {
+            if away_of(&self.hosts, &job.hosts).is_some() {
+                continue;
+            }
+            job.view.away(None);
+            if let Some(reply) = job.held.take() {
+                job.view.answered(now);
+                let _ = reply.send(Resolution::once(Decision::Retry));
+            }
+        }
+    }
+
+    /// Ends the jobs on `host`, which the user gave up or disconnected: they stop, and what
+    /// follows a job of F4 hears that it did not end.
+    fn end_jobs_on(&mut self, host: &str) -> Vec<Effect> {
+        let lost: Vec<u64> = self
+            .jobs
+            .iter()
+            .filter(|job| job.hosts.iter().any(|on| on == host))
+            .map(|job| job.id)
+            .collect();
+        let mut effects = Vec::new();
+        for id in lost {
+            let Some(job) = self.end_job(id) else {
+                continue;
+            };
+            job.cancel.cancel();
+            if let Some(then) = job.then {
+                effects.extend(self.follow_up(then, false));
+            }
+        }
+        effects.extend(self.start_queued());
+        effects
+    }
+
     /// Does what follows a job of F4 once it ends, `complete` if it did all it was asked: opens
     /// the editor on a copy that came, or removes a copy that went back. A partial copy goes;
     /// an edited one that did not go back stays, and the user hears where.
@@ -6424,6 +6476,22 @@ impl App {
             }
         }
         effects
+    }
+
+    /// How a job reaches the host of `location`, if it is remote; `Err` if the host is not
+    /// connected.
+    fn link_for(&mut self, location: &Location) -> Result<Option<HostLink>, ()> {
+        let Location::Remote { host, .. } = location else {
+            return Ok(None);
+        };
+        let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
+            return Err(());
+        };
+        let relink = self
+            .links
+            .entry(host.clone())
+            .or_insert_with(|| Relink::new(handle.clone()));
+        Ok(Some(relink.link()))
     }
 
     /// How to reach `location`: `None` here, the handle of its host if that is connected,
@@ -6559,7 +6627,7 @@ impl App {
         let mut hosts = Vec::new();
         for group in &groups {
             let Some(first) = group.first() else { continue };
-            let Ok(handle) = self.handle_for(first) else {
+            let Ok(handle) = self.link_for(first) else {
                 let first = first.clone();
                 let again = Again::Checksum {
                     dir,
@@ -7643,18 +7711,20 @@ impl App {
     }
 
     /// Closes the connection to the host that F8 acts on, or stops connecting to it.
-    fn disconnect_chosen(&mut self) {
-        if let Some(host) = self.chosen_host() {
-            self.disconnect(&host);
+    fn disconnect_chosen(&mut self) -> Vec<Effect> {
+        match self.chosen_host() {
+            Some(host) => self.disconnect(&host),
+            None => Vec::new(),
         }
     }
 
     /// Closes the connection to `host`, or stops connecting to it. Panels on that host stay
     /// there, with their entries toned down, until they read their directories again.
-    fn disconnect(&mut self, host: &str) {
+    fn disconnect(&mut self, host: &str) -> Vec<Effect> {
         self.forget_pending(host);
+        let effects = self.end_jobs_on(host);
         let Some(state) = self.hosts.remove(host) else {
-            return;
+            return effects;
         };
         state.stop();
         for panel in self.panels_mut() {
@@ -7665,6 +7735,7 @@ impl App {
             }
         }
         self.sync_connected();
+        effects
     }
 
     /// Takes the address and the user `ssh -G` gave for a host.
@@ -7866,12 +7937,16 @@ impl App {
         let (Host::Connecting { stop, .. } | Host::Connected { stop, .. }) = state else {
             return Vec::new();
         };
+        if let Some(relink) = self.links.get(host) {
+            relink.connected(handle.clone());
+        }
         *state = Host::Connected {
             connection,
             stop: stop.clone(),
             handle,
         };
         self.recent.use_host(host);
+        self.resume_jobs();
         let mut effects = Vec::new();
         for id in self.panel_ids() {
             // A tab that a workspace restored hidden asks once it shows.
@@ -7906,43 +7981,26 @@ impl App {
         if reason.is_some() {
             self.failed.insert(host.to_owned());
         }
+        // Jobs wait for a host that was lost, and end with one that was asked to stop.
         let mut effects = Vec::new();
-        // Their tasks dropped the jobs on the host, whose panels show nothing of it until it is
-        // back, so there is nothing to read.
-        let lost: Vec<u64> = self
-            .jobs
-            .iter()
-            .filter(|job| job.hosts.iter().any(|on| on == host))
-            .map(|job| job.id)
-            .collect();
-        for id in lost {
-            if let Some(Job {
-                then: Some(then), ..
-            }) = self.end_job(id)
-            {
-                effects.extend(self.follow_up(then, false));
-            }
-        }
-        effects.extend(self.start_queued());
-        match reason {
-            Some(reason) => {
-                self.hosts
-                    .insert(host.to_owned(), Host::Stalled { connection });
-                let lost = matches!(state, Host::Connected { .. });
-                if lost {
-                    for panel in self.panels_mut() {
-                        panel.lose_host(host);
-                    }
-                }
-                self.ask_reconnect(host, reason, lost);
-            }
-            None => {
+        if let Some(reason) = reason {
+            self.hosts
+                .insert(host.to_owned(), Host::Stalled { connection });
+            self.hold_jobs(host);
+            let lost = matches!(state, Host::Connected { .. });
+            if lost {
                 for panel in self.panels_mut() {
-                    if matches!(state, Host::Connected { .. }) {
-                        panel.drop_host(host);
-                    } else if waits_for(panel, host) {
-                        panel.cancel();
-                    }
+                    panel.lose_host(host);
+                }
+            }
+            self.ask_reconnect(host, reason, lost);
+        } else {
+            effects = self.end_jobs_on(host);
+            for panel in self.panels_mut() {
+                if matches!(state, Host::Connected { .. }) {
+                    panel.drop_host(host);
+                } else if waits_for(panel, host) {
+                    panel.cancel();
                 }
             }
         }
@@ -7986,12 +8044,13 @@ impl App {
     /// Stops waiting for `host`, which could not be reached for `reason`, after Cancel: the
     /// panels that were to open it stay where they were; those on it stay there with their
     /// entries toned down, until a key in one asks to connect. The dialog said why already.
-    fn give_up(&mut self, host: &str, reason: &str) {
+    fn give_up(&mut self, host: &str, reason: &str) -> Vec<Effect> {
         if !matches!(self.hosts.get(host), Some(Host::Stalled { .. })) {
-            return;
+            return Vec::new();
         }
         self.hosts.remove(host);
         self.forget_pending(host);
+        let effects = self.end_jobs_on(host);
         for panel in self.panels_mut() {
             let Some(request) = panel.pending_request() else {
                 continue;
@@ -8006,6 +8065,7 @@ impl App {
             }
         }
         self.sync_connected();
+        effects
     }
 
     /// Queues a dialog for a question from ssh.
@@ -8831,6 +8891,12 @@ fn step_text(step: Step) -> String {
 
 /// What a job does after a failure, `dialog`, closed by `event`: about this one by the button
 /// pressed, about the later ones by its combo box, if it has one.
+/// The first of `on`, the hosts of a job, that is not connected among `hosts`.
+fn away_of<'a>(hosts: &HashMap<String, Host>, on: &'a [String]) -> Option<&'a String> {
+    on.iter()
+        .find(|host| !matches!(hosts.get(*host), Some(Host::Connected { .. })))
+}
+
 fn resolution_of(event: DialogEvent, dialog: &Dialog) -> Resolution {
     const LATER: [Later; 3] = [Later::Ask, Later::SkipAll, Later::SkipSame];
     let this = match event {
@@ -12018,7 +12084,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lost_host_makes_room_and_f4_never_waits() {
+    fn a_host_given_up_makes_room_and_f4_never_waits() {
         let (mut app, connection) = on_a_host();
         app.parallel_jobs = 1;
         app.handle(action(Action::Delete));
@@ -12035,7 +12101,14 @@ mod tests {
         app.handle(action(Action::Delete));
         assert!(app.handle(action(Action::Confirm)).is_empty());
         app.handle(action(Action::Confirm));
-        let effects = app.closed("web", connection, Some("Broken pipe"));
+        // A lost host keeps its job, which waits for it.
+        assert!(
+            app.closed("web", connection, Some("Broken pipe"))
+                .is_empty()
+        );
+        assert_eq!(app.jobs.len(), 2);
+        // Cancel in Connection gives it up, and the job with it.
+        let effects = app.handle(action(Action::Cancel));
         assert_eq!(deletes(&effects).len(), 1, "{effects:?}");
         assert_eq!(app.jobs.len(), 1);
     }
@@ -12058,28 +12131,66 @@ mod tests {
     }
 
     #[test]
-    fn a_job_on_a_lost_host_ends_with_it() {
+    fn a_job_on_a_lost_host_waits_for_it_and_goes_on() {
         let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
             panic!("expected a connection");
         };
         let (handle, _requests) = HostHandle::channel();
         let effects = app.connected("web", connection, handle);
-        answer(&mut app, effects, &Listing::Dir(vec![dir("www")]));
+        answer(
+            &mut app,
+            effects,
+            &Listing::Dir(vec![dir("www"), dir("old")]),
+        );
         app.handle(action(Action::Down));
         app.handle(action(Action::Delete));
-        let (_, targets, through_host, _) = delete_job(app.handle(action(Action::Confirm)));
+        let (id, targets, through_host, cancel) = delete_job(app.handle(action(Action::Confirm)));
         assert_eq!(targets, [remote("web", "www")]);
-        assert!(through_host, "through the host's task");
+        assert!(through_host, "through a link to the host");
+        let www = remote("web", "www");
 
+        // A failure that came as the connection went asks, until the host is known to be lost.
+        let (reply, mut first) = oneshot::channel();
+        app.job_event(id, failed(www.clone(), "Broken pipe".to_owned(), reply));
+        assert!(matches!(
+            app.dialogs.front().map(|open| &open.purpose),
+            Some(Purpose::Failure { .. })
+        ));
         let effects = app.closed("web", connection, Some("Broken pipe"));
         assert!(effects.is_empty(), "the panel waits for an answer");
-        assert!(app.jobs.is_empty());
+        assert_eq!(app.jobs.len(), 1, "the job waits");
         assert_eq!(app.dialogs.len(), 1, "no question about the job");
         assert!(matches!(
             app.dialogs.front().map(|open| &open.purpose),
             Some(Purpose::Reconnect { .. })
         ));
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("Lost the connection to web"), "{text}");
+        // One that comes while it is lost waits too, without asking.
+        let (reply, mut second) = oneshot::channel();
+        app.job_event(id, failed(www.clone(), "Broken pipe".to_owned(), reply));
+        assert_eq!(app.dialogs.len(), 1);
+        assert!(first.try_recv().is_err(), "dropped for the later one");
+
+        // Retry connects; once connected, the job tries again.
+        let Effect::Connect { connection, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected a connection");
+        };
+        assert!(second.try_recv().is_err(), "not before the host is back");
+        assert!(screen_of(&mut app, 16).contains("Waiting for web to connect…"));
+        assert_eq!(app.jobs[0].view.summary(Instant::now()).state, "offline");
+        let (handle, _requests) = HostHandle::channel();
+        app.connected("web", connection, handle);
+        assert_eq!(second.try_recv(), Ok(Resolution::once(Decision::Retry)));
+        assert!(app.dialogs.is_empty());
+        assert!(!cancel.is_cancelled());
+
+        // Given up, a host takes its jobs with it.
+        app.closed("web", connection, Some("Broken pipe"));
+        app.handle(action(Action::Cancel));
+        assert!(app.jobs.is_empty());
+        assert!(cancel.is_cancelled());
     }
 
     /// The only effect, which must start copying: the job, its sources, its target, whether
@@ -12780,7 +12891,7 @@ mod tests {
     }
 
     #[test]
-    fn a_copy_to_a_lost_host_ends_with_it() {
+    fn a_copy_to_a_lost_host_waits_and_ends_when_it_is_disconnected() {
         let mut app = at_slash();
         let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Right, 1)) else {
             panic!("expected a connection");
@@ -12816,6 +12927,9 @@ mod tests {
         );
 
         app.closed("web", connection, Some("Broken pipe"));
+        assert_eq!(app.jobs.len(), 1);
+        assert_eq!(app.jobs[0].view.summary(Instant::now()).state, "offline");
+        app.disconnect("web");
         assert!(app.jobs.is_empty());
     }
 
@@ -13138,11 +13252,15 @@ mod tests {
     }
 
     #[test]
-    fn a_host_that_goes_ends_the_jobs_of_f4() {
+    fn a_host_given_up_ends_the_jobs_of_f4() {
         // While the copy comes: the partial copy goes, and there is nothing to edit.
         let (mut app, connection) = on_a_host();
         let (_, _, target, _, _) = copy_job(app.handle(action(Action::Edit)));
-        let effects = app.closed("web", connection, Some("Broken pipe"));
+        assert!(
+            app.closed("web", connection, Some("Broken pipe"))
+                .is_empty()
+        );
+        let effects = app.handle(action(Action::Cancel));
         let Location::Local(copy) = target else {
             panic!("expected a local copy");
         };
@@ -13161,7 +13279,8 @@ mod tests {
         app.job_event(id, JobEvent::Finished { complete: true });
         let copy = app.take_edit().unwrap();
         copy_job(app.edited(Ok(true)));
-        let effects = app.closed("web", connection, Some("Broken pipe"));
+        app.closed("web", connection, Some("Broken pipe"));
+        let effects = app.handle(action(Action::Cancel));
         assert!(
             !effects
                 .iter()

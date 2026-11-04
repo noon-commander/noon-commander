@@ -965,13 +965,19 @@ does not compile without.
 
 ## File operations
 
-`noc-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs
-with `LocalFs` in a task of its own or with a host's `SftpFs` in that host's task. A copy runs
-in a task of its own with the sessions of the hosts at its ends, which their tasks share
-(`Arc<SftpFs>`), so a copy between two hosts has both; it shares the panels' SFTP channel,
-so on a slow link listings wait behind its data. Separate transfer channels may follow. When
-a host's task ends while a copy holds its session, the session goes with the copy, which
-fails soon with the channel gone; the UI ends the job at once. A job talks
+`noc-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs in a task
+of its own with `LocalFs` or with the session of a host. A job reaches a host through a
+`HostLink`, which follows the host from one connection to the next (`Relink`, which the app
+tells of each); its session (`Rejoin`, a `Vfs`) takes the one of the connection the host has,
+which its task shares (`Arc<SftpFs>`), when it first needs one, and that of the next connection
+once the host is connected again ([ADR 0064](adr/0064-jobs-wait-for-a-lost-host.md)). So a copy
+between two hosts has both; it shares the panels' SFTP channel, so on a slow link listings wait
+behind its data. Separate transfer channels may follow. When a host's task ends while a job
+holds its session, the session goes with the job, which fails soon with the channel gone. If the
+connection was lost, the job waits: the app holds the answer to its failure until the host is
+back, then answers Retry, and the job goes on through the new session; if the user gives the
+host up or disconnects it, the app ends the job. A copy that failed and could not remove what it
+wrote replaces that, or removes it, on its next attempt. A job talks
 to the UI through a `Reporter`: it sends `Event`s (`Scanning` with the entries found, after
 each entry it was given and each directory it lists; `Progress` with the entry at hand and
 done/total counts; `Failed` with the path, the `Step` that failed on it, such as listing, reading,
@@ -1543,7 +1549,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or
   `Delete 2 files and 1 directory?`. mc asks a second time before it goes into a directory that is
   not empty; Noon Commander says so in the first question instead. The job runs in a task of its
-  own, or in the host's task, with a window that shows what it counts, the entry at hand, a gauge,
+  own, with a window that shows what it counts, the entry at hand, a gauge,
   and done/total; Esc or Abort stops it. A failure asks in a red dialog what the job could not do
   by its `Step` (`Cannot delete`, `Cannot read`, `Cannot create`, …), the path on a line of its
   own, and under a line the reason and its code (`Code: 13`, `SFTP code: 3`, or `Code: —` where
@@ -1554,8 +1560,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Skip is Abort; the window of the job knows how far it is (`JobView::more`,
   `JobView::single`). When the job ends,
   panels on the directory read it again, and a
-  cursor whose entry is gone stays on its row. If the host's connection is lost, the job ends with
-  it.
+  cursor whose entry is gone stays on its row. If the host's connection is lost, the job waits
+  for it, `Waiting for web to connect…`, while Connection asks whether to connect again; Retry
+  there goes on where the job was once the host is back, and Cancel ends the job.
 - **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
   behind the panels, which take the keys again, and Esc aborts, as in mc. As many jobs run
   at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and

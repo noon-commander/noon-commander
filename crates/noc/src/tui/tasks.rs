@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use futures_util::StreamExt as _;
 use futures_util::future::{BoxFuture, FutureExt as _};
@@ -33,12 +33,12 @@ use noc_tools::opener::Opener;
 use noc_tools::ripgrep::{self, Hits, Query, Ripgrep};
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
-    FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs, Space, Vfs,
-    VfsError, VfsPath as _,
+    DirEntry, FileKind, FileWriter as _, LocalFs, Location, Metadata, RemotePath, SftpFs,
+    SftpReader, SftpWriter, Space, Vfs, VfsError, VfsPath as _,
 };
 use noc_viewer::{Part, Progress, Want, read_part};
 use tokio::io::AsyncReadExt as _;
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::{Mutex, mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 
@@ -286,12 +286,6 @@ pub(crate) enum HostRequest {
     List(PanelId, ListRequest),
     /// Makes the directory at `path`.
     CreateDir(PanelId, RemotePath),
-    /// Runs the delete job `id` on `paths` until `cancel`.
-    Delete {
-        id: u64,
-        paths: Vec<RemotePath>,
-        cancel: CancellationToken,
-    },
     /// Shares the host's SFTP session, for a job that runs elsewhere, such as a copy between
     /// two hosts.
     Share(oneshot::Sender<Arc<SftpFs>>),
@@ -323,6 +317,141 @@ impl HostHandle {
     pub(crate) fn channel() -> (Self, mpsc::UnboundedReceiver<HostRequest>) {
         let (sender, receiver) = mpsc::unbounded_channel();
         (Self(sender), receiver)
+    }
+}
+
+/// How the jobs on a host reach it: the connection it has, and once it connects again after
+/// losing one, the next (ADR 0064).
+#[derive(Debug, Clone)]
+pub(crate) struct HostLink(watch::Receiver<HostHandle>);
+
+/// Where the app gives the jobs on a host each connection of the host in turn.
+#[derive(Debug)]
+pub(crate) struct Relink(watch::Sender<HostHandle>);
+
+impl Relink {
+    pub(crate) fn new(handle: HostHandle) -> Self {
+        Self(watch::channel(handle).0)
+    }
+
+    /// The host is connected again, through `handle`.
+    pub(crate) fn connected(&self, handle: HostHandle) {
+        self.0.send_replace(handle);
+    }
+
+    /// A link for a job, to the connection the host has now, and to those that follow.
+    pub(crate) fn link(&self) -> HostLink {
+        HostLink(self.0.subscribe())
+    }
+}
+
+/// The SFTP session of a host for a job, through its [`HostLink`]: it takes the session of
+/// the connection the host has when it first needs one, and that of the next connection once
+/// the host connects again. An operation that failed as the connection was lost works when the
+/// job tries it again then; a reader or a writer opened before stays on the old session.
+#[derive(Debug)]
+struct Rejoin {
+    link: HostLink,
+    /// The connection whose session it has, and that session.
+    joined: std::sync::Mutex<Option<(HostHandle, Arc<SftpFs>)>>,
+}
+
+impl Rejoin {
+    fn new(link: HostLink) -> Self {
+        Self {
+            link,
+            joined: std::sync::Mutex::default(),
+        }
+    }
+
+    /// The session of the connection the host has now, from its task the first time.
+    async fn fs(&self) -> Result<Arc<SftpFs>, VfsError> {
+        let handle = self.link.0.borrow().clone();
+        {
+            let joined = self
+                .joined
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some((used, fs)) = &*joined
+                && used.0.same_channel(&handle.0)
+            {
+                return Ok(Arc::clone(fs));
+            }
+        }
+        let Some(Some(fs)) = share(Some(handle.clone())).await else {
+            return Err(VfsError::Io(std::io::ErrorKind::NotConnected.into()));
+        };
+        *self
+            .joined
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((handle, Arc::clone(&fs)));
+        Ok(fs)
+    }
+}
+
+impl Vfs for Rejoin {
+    type Path = RemotePath;
+    type Reader = SftpReader;
+    type Writer = SftpWriter;
+
+    async fn list_dir(&self, path: &RemotePath) -> Result<Vec<DirEntry>, VfsError> {
+        self.fs().await?.list_dir(path).await
+    }
+
+    async fn metadata(&self, path: &RemotePath) -> Result<Metadata, VfsError> {
+        self.fs().await?.metadata(path).await
+    }
+
+    async fn symlink_metadata(&self, path: &RemotePath) -> Result<Metadata, VfsError> {
+        self.fs().await?.symlink_metadata(path).await
+    }
+
+    async fn space(&self, path: &RemotePath) -> Result<Option<Space>, VfsError> {
+        self.fs().await?.space(path).await
+    }
+
+    async fn canonicalize(&self, path: &RemotePath) -> Result<RemotePath, VfsError> {
+        self.fs().await?.canonicalize(path).await
+    }
+
+    async fn create_dir(&self, path: &RemotePath) -> Result<(), VfsError> {
+        self.fs().await?.create_dir(path).await
+    }
+
+    async fn remove_file(&self, path: &RemotePath) -> Result<(), VfsError> {
+        self.fs().await?.remove_file(path).await
+    }
+
+    async fn remove_dir(&self, path: &RemotePath) -> Result<(), VfsError> {
+        self.fs().await?.remove_dir(path).await
+    }
+
+    async fn rename(&self, from: &RemotePath, to: &RemotePath) -> Result<(), VfsError> {
+        self.fs().await?.rename(from, to).await
+    }
+
+    async fn read_link(&self, path: &RemotePath) -> Result<Vec<u8>, VfsError> {
+        self.fs().await?.read_link(path).await
+    }
+
+    async fn create_symlink(&self, target: &[u8], path: &RemotePath) -> Result<(), VfsError> {
+        self.fs().await?.create_symlink(target, path).await
+    }
+
+    async fn set_permissions(&self, path: &RemotePath, mode: u32) -> Result<(), VfsError> {
+        self.fs().await?.set_permissions(path, mode).await
+    }
+
+    async fn open_file_at(&self, path: &RemotePath, offset: u64) -> Result<SftpReader, VfsError> {
+        self.fs().await?.open_file_at(path, offset).await
+    }
+
+    async fn create_file(&self, path: &RemotePath, replace: bool) -> Result<SftpWriter, VfsError> {
+        self.fs().await?.create_file(path, replace).await
+    }
+
+    async fn set_modified(&self, path: &RemotePath, time: SystemTime) -> Result<(), VfsError> {
+        self.fs().await?.set_modified(path, time).await
     }
 }
 
@@ -494,7 +623,7 @@ impl Tasks {
         id: u64,
         sources: Vec<Location>,
         target: Location,
-        hosts: (Option<HostHandle>, Option<HostHandle>),
+        hosts: (Option<HostLink>, Option<HostLink>),
         options: CopyOptions,
         cancel: CancellationToken,
     ) {
@@ -841,47 +970,48 @@ impl Tasks {
         }
     }
 
-    /// Runs the delete job `id` on `targets`, all local or all on one host, here or in the task
-    /// of their host.
+    /// Runs the delete job `id` on `targets`, all local or all on the host of `host`, in a
+    /// task of its own.
     fn delete(
         &mut self,
         id: u64,
         targets: Vec<Location>,
-        host: Option<HostHandle>,
+        host: Option<HostLink>,
         cancel: CancellationToken,
     ) {
         let mut local = Vec::new();
         let mut remote = Vec::new();
+        let mut on = String::new();
         for target in targets {
             match target {
                 Location::Local(path) => local.push(path),
-                Location::Remote { path, .. } => remote.push(path),
+                Location::Remote { host, path } => {
+                    on = host;
+                    remote.push(path);
+                }
             }
         }
-        if let Some(handle) = host {
-            let request = HostRequest::Delete {
-                id,
-                paths: remote,
-                cancel,
+        let done = self.done.clone();
+        self.reap_jobs();
+        self.jobs.spawn(async move {
+            let finished = if let Some(link) = host {
+                let location = move |path| Location::Remote {
+                    host: on.clone(),
+                    path,
+                };
+                run_delete(&Rejoin::new(link), remote, cancel, id, &done, location).await
+            } else {
+                run_delete(&LocalFs, local, cancel, id, &done, Location::Local).await
             };
-            if handle.0.send(request).is_err() {
-                let _ = self.done.send(finished(id, None));
-            }
-        } else {
-            let done = self.done.clone();
-            self.reap_jobs();
-            self.jobs.spawn(async move {
-                let finished = run_delete(&LocalFs, local, cancel, id, &done, Location::Local);
-                let _ = done.send(finished.await);
-            });
-        }
+            let _ = done.send(finished);
+        });
     }
 
     /// Runs the checksum job `id` here.
     fn checksum(
         &mut self,
         id: u64,
-        targets: Vec<(Vec<Location>, Option<HostHandle>)>,
+        targets: Vec<(Vec<Location>, Option<HostLink>)>,
         algorithm: Algorithm,
         cancel: CancellationToken,
     ) {
@@ -1488,25 +1618,22 @@ async fn forward<P>(
 /// Files found for a checksum job, on the file system they are on.
 enum Found {
     Local(Files<PathBuf>),
-    Remote(Arc<SftpFs>, String, Files<RemotePath>),
+    Remote(Rejoin, String, Files<RemotePath>),
 }
 
 /// Runs the checksum job `id` on `targets`, each group local or on the host of its handle:
 /// counts the files of every group first, so that progress has one total, then hashes them.
 async fn run_checksum(
     id: u64,
-    targets: Vec<(Vec<Location>, Option<HostHandle>)>,
+    targets: Vec<(Vec<Location>, Option<HostLink>)>,
     algorithm: Algorithm,
     cancel: CancellationToken,
     done: &mpsc::UnboundedSender<Done>,
 ) -> Done {
-    let mut sessions = Vec::new();
-    for (group, host) in targets {
-        let Some(fs) = share(host).await else {
-            return finished(id, None);
-        };
-        sessions.push((group, fs));
-    }
+    let sessions: Vec<_> = targets
+        .into_iter()
+        .map(|(group, link)| (group, link.map(Rejoin::new)))
+        .collect();
     let (events, incoming) = mpsc::unbounded_channel();
     let reporter = Reporter::new(events, cancel.clone());
     let work = async move {
@@ -1544,7 +1671,7 @@ async fn run_checksum(
                         .collect();
                     let there = remote_location(host.clone());
                     let side = Endpoint {
-                        vfs: &*fs,
+                        vfs: &fs,
                         report: &there,
                     };
                     let files = job.scan(&side, paths).await;
@@ -1564,7 +1691,7 @@ async fn run_checksum(
                 Found::Remote(fs, host, files) => {
                     let there = remote_location(host);
                     let side = Endpoint {
-                        vfs: &*fs,
+                        vfs: &fs,
                         report: &there,
                     };
                     job.hash(&side, files).await;
@@ -2051,11 +2178,9 @@ impl CopyJob<'_> {
         self,
         sources: Vec<Location>,
         target: Location,
-        (from, to): (Option<HostHandle>, Option<HostHandle>),
+        (from, to): (Option<HostLink>, Option<HostLink>),
     ) -> Done {
-        let (Some(from), Some(to)) = (share(from).await, share(to).await) else {
-            return finished(self.id, None);
-        };
+        let (from, to) = (from.map(Rejoin::new), to.map(Rejoin::new));
         let mut local: Vec<PathBuf> = Vec::new();
         let mut remote = Vec::new();
         let mut source_host = String::new();
@@ -2083,21 +2208,21 @@ impl CopyJob<'_> {
             }
             (Some(from), Some(_), Location::Remote { host, path }) if host == source_host => {
                 let there = on_host(host);
-                self.within(&*from, remote, path, &there).await
+                self.within(&from, remote, path, &there).await
             }
             (None, Some(to), Location::Remote { host, path }) => {
                 let there = on_host(host);
-                self.copy((&LocalFs, local, &here), (&*to, path, &there))
+                self.copy((&LocalFs, local, &here), (&to, path, &there))
                     .await
             }
             (Some(from), None, Location::Local(target)) => {
                 let there = on_host(source_host);
-                self.copy((&*from, remote, &there), (&LocalFs, target, &here))
+                self.copy((&from, remote, &there), (&LocalFs, target, &here))
                     .await
             }
             (Some(from), Some(to), Location::Remote { host, path }) => {
                 let (source, target) = (on_host(source_host), on_host(host));
-                self.copy((&*from, remote, &source), (&*to, path, &target))
+                self.copy((&from, remote, &source), (&to, path, &target))
                     .await
             }
             _ => finished(self.id, None),
@@ -2294,15 +2419,6 @@ impl HostTask {
                     HostRequest::CreateDir(panel, path) => {
                         running.push(Box::pin(self.create_dir(&fs, panel, path)));
                     }
-                    HostRequest::Delete { id, paths, cancel } => {
-                        let host = self.host.clone();
-                        let location = move |path| Location::Remote {
-                            host: host.clone(),
-                            path,
-                        };
-                        let job = run_delete(&*fs, paths, cancel, id, &self.done, location);
-                        running.push(Box::pin(job));
-                    }
                     HostRequest::Share(reply) => {
                         let _ = reply.send(Arc::clone(&fs));
                     }
@@ -2480,6 +2596,50 @@ mod tests {
         let stdout = child.stdout.take().unwrap();
         let fs = SftpFs::from_pipes(stdin, stdout).await.unwrap();
         Some((child, fs))
+    }
+
+    /// A handle to a host whose task shares `fs`, until the handle and its copies go.
+    fn sharing(fs: SftpFs) -> HostHandle {
+        let (handle, mut requests) = HostHandle::channel();
+        let fs = Arc::new(fs);
+        tokio::spawn(async move {
+            while let Some(request) = requests.recv().await {
+                if let HostRequest::Share(reply) = request {
+                    let _ = reply.send(Arc::clone(&fs));
+                }
+            }
+        });
+        handle
+    }
+
+    #[tokio::test]
+    async fn a_job_takes_the_session_of_the_next_connection_once_one_is_lost() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = std::fs::canonicalize(tmp.path()).unwrap();
+        std::fs::write(root.join("a"), b"a").unwrap();
+        let (Some((mut first_server, first)), Some((_second_server, second))) =
+            (local_sftp(&root).await, local_sftp(&root).await)
+        else {
+            return;
+        };
+        let path = RemotePath::from(root.join("a").to_str().unwrap());
+        let within = |work| tokio::time::timeout(Duration::from_secs(10), work);
+
+        let relink = Relink::new(sharing(first));
+        let fs = Rejoin::new(relink.link());
+        assert!(within(fs.metadata(&path)).await.unwrap().is_ok());
+        // The connection is lost: what the job tries fails, until the host is back.
+        first_server.kill().await.unwrap();
+        assert!(within(fs.metadata(&path)).await.unwrap().is_err());
+        assert!(within(fs.metadata(&path)).await.unwrap().is_err());
+        relink.connected(sharing(second));
+        assert!(within(fs.metadata(&path)).await.unwrap().is_ok());
+
+        // A host whose task is gone has no session to give.
+        let (gone, requests) = HostHandle::channel();
+        drop(requests);
+        let fs = Rejoin::new(Relink::new(gone).link());
+        assert!(within(fs.metadata(&path)).await.unwrap().is_err());
     }
 
     fn task(dir: &Path, start_dir: Option<&str>) -> HostTask {

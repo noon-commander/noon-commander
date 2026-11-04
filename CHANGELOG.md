@@ -33,10 +33,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Shift+F6, F5, F6, or F7 again with what was typed, after a rename that failed, a copy onto its
   source, or a directory name that is taken.
 
+- A copy, move, delete, or checksum on a host whose connection is lost waits for it, rather than
+  ending: Retry in Connection connects again, and the job goes on where it was, copying again
+  only the file it was cut off in; Cancel ends it
+  ([ADR 0064](docs/adr/0064-jobs-wait-for-a-lost-host.md)).
 
 ### Fixed
 
 - A copy or a move that could not read its source said `Cannot copy to` the source.
+- Disconnecting a host while a job ran on it did not end the job: a delete never ended, and a
+  copy failed file by file. The job ends now.
 - A copy retried after a failure that also kept it from removing what it wrote asked whether to
   replace that file, or left its temporary file behind.
 

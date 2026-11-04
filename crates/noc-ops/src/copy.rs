@@ -472,6 +472,10 @@ struct Job<'a, 'r, A: Vfs, B: Vfs, L> {
     answered: Vec<(A::Path, Answered<B::Path>)>,
     /// The target that the entry being copied may replace without asking, as answered.
     granted: Option<B::Path>,
+    /// What a copy of a file that failed left behind, as it could not remove it either, as on
+    /// a host whose connection was lost: the next copy of a file replaces it if it is its
+    /// target, else removes it first.
+    leftover: Option<B::Path>,
 }
 
 impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
@@ -494,6 +498,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             policy: options.overwrite.then_some(Policy::OverwriteAll),
             answered: Vec::new(),
             granted: None,
+            leftover: None,
         }
     }
 
@@ -1003,6 +1008,13 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     async fn copy_file(&mut self, item: &Item<A::Path>, target: &B::Path) -> Result<bool, Stop<L>> {
         let to = self.to.vfs;
         let mut target = target.clone();
+        if let Some(leftover) = self.leftover.take() {
+            if leftover == target {
+                self.granted = Some(leftover);
+            } else {
+                let _ = to.remove_file(&leftover).await;
+            }
+        }
         let plan = self.plan(item, &mut target).await?;
         let target = &target;
         let replace = match plan {
@@ -1031,9 +1043,9 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             Ok(()) if self.options.atomic => self.rename_over(&written, target, replace).await,
             other => other,
         };
-        if result.is_err() {
-            // Best effort: what is left of it is no use, and an error here would hide the first.
-            let _ = to.remove_file(&written).await;
+        if result.is_err() && to.remove_file(&written).await.is_err() {
+            // What is left of it is no use, and an error here would hide the first.
+            self.leftover = Some(written);
         }
         result.map(|()| true)
     }
@@ -2390,6 +2402,149 @@ mod tests {
                 arrived: 0,
                 stall: self.stall.clone(),
             })
+        }
+    }
+
+    /// The local file system as a host whose connection is lost while the first file is
+    /// written, and back once the job has tried to clean up: the write fails, and so does the
+    /// removal of what it left.
+    #[derive(Debug, Default)]
+    struct Lost {
+        /// Whether the connection was lost already, and whether it is lost now.
+        state: std::sync::Arc<std::sync::Mutex<(bool, bool)>>,
+    }
+
+    /// A local file whose first write loses the connection, if `lost` is the state of one
+    /// still there.
+    #[derive(Debug)]
+    struct Cut {
+        writer: noc_vfs::LocalWriter,
+        lost: Option<std::sync::Arc<std::sync::Mutex<(bool, bool)>>>,
+    }
+
+    impl noc_vfs::FileWriter for Cut {
+        async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
+            self.writer.write(data).await?;
+            match self.lost.take() {
+                Some(lost) => {
+                    *lost.lock().unwrap() = (true, true);
+                    Err(VfsError::Io(io::ErrorKind::BrokenPipe.into()))
+                }
+                None => Ok(()),
+            }
+        }
+
+        fn written(&self) -> u64 {
+            self.writer.written()
+        }
+
+        async fn settle(&mut self) -> Result<bool, VfsError> {
+            self.writer.settle().await
+        }
+
+        async fn finish(self) -> Result<(), VfsError> {
+            self.writer.finish().await
+        }
+    }
+
+    impl Vfs for Lost {
+        type Path = PathBuf;
+        type Reader = noc_vfs::LocalReader;
+        type Writer = Cut;
+
+        async fn list_dir(&self, path: &PathBuf) -> Result<Vec<noc_vfs::DirEntry>, VfsError> {
+            LocalFs.list_dir(path).await
+        }
+        async fn metadata(&self, path: &PathBuf) -> Result<Metadata, VfsError> {
+            LocalFs.metadata(path).await
+        }
+        async fn symlink_metadata(&self, path: &PathBuf) -> Result<Metadata, VfsError> {
+            LocalFs.symlink_metadata(path).await
+        }
+        async fn space(&self, path: &PathBuf) -> Result<Option<noc_vfs::Space>, VfsError> {
+            LocalFs.space(path).await
+        }
+        async fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf, VfsError> {
+            LocalFs.canonicalize(path).await
+        }
+        async fn create_dir(&self, path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.create_dir(path).await
+        }
+        async fn remove_file(&self, path: &PathBuf) -> Result<(), VfsError> {
+            // The first removal after the loss fails, and the connection is back then.
+            let down = std::mem::replace(&mut self.state.lock().unwrap().1, false);
+            if down {
+                return Err(VfsError::Io(io::ErrorKind::BrokenPipe.into()));
+            }
+            LocalFs.remove_file(path).await
+        }
+        async fn remove_dir(&self, path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.remove_dir(path).await
+        }
+        async fn rename(&self, from: &PathBuf, to: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.rename(from, to).await
+        }
+        async fn read_link(&self, path: &PathBuf) -> Result<Vec<u8>, VfsError> {
+            LocalFs.read_link(path).await
+        }
+        async fn create_symlink(&self, target: &[u8], path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.create_symlink(target, path).await
+        }
+        async fn set_permissions(&self, path: &PathBuf, mode: u32) -> Result<(), VfsError> {
+            LocalFs.set_permissions(path, mode).await
+        }
+        async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
+            LocalFs.set_modified(path, time).await
+        }
+        async fn open_file_at(
+            &self,
+            path: &PathBuf,
+            offset: u64,
+        ) -> Result<Self::Reader, VfsError> {
+            LocalFs.open_file_at(path, offset).await
+        }
+        async fn create_file(
+            &self,
+            path: &PathBuf,
+            replace: bool,
+        ) -> Result<Self::Writer, VfsError> {
+            let writer = LocalFs.create_file(path, replace).await?;
+            let lost = !self.state.lock().unwrap().0;
+            Ok(Cut {
+                writer,
+                lost: lost.then(|| std::sync::Arc::clone(&self.state)),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_retry_after_a_lost_connection_replaces_what_the_failed_copy_left() {
+        for atomic in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let src = root.path().join("file");
+            fs::write(&src, vec![7; 600_000]).unwrap();
+            let dst = root.path().join("dst");
+            fs::create_dir(&dst).unwrap();
+            let options = CopyOptions { atomic, ..BOTH };
+            let from = (&LocalFs, vec![src]);
+            let (outcome, seen) = run(
+                from,
+                (&Lost::default(), dst.clone()),
+                options,
+                &[Decision::Retry],
+                false,
+            )
+            .await;
+            assert_eq!(seen.steps, [Step::Write], "atomic: {atomic}");
+            // Without a question about the name the first try took.
+            assert!(seen.exists.is_empty(), "atomic: {atomic}");
+            assert_eq!(outcome.done, 1, "atomic: {atomic}");
+            assert_eq!(fs::read(dst.join("file")).unwrap(), vec![7; 600_000]);
+            let names: Vec<_> = fs::read_dir(&dst)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect();
+            assert_eq!(names, ["file"], "nothing else is left, atomic: {atomic}");
         }
     }
 

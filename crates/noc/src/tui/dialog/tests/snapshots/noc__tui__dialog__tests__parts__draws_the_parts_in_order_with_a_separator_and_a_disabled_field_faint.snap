@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/dialog.rs
+source: crates/noc/src/tui/dialog/tests/parts.rs
 expression: terminal.backend()
 ---
 "                                        "

@@ -53,7 +53,7 @@ In dialogs, as everywhere in Insert and Visual mode, Alt and a key stood for Esc
   host key, is ssh's text and has no letter; the buttons of its dialogs do.
 - **Text the user named never makes a letter**: the `&` of the names of files, paths, workspaces,
   and hosts is doubled, `&&`, before they go into a label, and shows as one `&`.
-- **The windows that have letters**: every dialog of `tui/dialog.rs` (the questions, the errors,
+- **The windows that have letters**: every dialog of `tui/dialog/` (the questions, the errors,
   the forms, the host settings, the checksum dialog, and the search of a tree), the window of a
   job, the list of the jobs, the results of the checksums, and the Configuration dialog. There,
   Alt+1 … Alt+7 open its categories, Interface, Transfers, SSH, Volumes, zoxide, Command line, and

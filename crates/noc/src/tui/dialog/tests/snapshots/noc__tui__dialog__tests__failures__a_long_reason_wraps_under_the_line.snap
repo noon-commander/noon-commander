@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/dialog.rs
+source: crates/noc/src/tui/dialog/tests/failures.rs
 expression: "draw(&dialog, 40, 12).backend()"
 ---
 "                                        "

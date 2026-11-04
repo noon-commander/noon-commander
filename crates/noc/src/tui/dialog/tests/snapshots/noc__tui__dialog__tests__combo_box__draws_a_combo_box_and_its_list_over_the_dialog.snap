@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/dialog.rs
+source: crates/noc/src/tui/dialog/tests/combo_box.rs
 expression: terminal.backend()
 ---
 "                                        "

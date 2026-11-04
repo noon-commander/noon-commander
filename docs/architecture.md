@@ -569,7 +569,7 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ╚════════════════════════════════════════════════════════════════════╝
 ```
 
-- A `Dialog` (`tui/dialog.rs`) with rows, a picker without a filter (`Picker::without_filter`,
+- A `Dialog` (`tui/dialog/`) with rows, a picker without a filter (`Picker::without_filter`,
   `Dialog::with_picker`): two fields, the text and the
   globs of the files, split at blanks, `!` before one leaving those out; the rows; and four
   buttons. The text is a regular expression in the regex and fzf [search modes](#search-modes) and

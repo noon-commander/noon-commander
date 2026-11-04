@@ -43,6 +43,27 @@ pub enum Decision {
     Abort,
 }
 
+/// What a job was doing to a path when an operation on it failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    /// Reading what the entry is: its kind, size, and times.
+    Inspect,
+    /// Listing the directory.
+    List,
+    /// Reading the file, or where the link points.
+    Read,
+    /// Making the directory, the file, or the link.
+    Create,
+    /// Writing the data of the file.
+    Write,
+    /// Setting its permissions or times.
+    SetAttributes,
+    /// Renaming or moving it within its file system.
+    Rename,
+    /// Removing it.
+    Remove,
+}
+
 /// What to do about a target that is there already: about this one, and about the targets that
 /// are there that come after it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,10 +142,11 @@ pub enum Event<P> {
         items: u64,
     },
     Progress(Progress<P>),
-    /// An operation on `path` failed; the job waits for an answer on `reply`. Dropping `reply`
-    /// aborts the job.
+    /// An operation on `path` failed at `step`; the job waits for an answer on `reply`.
+    /// Dropping `reply` aborts the job.
     Failed {
         path: P,
+        step: Step,
         error: VfsError,
         reply: oneshot::Sender<Decision>,
     },
@@ -205,14 +227,19 @@ impl<P> Reporter<P> {
         }
     }
 
-    /// Asks what to do about `error` on `path`. After [`Decision::SkipAll`] every failure is
-    /// skipped without asking; cancellation, and a reply that never comes, abort.
-    pub(crate) async fn ask(&mut self, path: P, error: VfsError) -> Decision {
+    /// Asks what to do about `error` on `path` at `step`. After [`Decision::SkipAll`] every
+    /// failure is skipped without asking; cancellation, and a reply that never comes, abort.
+    pub(crate) async fn ask(&mut self, path: P, step: Step, error: VfsError) -> Decision {
         if self.skip_all {
             return Decision::Skip;
         }
         let decision = self
-            .question(|reply| Event::Failed { path, error, reply })
+            .question(|reply| Event::Failed {
+                path,
+                step,
+                error,
+                reply,
+            })
             .await
             .unwrap_or(Decision::Abort);
         match decision {

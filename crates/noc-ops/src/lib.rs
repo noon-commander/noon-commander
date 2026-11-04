@@ -16,5 +16,7 @@ mod testing;
 pub use checksum::{Algorithm, Checksum, Files, Hasher, Sum, checksum};
 pub use copy::{CopyOptions, Endpoint, copy, copy_within, move_within};
 pub use delete::delete;
-pub use job::{Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest, in_time};
+pub use job::{
+    Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest, Step, in_time,
+};
 pub use rename::{RenameError, rename};

@@ -8,7 +8,7 @@ use sha2::Digest as _;
 use tokio::task::{JoinError, JoinHandle};
 
 use crate::copy::Endpoint;
-use crate::job::{Decision, Event, Outcome, Progress, Reporter};
+use crate::job::{Decision, Event, Outcome, Progress, Reporter, Step};
 
 /// Data gathered before it goes to a hasher off the async thread: enough that the trip there
 /// costs little next to the hashing.
@@ -239,7 +239,10 @@ impl<'r, L> Checksum<'r, L> {
         files: &mut Vec<File<V::Path>>,
     ) -> Result<(), Aborted> {
         for path in targets {
-            let Some(metadata) = self.retry(side, &path, Vfs::metadata).await? else {
+            let Some(metadata) = self
+                .retry(side, &path, Step::Inspect, Vfs::metadata)
+                .await?
+            else {
                 continue;
             };
             let name = path.name().unwrap_or_default().to_vec();
@@ -263,7 +266,9 @@ impl<'r, L> Checksum<'r, L> {
                         }
                     }
                     FileKind::Dir => {
-                        let listed = self.retry(side, &entry.path, Vfs::list_dir).await?;
+                        let listed = self
+                            .retry(side, &entry.path, Step::List, Vfs::list_dir)
+                            .await?;
                         let Some(mut entries) = listed else { continue };
                         entries.sort_unstable_by(|a, b| a.name.cmp(&b.name));
                         // Reversed onto the stack, so that they come off in order.
@@ -292,12 +297,13 @@ impl<'r, L> Checksum<'r, L> {
         Ok(())
     }
 
-    /// Runs `operation` on `path` until it works, or the reporter says to skip it: then
-    /// `None`, and it counts as one entry skipped.
+    /// Runs `operation`, which does `step` to `path`, until it works, or the reporter says to
+    /// skip it: then `None`, and it counts as one entry skipped.
     async fn retry<'v, 'p, V: Vfs, T, F>(
         &mut self,
         side: &Endpoint<'v, V, L>,
         path: &'p V::Path,
+        step: Step,
         operation: impl Fn(&'v V, &'p V::Path) -> F,
     ) -> Result<Option<T>, Aborted>
     where
@@ -309,7 +315,7 @@ impl<'r, L> Checksum<'r, L> {
             }
             match operation(side.vfs, path).await {
                 Ok(value) => return Ok(Some(value)),
-                Err(error) => match self.reporter.ask((side.report)(path), error).await {
+                Err(error) => match self.reporter.ask((side.report)(path), step, error).await {
                     Decision::Retry => {}
                     Decision::Skip | Decision::SkipAll => {
                         self.outcome.skipped += 1;
@@ -347,7 +353,8 @@ impl<'r, L> Checksum<'r, L> {
                     Err(Stop::Aborted) => return Err(Aborted),
                     Err(Stop::Failed(error)) => {
                         (self.bytes_done, self.bytes_total) = (before, total);
-                        match self.reporter.ask((side.report)(&file.path), error).await {
+                        let path = (side.report)(&file.path);
+                        match self.reporter.ask(path, Step::Read, error).await {
                             Decision::Retry => {}
                             Decision::Skip | Decision::SkipAll => break None,
                             Decision::Abort => return Err(Aborted),
@@ -491,6 +498,8 @@ mod tests {
     #[derive(Debug, Default)]
     struct Seen {
         failed: Vec<String>,
+        /// The step of each failure.
+        steps: Vec<Step>,
         progress: Vec<Progress<String>>,
         /// The files found, as each report of counting said.
         scanned: Vec<u64>,
@@ -520,8 +529,11 @@ mod tests {
                     assert!(progress.bytes_done <= progress.bytes_total, "{progress:?}");
                     seen.progress.push(progress);
                 }
-                Event::Failed { path, reply, .. } => {
+                Event::Failed {
+                    path, step, reply, ..
+                } => {
                     seen.failed.push(path);
+                    seen.steps.push(step);
                     let answer = *answers.next().expect("an answer for each failure");
                     let _ = reply.send(answer);
                 }
@@ -694,6 +706,7 @@ mod tests {
         )
         .await;
         assert_eq!(seen.failed, std::slice::from_ref(&failed));
+        assert_eq!(seen.steps, [Step::Read]);
         assert_eq!(
             outcome,
             Outcome {
@@ -782,6 +795,7 @@ mod tests {
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
         // The link to `a/x` cannot be followed either, and goes without a word.
         assert_eq!(seen.failed, [report(&locked)]);
+        assert_eq!(seen.steps, [Step::List]);
         assert_eq!(names(&sums), ["dir/b"]);
         assert_eq!(
             outcome,
@@ -823,6 +837,7 @@ mod tests {
         )
         .await;
         assert_eq!(seen.failed, [report(&missing)]);
+        assert_eq!(seen.steps, [Step::Inspect]);
         assert_eq!(
             outcome,
             Outcome {

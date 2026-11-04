@@ -2,7 +2,7 @@
 
 use noc_vfs::{FileKind, Vfs, VfsError, VfsPath as _};
 
-use crate::job::{Decision, Event, Outcome, Progress, Reporter};
+use crate::job::{Decision, Event, Outcome, Progress, Reporter, Step};
 
 /// An entry to remove, found while counting.
 struct Item<P> {
@@ -59,7 +59,7 @@ async fn scan<V: Vfs>(
             match vfs.symlink_metadata(&path).await {
                 Ok(metadata) => break Some(metadata),
                 Err(VfsError::NotFound(_)) => break None,
-                Err(error) => match reporter.ask(path.clone(), error).await {
+                Err(error) => match reporter.ask(path.clone(), Step::Inspect, error).await {
                     Decision::Retry => {}
                     Decision::Skip | Decision::SkipAll => {
                         outcome.skipped += 1;
@@ -92,14 +92,17 @@ async fn scan<V: Vfs>(
                     Ok(entries) => break entries,
                     // Gone already; removing it will find that out.
                     Err(VfsError::NotFound(_)) => break Vec::new(),
-                    Err(error) => match reporter.ask(items[index].path.clone(), error).await {
-                        Decision::Retry => {}
-                        Decision::Skip | Decision::SkipAll => {
-                            items[index].kept = true;
-                            break Vec::new();
+                    Err(error) => {
+                        let path = items[index].path.clone();
+                        match reporter.ask(path, Step::List, error).await {
+                            Decision::Retry => {}
+                            Decision::Skip | Decision::SkipAll => {
+                                items[index].kept = true;
+                                break Vec::new();
+                            }
+                            Decision::Abort => return Err(Aborted),
                         }
-                        Decision::Abort => return Err(Aborted),
-                    },
+                    }
                 }
             };
             for entry in entries {
@@ -153,14 +156,16 @@ async fn remove<V: Vfs>(
                 };
                 match result {
                     Ok(()) | Err(VfsError::NotFound(_)) => break,
-                    Err(error) => match reporter.ask(item.path.clone(), error).await {
-                        Decision::Retry => {}
-                        Decision::Skip | Decision::SkipAll => {
-                            removed = false;
-                            break;
+                    Err(error) => {
+                        match reporter.ask(item.path.clone(), Step::Remove, error).await {
+                            Decision::Retry => {}
+                            Decision::Skip | Decision::SkipAll => {
+                                removed = false;
+                                break;
+                            }
+                            Decision::Abort => return Err(Aborted),
                         }
-                        Decision::Abort => return Err(Aborted),
-                    },
+                    }
                 }
             }
         }
@@ -190,14 +195,14 @@ mod tests {
     use crate::testing;
 
     /// Deletes `targets` with `vfs`, answering failures with `answers` in turn, and returns
-    /// the outcome, the paths that failed, the totals that progress reported, and the entries
-    /// found as counting reported them.
+    /// the outcome, the paths that failed with their steps, the totals that progress reported,
+    /// and the entries found as counting reported them.
     async fn run<V: Vfs>(
         vfs: &V,
         targets: Vec<V::Path>,
         answers: &[Decision],
         cancel: CancellationToken,
-    ) -> (Outcome, Vec<V::Path>, Vec<u64>, Vec<u64>) {
+    ) -> (Outcome, Vec<(V::Path, Step)>, Vec<u64>, Vec<u64>) {
         let (events, mut incoming) = mpsc::unbounded_channel();
         let mut reporter = Reporter::new(events, cancel);
         let job = async {
@@ -212,8 +217,10 @@ mod tests {
                 match event {
                     Event::Scanning { items } => found.push(items),
                     Event::Progress(progress) => totals.push(progress.items_total),
-                    Event::Failed { path, reply, .. } => {
-                        failed.push(path);
+                    Event::Failed {
+                        path, step, reply, ..
+                    } => {
+                        failed.push((path, step));
                         let answer = *answers.next().expect("an answer for each failure");
                         let _ = reply.send(answer);
                     }
@@ -271,7 +278,7 @@ mod tests {
         ];
         let (outcome, failed, totals, found) =
             run(&LocalFs, targets, &[], CancellationToken::new()).await;
-        assert_eq!(failed, Vec::<PathBuf>::new());
+        assert!(failed.is_empty(), "{failed:?}");
         // dir as it is found; each directory as it is listed: dir, sub, deeper; then file.
         assert_eq!(found, [1, 4, 7, 8, 9]);
         // dir, a, dangling, sub, b, out, deeper, c, and file.
@@ -307,7 +314,7 @@ mod tests {
         )
         .await;
         unlock(&deeper);
-        assert_eq!(failed, [deeper.join("c")]);
+        assert_eq!(failed, [(deeper.join("c"), Step::Remove)]);
         // c, deeper, sub, and dir stay.
         assert_eq!(
             outcome,
@@ -429,7 +436,7 @@ mod tests {
         };
         let targets = vec![RemotePath::from("dir")];
         let (outcome, failed, ..) = run(&fs, targets, &[], CancellationToken::new()).await;
-        assert_eq!(failed, Vec::<RemotePath>::new());
+        assert!(failed.is_empty(), "{failed:?}");
         assert_eq!(outcome.done, 8);
         assert!(!dir.exists());
         assert!(root.path().join("outside/keep").exists());

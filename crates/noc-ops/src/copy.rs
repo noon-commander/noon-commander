@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use noc_vfs::{FileKind, FileReader as _, FileWriter as _, Metadata, Vfs, VfsError, VfsPath};
 
 use crate::free_name::{free_name, numbered};
-use crate::job::{Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest};
+use crate::job::{Choice, Conflict, Decision, Event, Outcome, Progress, Reporter, Rest, Step};
 use crate::spelling::spelled_otherwise;
 
 /// How to copy.
@@ -118,7 +118,8 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                     Some(false) => break,
                     Some(true) => {
                         let error = VfsError::SameFile(target.display());
-                        match self.reporter.ask((self.to.report)(&target), error).await {
+                        let path = (self.to.report)(&target);
+                        match self.reporter.ask(path, Step::Create, error).await {
                             Decision::Retry => {}
                             Decision::Skip | Decision::SkipAll => {
                                 self.outcome.skipped = 1;
@@ -156,7 +157,8 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                     }
                 },
             };
-            match self.reporter.ask((self.from.report)(source), error).await {
+            let path = (self.from.report)(source);
+            match self.reporter.ask(path, Step::Inspect, error).await {
                 Decision::Retry => {}
                 Decision::Skip | Decision::SkipAll => return Ok(None),
                 Decision::Abort => return Err(Aborted),
@@ -174,11 +176,13 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
             match self.try_rename(source, target, respelled).await {
                 Ok(renamed) => return Ok(renamed),
                 Err(Stop::Aborted) => return Err(Aborted),
-                Err(Stop::Failed(path, error)) => match self.reporter.ask(path, error).await {
-                    Decision::Retry => {}
-                    Decision::Skip | Decision::SkipAll => return Ok(Renamed::Skipped),
-                    Decision::Abort => return Err(Aborted),
-                },
+                Err(Stop::Failed(path, step, error)) => {
+                    match self.reporter.ask(path, step, error).await {
+                        Decision::Retry => {}
+                        Decision::Skip | Decision::SkipAll => return Ok(Renamed::Skipped),
+                        Decision::Abort => return Err(Aborted),
+                    }
+                }
             }
         }
     }
@@ -193,22 +197,24 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
         respelled: bool,
     ) -> Result<Renamed<V::Path>, Stop<L>> {
         let vfs = self.to.vfs;
-        let at_source = |error| Stop::Failed((self.from.report)(source), error);
         if respelled {
             return vfs
                 .rename(source, target)
                 .await
                 .map(|()| Renamed::Done)
-                .map_err(at_source);
+                .map_err(|error| self.at_source(source, Step::Rename, error));
         }
-        let metadata = vfs.symlink_metadata(source).await.map_err(at_source)?;
+        let metadata = vfs
+            .symlink_metadata(source)
+            .await
+            .map_err(|error| self.at_source(source, Step::Inspect, error))?;
         let mut target = target.clone();
         let replace = match vfs.symlink_metadata(&target).await {
             Err(VfsError::NotFound(_)) => false,
             // A hard link, or a directory on the way spelled otherwise: a rename would do nothing.
             Ok(existing) if existing.same_object(&metadata) => {
                 let error = VfsError::SameFile(target.display());
-                return Err(self.at_target(&target, error));
+                return Err(self.at_target(&target, Step::Create, error));
             }
             Ok(existing) if existing.kind == FileKind::Dir && metadata.kind == FileKind::Dir => {
                 return Ok(Renamed::Copy(None));
@@ -227,10 +233,11 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
                     Plan::Replace(_) => true,
                 }
             }
-            Err(error) => return Err(self.at_target(&target, error)),
+            Err(error) => return Err(self.at_target(&target, Step::Inspect, error)),
         };
         let target = &target;
-        let error = match vfs.rename(source, target).await {
+        let renaming = |error| self.at_source(source, Step::Rename, error);
+        let stop = match vfs.rename(source, target).await {
             Ok(()) => return Ok(Renamed::Done),
             Err(error) if error.is_cross_device() => {
                 let answered = Answered {
@@ -241,14 +248,14 @@ impl<V: Vfs, L> Job<'_, '_, V, V, L> {
             }
             // Without posix-rename the target goes first.
             Err(VfsError::AlreadyExists(_)) if replace => match vfs.remove_file(target).await {
-                Ok(()) => vfs.rename(source, target).await.err(),
-                Err(error) => Some(error),
+                Ok(()) => vfs.rename(source, target).await.err().map(renaming),
+                Err(error) => Some(self.at_target(target, Step::Remove, error)),
             },
-            Err(error) => Some(error),
+            Err(error) => Some(renaming(error)),
         };
-        match error {
+        match stop {
             None => Ok(Renamed::Done),
-            Some(error) => Err(Stop::Failed((self.from.report)(source), error)),
+            Some(stop) => Err(stop),
         }
     }
 }
@@ -297,7 +304,7 @@ fn keep<P>(kept: &mut [bool], items: &[Item<P>], mut index: usize) {
 
 /// Why one attempt at an entry did not work.
 enum Stop<L> {
-    Failed(L, VfsError),
+    Failed(L, Step, VfsError),
     /// Cancelled, or Abort.
     Aborted,
 }
@@ -556,17 +563,18 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                     FileKind::Fifo
                     | FileKind::Socket
                     | FileKind::BlockDevice
-                    | FileKind::CharDevice => Err(Stop::Failed(
-                        (self.from.report)(&item.source),
+                    | FileKind::CharDevice => Err(self.at_source(
+                        &item.source,
+                        Step::Read,
                         VfsError::Io(io::ErrorKind::Unsupported.into()),
                     )),
                 };
                 match attempt {
                     Ok(copied) => break copied,
                     Err(Stop::Aborted) => return Err(Aborted),
-                    Err(Stop::Failed(path, error)) => {
+                    Err(Stop::Failed(path, step, error)) => {
                         (self.bytes_done, self.bytes_total) = (before, total);
-                        match self.reporter.ask(path, error).await {
+                        match self.reporter.ask(path, step, error).await {
                             Decision::Retry => {}
                             Decision::Skip | Decision::SkipAll => break false,
                             Decision::Abort => return Err(Aborted),
@@ -657,11 +665,8 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 Ok(()) | Err(VfsError::NotFound(_)) => return Ok(true),
                 Err(error) => error,
             };
-            match self
-                .reporter
-                .ask((self.from.report)(&item.source), error)
-                .await
-            {
+            let path = (self.from.report)(&item.source);
+            match self.reporter.ask(path, Step::Remove, error).await {
                 Decision::Retry => {}
                 Decision::Skip | Decision::SkipAll => return Ok(false),
                 Decision::Abort => return Err(Aborted),
@@ -677,7 +682,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
     ) -> Result<Option<Destination<B::Path>>, Aborted> {
         let to = self.to.vfs;
         loop {
-            let error = match to.metadata(&target).await {
+            let (step, error) = match to.metadata(&target).await {
                 Ok(metadata) if metadata.kind == FileKind::Dir => {
                     return Ok(Some(Destination::Into(target)));
                 }
@@ -692,12 +697,16 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 }
                 Err(VfsError::NotFound(_)) => match to.create_dir(&target).await {
                     Ok(()) => return Ok(Some(Destination::Into(target))),
-                    Err(error) => error,
+                    Err(error) => (Step::Create, error),
                 },
-                Ok(_) => VfsError::AlreadyExists(target.display()),
-                Err(error) => error,
+                Ok(_) => (Step::Create, VfsError::AlreadyExists(target.display())),
+                Err(error) => (Step::Inspect, error),
             };
-            match self.reporter.ask((self.to.report)(&target), error).await {
+            match self
+                .reporter
+                .ask((self.to.report)(&target), step, error)
+                .await
+            {
                 Decision::Retry => {}
                 Decision::Skip | Decision::SkipAll => return Ok(None),
                 Decision::Abort => return Err(Aborted),
@@ -719,12 +728,14 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 }
                 match from.symlink_metadata(&source).await {
                     Ok(metadata) => break Some(metadata),
-                    Err(error) => match self.reporter.ask((self.from.report)(&source), error).await
-                    {
-                        Decision::Retry => {}
-                        Decision::Skip | Decision::SkipAll => break None,
-                        Decision::Abort => return Err(Aborted),
-                    },
+                    Err(error) => {
+                        let path = (self.from.report)(&source);
+                        match self.reporter.ask(path, Step::Inspect, error).await {
+                            Decision::Retry => {}
+                            Decision::Skip | Decision::SkipAll => break None,
+                            Decision::Abort => return Err(Aborted),
+                        }
+                    }
                 }
             };
             let Some(metadata) = metadata else {
@@ -746,7 +757,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                         Ok(entries) => break entries,
                         Err(error) => {
                             let path = (self.from.report)(&dir.source);
-                            match self.reporter.ask(path, error).await {
+                            match self.reporter.ask(path, Step::List, error).await {
                                 Decision::Retry => {}
                                 Decision::Skip | Decision::SkipAll => {
                                     items[index].skip = true;
@@ -804,8 +815,12 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         }));
     }
 
-    fn at_target(&self, path: &B::Path, error: VfsError) -> Stop<L> {
-        Stop::Failed((self.to.report)(path), error)
+    fn at_source(&self, path: &A::Path, step: Step, error: VfsError) -> Stop<L> {
+        Stop::Failed((self.from.report)(path), step, error)
+    }
+
+    fn at_target(&self, path: &B::Path, step: Step, error: VfsError) -> Stop<L> {
+        Stop::Failed((self.to.report)(path), step, error)
     }
 
     /// Makes the directory `target` for `item`, or goes into one that is there, unless that is
@@ -816,12 +831,12 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             Ok(()) => Ok(true),
             Err(VfsError::AlreadyExists(name)) => match to.metadata(target).await {
                 Ok(metadata) if metadata.same_object(&item.metadata) => {
-                    Err(self.at_target(target, VfsError::SameFile(name)))
+                    Err(self.at_target(target, Step::Create, VfsError::SameFile(name)))
                 }
                 Ok(metadata) if metadata.kind == FileKind::Dir => Ok(false),
-                _ => Err(self.at_target(target, VfsError::AlreadyExists(name))),
+                _ => Err(self.at_target(target, Step::Create, VfsError::AlreadyExists(name))),
             },
-            Err(error) => Err(self.at_target(target, error)),
+            Err(error) => Err(self.at_target(target, Step::Create, error)),
         }
     }
 
@@ -834,15 +849,15 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             let existing = match self.to.vfs.symlink_metadata(target).await {
                 Ok(existing) => existing,
                 Err(VfsError::NotFound(_)) => return Ok(Plan::New),
-                Err(error) => return Err(self.at_target(target, error)),
+                Err(error) => return Err(self.at_target(target, Step::Inspect, error)),
             };
             if existing.same_object(&item.metadata) {
                 let error = VfsError::SameFile(target.display());
-                return Err(self.at_target(target, error));
+                return Err(self.at_target(target, Step::Create, error));
             }
             if existing.kind == FileKind::Dir {
                 let error = VfsError::AlreadyExists(target.display());
-                return Err(self.at_target(target, error));
+                return Err(self.at_target(target, Step::Create, error));
             }
             if self.granted.as_ref() == Some(&*target) {
                 return Ok(Plan::Replace(existing.kind));
@@ -920,7 +935,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 let name = target.name().unwrap_or_default();
                 return match free_name(self.to.vfs, &dir, name).await {
                     Ok(path) => Ok(Next::To(path)),
-                    Err(error) => Err(self.at_target(target, error)),
+                    Err(error) => Err(self.at_target(target, Step::Inspect, error)),
                 };
             }
             // Unknown times keep the target.
@@ -961,19 +976,19 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .vfs
                 .remove_file(target)
                 .await
-                .map_err(|error| self.at_target(target, error))?,
+                .map_err(|error| self.at_target(target, Step::Remove, error))?,
         }
         let link = self
             .from
             .vfs
             .read_link(&item.source)
             .await
-            .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
+            .map_err(|error| self.at_source(&item.source, Step::Read, error))?;
         self.to
             .vfs
             .create_symlink(&link, target)
             .await
-            .map_err(|error| self.at_target(target, error))?;
+            .map_err(|error| self.at_target(target, Step::Create, error))?;
         Ok(true)
     }
 
@@ -991,7 +1006,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             Plan::Replace(FileKind::Symlink) if !self.options.atomic => {
                 to.remove_file(target)
                     .await
-                    .map_err(|error| self.at_target(target, error))?;
+                    .map_err(|error| self.at_target(target, Step::Remove, error))?;
                 false
             }
             Plan::Replace(_) => true,
@@ -1001,7 +1016,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             .vfs
             .open_file(&item.source)
             .await
-            .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
+            .map_err(|error| self.at_source(&item.source, Step::Read, error))?;
         let (writer, written) = self.create(target, replace).await?;
         let result = self
             .transfer(item, &mut reader, writer, (&written, target))
@@ -1027,17 +1042,18 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         replace: bool,
     ) -> Result<(), Stop<L>> {
         let to = self.to.vfs;
-        let error = match to.rename(written, target).await {
+        match to.rename(written, target).await {
             Ok(()) => return Ok(()),
-            Err(VfsError::AlreadyExists(_)) if replace => to.remove_file(target).await.err(),
-            Err(error) => Some(error),
-        };
-        if let Some(error) = error {
-            return Err(self.at_target(target, error));
+            Err(VfsError::AlreadyExists(_)) if replace => {
+                if let Err(error) = to.remove_file(target).await {
+                    return Err(self.at_target(target, Step::Remove, error));
+                }
+            }
+            Err(error) => return Err(self.at_target(target, Step::Rename, error)),
         }
         to.rename(written, target)
             .await
-            .map_err(|error| self.at_target(target, error))
+            .map_err(|error| self.at_target(target, Step::Rename, error))
     }
 
     /// Opens the file to write for `target`: a temporary name next to it if the copy is atomic,
@@ -1051,12 +1067,12 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
         if !self.options.atomic {
             return match to.create_file(target, replace).await {
                 Ok(writer) => Ok((writer, target.clone())),
-                Err(error) => Err(self.at_target(target, error)),
+                Err(error) => Err(self.at_target(target, Step::Create, error)),
             };
         }
         let (Some(dir), Some(name)) = (target.parent(), target.name()) else {
             let error = VfsError::Io(io::ErrorKind::InvalidInput.into());
-            return Err(self.at_target(target, error));
+            return Err(self.at_target(target, Step::Create, error));
         };
         loop {
             let temporary = dir.join_name(&temporary_name(name));
@@ -1072,7 +1088,7 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 }
                 Some(Ok(writer)) => return Ok((writer, temporary)),
                 Some(Err(VfsError::AlreadyExists(_))) => {}
-                Some(Err(error)) => return Err(self.at_target(target, error)),
+                Some(Err(error)) => return Err(self.at_target(target, Step::Create, error)),
             }
         }
     }
@@ -1098,21 +1114,21 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
                 .unless_cancelled(reader.read())
                 .await
                 .ok_or(Stop::Aborted)?
-                .map_err(|error| Stop::Failed((self.from.report)(&item.source), error))?;
+                .map_err(|error| self.at_source(&item.source, Step::Read, error))?;
             let Some(chunk) = chunk else { break };
             let wrote = self.reporter.unless_cancelled(writer.write(chunk)).await;
             // What the server took before a write it refused still counts.
             self.arrived(item, &writer, &mut counted);
             wrote
                 .ok_or(Stop::Aborted)?
-                .map_err(|error| self.at_target(target, error))?;
+                .map_err(|error| self.at_target(target, Step::Write, error))?;
         }
         loop {
             let more = self.reporter.unless_cancelled(writer.settle()).await;
             self.arrived(item, &writer, &mut counted);
             let more = more
                 .ok_or(Stop::Aborted)?
-                .map_err(|error| self.at_target(target, error))?;
+                .map_err(|error| self.at_target(target, Step::Write, error))?;
             if !more {
                 break;
             }
@@ -1124,13 +1140,13 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             .unless_cancelled(writer.finish())
             .await
             .ok_or(Stop::Aborted)?
-            .map_err(|error| self.at_target(target, error))?;
+            .map_err(|error| self.at_target(target, Step::Write, error))?;
         if self.options.preserve {
             self.reporter
                 .unless_cancelled(self.set_attributes(written, &item.metadata))
                 .await
                 .ok_or(Stop::Aborted)?
-                .map_err(|error| self.at_target(target, error))?;
+                .map_err(|error| self.at_target(target, Step::SetAttributes, error))?;
         }
         Ok(())
     }
@@ -1167,7 +1183,11 @@ impl<'a, 'r, A: Vfs, B: Vfs, L> Job<'a, 'r, A, B, L> {
             let Err(error) = self.set_attributes(dir, metadata).await else {
                 return Ok(());
             };
-            match self.reporter.ask((self.to.report)(dir), error).await {
+            match self
+                .reporter
+                .ask((self.to.report)(dir), Step::SetAttributes, error)
+                .await
+            {
                 Decision::Retry => {}
                 Decision::Skip | Decision::SkipAll => return Ok(()),
                 Decision::Abort => return Err(Aborted),
@@ -1233,6 +1253,8 @@ mod tests {
     #[derive(Debug, Default)]
     struct Seen {
         failed: Vec<String>,
+        /// The step of each failure.
+        steps: Vec<Step>,
         /// `bytes_copied` as each failure came.
         copied_at_failures: Vec<u64>,
         bytes: Vec<(u64, u64)>,
@@ -1362,8 +1384,11 @@ mod tests {
                         cancel.cancel();
                     }
                 }
-                Event::Failed { path, reply, .. } => {
+                Event::Failed {
+                    path, step, reply, ..
+                } => {
                     seen.failed.push(path);
+                    seen.steps.push(step);
                     seen.copied_at_failures.push(seen.copied);
                     let answer = *failures.next().expect("an answer for each failure");
                     let _ = reply.send(answer);
@@ -1523,6 +1548,7 @@ mod tests {
         .await;
         assert!(outcome.aborted);
         assert_eq!(seen.failed, [report(&dst.join("file"))]);
+        assert_eq!(seen.steps, [Step::Create]);
         check_dir(&dst.join("dir"));
     }
 
@@ -1977,11 +2003,54 @@ mod tests {
         )
         .await;
         assert_eq!(seen.failed.len(), 2, "{seen:?}");
+        assert!(
+            seen.failed.contains(&report(&src.join("locked"))),
+            "{seen:?}"
+        );
+        assert!(seen.failed.contains(&report(&src.join("fifo"))), "{seen:?}");
+        assert_eq!(seen.steps, [Step::Read, Step::Read], "of the sources");
         assert_eq!(fs::read_to_string(dst.join("ok")).unwrap(), "ok");
         assert!(!dst.join("locked").exists());
         assert!(!dst.join("fifo").exists());
         assert_eq!((outcome.done, outcome.skipped), (2, 2));
         assert_eq!(leftovers(&dst), Vec::<PathBuf>::new());
+    }
+
+    #[tokio::test]
+    async fn an_unlisted_directory_and_a_locked_target_name_their_steps() {
+        let root = tempfile::tempdir().unwrap();
+        let src = root.path().join("src");
+        fs::create_dir_all(src.join("hidden")).unwrap();
+        fs::write(src.join("file"), "f").unwrap();
+        fs::set_permissions(src.join("hidden"), fs::Permissions::from_mode(0o000)).unwrap();
+        let dst = root.path().join("dst");
+        fs::create_dir(&dst).unwrap();
+        fs::set_permissions(&dst, fs::Permissions::from_mode(0o555)).unwrap();
+        let unlock = || {
+            fs::set_permissions(src.join("hidden"), fs::Permissions::from_mode(0o755)).unwrap();
+            fs::set_permissions(&dst, fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        if fs::read_dir(src.join("hidden")).is_ok() {
+            // Root reads and writes it anyway.
+            unlock();
+            return;
+        }
+        let sources = vec![src.join("hidden"), src.join("file")];
+        let answers = [Decision::Skip, Decision::Skip];
+        let (outcome, seen) = run(
+            (&LocalFs, sources),
+            (&LocalFs, dst.clone()),
+            BOTH,
+            &answers,
+            false,
+        )
+        .await;
+        unlock();
+        // The directory that could not be listed is skipped before anything goes to the target.
+        let failed = [report(&src.join("hidden")), report(&dst.join("file"))];
+        assert_eq!(seen.failed, failed, "{seen:?}");
+        assert_eq!(seen.steps, [Step::List, Step::Create]);
+        assert_eq!((outcome.done, outcome.skipped), (0, 2));
     }
 
     #[tokio::test]
@@ -2009,6 +2078,7 @@ mod tests {
         assert_eq!(outcome.skipped, 1);
         // Written under a temporary name, the file failed under its own.
         assert_eq!(seen.failed, ["file", "file"]);
+        assert_eq!(seen.steps, [Step::Write, Step::Write]);
         assert_eq!(seen.copied_at_failures, [taken, 2 * taken], "{seen:?}");
         assert_eq!(seen.copied, 2 * taken);
         assert_eq!(leftovers(&remote), Vec::<PathBuf>::new());
@@ -2165,12 +2235,12 @@ mod tests {
     /// Where a host stops answering, and the job it cancels as it does.
     #[derive(Debug, Clone)]
     struct Stall {
-        at: Step,
+        at: Stage,
         cancel: CancellationToken,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum Step {
+    enum Stage {
         Create,
         Read,
         Write,
@@ -2179,9 +2249,9 @@ mod tests {
         Attributes,
     }
 
-    /// Never ends at the `step` where `stall` stops answering, once it has cancelled its job.
-    async fn stall_at(stall: Option<&Stall>, step: Step) {
-        if let Some(stall) = stall.filter(|stall| stall.at == step) {
+    /// Never ends at the `stage` where `stall` stops answering, once it has cancelled its job.
+    async fn stall_at(stall: Option<&Stall>, stage: Stage) {
+        if let Some(stall) = stall.filter(|stall| stall.at == stage) {
             stall.cancel.cancel();
             std::future::pending::<()>().await;
         }
@@ -2198,7 +2268,7 @@ mod tests {
     impl noc_vfs::FileWriter for Late {
         async fn write(&mut self, data: Vec<u8>) -> Result<(), VfsError> {
             if self.writer.written() > 0 {
-                stall_at(self.stall.as_ref(), Step::Write).await;
+                stall_at(self.stall.as_ref(), Stage::Write).await;
             }
             self.writer.write(data).await
         }
@@ -2208,7 +2278,7 @@ mod tests {
         }
 
         async fn settle(&mut self) -> Result<bool, VfsError> {
-            stall_at(self.stall.as_ref(), Step::Settle).await;
+            stall_at(self.stall.as_ref(), Stage::Settle).await;
             // As a server's answer, it comes after others have had their turn.
             tokio::task::yield_now().await;
             let left = self.writer.written() - self.arrived;
@@ -2217,7 +2287,7 @@ mod tests {
         }
 
         async fn finish(self) -> Result<(), VfsError> {
-            stall_at(self.stall.as_ref(), Step::Finish).await;
+            stall_at(self.stall.as_ref(), Stage::Finish).await;
             self.writer.finish().await
         }
     }
@@ -2233,7 +2303,7 @@ mod tests {
     impl noc_vfs::FileReader for Remote {
         async fn read(&mut self) -> Result<Option<Vec<u8>>, VfsError> {
             if self.read {
-                stall_at(self.stall.as_ref(), Step::Read).await;
+                stall_at(self.stall.as_ref(), Stage::Read).await;
             }
             self.read = true;
             self.reader.read().await
@@ -2283,7 +2353,7 @@ mod tests {
             LocalFs.create_symlink(target, path).await
         }
         async fn set_permissions(&self, path: &PathBuf, mode: u32) -> Result<(), VfsError> {
-            stall_at(self.stall.as_ref(), Step::Attributes).await;
+            stall_at(self.stall.as_ref(), Stage::Attributes).await;
             LocalFs.set_permissions(path, mode).await
         }
         async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
@@ -2307,7 +2377,7 @@ mod tests {
         ) -> Result<Self::Writer, VfsError> {
             // Made, as a host makes it once asked, whether or not its answer comes.
             let writer = LocalFs.create_file(path, replace).await?;
-            stall_at(self.stall.as_ref(), Step::Create).await;
+            stall_at(self.stall.as_ref(), Stage::Create).await;
             Ok(Late {
                 writer,
                 arrived: 0,
@@ -2427,7 +2497,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_cancel_stops_each_wait_on_a_host_and_takes_away_the_copy() {
-        use Step::{Attributes, Create, Finish, Read, Settle, Write};
+        use Stage::{Attributes, Create, Finish, Read, Settle, Write};
         for at in [Create, Read, Write, Settle, Finish, Attributes] {
             let root = tempfile::tempdir().unwrap();
             let src = root.path().join("file");
@@ -2602,6 +2672,7 @@ mod tests {
             [src.join("hard").to_string_lossy()],
             "{seen:?}"
         );
+        assert_eq!(seen.steps, [Step::Create]);
         assert!(seen.exists.is_empty(), "{seen:?}");
         assert_eq!((outcome.done, outcome.skipped), (0, 1));
         assert_eq!(fs::read_to_string(src.join("file")).unwrap(), "f");

@@ -1391,7 +1391,9 @@ async fn forward<P>(
                 }
                 continue;
             }
-            Some(Event::Failed { path, error, reply }) => JobEvent::Failed {
+            Some(Event::Failed {
+                path, error, reply, ..
+            }) => JobEvent::Failed {
                 at,
                 path: location(path),
                 error: describe::vfs_error(&error),
@@ -2348,6 +2350,7 @@ mod tests {
     use std::process::Stdio;
 
     use noc_config::{Config, HostConfig, Hosts, Paths, SftpHost};
+    use noc_ops::Step;
     use noc_tools::ripgrep::Hit;
     use noc_vfs::RemotePath;
     use tokio::process::Command;
@@ -2970,7 +2973,13 @@ mod tests {
         let (reply, _decision) = oneshot::channel();
         let path = PathBuf::from("/f1000");
         let error = VfsError::Io(std::io::ErrorKind::PermissionDenied.into());
-        events.send(Event::Failed { path, error, reply }).unwrap();
+        let failed = Event::Failed {
+            path,
+            step: Step::Read,
+            error,
+            reply,
+        };
+        events.send(failed).unwrap();
         events.send(progress("/g", 1000)).unwrap();
         drop(events);
         let (done, mut forwarded) = mpsc::unbounded_channel();

@@ -58,6 +58,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   replace that file, or left its temporary file behind.
 - When ssh asked again about a host key on the terminal, after an answer that was neither yes nor
   no, what was typed did not show.
+- Dialogs dropped the spaces a line of their text starts with, such as the indent of the other
+  names of a host key in ssh's question; such a line and the lines it breaks into keep them.
 
 ## [0.3.1] - 2026-11-01
 

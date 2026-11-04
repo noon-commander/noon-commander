@@ -210,47 +210,66 @@ pub fn rule(text: &str, width: usize, line: &str) -> Fitted {
 }
 
 /// Breaks `text` into lines of at most `width` cells: at its newlines, then between words,
-/// and inside words longer than a line. Each line is made terminal-safe.
+/// and inside words longer than a line. The spaces a line starts with indent it and the lines
+/// it breaks into, while room is left after them. Each line is made terminal-safe.
 pub fn wrap(text: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     let mut lines = Vec::new();
     for paragraph in text.lines() {
-        let mut line = String::new();
-        let mut used = 0;
-        for word in sanitize(paragraph.as_bytes()).split(' ') {
-            let mut word = word;
-            loop {
-                let word_width = word.width();
-                let gap = usize::from(used > 0);
-                if used + gap + word_width <= width {
-                    if gap == 1 {
-                        line.push(' ');
-                    }
-                    line.push_str(word);
-                    used += gap + word_width;
-                    break;
-                }
-                if used > 0 {
-                    lines.push(std::mem::take(&mut line));
-                    used = 0;
-                    continue;
-                }
-                // A word longer than a line goes on in the next one; a character wider than a
-                // line gets one of its own.
-                let (head, _) = take_width(word.chars(), width);
-                let head_len = head
-                    .len()
-                    .max(word.chars().next().map_or(0, char::len_utf8));
-                lines.push(word[..head_len].to_owned());
-                word = &word[head_len..];
-                if word.is_empty() {
-                    break;
-                }
+        let paragraph = sanitize(paragraph.as_bytes());
+        let words = paragraph.trim_start_matches(' ');
+        let indent = match paragraph.len() - words.len() {
+            indent if indent < width && !words.is_empty() => indent,
+            _ => 0,
+        };
+        let start = lines.len();
+        wrap_words(words, width - indent, &mut lines);
+        if indent > 0 {
+            for line in &mut lines[start..] {
+                line.insert_str(0, &" ".repeat(indent));
             }
         }
-        lines.push(line);
     }
     lines
+}
+
+/// Breaks `words`, one line without its newline, into lines of at most `width` cells, which
+/// it adds to `lines`.
+fn wrap_words(words: &str, width: usize, lines: &mut Vec<String>) {
+    let mut line = String::new();
+    let mut used = 0;
+    for word in words.split(' ') {
+        let mut word = word;
+        loop {
+            let word_width = word.width();
+            let gap = usize::from(used > 0);
+            if used + gap + word_width <= width {
+                if gap == 1 {
+                    line.push(' ');
+                }
+                line.push_str(word);
+                used += gap + word_width;
+                break;
+            }
+            if used > 0 {
+                lines.push(std::mem::take(&mut line));
+                used = 0;
+                continue;
+            }
+            // A word longer than a line goes on in the next one; a character wider than a
+            // line gets one of its own.
+            let (head, _) = take_width(word.chars(), width);
+            let head_len = head
+                .len()
+                .max(word.chars().next().map_or(0, char::len_utf8));
+            lines.push(word[..head_len].to_owned());
+            word = &word[head_len..];
+            if word.is_empty() {
+                break;
+            }
+        }
+    }
+    lines.push(line);
 }
 
 /// The longest prefix of `chars` that fits into `limit` cells, and its width.
@@ -434,5 +453,21 @@ mod tests {
         assert_eq!(wrap("bad\x1b[2J", 20), ["bad?[2J"]);
         assert_eq!(wrap("文件文件", 3), ["文", "件", "文", "件"]);
         assert_eq!(wrap("", 10), Vec::<String>::new());
+    }
+
+    #[test]
+    fn wrap_keeps_the_indent_of_a_line_on_the_lines_it_breaks_into() {
+        assert_eq!(
+            wrap("Known by these names:\n    ~/.ssh/known_hosts:3: web2", 40),
+            ["Known by these names:", "    ~/.ssh/known_hosts:3: web2"]
+        );
+        assert_eq!(wrap("  one two three", 9), ["  one two", "  three"]);
+        assert_eq!(wrap("  abcdefghij", 6), ["  abcd", "  efgh", "  ij"]);
+        assert_eq!(wrap("    ab", 4), ["ab"], "no room after the indent");
+        assert_eq!(
+            wrap("a\n   \nb", 10),
+            ["a", "", "b"],
+            "blank lines stay empty"
+        );
     }
 }

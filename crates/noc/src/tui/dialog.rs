@@ -3205,7 +3205,7 @@ mod tests {
             vec![Button::Retry, Button::Up, Button::GoTo, Button::Cancel],
             vec![Button::Overwrite, Button::Rename, Button::Cancel],
             vec![Button::Connect, Button::Local, Button::Cancel],
-            vec![Button::Retry, Button::Connect, Button::Cancel],
+            vec![Button::Connect, Button::Cancel],
             vec![Button::Change, Button::Cancel],
         ];
         for buttons in questions {

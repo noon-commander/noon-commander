@@ -480,8 +480,8 @@ enum Purpose {
     NotConnected { panel: PanelId },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
-    /// `problem`, an error, with a way on from it besides Cancel, which `way` says.
-    Problem { problem: Problem, way: Way },
+    /// An error, with a way on from it besides Cancel, which `way` says.
+    Problem { way: Way },
     /// Something to read, such as an error.
     Info,
     /// An error about the dialog after it, which shows under it and has the keys again once
@@ -509,17 +509,50 @@ enum Answer {
 /// What an error dialog offers besides Cancel, its first button and the default (ADR 0063).
 #[derive(Debug)]
 enum Way {
-    /// Retry does it again.
+    /// Retry does it again; where a host it needs is not connected, Connect connects, and
+    /// does it once the host is.
     Again(Again),
-    /// Connect connects to the host, which was not connected; the user does it again then.
-    Connect(String),
     /// Change… opens the dialog it came from again, with what was typed there.
     Change(Change),
 }
 
-/// What Retry does again after an error.
+/// What Retry does again after an error, or Connect once the hosts it needs are connected.
 #[derive(Debug)]
 enum Again {
+    /// F8 deletes `names` in `dir`.
+    Delete {
+        dir: Location,
+        names: Vec<Vec<u8>>,
+    },
+    /// F5 or F6, by `kind`, takes `names` in `dir` to `target`; `typed` is the dialog again.
+    Transfer {
+        kind: transfer::Kind,
+        dir: Location,
+        names: Vec<Vec<u8>>,
+        target: Location,
+        typed: Change,
+    },
+    /// `f #` hashes the `groups` of files with `algorithm`, against `expected`, comparing the
+    /// two groups if `compare`; their checksums may be saved in `dir`.
+    Checksum {
+        dir: Location,
+        groups: Vec<Vec<Location>>,
+        algorithm: Algorithm,
+        expected: Option<String>,
+        compare: bool,
+    },
+    /// F4 edits the file `name` in `dir`, at `line` if there is one.
+    EditFile {
+        dir: Location,
+        name: Vec<u8>,
+        line: Option<u64>,
+    },
+    /// `!` or `:` runs `command` in `dir`, after `prompt`.
+    RunIn {
+        dir: Location,
+        command: String,
+        prompt: String,
+    },
     /// F7 makes the directory at `location` for `panel`.
     CreateDir {
         panel: PanelId,
@@ -565,32 +598,50 @@ enum Again {
 }
 
 impl Again {
-    /// The host it works on, if any, which must be connected for it to work.
-    fn host(&self) -> Option<&str> {
-        let location = match self {
+    /// The hosts it works on, which must be connected for it to work.
+    fn hosts(&self) -> Vec<&str> {
+        let locations: Vec<&Location> = match self {
+            Self::Delete { dir, .. } | Self::EditFile { dir, .. } | Self::RunIn { dir, .. } => {
+                vec![dir]
+            }
+            Self::Transfer { dir, target, .. } => vec![dir, target],
+            Self::Checksum { groups, .. } => {
+                groups.iter().filter_map(|group| group.first()).collect()
+            }
             Self::CreateDir { location, .. }
             | Self::Write { location, .. }
-            | Self::View(location) => location,
-            Self::Rename { from, .. } => from,
-            Self::Edit(editing) => editing.remote.as_ref()?,
-            Self::SendBack { remote, .. } => remote,
+            | Self::View(location) => vec![location],
+            Self::Rename { from, .. } => vec![from],
+            Self::Edit(editing) => editing.remote.iter().collect(),
+            Self::SendBack { remote, .. } => vec![remote],
             Self::ReadMore
             | Self::Run(_)
             | Self::SaveConfig { .. }
             | Self::SaveHost { .. }
             | Self::Workspaces(_)
-            | Self::History(_) => return None,
+            | Self::History(_) => Vec::new(),
         };
-        match location {
-            Location::Remote { host, .. } => Some(host),
-            Location::Local(_) => None,
+        let mut hosts = Vec::new();
+        for location in locations {
+            if let Location::Remote { host, .. } = location
+                && !hosts.contains(&host.as_str())
+            {
+                hosts.push(host.as_str());
+            }
         }
+        hosts
     }
 }
 
 /// The dialog that Change… opens again, with the text typed in it.
 #[derive(Debug)]
 enum Change {
+    /// Shift+F6 on the entry `name` in `panel`, the field holding `text`.
+    Rename {
+        panel: PanelId,
+        name: Vec<u8>,
+        text: String,
+    },
     /// F5, F6, or Shift+F5, by `kind`, in `panel` on `dir`, for `names`, which the prompt names
     /// as `sources`.
     Transfer {
@@ -988,6 +1039,8 @@ pub(crate) struct App {
     /// Running jobs: at most one in front, over the panels and the help and under the
     /// dialogs, and any number in the background.
     jobs: Vec<Job>,
+    /// What waits for its hosts to connect, after Connect in an error, and runs once they are.
+    pending: Vec<Again>,
     /// Instead of the panels.
     viewing: Option<Viewing>,
     editing: Option<Editing>,
@@ -1161,10 +1214,9 @@ impl App {
     /// location menu opens `home`, which `~` in dialogs stands for too.
     pub(crate) fn new(start: &Path, home: &Path, config: &Config) -> (Self, Vec<Effect>) {
         let (ui, transfer) = (&config.ui, &config.transfer);
-        let show_hidden = ui.show_hidden;
         let panel = || {
             let start = Location::Local(start.to_path_buf());
-            let (mut panel, request) = Panel::new(start, home.to_path_buf(), show_hidden);
+            let (mut panel, request) = Panel::new(start, home.to_path_buf(), ui.show_hidden);
             panel.set_natural_sort(ui.natural_sort);
             (panel, request)
         };
@@ -1208,6 +1260,7 @@ impl App {
             saving: HashMap::new(),
             tz: TimeZone::UTC,
             jobs: Vec::new(),
+            pending: Vec::new(),
             viewing: None,
             editing: None,
             handover: None,
@@ -3926,7 +3979,7 @@ impl App {
                     fl!("workspaces-save-error")
                 };
                 let again = Again::Workspaces(change);
-                self.show_problem_way(Problem::new(head, reason), Way::Again(again));
+                self.show_problem_way(&Problem::new(head, reason), Way::Again(again));
             }
         }
     }
@@ -4522,7 +4575,7 @@ impl App {
     ) {
         if let Err(reason) = result {
             let problem = Problem::new(fl!("config-save-error"), reason.sanitized());
-            self.show_problem_way(problem, Way::Again(Again::SaveConfig { old, new }));
+            self.show_problem_way(&problem, Way::Again(Again::SaveConfig { old, new }));
         }
     }
 
@@ -4769,7 +4822,7 @@ impl App {
             | Purpose::Transfer { .. }
             | Purpose::Info
             | Purpose::InfoOver => {}
-            Purpose::Problem { problem, way } => return self.problem_closed(problem, way, event),
+            Purpose::Problem { way } => return self.problem_closed(way, event),
         }
         Vec::new()
     }
@@ -4961,7 +5014,12 @@ impl App {
             return Vec::new();
         };
         let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
-            self.show_not_connected(fl!("edit-error"), &location);
+            let again = Again::EditFile {
+                dir: dir.clone(),
+                name: name.to_vec(),
+                line,
+            };
+            self.show_not_connected(fl!("edit-error"), &location, again);
             return Vec::new();
         };
         let (handle, on) = (handle.clone(), host.clone());
@@ -5048,7 +5106,7 @@ impl App {
                     location_text,
                 );
                 let problem = Problem::new(fl!("edit-error"), reason.sanitized()).at(path);
-                self.show_problem_way(problem, Way::Again(Again::Edit(editing)));
+                self.show_problem_way(&problem, Way::Again(Again::Edit(editing)));
                 Vec::new()
             }
         }
@@ -5195,36 +5253,48 @@ impl App {
             CommandEvent::Run(command) => {
                 self.command_line = None;
                 let dir = self.panel(self.active).location().clone();
-                let mut shell = &self.config.shell.run;
-                let place = match &dir {
-                    Location::Local(path) => Place::Local(path.clone()),
-                    Location::Remote { host, path } => {
-                        let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
-                            self.show_not_connected(fl!("command-failed"), &dir);
-                            return Vec::new();
-                        };
-                        if let Some(run) = self.host_settings.get(host).and_then(HostConfig::run) {
-                            shell = run;
-                        }
-                        Place::Remote {
-                            handle: handle.clone(),
-                            dir: path.clone(),
-                        }
-                    }
-                };
-                let shell = shell.clone();
-                let mut effects = self.remember(&dir, &command);
-                self.handover = Some(Handover::Run(Run {
-                    place,
-                    shell,
-                    command,
-                    prompt: cells::text_of(&self.shell_prompt(u16::MAX)),
-                    pause: self.config.shell.pause,
-                }));
-                effects.extend(self.note(&dir));
-                effects
+                let prompt = cells::text_of(&self.shell_prompt(u16::MAX));
+                self.run_in(&dir, command, prompt)
             }
         }
+    }
+
+    /// Runs `command` of the command line in `dir`, with the shell of the host if it is on one,
+    /// after `prompt`; and keeps it in the history.
+    fn run_in(&mut self, dir: &Location, command: String, prompt: String) -> Vec<Effect> {
+        let mut shell = &self.config.shell.run;
+        let place = match dir {
+            Location::Local(path) => Place::Local(path.clone()),
+            Location::Remote { host, path } => {
+                let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
+                    let again = Again::RunIn {
+                        dir: dir.clone(),
+                        command,
+                        prompt,
+                    };
+                    self.show_not_connected(fl!("command-failed"), dir, again);
+                    return Vec::new();
+                };
+                if let Some(run) = self.host_settings.get(host).and_then(HostConfig::run) {
+                    shell = run;
+                }
+                Place::Remote {
+                    handle: handle.clone(),
+                    dir: path.clone(),
+                }
+            }
+        };
+        let shell = shell.clone();
+        let mut effects = self.remember(dir, &command);
+        self.handover = Some(Handover::Run(Run {
+            place,
+            shell,
+            command,
+            prompt,
+            pause: self.config.shell.pause,
+        }));
+        effects.extend(self.note(dir));
+        effects
     }
 
     /// Opens the window of the command history over the command line, if it is open.
@@ -5357,7 +5427,7 @@ impl App {
             }
             Err(reason) => {
                 let problem = Problem::new(fl!("history-error"), reason.sanitized());
-                self.show_problem_way(problem, Way::Again(Again::History(change)));
+                self.show_problem_way(&problem, Way::Again(Again::History(change)));
             }
         }
     }
@@ -5366,7 +5436,7 @@ impl App {
     /// their directories again, as in mc, since the command may have changed anything.
     pub(crate) fn ran(&mut self, result: Result<(), (Problem, Run)>) -> Vec<Effect> {
         if let Err((problem, run)) = result {
-            self.show_problem_way(problem.sanitized(), Way::Again(Again::Run(run)));
+            self.show_problem_way(&problem.sanitized(), Way::Again(Again::Run(run)));
         }
         let mut dirs: Vec<Location> = Vec::new();
         for side in [self.active, self.active.other()] {
@@ -5553,7 +5623,7 @@ impl App {
         let reason = [why.to_owned(), fl!("edit-kept-copy", copy = shown)].join("\n");
         let problem = Problem::new(fl!("edit-kept"), reason).at(location_text(&remote));
         let again = Again::SendBack { copy, remote, dir };
-        self.show_problem_way(problem, Way::Again(again));
+        self.show_problem_way(&problem, Way::Again(again));
     }
 
     /// Takes the part [`Effect::Read`] read for the viewer `id`, and reads the next one it
@@ -5590,14 +5660,14 @@ impl App {
                     match (asked, location) {
                         (true, _) => self.show_problem_over(&problem),
                         (false, Some(location)) => {
-                            self.show_problem_way(problem, Way::Again(Again::View(location)));
+                            self.show_problem_way(&problem, Way::Again(Again::View(location)));
                         }
                         (false, None) => self.show_problem(&problem),
                     }
                 } else {
                     viewing.viewer.stop();
                     let problem = Problem::new(fl!("viewer-read-error"), reason).at(path);
-                    self.show_problem_way(problem, Way::Again(Again::ReadMore));
+                    self.show_problem_way(&problem, Way::Again(Again::ReadMore));
                 }
                 return Vec::new();
             }
@@ -5711,7 +5781,11 @@ impl App {
                 if let Some(Host::Connected { handle, .. }) = self.hosts.get(host) {
                     Some(handle.clone())
                 } else {
-                    self.show_not_connected(fl!("delete-error"), &dir);
+                    let again = Again::Delete {
+                        dir: dir.clone(),
+                        names: names.to_vec(),
+                    };
+                    self.show_not_connected(fl!("delete-error"), &dir, again);
                     return Vec::new();
                 }
             }
@@ -5881,12 +5955,12 @@ impl App {
         let sources: Vec<Location> = names.iter().map(|name| child(&dir, name)).collect();
         let error = |reason: String| Problem::new(kind.error(), reason).at(location_text(&target));
         if target == dir || sources.contains(&target) {
-            self.show_problem_way(error(fl!("transfer-same")), Way::Change(typed));
+            self.show_problem_way(&error(fl!("transfer-same")), Way::Change(typed));
             return Vec::new();
         }
         if let Some(source) = sources.iter().find(|source| within(source, &target)) {
             let reason = fl!("transfer-into-itself", path = location_text(source));
-            self.show_problem_way(error(reason), Way::Change(typed));
+            self.show_problem_way(&error(reason), Way::Change(typed));
             return Vec::new();
         }
         let handle = |location: &Location| match location {
@@ -5899,7 +5973,14 @@ impl App {
         let (Ok(from), Ok(to)) = (handle(&dir), handle(&target)) else {
             let away = if handle(&dir).is_err() { &dir } else { &target };
             let away = away.clone();
-            self.show_not_connected(kind.error(), &away);
+            let again = Again::Transfer {
+                kind,
+                dir: dir.clone(),
+                names: names.to_vec(),
+                target: target.clone(),
+                typed,
+            };
+            self.show_not_connected(kind.error(), &away, again);
             return Vec::new();
         };
         // The source, and the target if a panel shows it.
@@ -6461,19 +6542,39 @@ impl App {
         if compare {
             groups.extend(other.map(|location| vec![location]));
         }
+        self.hash(dir, groups, (algorithm, expected), compare)
+    }
+
+    /// Starts the checksum job of the `groups` of files, each on one host or local, with
+    /// `algorithm`, against `expected`, comparing the two groups if `compare`; their checksums
+    /// may be saved in `dir`.
+    fn hash(
+        &mut self,
+        dir: Location,
+        groups: Vec<Vec<Location>>,
+        (algorithm, expected): (Algorithm, Option<String>),
+        compare: bool,
+    ) -> Vec<Effect> {
         let mut targets = Vec::new();
         let mut hosts = Vec::new();
-        for group in groups {
+        for group in &groups {
             let Some(first) = group.first() else { continue };
             let Ok(handle) = self.handle_for(first) else {
                 let first = first.clone();
-                self.show_not_connected(fl!("checksum-error"), &first);
+                let again = Again::Checksum {
+                    dir,
+                    groups,
+                    algorithm,
+                    expected,
+                    compare,
+                };
+                self.show_not_connected(fl!("checksum-error"), &first, again);
                 return Vec::new();
             };
             if let Location::Remote { host, .. } = first {
                 hosts.push(host.clone());
             }
-            targets.push((group, handle));
+            targets.push((group.clone(), handle));
         }
         let noted = self.note(&dir);
         self.last_job += 1;
@@ -6662,7 +6763,11 @@ impl App {
     /// Writes `bytes` to the file at `location`, over what is there if `replace`.
     fn write_file(&mut self, location: Location, bytes: Vec<u8>, replace: bool) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&location) else {
-            self.show_not_connected(fl!("save-error"), &location);
+            let again = Again::Write {
+                location: location.clone(),
+                bytes,
+            };
+            self.show_not_connected(fl!("save-error"), &location, again);
             return Vec::new();
         };
         self.saving.insert(location.clone(), bytes.clone());
@@ -6700,7 +6805,7 @@ impl App {
                     location: location.clone(),
                     bytes,
                 };
-                self.show_problem_way(problem, Way::Again(again));
+                self.show_problem_way(&problem, Way::Again(again));
                 Vec::new()
             }
         }
@@ -6798,20 +6903,15 @@ impl App {
             Ok(()) => self.show_new(panel, location),
             Err(Unmade::Taken(reason)) => {
                 let text = self.typed_in(panel, location);
-                self.show_problem_way(problem(reason), Way::Change(Change::Mkdir { panel, text }));
+                self.show_problem_way(&problem(reason), Way::Change(Change::Mkdir { panel, text }));
                 Vec::new()
             }
             Err(Unmade::Failed(reason)) => {
-                let way = match location {
-                    Location::Remote { host, .. } if !self.reachable(host) => {
-                        Way::Connect(host.clone())
-                    }
-                    _ => Way::Again(Again::CreateDir {
-                        panel,
-                        location: location.clone(),
-                    }),
+                let again = Again::CreateDir {
+                    panel,
+                    location: location.clone(),
                 };
-                self.show_problem_way(problem(reason), way);
+                self.show_problem_way(&problem(reason), Way::Again(again));
                 Vec::new()
             }
         };
@@ -6963,7 +7063,12 @@ impl App {
         replace: bool,
     ) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&from) else {
-            self.show_not_connected(fl!("rename-error"), &from);
+            let again = Again::Rename {
+                panel,
+                from: from.clone(),
+                to,
+            };
+            self.show_not_connected(fl!("rename-error"), &from, again);
             return Vec::new();
         };
         let noted = from.parent().map_or_else(Vec::new, |dir| self.note(&dir));
@@ -7018,12 +7123,10 @@ impl App {
             Err(Refused::Failed(reason)) => {
                 let reason = reason.sanitized();
                 let problem = Problem::new(fl!("rename-error"), reason).at(location_text(from));
-                let again = Again::Rename {
-                    panel,
-                    from: from.clone(),
-                    to: to.clone(),
-                };
-                self.show_problem_way(problem, Way::Again(again));
+                let name = file_name(from).unwrap_or_default();
+                let text = String::from_utf8_lossy(&file_name(to).unwrap_or_default()).into_owned();
+                let change = Change::Rename { panel, name, text };
+                self.show_problem_way(&problem, Way::Change(change));
                 Vec::new()
             }
         }
@@ -7064,37 +7167,35 @@ impl App {
     }
 
     /// Shows `problem` in an error dialog, after the dialogs open before it, with `way` on
-    /// from it first, the default, and Cancel (ADR 0063). Retry for work on a host that is not
-    /// connected has Connect after it, which connects and asks again.
-    fn show_problem_way(&mut self, problem: Problem, way: Way) {
-        let mut buttons = match &way {
-            Way::Again(_) => vec![Button::Retry],
-            Way::Connect(_) => vec![Button::Connect],
-            Way::Change(_) => vec![Button::Change],
+    /// from it first, the default, and Cancel (ADR 0063). Where a host that `again` needs is
+    /// not connected, Connect takes the place of Retry.
+    fn show_problem_way(&mut self, problem: &Problem, way: Way) {
+        let first = match &way {
+            Way::Again(again) if self.host_away(again).is_some() => Button::Connect,
+            Way::Again(_) => Button::Retry,
+            Way::Change(_) => Button::Change,
         };
-        if let Way::Again(again) = &way
-            && again.host().is_some_and(|host| !self.reachable(host))
-        {
-            buttons.push(Button::Connect);
-        }
-        buttons.push(Button::Cancel);
         self.dialogs.push_back(Open {
-            dialog: Dialog::failure(&problem, buttons, 0),
-            purpose: Purpose::Problem { problem, way },
+            dialog: Dialog::failure(problem, vec![first, Button::Cancel], 0),
+            purpose: Purpose::Problem { way },
         });
     }
 
     /// Says that `head` cannot be done at `location`, as its host is not connected, with
-    /// Connect, after which the user does it again.
-    fn show_not_connected(&mut self, head: String, location: &Location) {
+    /// Connect, which connects and does `again` then.
+    fn show_not_connected(&mut self, head: String, location: &Location, again: Again) {
         let problem =
             Problem::new(head, fl!("error-connection-closed")).at(location_text(location));
-        match location {
-            Location::Remote { host, .. } => {
-                self.show_problem_way(problem, Way::Connect(host.clone()));
-            }
-            Location::Local(_) => self.show_problem(&problem),
-        }
+        self.show_problem_way(&problem, Way::Again(again));
+    }
+
+    /// A host that `again` needs and that is not connected.
+    fn host_away(&self, again: &Again) -> Option<String> {
+        again
+            .hosts()
+            .into_iter()
+            .find(|host| !matches!(self.hosts.get(*host), Some(Host::Connected { .. })))
+            .map(str::to_owned)
     }
 
     /// Whether `host` is connected, or on its way.
@@ -7117,20 +7218,47 @@ impl App {
         effects
     }
 
+    /// Does `again` once the hosts it needs are connected: at once if they are, else after
+    /// connecting to them.
+    fn connect_and_do(&mut self, again: Again) -> Vec<Effect> {
+        let away: Vec<String> = again
+            .hosts()
+            .into_iter()
+            .filter(|host| !matches!(self.hosts.get(*host), Some(Host::Connected { .. })))
+            .map(str::to_owned)
+            .collect();
+        if away.is_empty() {
+            return self.again(again);
+        }
+        self.pending.push(again);
+        away.iter().flat_map(|host| self.connect_to(host)).collect()
+    }
+
+    /// Does what waited for `host`, and for no other host that is not connected yet.
+    fn do_pending(&mut self, host: &str) -> Vec<Effect> {
+        let (ready, waiting): (Vec<Again>, Vec<Again>) = std::mem::take(&mut self.pending)
+            .into_iter()
+            .partition(|again| again.hosts().contains(&host) && self.host_away(again).is_none());
+        self.pending = waiting;
+        ready
+            .into_iter()
+            .flat_map(|again| self.again(again))
+            .collect()
+    }
+
+    /// Forgets what waited for `host`, which will not connect.
+    fn forget_pending(&mut self, host: &str) {
+        self.pending.retain(|again| !again.hosts().contains(&host));
+    }
+
     /// Does what the error dialog of `problem` offered, once `event` closed it: Retry, Connect,
     /// or Change… as `way` says; Cancel and Esc do nothing, but end an edit.
-    fn problem_closed(&mut self, problem: Problem, way: Way, event: DialogEvent) -> Vec<Effect> {
+    fn problem_closed(&mut self, way: Way, event: DialogEvent) -> Vec<Effect> {
         match (way, event) {
             (Way::Again(again), DialogEvent::Pressed(Button::Retry)) => self.again(again),
             (Way::Again(again), DialogEvent::Pressed(Button::Connect)) => {
-                let effects = again
-                    .host()
-                    .map(str::to_owned)
-                    .map_or_else(Vec::new, |host| self.connect_to(&host));
-                self.show_problem_way(problem, Way::Again(again));
-                effects
+                self.connect_and_do(again)
             }
-            (Way::Connect(host), DialogEvent::Pressed(Button::Connect)) => self.connect_to(&host),
             (Way::Change(change), DialogEvent::Pressed(Button::Change)) => {
                 self.change(change);
                 Vec::new()
@@ -7143,6 +7271,27 @@ impl App {
     /// Does `again` again.
     fn again(&mut self, again: Again) -> Vec<Effect> {
         match again {
+            Again::Delete { dir, names } => self.start_delete(dir, &names),
+            Again::Transfer {
+                kind,
+                dir,
+                names,
+                target,
+                typed,
+            } => self.start_transfer(kind, dir, &names, target, typed),
+            Again::Checksum {
+                dir,
+                groups,
+                algorithm,
+                expected,
+                compare,
+            } => self.hash(dir, groups, (algorithm, expected), compare),
+            Again::EditFile { dir, name, line } => self.edit_file(dir, &name, line),
+            Again::RunIn {
+                dir,
+                command,
+                prompt,
+            } => self.run_in(&dir, command, prompt),
             Again::CreateDir { panel, location } => self.create_dir(panel, location),
             Again::Rename { panel, from, to } => self.rename_entry(panel, from, to, false),
             Again::Write { location, bytes } => self.write_file(location, bytes, false),
@@ -7183,6 +7332,13 @@ impl App {
     /// Opens the dialog of `change` again, with what was typed in it.
     fn change(&mut self, change: Change) {
         match change {
+            Change::Rename { panel, name, text } => {
+                if self.shown(panel.side) != panel {
+                    return;
+                }
+                self.active = panel.side;
+                self.panel_mut(panel.side).rename_again(&name, &text);
+            }
             Change::Transfer {
                 kind,
                 panel,
@@ -7362,7 +7518,7 @@ impl App {
             }
             Err(reason) => {
                 let problem = Problem::new(fl!("host-save-error"), reason.sanitized());
-                self.show_problem_way(problem, Way::Again(Again::SaveHost { name, host }));
+                self.show_problem_way(&problem, Way::Again(Again::SaveHost { name, host }));
                 Vec::new()
             }
         }
@@ -7496,6 +7652,7 @@ impl App {
     /// Closes the connection to `host`, or stops connecting to it. Panels on that host stay
     /// there, with their entries toned down, until they read their directories again.
     fn disconnect(&mut self, host: &str) {
+        self.forget_pending(host);
         let Some(state) = self.hosts.remove(host) else {
             return;
         };
@@ -7726,6 +7883,7 @@ impl App {
                 effects.extend(self.route(id, request));
             }
         }
+        effects.extend(self.do_pending(host));
         effects
     }
 
@@ -7833,6 +7991,7 @@ impl App {
             return;
         }
         self.hosts.remove(host);
+        self.forget_pending(host);
         for panel in self.panels_mut() {
             let Some(request) = panel.pending_request() else {
                 continue;
@@ -12963,18 +13122,19 @@ mod tests {
         let text = screen_of(&mut app, 16);
         assert!(text.contains("did not go back"), "{text}");
         assert!(text.contains("The connection is closed"), "{text}");
-        // Connect connects, and asks again, for Retry once it is connected.
-        assert!(text.contains("{ Retry } [ Connect ] [ Cancel ]"), "{text}");
-        app.handle(action(Action::Right));
-        let effects = app.handle(action(Action::Confirm));
-        assert!(
-            matches!(&effects[..], [Effect::Connect { host, .. }] if host == "web"),
-            "{effects:?}"
-        );
-        assert!(
-            screen_of(&mut app, 16).contains("did not go back"),
-            "asks again"
-        );
+        // Connect connects, and the copy goes back once the host is connected.
+        assert!(text.contains("{ Connect } [ Cancel ]"), "{text}");
+        let Effect::Connect { connection, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected a connection");
+        };
+        assert!(app.dialogs.is_empty(), "nothing asks");
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let copied = effects.iter().any(|effect| {
+            matches!(effect, Effect::Copy { target, .. }
+                if *target == remote("web", "/home/deploy/notes"))
+        });
+        assert!(copied, "{effects:?}");
     }
 
     #[test]
@@ -13055,23 +13215,45 @@ mod tests {
         assert!(text.contains("Cannot delete"), "{text}");
         assert!(text.contains("The connection is closed"), "{text}");
         assert!(text.contains("{ Connect } [ Cancel ]"), "{text}");
-        let effects = app.handle(action(Action::Confirm));
-        assert!(
-            matches!(&effects[..], [Effect::Connect { host, .. }] if host == "web"),
-            "{effects:?}"
-        );
+        let Effect::Connect { connection, .. } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected a connection");
+        };
         assert!(app.dialogs.is_empty(), "nothing more");
+        // Once connected, it deletes.
+        let (handle, _requests) = HostHandle::channel();
+        let effects = app.connected("web", connection, handle);
+        let deletes = effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Delete { .. }));
+        assert!(deletes, "{effects:?}");
+        assert!(app.pending.is_empty());
+
+        // What waits for a host goes once the host does.
+        app.pending.push(Again::Delete {
+            dir: remote("web", "/home/deploy"),
+            names: vec![b"notes".to_vec()],
+        });
+        app.disconnect("web");
+        assert!(app.pending.is_empty());
     }
 
     #[test]
-    fn retry_renames_and_writes_again_and_cancel_does_nothing() {
+    fn a_rename_changes_and_a_write_retries_and_cancel_does_nothing() {
         let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
         answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
         let panel = app.shown(Side::Left);
         let (from, to) = (local("/srv/a"), local("/srv/b"));
         let busy = || Err(Refused::Failed("Busy".to_owned().into()));
+        // A rename that failed: Change… opens its field again, with the name typed.
         app.entry_renamed(panel, &from, &to, busy());
-        assert!(screen_of(&mut app, 16).contains("{ Retry } [ Cancel ]"));
+        assert!(screen_of(&mut app, 16).contains("{ Change… } [ Cancel ]"));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.context(), Context::Rename);
+        let typed = app
+            .panel_mut(Side::Left)
+            .rename_field()
+            .map(|field| field.text().to_owned());
+        assert_eq!(typed.as_deref(), Some("b"));
         let again = one(app.handle(action(Action::Confirm)));
         assert!(
             matches!(&again, Effect::Rename { from: f, to: t, replace: false, .. }

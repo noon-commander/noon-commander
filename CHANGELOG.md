@@ -27,10 +27,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Replacing a workspace by Save as has No as the default.
 - A shell of `!` or `:` that cannot run, and an edited remote file whose changes did not go back,
   say so in parts too, with the code of the system and where the edited copy stays.
-- Most errors offer a way on rather than OK: Retry does it again (F7, rename, save, F3, F4, an
-  edited copy that did not go back, `!` and `:`, the settings, workspaces, and history files);
-  Connect connects a host that is not connected; Change… opens F5, F6, or F7 again with what was
-  typed, after a copy onto its source or a directory name that is taken.
+- Most errors offer a way on rather than OK: Retry does it again (F7, save, F3, F4, an edited
+  copy that did not go back, `!` and `:`, the settings, workspaces, and history files); Connect
+  connects a host that is not connected and then does what could not start; Change… opens
+  Shift+F6, F5, F6, or F7 again with what was typed, after a rename that failed, a copy onto its
+  source, or a directory name that is taken.
 
 ### Fixed
 

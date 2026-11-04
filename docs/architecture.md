@@ -189,10 +189,10 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   host stays where it was.
 - An error that has a way on offers it first, the default, then Cancel (`App::show_problem_way`,
   [ADR 0063](adr/0063-errors-in-parts-and-the-order-of-buttons.md)): Retry does the same again
-  (`Again`), Connect connects a host that was not connected, and the user does it again,
-  Change… opens F5, F6, or F7 again with what was typed. Retry on a host that is not connected
-  has Connect after it, which asks again once it connects. Errors that Retry would not mend,
-  such as a name typed wrong, keep OK.
+  (`Again`); where a host it needs is not connected, Connect in its place connects and does it
+  once the host is (`App::pending`, run by `App::connected`, dropped when the host is given up
+  or disconnected); Change… opens Shift+F6, F5, F6, or F7 again with what was typed. Errors
+  that Retry would not mend, such as a name typed wrong, keep OK.
 - A directory that cannot be read opens a dialog, Error, as every error dialog shows a problem:
   `Cannot open the directory`, the path on a line of its own, and the reason under a line across
   the frame (`Dialog::failure`, `Problem`). The panel keeps what it showed. Retry reads it again;

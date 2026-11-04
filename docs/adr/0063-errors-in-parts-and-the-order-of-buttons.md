@@ -76,16 +76,17 @@ had No.
 
   | Way | Errors | What it does |
   | --- | --- | --- |
-  | Retry | F7, a rename, a save, F3, a part F3 could not read, the editor of F4, an edited copy that did not go back, the shell of `!` and `:`, the configuration, the settings of a host, the workspaces, the history | Does the same again (`Again`) |
-  | Connect | What could not start as its host is not connected: F5, F6, F8, F7, a rename, a save, `f #`, F4, `!` and `:` | Connects to the host; the user does it again |
-  | Change… | F5 or F6 onto or into the source, F7 onto a name that is taken | Opens the dialog again with what was typed |
+  | Retry | F7, a save, F3, a part F3 could not read, the editor of F4, an edited copy that did not go back, the shell of `!` and `:`, the configuration, the settings of a host, the workspaces, the history | Does the same again (`Again`) |
+  | Connect | Any of these, and F5, F6, F8, `f #`, F4, a rename, whose host is not connected | Connects to the hosts, and does it once they are connected (`App::pending`) |
+  | Change… | Shift+F6 that failed, F5 or F6 onto or into the source, F7 onto a name that is taken | Opens the field or the dialog again with what was typed |
 
-  Retry for work on a host that is not connected has Connect after it, which connects and asks
-  again, for Retry once connected: an edited copy can only go back so. Cancel after the editor
-  could not run ends the edit, as if the file did not change. What Retry would fail at again
-  keeps OK: `g x`, whose program ran and said no, a name that cannot be a name, and what else
-  was typed wrong in a form, over which most of these show. F3 over the question about a taken
-  name keeps OK too, as its line views the file again.
+  Connect takes the place of Retry, which would fail again. What waits for a host goes with it
+  when the user gives the host up in Connection, or disconnects it. A rename that failed opens
+  its field again, as the name typed is what most often needs a change, and Enter there tries
+  again. Cancel after the editor could not run ends the edit, as if the file did not change.
+  What Retry would fail at again keeps OK: `g x`, whose program ran and said no, a name that
+  cannot be a name, and what else was typed wrong in a form, over which most of these show. F3
+  over the question about a taken name keeps OK too, as its line views the file again.
 - **Replacing a workspace by Save as has No as the default**, as renaming one onto another has.
 - **Errors that had their reason in a sentence show it in parts too**: a shell of `!` or `:` that
   could not run (`Cannot run /bin/zsh`, then why and its code), and an edited copy of a remote

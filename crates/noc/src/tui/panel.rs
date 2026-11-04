@@ -901,6 +901,25 @@ impl Panel {
         true
     }
 
+    /// Starts renaming the entry `name` again, with `text` in the field and its cursor before
+    /// its last extension; the cursor of the panel goes to it. `false` if it is not shown.
+    pub(crate) fn rename_again(&mut self, name: &[u8], text: &str) -> bool {
+        let row = (0..self.rows()).find(
+            |&index| matches!(self.row(index), Some(Row::Entry(entry)) if entry.name == name),
+        );
+        let Some(row) = row else {
+            return false;
+        };
+        self.cursor = row;
+        let dir_like = self.entry_under_cursor().is_some_and(DirEntry::is_dir_like);
+        self.renaming = Some(Renaming {
+            name: name.to_vec(),
+            field: Field::at(text, stem_chars(text, dir_like)),
+        });
+        self.search = None;
+        true
+    }
+
     /// Whether an entry is being renamed.
     pub(crate) fn renaming(&self) -> bool {
         self.renaming.is_some()

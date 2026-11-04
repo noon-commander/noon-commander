@@ -4,14 +4,16 @@ use std::sync::Arc;
 
 use noc_config::{HostConfig, Hosts, SftpHost};
 use noc_ops::Algorithm;
+use noc_ssh::askpass::PromptKind;
 use noc_vfs::Location;
+use secrecy::SecretString;
 use tokio_util::sync::CancellationToken;
 
 use crate::i18n::fl;
 use crate::tui::cells::{self};
 use crate::tui::configuration::{run_of, run_text};
 use crate::tui::describe::Reason;
-use crate::tui::dialog::{Ask, Button, Dialog, DialogEvent, Problem, Tone};
+use crate::tui::dialog::{Ask, Button, Dialog, DialogEvent, Problem, Reply, Tone};
 use crate::tui::keymap::Action;
 use crate::tui::panel::{
     Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
@@ -230,6 +232,7 @@ impl App {
         let state = Host::Connecting {
             connection,
             stop: stop.clone(),
+            declined: Vec::new(),
         };
         self.hosts.insert(host.to_owned(), state);
         vec![Effect::Connect {
@@ -636,10 +639,15 @@ impl App {
     /// Queues a dialog for a question from ssh.
     pub(crate) fn ask(&mut self, ask: Ask) {
         let dialog = Dialog::prompt(&ask.context, &ask.message, ask.kind);
+        // ssh takes a password, a code, or a server's question declined for an empty answer,
+        // which fails and is asked again; a host key or a confirmation declined ends there.
+        let stops = matches!(ask.kind, PromptKind::Secret | PromptKind::Question);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Ssh {
                 id: ask.id,
+                host: ask.context,
+                stops,
                 reply: Some(ask.reply),
             },
         });
@@ -650,8 +658,31 @@ impl App {
         let dialog = Dialog::notice(context, message);
         self.dialogs.push_back(Open {
             dialog,
-            purpose: Purpose::Ssh { id, reply: None },
+            purpose: Purpose::Ssh {
+                id,
+                host: context.to_owned(),
+                stops: false,
+                reply: None,
+            },
         });
+    }
+
+    /// Sends ssh the answer to a prompt from connecting to `host`. Declining one that `stops`
+    /// stops the attempt, and leaves the prompt unanswered until it ends.
+    pub(super) fn answer_ssh(
+        &mut self,
+        host: &str,
+        stops: bool,
+        reply: Reply,
+        answer: Option<SecretString>,
+    ) {
+        match self.hosts.get_mut(host) {
+            Some(Host::Connecting { stop, declined, .. }) if stops && answer.is_none() => {
+                stop.cancel();
+                declined.push(reply);
+            }
+            _ => reply.send(answer),
+        }
     }
 
     /// Closes the dialog of a prompt or notice that ssh no longer waits for.

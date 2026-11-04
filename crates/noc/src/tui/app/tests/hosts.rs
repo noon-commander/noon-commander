@@ -574,6 +574,72 @@ fn prompts_wait_their_turn_and_take_the_keys() {
 }
 
 #[test]
+fn declining_a_password_or_a_question_of_the_server_stops_connecting() {
+    for kind in [PromptKind::Secret, PromptKind::Question] {
+        let mut app = at_slash();
+        let Effect::Connect {
+            connection, stop, ..
+        } = one(enter_host(&mut app, Side::Left, 1))
+        else {
+            panic!("expected a connection");
+        };
+        let (prompt, answers) = ask(1, kind, "deploy@web's password: ");
+        app.ask(prompt);
+        app.handle(action(Action::Cancel));
+        assert!(stop.is_cancelled(), "{kind:?}: ssh would ask again");
+        assert_eq!(
+            answers.try_recv(),
+            Err(mpsc::TryRecvError::Empty),
+            "{kind:?}: ssh would send an empty answer to the server"
+        );
+        assert!(app.closed("web", connection, None).is_empty());
+        assert_eq!(
+            answers.try_recv(),
+            Err(mpsc::TryRecvError::Disconnected),
+            "{kind:?}: let go once the attempt ends"
+        );
+        assert!(app.dialogs.is_empty(), "{kind:?}: asked for, so no dialog");
+        assert_eq!(app.panel(Side::Left).pending_request(), None, "{kind:?}");
+    }
+}
+
+#[test]
+fn answers_that_are_not_a_refusal_go_to_ssh_and_connecting_goes_on() {
+    let mut app = at_slash();
+    let Effect::Connect { stop, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+        panic!("expected a connection");
+    };
+    let (password, password_answer) = ask(1, PromptKind::Secret, "Enter passphrase: ");
+    app.ask(password);
+    app.handle(action(Action::Confirm));
+    assert_eq!(
+        password_answer.try_recv(),
+        Ok(Some(String::new())),
+        "OK on nothing skips a key, as in ssh"
+    );
+    let (question, question_answer) = ask(2, PromptKind::Question, "Continue (yes/no)? ");
+    app.ask(question);
+    app.handle(action(Action::Confirm));
+    assert_eq!(question_answer.try_recv(), Ok(Some("no".to_owned())));
+    let (host_key, host_key_answer) = ask(3, PromptKind::HostKey, "Continue (yes/no)? ");
+    app.ask(host_key);
+    app.handle(action(Action::Cancel));
+    assert_eq!(
+        host_key_answer.try_recv(),
+        Ok(None),
+        "ssh ends on its own after a host key is declined"
+    );
+    assert!(!stop.is_cancelled());
+
+    // Declined without an attempt to stop, the prompt is answered.
+    let mut app = at_slash();
+    let (password, password_answer) = ask(1, PromptKind::Secret, "Password: ");
+    app.ask(password);
+    app.handle(action(Action::Cancel));
+    assert_eq!(password_answer.try_recv(), Ok(None));
+}
+
+#[test]
 fn dialogs_close_when_ssh_stops_waiting() {
     let mut app = at_slash();
     let (first, first_answer) = ask(1, PromptKind::Secret, "first");

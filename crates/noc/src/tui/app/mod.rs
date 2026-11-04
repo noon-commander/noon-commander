@@ -336,9 +336,12 @@ pub(crate) enum WorkspaceChange {
 /// about an earlier one are ignored.
 #[derive(Debug)]
 enum Host {
+    /// `declined` holds the prompts declined since it was asked to stop, unanswered while it
+    /// lasts: ssh would take the refusal for an empty answer and send it to the server.
     Connecting {
         connection: u64,
         stop: CancellationToken,
+        declined: Vec<Reply>,
     },
     Connected {
         connection: u64,
@@ -410,8 +413,14 @@ impl Open {
 
 #[derive(Debug)]
 enum Purpose {
-    /// A prompt from ssh, or a notice, which has no `reply`.
-    Ssh { id: u64, reply: Option<Reply> },
+    /// A prompt from ssh connecting to `host`, or a notice, which has no `reply`. Declining a
+    /// prompt that `stops` stops connecting: ssh would ask again.
+    Ssh {
+        id: u64,
+        host: String,
+        stops: bool,
+        reply: Option<Reply>,
+    },
     /// `g +` (`mark`) or `g -` in `panel`.
     Pattern { panel: PanelId, mark: bool },
     /// F7 in `panel`.

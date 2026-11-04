@@ -870,8 +870,11 @@ shows them as dialogs:
 
 Dialogs queue: a new prompt, say from a second host, waits until the one in use is answered,
 so it never takes over the keys mid-password. A dialog closes by itself when ssh stops
-waiting. The typed secret lives in memory reserved up front, so it is never copied by growing,
-and is wiped when the dialog closes; it is passed on as a `SecretString` and never logged.
+waiting. Cancel or Esc on a password, a code, or a server's question stops connecting, as ssh
+would take the refusal for an empty answer and ask again; the prompt goes unanswered until the
+attempt ends, so the empty answer never reaches the server. The typed secret lives in memory
+reserved up front, so it is never copied by growing, and is wiped when the dialog closes; it is
+passed on as a `SecretString` and never logged.
 Messages from ssh, which may quote the server, are shown terminal-safe.
 
 ## Command line

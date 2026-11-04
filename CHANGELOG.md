@@ -60,6 +60,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   no, what was typed did not show.
 - Dialogs dropped the spaces a line of their text starts with, such as the indent of the other
   names of a host key in ssh's question; such a line and the lines it breaks into keep them.
+- Cancel or Esc on a password, a code, or a server's question did not stop connecting: ssh sent
+  the server an empty answer and asked again. It stops connecting now, and sends nothing
+  ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
 
 ## [0.3.1] - 2026-11-01
 

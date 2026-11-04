@@ -30,6 +30,12 @@ problem by supporting only password-less authentication, which is not acceptable
   Any other text with `(yes/no` is a question of the server: Yes and No, whose No answers `no`.
   What lies between the ends, such as the fingerprint, is shown as it is, never parsed: its form
   changes between versions of OpenSSH.
+- A refusal from askpass reaches ssh as an empty answer: an empty password or code goes to the
+  server, fails, and is asked for again, up to `NumberOfPasswordPrompts` times. So Cancel or Esc
+  on a password, a code, or a question of the server stops connecting to the host, as Esc in a
+  waiting panel does. The prompt stays unanswered until ssh is gone, so that the empty answer
+  never reaches the server. OK on an empty field is the empty answer, with which ssh skips a key
+  whose passphrase it asked for. A host key declined ends the attempt in ssh itself.
 - Answers are held in `secrecy::SecretString` and are never logged or written to disk.
 - Protocol: one JSON line from the client (`token`, `context`, `prompt`, `hint`) and one JSON
   line back (`answer` with the text, or `cancel`). The server accepts connections only from

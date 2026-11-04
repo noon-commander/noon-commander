@@ -171,11 +171,12 @@ impl App {
     ) -> Vec<Effect> {
         let ok = event == DialogEvent::Pressed(Button::Ok);
         match purpose {
-            Purpose::Ssh { reply, .. } => {
-                if let Some(reply) = reply {
-                    reply.send(dialog.answer(event));
-                }
-            }
+            Purpose::Ssh {
+                host,
+                stops,
+                reply: Some(reply),
+                ..
+            } => self.answer_ssh(&host, stops, reply, dialog.answer(event)),
             Purpose::Pattern { panel, mark } if ok => self.mark_matching(panel, mark, dialog),
             Purpose::Mkdir { panel } if ok && !dialog.text().is_empty() => {
                 let resolved = self.panel_of(panel).map(|p| p.resolve(dialog.text()));
@@ -252,7 +253,8 @@ impl App {
             }
             Purpose::NotConnected { panel } => return self.not_connected_closed(panel, event),
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
-            Purpose::EditHost { .. }
+            Purpose::Ssh { reply: None, .. }
+            | Purpose::EditHost { .. }
             | Purpose::GoToDir { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveFile { .. }

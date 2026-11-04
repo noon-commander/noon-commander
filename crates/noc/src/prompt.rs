@@ -37,7 +37,7 @@ async fn ask(tty: &Tty, prompt: Prompt, events: &mut mpsc::Receiver<AskpassEvent
             prompt.context,
             prompt.message.trim_end()
         ),
-        PromptKind::Secret | PromptKind::HostKey => {
+        PromptKind::Secret | PromptKind::HostKey | PromptKind::Question => {
             format!("[{}] {}", prompt.context, prompt.message)
         }
     };
@@ -54,7 +54,7 @@ async fn ask(tty: &Tty, prompt: Prompt, events: &mut mpsc::Receiver<AskpassEvent
                             prompt.cancel();
                         }
                     }
-                    (Ok(line), PromptKind::Secret | PromptKind::HostKey) => {
+                    (Ok(line), _) => {
                         prompt.answer(SecretString::from(line.as_str()));
                     }
                     (Err(_), _) => prompt.cancel(),

@@ -77,6 +77,25 @@ fn questions_default_to_no() {
     dialog.handle(action(Action::Left));
     assert_eq!(confirm(&mut dialog).as_deref(), Some("yes"));
 
+    for kind in [
+        PromptKind::HostKey,
+        PromptKind::Confirm,
+        PromptKind::Question,
+    ] {
+        let dialog = Dialog::prompt("web", "Continue? (yes/no)", kind);
+        let no = dialog.answer(DialogEvent::Pressed(Button::No));
+        let said = no.as_ref().map(secrecy::ExposeSecret::expose_secret);
+        let expected = (kind == PromptKind::Question).then_some("no");
+        assert_eq!(said, expected, "No on {kind:?}");
+        assert!(dialog.answer(DialogEvent::Cancelled).is_none(), "{kind:?}");
+        let tone = if kind == PromptKind::HostKey {
+            Tone::Warning
+        } else {
+            Tone::Plain
+        };
+        assert_eq!(dialog.tone(), tone, "{kind:?}");
+    }
+
     let mut notice = Dialog::notice("web", "Confirm user presence for key");
     assert_eq!(
         notice.handle(action(Action::Cancel)),
@@ -199,7 +218,7 @@ fn the_default_button_is_bold_in_braces_with_the_focus_or_without() {
 #[test]
 fn draws_a_host_key_question_wrapped_and_terminal_safe() {
     let message = "The authenticity of host 'web (10.0.0.5)' can't be established.\n\
-            ED25519 key fingerprint is SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU.\n\
+            ED25519 key fingerprint is: SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU\n\
             This key is not known by any other names.\x1b[2J\n\
             Are you sure you want to continue connecting (yes/no/[fingerprint])? ";
     let dialog = Dialog::prompt("web", message, PromptKind::HostKey);

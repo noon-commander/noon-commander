@@ -19,6 +19,17 @@ problem by supporting only password-less authentication, which is not acceptable
   unset) to the TUI over the Unix socket and prints the answer to stdout.
 - The TUI shows a modal dialog: masked input for passwords and codes, yes/no for host keys, and a
   notice for FIDO touch requests (hint `none`).
+- ssh tells askpass nothing but the text and the hint; whether to echo the answer does not reach
+  it. So a question about a host key is known by its text, which OpenSSH never translates: it
+  starts with `The authenticity of host` and ends with `(yes/no/[fingerprint])?`, starts with
+  `Warning: the` and ends with `(yes/no)?`, or is `Accept updated hostkeys? (yes/no):` or one of
+  the questions ssh asks again after another answer (`HOST_KEY_QUESTIONS` in `askpass.rs`). Both
+  ends count: ssh puts `(user@host)` before any text a server sends through keyboard-interactive
+  authentication, so a server cannot pass its question for one about a host key. Such a question
+  shows in the colors of warnings.
+  Any other text with `(yes/no` is a question of the server: Yes and No, whose No answers `no`.
+  What lies between the ends, such as the fingerprint, is shown as it is, never parsed: its form
+  changes between versions of OpenSSH.
 - Answers are held in `secrecy::SecretString` and are never logged or written to disk.
 - Protocol: one JSON line from the client (`token`, `context`, `prompt`, `hint`) and one JSON
   line back (`answer` with the text, or `cancel`). The server accepts connections only from

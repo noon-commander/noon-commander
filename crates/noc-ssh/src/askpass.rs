@@ -36,22 +36,51 @@ const MAX_MESSAGE: u64 = 64 * 1024;
 pub enum PromptKind {
     /// Masked input: passwords, passphrases, PINs, one-time codes.
     Secret,
-    /// A question about an unknown or changed host key, answered with `yes` or `no`.
+    /// A question of ssh about a host key, answered with `yes` or `no`.
     HostKey,
     /// A yes/no confirmation (`SSH_ASKPASS_PROMPT=confirm`): answer `yes`, or cancel to deny.
     Confirm,
+    /// Any other question that wants `yes` or `no`, such as one a server asks through
+    /// keyboard-interactive authentication.
+    Question,
 }
+
+/// The questions of ssh about host keys, by how they start and end: an unknown host, and a key
+/// that differs from the one of the address. ssh passes askpass nothing but the text, which
+/// OpenSSH never translates. Matching the start keeps out text a server sends through
+/// keyboard-interactive authentication, to which ssh puts `(user@host) ` first.
+const HOST_KEY_QUESTIONS: &[(&str, &str)] = &[
+    ("The authenticity of host '", "(yes/no/[fingerprint])? "),
+    ("Warning: the ", "(yes/no)? "),
+];
+
+/// The other questions of ssh about host keys, whole: `UpdateHostKeys=ask`, and the ones it
+/// asks again after an answer that is neither `yes` nor `no`.
+const HOST_KEY_QUESTIONS_WHOLE: &[&str] = &[
+    "Accept updated hostkeys? (yes/no): ",
+    "Please type 'yes' or 'no': ",
+    "Please type 'yes', 'no' or the fingerprint: ",
+];
 
 impl PromptKind {
     fn classify(hint: Option<&str>, message: &str) -> Self {
         if hint == Some("confirm") {
             Self::Confirm
-        } else if message.contains("(yes/no") {
+        } else if is_host_key_question(message) {
             Self::HostKey
+        } else if message.contains("(yes/no") {
+            Self::Question
         } else {
             Self::Secret
         }
     }
+}
+
+fn is_host_key_question(message: &str) -> bool {
+    HOST_KEY_QUESTIONS
+        .iter()
+        .any(|&(start, end)| message.starts_with(start) && message.ends_with(end))
+        || HOST_KEY_QUESTIONS_WHOLE.contains(&message)
 }
 
 /// A question from ssh that needs an answer.
@@ -493,12 +522,49 @@ mod tests {
         let (_dir, server, mut events) = server();
         let cases = [
             (
-                "Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
+                "The authenticity of host 'web (10.0.0.5)' can't be established.\n\
+                 ED25519 key fingerprint is: SHA256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU\n\
+                 Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
                 None,
                 PromptKind::HostKey,
             ),
+            (
+                "Warning: the ED25519 host key for 'web' differs from the key for the IP \
+                 address '10.0.0.5'\nOffending key for IP in /home/u/.ssh/known_hosts:3\n\
+                 Are you sure you want to continue connecting (yes/no)? ",
+                None,
+                PromptKind::HostKey,
+            ),
+            (
+                "Accept updated hostkeys? (yes/no): ",
+                None,
+                PromptKind::HostKey,
+            ),
+            ("Please type 'yes' or 'no': ", None, PromptKind::HostKey),
+            (
+                "Please type 'yes', 'no' or the fingerprint: ",
+                None,
+                PromptKind::HostKey,
+            ),
+            (
+                "(deploy@web) Continue connecting (yes/no/[fingerprint])? ",
+                None,
+                PromptKind::Question,
+            ),
+            (
+                "(deploy@web) The authenticity of host 'web' can't be established.\n\
+                 Are you sure you want to continue connecting (yes/no/[fingerprint])? ",
+                None,
+                PromptKind::Question,
+            ),
+            (
+                "(deploy@web) Accept updated hostkeys? (yes/no): ",
+                None,
+                PromptKind::Question,
+            ),
             ("Allow use of key? ", Some("confirm"), PromptKind::Confirm),
             ("Verification code: ", None, PromptKind::Secret),
+            ("deploy@web's password: ", None, PromptKind::Secret),
         ];
         for (message, hint, kind) in cases {
             let client = invocation(&server.env("web"), message, hint);

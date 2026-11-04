@@ -236,6 +236,10 @@ fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
             Dialog::prompt("web", "yes?", PromptKind::HostKey),
         ),
         (
+            "question",
+            Dialog::prompt("web", "yes?", PromptKind::Question),
+        ),
+        (
             "file exists",
             question(vec![
                 Button::Overwrite,

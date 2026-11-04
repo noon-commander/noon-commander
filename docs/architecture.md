@@ -863,7 +863,9 @@ and returns the answer. The command-line subcommands answer prompts on `/dev/tty
 shows them as dialogs:
 
 - passwords, passphrases, PINs, and codes: a masked field, OK, and Cancel;
-- host keys and confirmations: ssh's question, Yes, and No, which is the default;
+- host keys: ssh's question in the colors of warnings, Yes, and No, which is the default;
+- confirmations, and yes/no questions of a server: the question, Yes, and No, which is the
+  default; for a server's question No answers `no`, where declining would answer nothing;
 - notices, such as a request to touch a security key: shown until ssh is done.
 
 Dialogs queue: a new prompt, say from a second host, waits until the one in use is answered,

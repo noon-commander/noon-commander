@@ -45,6 +45,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ending: Retry in Connection connects again, and the job goes on where it was, copying again
   only the file it was cut off in; Cancel ends it
   ([ADR 0064](docs/adr/0064-jobs-wait-for-a-lost-host.md)).
+- The question of ssh about a host key shows in the colors of warnings. A yes/no question from
+  a server shows as a question of its own, in the colors of dialogs, whose No answers `no`; it can
+  no longer pass for one about a host key ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
 
 ### Fixed
 
@@ -53,6 +56,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   copy failed file by file. The job ends now.
 - A copy retried after a failure that also kept it from removing what it wrote asked whether to
   replace that file, or left its temporary file behind.
+- When ssh asked again about a host key on the terminal, after an answer that was neither yes nor
+  no, what was typed did not show.
 
 ## [0.3.1] - 2026-11-01
 

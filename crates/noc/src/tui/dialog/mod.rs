@@ -318,6 +318,9 @@ pub(crate) struct Dialog {
     /// Widest the dialog gets, in cells, borders included.
     width: u16,
     tone: Tone,
+    /// No answers `no` rather than declining: a server asking through ssh gets an empty answer
+    /// when the prompt is declined, which it need not take for `no`.
+    answers_no: bool,
     /// Its first field holds a path, which Tab completes.
     completes: bool,
     /// Where its first field was drawn last, for the list of completions under it.
@@ -344,15 +347,19 @@ pub(crate) struct Dialog {
 
 impl Dialog {
     /// A dialog for a prompt of `kind`: a masked field with OK and Cancel for secrets, Yes and
-    /// No (with the focus) for questions. `context` is the host alias.
+    /// No (with the focus) for questions, in the colors of warnings for host keys. `context` is
+    /// the host alias.
     pub(crate) fn prompt(context: &str, message: &str, kind: PromptKind) -> Self {
+        let question =
+            |tone| Self::question(context, message, vec![Button::Yes, Button::No], 1, tone);
         match kind {
             PromptKind::Secret => Self::new(context, message, vec![Button::Ok, Button::Cancel])
                 .with_part_field(LabelledField::unlabelled(Field::secret())),
-            PromptKind::HostKey | PromptKind::Confirm => Self {
-                default: 1,
-                focus: Focus::Button(1),
-                ..Self::new(context, message, vec![Button::Yes, Button::No])
+            PromptKind::HostKey => question(Tone::Warning),
+            PromptKind::Confirm => question(Tone::Plain),
+            PromptKind::Question => Self {
+                answers_no: true,
+                ..question(Tone::Plain)
             },
         }
     }
@@ -578,6 +585,7 @@ impl Dialog {
             focus: Focus::Button(0),
             width: MAX_WIDTH,
             tone: Tone::Plain,
+            answers_no: false,
             completes: false,
             field_area: Cell::new(None),
             cursor: Cell::new(None),
@@ -750,7 +758,7 @@ impl Dialog {
     }
 
     /// The answer for ssh after `event`: the secret for OK on a secret prompt, `yes` for Yes,
-    /// and `None` to decline.
+    /// `no` for No on a question of a server, and `None` to decline.
     pub(crate) fn answer(&self, event: DialogEvent) -> Option<SecretString> {
         match (event, self.fields.first()) {
             (DialogEvent::Pressed(Button::Ok), Some(LabelledField { field, .. })) => {
@@ -758,6 +766,9 @@ impl Dialog {
                 Some(SecretString::from(field.text()))
             }
             (DialogEvent::Pressed(Button::Yes), _) => Some(SecretString::from("yes")),
+            (DialogEvent::Pressed(Button::No), _) if self.answers_no => {
+                Some(SecretString::from("no"))
+            }
             _ => None,
         }
     }

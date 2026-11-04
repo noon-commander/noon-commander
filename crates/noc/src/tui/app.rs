@@ -682,6 +682,16 @@ enum FieldHosts {
     None,
 }
 
+/// What the path field of a dialog completes, from [`App::completion_of`].
+struct FieldCompletion {
+    /// The directory a relative path starts from.
+    here: Location,
+    /// Where `:` without a host starts a local path, in Go to directory only.
+    last_local: Option<PathBuf>,
+    offer: Offer,
+    hosts: FieldHosts,
+}
+
 /// Where a completion goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Completes {
@@ -3995,19 +4005,48 @@ impl App {
     }
 
     /// What the path field of a dialog for `purpose` completes: from which directory, what it
-    /// takes, and which hosts.
-    fn completion_of(&self, purpose: &Purpose) -> Option<(Location, Offer, FieldHosts)> {
+    /// takes, and which hosts; and where `:` starts, for Go to directory only.
+    fn completion_of(&self, purpose: &Purpose) -> Option<FieldCompletion> {
         let (panel, offer, hosts) = match purpose {
             Purpose::GoToDir { panel } => (*panel, Offer::Dirs, FieldHosts::All),
             Purpose::Transfer { panel, .. } => (*panel, Offer::Any, FieldHosts::Connected),
             Purpose::Mkdir { panel } => (*panel, Offer::Dirs, FieldHosts::None),
             Purpose::SaveFile { dir, .. } => {
-                return Some((dir.clone(), Offer::Any, FieldHosts::None));
+                return Some(FieldCompletion {
+                    here: dir.clone(),
+                    last_local: None,
+                    offer: Offer::Any,
+                    hosts: FieldHosts::None,
+                });
             }
             _ => return None,
         };
-        let dir = self.panel_of(panel)?.location().clone();
-        Some((dir, offer, hosts))
+        let shown = self.panel_of(panel)?;
+        let last_local =
+            matches!(purpose, Purpose::GoToDir { .. }).then(|| self.last_local(shown).0);
+        Some(FieldCompletion {
+            here: shown.location().clone(),
+            last_local,
+            offer,
+            hosts,
+        })
+    }
+
+    /// Where `:` leads in Go to directory of `panel`: its directory if it is local, else the
+    /// last local one it showed, else the home directory; as a path, and as where to go with
+    /// the cursor where it was.
+    fn last_local(&self, panel: &Panel) -> (PathBuf, Destination) {
+        let destination = match panel.location() {
+            Location::Local(_) => panel.here(),
+            Location::Remote { .. } => panel
+                .last_local()
+                .unwrap_or_else(|| Destination::to(Location::Local(self.home.clone()))),
+        };
+        let dir = match destination.location() {
+            Location::Local(dir) => dir.clone(),
+            Location::Remote { .. } => self.home.clone(),
+        };
+        (dir, destination)
     }
 
     /// Completes the path before the cursor in the field of the dialog in front: lists the
@@ -4019,7 +4058,13 @@ impl App {
         if !open.dialog.completes() {
             return Vec::new();
         }
-        let Some((here, offer, hosts)) = self.completion_of(&open.purpose) else {
+        let Some(FieldCompletion {
+            here,
+            last_local,
+            offer,
+            hosts,
+        }) = self.completion_of(&open.purpose)
+        else {
             return Vec::new();
         };
         let Some(open) = self.dialogs.front_mut() else {
@@ -4041,14 +4086,21 @@ impl App {
             FieldHosts::Connected => connected.iter().any(|known| known == host),
             FieldHosts::None => false,
         };
-        let split = complete::split(&before, is_host);
+        let split = complete::split(&before, last_local.is_some(), is_host);
         let word = match before.split_once(':') {
+            Some(("", _)) if last_local.is_some() => 1,
             Some((host, _)) if !host.is_empty() && !host.contains('/') && is_host(host) => {
                 host.len() + 1
             }
             _ => 0,
         };
-        let dir = cd::directory(&split.dir, &here, &self.home, is_host);
+        let dir = cd::directory(
+            &split.dir,
+            &here,
+            &self.home,
+            last_local.as_deref(),
+            is_host,
+        );
         // A host that is not connected has nothing to list.
         let host = self.handle_for(&dir).unwrap_or(None);
         let list_hosts = split.hosts && hosts == FieldHosts::All;
@@ -4126,7 +4178,7 @@ impl App {
                 with_dirs: false,
             }];
         }
-        let dir = cd::directory(&word.dir, &here, &self.home, |_| false);
+        let dir = cd::directory(&word.dir, &here, &self.home, None, |_| false);
         // A command named by its path, as vim's `:!` completes it: directories and programs.
         if word.first
             && let Location::Local(path) = &dir
@@ -6908,13 +6960,18 @@ impl App {
             return Vec::new();
         };
         let here = tab.panel.location();
-        let Some(location) = cd::target(text, here, &self.home, tab.previous.as_ref()) else {
+        let (dir, last_local) = self.last_local(&tab.panel);
+        let Some(location) = cd::target(text, here, &self.home, &dir, tab.previous.as_ref()) else {
             return Vec::new();
         };
         if location == *here {
             return Vec::new();
         }
-        let destination = tab.panel.destination(location);
+        let destination = if location == *last_local.location() {
+            last_local
+        } else {
+            tab.panel.destination(location)
+        };
         self.go(panel, destination)
     }
 
@@ -17584,6 +17641,58 @@ mod tests {
         assert!(go_to_dir(&mut app, "").is_empty());
         assert!(go_to_dir(&mut app, ".").is_empty());
         assert_eq!(app.context(), Context::Panel);
+    }
+
+    #[test]
+    fn g_d_with_a_colon_leaves_a_host_for_the_last_local_directory() {
+        // The left panel went to web from /.
+        let (mut app, _) = on_a_host();
+        let effects = go_to_dir(&mut app, ":");
+        let [Effect::List { request, .. }] = &effects[..] else {
+            panic!("expected a listing, got {effects:?}");
+        };
+        assert_eq!(request.location, local("/"));
+        answer(&mut app, effects, &Listing::Dir(vec![dir("srv")]));
+        assert_eq!(app.panel(Side::Left).location(), &local("/"));
+        assert!(go_to_dir(&mut app, ":").is_empty(), "already there");
+
+        let (mut app, _) = on_a_host();
+        let [Effect::List { request, .. }] = &go_to_dir(&mut app, ":srv/www")[..] else {
+            panic!("expected a listing");
+        };
+        assert_eq!(
+            request.location,
+            local("/srv/www"),
+            "from the last local directory"
+        );
+        let (mut app, _) = on_a_host();
+        let [Effect::List { request, .. }] = &go_to_dir(&mut app, ":~/src")[..] else {
+            panic!("expected a listing");
+        };
+        assert_eq!(request.location, local("/home/me/src"));
+        let (mut app, _) = on_a_host();
+        let [Effect::List { request, .. }] = &go_to_dir(&mut app, "/etc")[..] else {
+            panic!("expected a listing");
+        };
+        assert_eq!(
+            request.location,
+            remote("web", "/etc"),
+            "without it, on the host"
+        );
+    }
+
+    #[test]
+    fn g_d_completes_local_paths_after_a_colon_on_a_host() {
+        let (mut app, _) = on_a_host();
+        app.handle(action(Action::GoToDir));
+        type_text(&mut app, ":sr");
+        let (generation, dir, through, hosts) =
+            names_request(&app.handle(action(Action::Complete)));
+        assert_eq!((dir, through, hosts), (local("/"), false, false));
+        app.names(generation, Ok(names_of(&[("srv", true)])), &[]);
+        assert_eq!(field(&app), ":srv/|");
+        let (_, dir, ..) = names_request(&app.handle(action(Action::Complete)));
+        assert_eq!(dir, local("/srv"));
     }
 
     #[test]

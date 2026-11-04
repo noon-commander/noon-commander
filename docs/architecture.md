@@ -357,7 +357,10 @@ the other one, as the [location menu](#location-menu) does, and opens the path i
 `cd` in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
 directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
 `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
-and `~` is the remote home. [Completion](#completion) reads from the panel's directory too.
+and `~` is the remote home. `:` without a host is local, from a host too: `:` alone is the panel's
+last local directory, with the cursor where it was, and `:path` starts there
+([ADR 0065](adr/0065-a-colon-without-a-host-is-local.md)). [Completion](#completion) reads from
+the panel's directory too.
 `cd ..` puts the cursor on the directory left, as `h` does; a
 path that is not there leaves the panel where it is, with the reason below the listing. The Go to
 button of a listing that failed opens it for the panel that failed. It is in F9 → Command.

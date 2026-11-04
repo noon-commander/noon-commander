@@ -113,8 +113,9 @@ pub(crate) struct Split {
 }
 
 /// Cuts `before`, the text before the cursor: after its last `/`; else after `host:` where
-/// `is_host` takes the text before the first `:`; else at its start, where hosts may be meant.
-pub(crate) fn split(before: &str, is_host: impl Fn(&str) -> bool) -> Split {
+/// `is_host` takes the text before the first `:`, or after a `:` at its start where `local`
+/// says that it starts a local path; else at its start, where hosts may be meant.
+pub(crate) fn split(before: &str, local: bool, is_host: impl Fn(&str) -> bool) -> Split {
     if let Some(slash) = before.rfind('/') {
         return Split {
             dir: before[..=slash].to_owned(),
@@ -123,8 +124,7 @@ pub(crate) fn split(before: &str, is_host: impl Fn(&str) -> bool) -> Split {
         };
     }
     if let Some((host, rest)) = before.split_once(':')
-        && !host.is_empty()
-        && is_host(host)
+        && (host.is_empty() && local || !host.is_empty() && is_host(host))
     {
         return Split {
             dir: format!("{host}:"),
@@ -542,7 +542,7 @@ mod tests {
     #[test]
     fn splits_after_the_last_slash_or_a_host() {
         let hosts = |host: &str| host == "web";
-        let cut = |before: &str| split(before, hosts);
+        let cut = |before: &str| split(before, false, hosts);
         assert_eq!(
             cut("/srv/www/lo"),
             Split {
@@ -572,6 +572,17 @@ mod tests {
         assert_eq!(cut("db:x").dir, "");
         assert_eq!(cut("db:x").prefix, "db:x");
         assert_eq!(cut("").prefix, "");
+        // A colon at the start is a name, unless the field takes it as the local side.
+        assert_eq!(cut(":sr").dir, "");
+        assert_eq!(
+            split(":sr", true, hosts),
+            Split {
+                dir: ":".to_owned(),
+                prefix: "sr".to_owned(),
+                hosts: false,
+            }
+        );
+        assert_eq!(split(":/srv/w", true, hosts).dir, ":/srv/");
     }
 
     #[test]

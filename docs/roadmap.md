@@ -100,7 +100,8 @@
 - [x] Release workflow from signed tags: macOS binaries for arm64 and x86_64 with build
       provenance attestations, and a Homebrew tap
       ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
-- [x] Go to directory (`g d`), as mc's Quick cd, with `~`, `..`, `-`, and `host:path`
+- [x] Go to directory (`g d`), as mc's Quick cd, with `~`, `..`, `-`, `host:path`, and `:path`
+  for the local side ([ADR 0065](adr/0065-a-colon-without-a-host-is-local.md))
 - [x] Tab completion of paths in Go to directory, F5, F6, and F7, with a list of choices
 - [x] Shift+F6 renames the entry under the cursor in its row, in Insert mode with the cursor
       before the last extension

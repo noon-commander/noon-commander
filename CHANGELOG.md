@@ -7,6 +7,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Go to directory (`g d`) leaves a host for a local directory with `:`: `:` alone goes back to
+  the last local directory of the panel, `:path` starts there, and `:/…` and `:~/…` are local,
+  with Tab completing them. A name that starts with a colon is `./:name`
+  ([ADR 0065](docs/adr/0065-a-colon-without-a-host-is-local.md)).
+
 ### Changed
 
 - F10 and `Z Z` always ask before quitting: Yes is the default, or No while jobs run.

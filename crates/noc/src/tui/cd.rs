@@ -11,6 +11,9 @@ use noc_vfs::{Location, RemotePath};
 /// - `host:path` is on that host, scp-style: the text before the first `:` is not empty and
 ///   has no `/` (write `./a:b` for a local name with a colon); `host:` alone, `host:~` and
 ///   `host:~/…` start at its home directory, a relative path too;
+/// - `:path`, with no host, is local, from a host too: `:` alone is `last_local`, the panel's
+///   last local directory, and a relative path starts there (write `./:a` for a name that
+///   starts with a colon);
 /// - `~` and `~/…` are the home directory, `home` locally and the remote one on a host;
 /// - `/…` is absolute on the panel's side: local, or on its host;
 /// - anything else is relative to `here`; from the volumes and hosts, to `home`.
@@ -21,6 +24,7 @@ pub(crate) fn target(
     text: &str,
     here: &Location,
     home: &Path,
+    last_local: &Path,
     previous: Option<&Location>,
 ) -> Option<Location> {
     let text = text.trim();
@@ -30,18 +34,25 @@ pub(crate) fn target(
     if text == "-" {
         return previous.cloned();
     }
-    Some(directory(text, here, home, |_| true))
+    Some(directory(text, here, home, Some(last_local), |_| true))
 }
 
 /// The directory that `text` names from `here`, as [`target`] reads it, for completion: the
-/// empty text is `here` itself (the home directory from the volumes and hosts), and `host:`
-/// starts a host only where `is_host` takes it; else the text is a local name with a colon.
+/// empty text is `here` itself (the home directory from the volumes and hosts), `host:`
+/// starts a host only where `is_host` takes it, and `:` the local directory `last_local` only
+/// where there is one; else the text is a local name with a colon.
 pub(crate) fn directory(
     text: &str,
     here: &Location,
     home: &Path,
+    last_local: Option<&Path>,
     is_host: impl Fn(&str) -> bool,
 ) -> Location {
+    if let Some(dir) = last_local
+        && let Some(rest) = text.strip_prefix(':')
+    {
+        return Location::Local(local(dir, home, rest));
+    }
     if let Location::Remote { host, path } = Location::parse(text)
         && is_host(&host)
     {
@@ -123,6 +134,8 @@ mod tests {
     use super::*;
 
     const HOME: &str = "/home/me";
+    /// The last local directory of the panels of these tests.
+    const LAST_LOCAL: &str = "/srv/www";
 
     fn local_at(path: &str) -> Location {
         Location::Local(PathBuf::from(path))
@@ -136,7 +149,7 @@ mod tests {
     }
 
     fn cd(text: &str, here: &Location) -> Option<Location> {
-        target(text, here, Path::new(HOME), None)
+        target(text, here, Path::new(HOME), Path::new(LAST_LOCAL), None)
     }
 
     #[test]
@@ -200,19 +213,58 @@ mod tests {
     }
 
     #[test]
+    fn a_colon_without_a_host_is_local_from_a_host_too() {
+        for here in [remote_at("web", "/var/www"), local_at("/etc")] {
+            for (text, expected) in [
+                (":", LAST_LOCAL),
+                (" : ", LAST_LOCAL),
+                (":logs", "/srv/www/logs"),
+                (":..", "/srv"),
+                (":/etc/../var", "/var"),
+                (":~", HOME),
+                (":~/src", "/home/me/src"),
+                (":db:x", "/srv/www/db:x"),
+            ] {
+                assert_eq!(
+                    cd(text, &here),
+                    Some(local_at(expected)),
+                    "{text} from {here:?}"
+                );
+            }
+        }
+        assert_eq!(
+            cd("./:a", &remote_at("web", "/var")),
+            Some(remote_at("web", "/var/:a")),
+            "a name that starts with a colon"
+        );
+        assert_eq!(cd("./:a", &local_at("/etc")), Some(local_at("/etc/:a")));
+    }
+
+    #[test]
     fn directories_for_completion_take_only_the_hosts_they_are_told() {
         let here = local_at("/srv");
         let home = Path::new(HOME);
-        assert_eq!(directory("", &here, home, |_| true), here);
+        let last = Some(Path::new(LAST_LOCAL));
+        assert_eq!(directory("", &here, home, last, |_| true), here);
         assert_eq!(
-            directory("web:/var/", &here, home, |host| host == "web"),
+            directory("web:/var/", &here, home, last, |host| host == "web"),
             remote_at("web", "/var")
         );
         assert_eq!(
-            directory("db:x/", &here, home, |host| host == "web"),
+            directory("db:x/", &here, home, last, |host| host == "web"),
             local_at("/srv/db:x")
         );
-        assert_eq!(directory("a/../", &here, home, |_| false), here);
+        assert_eq!(directory("a/../", &here, home, last, |_| false), here);
+        let web = remote_at("web", "/var");
+        assert_eq!(
+            directory(":a/", &web, home, last, |_| false),
+            local_at("/srv/www/a")
+        );
+        assert_eq!(
+            directory(":a/", &web, home, None, |_| false),
+            remote_at("web", "/var/:a"),
+            "without a local directory, a colon is a name"
+        );
     }
 
     #[test]
@@ -220,7 +272,13 @@ mod tests {
         let here = local_at("/srv");
         let before = remote_at("web", "/var");
         assert_eq!(
-            target("-", &here, Path::new(HOME), Some(&before)),
+            target(
+                "-",
+                &here,
+                Path::new(HOME),
+                Path::new(LAST_LOCAL),
+                Some(&before)
+            ),
             Some(before)
         );
         assert_eq!(cd("-", &here), None);

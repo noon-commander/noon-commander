@@ -24,6 +24,7 @@ use super::label::Label;
 use super::mouse::Scroll;
 use super::picker::{Body, Picker, ShownRow};
 use super::search::{GlyphSpots, Input, Kind, Switch};
+use super::spinner::Wait;
 use crate::i18n::fl;
 
 mod colors;
@@ -343,6 +344,9 @@ pub(crate) struct Dialog {
     picker: Option<Box<Picker>>,
     /// Where the picker was drawn last, for the mouse.
     picker_area: Cell<Option<Rect>>,
+    /// What the dialog waits for, such as ssh that waits for a touch of a security key: dots
+    /// turn in front of its title.
+    wait: Option<Wait>,
 }
 
 impl Dialog {
@@ -364,9 +368,14 @@ impl Dialog {
         }
     }
 
-    /// Information from ssh that needs no answer, such as a request to touch a security key.
+    /// Information from ssh that needs no answer, such as a request to touch a security key,
+    /// shown while ssh waits for it: the dots turn in front of the title, and Cancel stops
+    /// connecting.
     pub(crate) fn notice(context: &str, message: &str) -> Self {
-        Self::new(context, message, vec![Button::Ok])
+        Self {
+            wait: Some(Wait::default()),
+            ..Self::new(context, message, vec![Button::Cancel])
+        }
     }
 
     /// A question in `tone` with `buttons`, of which `default` has the focus.
@@ -596,7 +605,13 @@ impl Dialog {
             bar: Cell::new(None),
             picker: None,
             picker_area: Cell::new(None),
+            wait: None,
         }
+    }
+
+    /// What the dialog waits for, whose dots turn in front of its title.
+    pub(crate) fn wait(&self) -> Option<&Wait> {
+        self.wait.as_ref()
     }
 
     /// The scroll bar of a message that did not fit at the last render, for the mouse.

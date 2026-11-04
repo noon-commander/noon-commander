@@ -1,0 +1,11 @@
+---
+source: crates/noc/src/tui/dialog/tests/basics.rs
+expression: terminal.backend()
+---
+"                                                  "
+"  ╔═════════════════ | web ════════════════════╗  "
+"  ║ Confirm user presence for key ECDSA-SK     ║  "
+"  ╟────────────────────────────────────────────╢  "
+"  ║                 { Cancel }                 ║  "
+"  ╚════════════════════════════════════════════╝  "
+"                                                  "

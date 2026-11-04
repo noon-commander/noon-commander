@@ -653,7 +653,8 @@ impl App {
         });
     }
 
-    /// Queues a dialog for information from ssh.
+    /// Queues a dialog for information from ssh, whose Cancel stops connecting: ssh waits for
+    /// something done outside, such as a touch of a security key, which the dialog cannot do.
     pub(crate) fn notice(&mut self, id: u64, context: &str, message: &str) {
         let dialog = Dialog::notice(context, message);
         self.dialogs.push_back(Open {
@@ -661,27 +662,32 @@ impl App {
             purpose: Purpose::Ssh {
                 id,
                 host: context.to_owned(),
-                stops: false,
+                stops: true,
                 reply: None,
             },
         });
     }
 
-    /// Sends ssh the answer to a prompt from connecting to `host`. Declining one that `stops`
-    /// stops the attempt, and leaves the prompt unanswered until it ends.
+    /// Sends ssh the answer to a prompt from connecting to `host`, if it has a `reply`.
+    /// Declining one that `stops` stops the attempt, and leaves the prompt unanswered until it
+    /// ends.
     pub(super) fn answer_ssh(
         &mut self,
         host: &str,
         stops: bool,
-        reply: Reply,
+        reply: Option<Reply>,
         answer: Option<SecretString>,
     ) {
         match self.hosts.get_mut(host) {
             Some(Host::Connecting { stop, declined, .. }) if stops && answer.is_none() => {
                 stop.cancel();
-                declined.push(reply);
+                declined.extend(reply);
             }
-            _ => reply.send(answer),
+            _ => {
+                if let Some(reply) = reply {
+                    reply.send(answer);
+                }
+            }
         }
     }
 

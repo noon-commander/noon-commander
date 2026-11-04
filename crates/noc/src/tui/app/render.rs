@@ -82,6 +82,7 @@ impl App {
 
     /// What waits on screen, each with a spinner.
     fn waits(&self) -> Vec<&Wait> {
+        let dialog = self.dialogs.front().and_then(|open| open.dialog.wait());
         if let Some(viewing) = &self.viewing {
             return viewing
                 .viewer
@@ -89,6 +90,7 @@ impl App {
                 .then_some(&viewing.wait)
                 .into_iter()
                 .chain(viewing.reading.as_ref().and_then(Reading::wait))
+                .chain(dialog)
                 .collect();
         }
         let panels = [Side::Left, Side::Right].map(|side| {
@@ -102,6 +104,7 @@ impl App {
             .chain(self.jump.as_ref().and_then(JumpMenu::wait))
             .chain(self.find.as_ref().and_then(FindWindow::wait))
             .chain(self.in_front().and_then(|job| job.view.shining()))
+            .chain(dialog)
             .collect()
     }
 
@@ -330,7 +333,7 @@ impl App {
         stage: &mut Stage,
     ) {
         if self.viewer_over() {
-            self.render_dialogs(frame, panels, stage);
+            self.render_dialogs(frame, panels, spin, stage);
             return;
         }
         let middle = |window| (window, Grows::FromMiddle);
@@ -378,12 +381,18 @@ impl App {
                 results.window.render(frame, panels, theme);
             });
         }
-        self.render_dialogs(frame, panels, stage);
+        self.render_dialogs(frame, panels, spin, stage);
     }
 
     /// The dialog in front, over the one it is about if it is an error about it, and the list of
     /// completions of its field.
-    fn render_dialogs(&mut self, frame: &mut Frame<'_>, panels: Rect, stage: &mut Stage) {
+    fn render_dialogs(
+        &mut self,
+        frame: &mut Frame<'_>,
+        panels: Rect,
+        spin: &Spin,
+        stage: &mut Stage,
+    ) {
         let middle = |window| (window, Grows::FromMiddle);
         let theme = &self.theme;
         if let Some(open) = self.dialogs.front() {
@@ -400,7 +409,7 @@ impl App {
                 frame,
                 middle(zoom::Window::Dialog(open.dialog.id())),
                 |frame| {
-                    open.dialog.render(frame, panels, theme);
+                    open.dialog.render_spun(frame, panels, theme, spin);
                 },
             );
             if let Some(choices) = choices_for(&mut self.completion, Completes::Field)

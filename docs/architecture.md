@@ -866,7 +866,9 @@ shows them as dialogs:
 - host keys: ssh's question in the colors of warnings, Yes, and No, which is the default;
 - confirmations, and yes/no questions of a server: the question, Yes, and No, which is the
   default; for a server's question No answers `no`, where declining would answer nothing;
-- notices, such as a request to touch a security key: shown until ssh is done.
+- notices, such as a request to touch a security key: shown until ssh is done, the dots turning
+  in front of the title, with Cancel, which stops connecting: the touch is not done in the
+  dialog, so it has nothing to confirm.
 
 Dialogs queue: a new prompt, say from a second host, waits until the one in use is answered,
 so it never takes over the keys mid-password. A dialog closes by itself when ssh stops

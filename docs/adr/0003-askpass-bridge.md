@@ -18,7 +18,9 @@ problem by supporting only password-less authentication, which is not acceptable
   as a small client: it sends the prompt and the `SSH_ASKPASS_PROMPT` hint (`confirm`, `none`, or
   unset) to the TUI over the Unix socket and prints the answer to stdout.
 - The TUI shows a modal dialog: masked input for passwords and codes, yes/no for host keys, and a
-  notice for FIDO touch requests (hint `none`).
+  notice for FIDO touch requests (hint `none`). A notice waits for something done outside, a touch
+  of a key or Touch ID, so its dots turn in front of its title, and its one button is Cancel,
+  which stops connecting: an OK would hide the dialog alone while ssh waited on.
 - ssh tells askpass nothing but the text and the hint; whether to echo the answer does not reach
   it. So a question about a host key is known by its text, which OpenSSH never translates: it
   starts with `The authenticity of host` and ends with `(yes/no/[fingerprint])?`, starts with

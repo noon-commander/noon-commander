@@ -653,9 +653,50 @@ fn dialogs_close_when_ssh_stops_waiting() {
     assert!(second_answer.try_recv().is_err());
     assert!(screen(&mut app).contains("Confirm user presence"));
     app.handle(action(Action::Confirm));
-    assert_eq!(app.context(), Context::Panel, "OK dismisses a notice");
+    assert_eq!(app.context(), Context::Panel, "Cancel closes a notice");
 
     app.notice(4, "web", "Touch your key");
     app.prompt_closed(4);
     assert_eq!(app.context(), Context::Panel);
+}
+
+#[test]
+fn cancel_on_a_notice_stops_connecting() {
+    for key in [Action::Confirm, Action::Cancel] {
+        let mut app = at_slash();
+        let Effect::Connect {
+            connection, stop, ..
+        } = one(enter_host(&mut app, Side::Left, 1))
+        else {
+            panic!("expected a connection");
+        };
+        app.notice(1, "web", "Confirm user presence for key ECDSA-SK");
+        let text = screen(&mut app);
+        assert!(text.contains("{ Cancel }"), "{text}");
+        assert!(!text.contains("OK }"), "{text}");
+        app.handle(action(key));
+        assert!(stop.is_cancelled(), "{key:?}: ssh would wait on");
+        assert!(app.dialogs.is_empty(), "{key:?}");
+        assert!(app.closed("web", connection, None).is_empty());
+        assert_eq!(app.panel(Side::Left).pending_request(), None, "{key:?}");
+    }
+}
+
+#[test]
+fn the_dots_turn_in_the_title_of_a_notice() {
+    let mut app = at_slash();
+    app.config.animations.spinners = true;
+    app.notice(1, "web", "Confirm user presence for key ECDSA-SK");
+    let start = Instant::now();
+    let first = format!(" {} web ", app.theme.glyphs.spinners.dots[0]);
+    let title = |text: &str| text.lines().any(|line| line.contains(&first));
+    let text = screen_at(&mut app, 9, start);
+    assert!(!title(&text), "not at once: {text}");
+    assert_eq!(app.spin_due(start), Some(start + spinner::DELAY));
+    let shows = start + spinner::DELAY;
+    let text = screen_at(&mut app, 9, shows);
+    assert!(title(&text), "{text}");
+    assert_eq!(app.spin_due(shows), Some(shows + spinner::DOTS_FRAME));
+    app.prompt_closed(1);
+    assert_eq!(app.spin_due(shows), None, "nothing waits once ssh is done");
 }

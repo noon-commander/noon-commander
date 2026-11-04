@@ -101,7 +101,52 @@ fn questions_default_to_no() {
         notice.handle(action(Action::Cancel)),
         DialogEvent::Cancelled
     );
-    assert_eq!(confirm(&mut notice), None);
+    assert_eq!(
+        notice.handle(action(Action::Confirm)),
+        DialogEvent::Pressed(Button::Cancel),
+        "Cancel alone"
+    );
+    assert!(
+        notice
+            .answer(DialogEvent::Pressed(Button::Cancel))
+            .is_none()
+    );
+}
+
+#[test]
+fn a_notice_turns_the_dots_in_front_of_its_title_once_they_show() {
+    use std::time::Instant;
+
+    use crate::tui::glyphs::Glyphs;
+    use crate::tui::spinner::{DELAY, Spin};
+
+    let notice = Dialog::notice("web", "Confirm user presence for key ECDSA-SK");
+    let start = Instant::now();
+    let draw_at = |at, turns| {
+        let mut terminal = Terminal::new(TestBackend::new(50, 7)).unwrap();
+        let spin = Spin::new(at, start, turns, Glyphs::PLAIN.spinners);
+        terminal
+            .draw(|frame| notice.render_spun(frame, frame.area(), &Theme::terminal(), &spin))
+            .unwrap();
+        terminal
+    };
+    let title = |terminal: &Terminal<TestBackend>| {
+        let buffer = terminal.backend().buffer();
+        (0..buffer.area.width)
+            .map(|x| buffer[(x, 1)].symbol())
+            .collect::<String>()
+    };
+    assert!(
+        !title(&draw_at(start, true)).contains("| web"),
+        "not at once"
+    );
+    let terminal = draw_at(start + DELAY, true);
+    assert!(title(&terminal).contains(" | web "));
+    insta::assert_snapshot!(terminal.backend());
+    assert!(
+        title(&draw_at(start + DELAY, false)).contains(" … web "),
+        "still"
+    );
 }
 
 #[test]

@@ -93,7 +93,8 @@ too, which some users want and others do not, apart from windows.
   right bar of a row, which the shine crosses with them: a count that runs said less than the one at
   the end. R in the location menu keeps the last rows while it lists the volumes and the hosts
   again, the dots in the title, or shows the reason it failed right of the filter, in the colors of
-  errors.
+  errors. A notice of ssh, such as a request to touch a security key, turns the dots in front of its
+  title too, until ssh is done: ssh's text says what it waits for.
 - **A job waits in its gauge.** While a job waits its turn or counts, its window says which on its
   first line, a stage of the job rather than a wait, and its gauge, which has no percentage yet, is
   a faint bar of `▒` over which the shine of the skeleton of rows runs to and fro, turning at its

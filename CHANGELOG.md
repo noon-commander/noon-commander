@@ -17,6 +17,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - F10 and `Z Z` always ask before quitting: Yes is the default, or No while jobs run.
+- A notice of ssh, such as a request to touch a security key or to use Touch ID, turns the dots
+  in front of its title while ssh waits, and has Cancel, which stops connecting, in place of OK,
+  which hid the dialog alone.
 - Error dialogs say what failed, then the path on a line of its own, then, under a line, why,
   and always the code of the system, such as `Code: 13`, or `Code: —` where there is none
   ([ADR 0063](docs/adr/0063-errors-in-parts-and-the-order-of-buttons.md)).

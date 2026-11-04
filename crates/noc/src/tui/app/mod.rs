@@ -414,7 +414,7 @@ impl Open {
 #[derive(Debug)]
 enum Purpose {
     /// A prompt from ssh connecting to `host`, or a notice, which has no `reply`. Declining a
-    /// prompt that `stops` stops connecting: ssh would ask again.
+    /// prompt that `stops` stops connecting: ssh would ask again; a notice always stops.
     Ssh {
         id: u64,
         host: String,

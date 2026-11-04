@@ -10,6 +10,7 @@ use crate::tui::cells;
 use crate::tui::glyphs;
 use crate::tui::label::{self, Label};
 use crate::tui::picker::{Body, ShownRow};
+use crate::tui::spinner::Spin;
 use crate::tui::theme::Theme;
 
 use super::{
@@ -56,13 +57,25 @@ impl Dialog {
 
     /// Draws the dialog centered in `area`, with the terminal cursor in the focused field.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        self.render_with(frame, area, theme, None);
+        self.render_with(frame, area, theme, None, None);
+    }
+
+    /// Draws the dialog as [`render`](Self::render) does, with the dots of what it waits for
+    /// in front of its title, as `spin` draws them.
+    pub(crate) fn render_spun(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        spin: &Spin,
+    ) {
+        self.render_with(frame, area, theme, None, Some(spin));
     }
 
     /// Draws the dialog as [`render`](Self::render) does, but under another, which has the
     /// keys: without the terminal cursor and the open list of a combo box.
     pub(crate) fn render_under(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        self.draw_parts(frame, area, theme, None);
+        self.draw_parts(frame, area, theme, None, None);
     }
 
     /// Draws the dialog as [`render`](Self::render) does, with the lines of its picker and
@@ -85,7 +98,7 @@ impl Dialog {
             body: Some(body),
             row,
         };
-        self.render_with(frame, area, theme, Some(draw));
+        self.render_with(frame, area, theme, Some(draw), None);
         self.picker = Some(picker);
     }
 
@@ -97,8 +110,9 @@ impl Dialog {
         area: Rect,
         theme: &Theme,
         picker: Option<PickerDraw<'_, '_>>,
+        spin: Option<&Spin>,
     ) {
-        self.draw_parts(frame, area, theme, picker);
+        self.draw_parts(frame, area, theme, picker, spin);
         if let Some(cursor) = self.cursor.get() {
             frame.set_cursor_position(cursor);
         }
@@ -113,6 +127,7 @@ impl Dialog {
         area: Rect,
         theme: &Theme,
         mut picker: Option<PickerDraw<'_, '_>>,
+        spin: Option<&Spin>,
     ) {
         let width = self.box_width(area);
         let text_width = usize::from(width.saturating_sub(4));
@@ -127,7 +142,10 @@ impl Dialog {
             .and_then(|draw| Some((&*draw.picker, draw.body.as_ref()?)));
         let picker_rows = body.map_or(0, |(picker, body)| picker.height(body));
         let fill = body.is_some_and(|(_, body)| body.fill);
-        let dots = body.and_then(|(_, body)| body.dots());
+        let dots = body.and_then(|(_, body)| body.dots()).or_else(|| {
+            let (wait, spin) = (self.wait.as_ref()?, spin?);
+            spin.wait_dots(wait)
+        });
         // Borders, the message, the parts under it, a line, the buttons.
         let height = self.parts.iter().fold(rows(lines.len()), |height, &part| {
             height.saturating_add(self.part_rows(part, text_width, picker_rows))

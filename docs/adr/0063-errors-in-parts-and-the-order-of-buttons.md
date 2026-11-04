@@ -53,14 +53,30 @@ had No.
   for the only entry, where it is Abort. The question about a taken name drops The rest at the
   last entry and Skip for the only one, where Abort is the default. Where the job still counts,
   it does not know what is left, and everything shows.
-- **The main way on comes first, the way out last.** Cancel or Abort is the last button. The
-  dialog after a directory could not be read has Retry, Up, Go to, and Cancel, which takes the
-  place of OK. Its default is Up where the panel has nothing to show, and Retry otherwise.
+- **The main way on comes first, the way out last.** The way out is the last button, and Esc
+  and F10 press it. Which word it has follows from what stands behind the dialog:
+
+  | Button | What it does | Where |
+  | --- | --- | --- |
+  | Abort | Stops a job that runs: some of its work is done, and what is left is not | The failure of a job, the question of a job about a taken name, the window of a job, the list of jobs |
+  | Cancel | Does nothing: nothing has begun, or what it gives up is one thing | Forms, Connection, a host not connected, a directory that could not be read, a rename or a save onto a file, the settings of a host, the results of a search, a password of ssh |
+  | No | Answers a question asked as one | Delete, Quit while jobs run, replacing a workspace, the questions of ssh |
+  | OK | Takes a form, or closes what has nothing to decide | Forms, and every error with nothing to do but read it |
+
+  Abort has a letter; Cancel has none, as Esc and F10 cancel. So one question, about a taken name,
+  ends in Abort in a copy, which stops the copy, and in Cancel in a rename or a save, which gives
+  up only that. The dialog after a directory could not be read has Retry, Up, Go to, and Cancel,
+  which takes the place of OK, as OK did what Esc does. Its default is Up where the panel has
+  nothing to show, and Retry otherwise.
 - **Renaming or saving onto a file asks the question of a copy** about a taken name, for one
   file: the path, New and Existing with their sizes and times, each viewing its file, and
   Overwrite, Rename…, and Cancel, the default. For a save, New views the bytes it would write and
   has no time. Rename… offers a free name; a rename takes a name in its directory alone.
 - **Replacing a workspace by Save as has No as the default**, as renaming one onto another has.
+- **Errors that had their reason in a sentence show it in parts too**: a shell of `!` or `:` that
+  could not run (`Cannot run /bin/zsh`, then why and its code), and an edited copy of a remote
+  file that did not go back (`The changes did not go back to`, the remote file, then why and where
+  the copy stays).
 
 ## Consequences
 

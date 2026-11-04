@@ -1249,8 +1249,13 @@ viewer-read-close = &Close
 
 # Over the path and why, each on a line of its own.
 edit-error = Cannot edit
-# The edited copy of a remote file could not go back; it stays where the user can find it.
-edit-kept = The changes to { $path } did not go back; they are in { $copy }
+# The edited copy of a remote file could not go back; it stays where the user can find it. Over
+# the remote file, then why and where the copy is, under a line.
+edit-kept = The changes did not go back to
+# Where the edited copy stays, under why.
+edit-kept-copy = They are in { $copy }
+# Why: the copy back stopped before its end, after a failure it reported or Abort.
+edit-kept-stopped = The copy back did not finish
 # Why the editor did not run.
 edit-cannot-run = Cannot run { $program }: { $reason }
 
@@ -1267,8 +1272,11 @@ open-cannot-run = Cannot run { $program }: { $reason }
 
 # A command after : that Noon Commander does not have.
 command-unknown = Unknown command: { $command }. :!command runs a shell command.
-# The shell did not start.
-command-error = Cannot run { $program }: { $reason }
+# The shell, or ssh for a host, did not start or could not be waited for; over why, on a line of
+# its own.
+command-error = Cannot run { $program }
+# Over why the command could not run at all, as without a connection to the host.
+command-failed = Cannot run the command
 # Printed in the terminal after a command, with the panels hidden.
 command-exit-code = The command exited with { $code }.
 command-signal = The command was ended by signal { $signal }.

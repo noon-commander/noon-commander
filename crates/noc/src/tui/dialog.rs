@@ -616,6 +616,16 @@ impl Problem {
         }
     }
 
+    /// The same problem, its text safe for the terminal.
+    pub(crate) fn sanitized(self) -> Self {
+        let clean = |text: &str| cells::sanitize(text.as_bytes());
+        Self {
+            head: clean(&self.head),
+            path: self.path.as_deref().map(clean),
+            reason: self.reason.sanitized(),
+        }
+    }
+
     /// The code of the failure, if the system or the server gave one.
     pub(crate) fn code(&self) -> Option<Code> {
         self.reason.code

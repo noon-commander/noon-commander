@@ -19,6 +19,8 @@ use rustix::process;
 use tokio::process::Child;
 
 use super::command::{Place, Run};
+use super::describe::Reason;
+use super::dialog::Problem;
 use super::glyphs;
 use super::keymap::{Action, Context, KeyState, Keymap, Mode, Resolved};
 use super::told::Told;
@@ -41,7 +43,7 @@ pub(super) struct Ran {
 pub(super) async fn run_command(
     run: Run,
     (keymap, told): (&Keymap, &mut Told),
-) -> Result<Ran, String> {
+) -> Result<Ran, Problem> {
     let Run {
         place,
         shell,
@@ -54,23 +56,29 @@ pub(super) async fn run_command(
     let status = match place {
         Place::Local(dir) => {
             let shell = Shell::from_env(shell.words());
-            let cannot_run = |error: ToolError| {
-                let reason = match &error {
-                    ToolError::Spawn { source, .. } => source.to_string(),
-                    other => describe::chain(other),
-                };
-                let program = shell.program().display().to_string();
-                fl!("command-error", program = program, reason = reason)
+            let program = shell.program().display().to_string();
+            let cannot_run = |reason: Reason| {
+                Problem::new(fl!("command-error", program = program.clone()), reason)
             };
-            let mut running = shell.start(&dir, &command).map_err(cannot_run)?;
-            finish(&mut running, (keymap, told), cannot_run).await?
+            let why = |error: ToolError| match &error {
+                ToolError::Spawn { source, .. } => describe::reason(source),
+                other => describe::reason(other),
+            };
+            let mut running = shell
+                .start(&dir, &command)
+                .map_err(|error| cannot_run(why(error)))?;
+            finish(&mut running, (keymap, told), why)
+                .await
+                .map_err(cannot_run)?
         }
         Place::Remote { handle, dir } => {
-            let mut ssh = tasks::remote_command(&handle, dir, shell, command).await?;
+            let mut ssh = tasks::remote_command(&handle, dir, shell, command)
+                .await
+                .map_err(|reason| Problem::new(fl!("command-failed"), reason))?;
             let program = ssh.as_std().get_program().to_string_lossy().into_owned();
             let cannot_run = |error: io::Error| {
-                let reason = error.to_string();
-                fl!("command-error", program = program.clone(), reason = reason)
+                let head = fl!("command-error", program = program.clone());
+                Problem::new(head, describe::reason(&error))
             };
             let mut ssh = ssh.spawn().map_err(cannot_run)?;
             tokio::select! {
@@ -118,7 +126,8 @@ pub(super) async fn run_command(
             SetAttribute(Attribute::Reset)
         );
         let _ = out.flush();
-        crossterm::terminal::enable_raw_mode().map_err(|error| error.to_string())?;
+        crossterm::terminal::enable_raw_mode()
+            .map_err(|error| Problem::new(fl!("command-failed"), describe::reason(&error)))?;
     } else if let Some(mark) = &mark {
         print_mark(&mut out, mark, "\n");
     }

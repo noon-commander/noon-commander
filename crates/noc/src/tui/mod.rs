@@ -74,6 +74,7 @@ use tokio::sync::mpsc;
 
 use app::{App, Handover};
 use describe::Reason;
+use dialog::Problem;
 use help::{About, Files};
 use keymap::{KeyState, Keyboard, Keymap, Mode};
 use mouse::{Clicks, Press};
@@ -82,6 +83,7 @@ use told::Told;
 
 use crate::about::{self, Build, Report, System, Tool};
 use crate::context::Context;
+use crate::i18n::fl;
 
 pub(crate) use places::read_volumes;
 pub(crate) use theme::ColorDepth;
@@ -540,7 +542,7 @@ async fn hand_over(
                     let command = pin!(output::run_command(run, (&keymap, told)));
                     meanwhile(command, done, &mut held, &mut take).await
                 }
-                Err(error) => Err(error),
+                Err(error) => Err(Problem::new(fl!("command-failed"), error)),
             };
             let mut events = told.events()?;
             if let Ok(ran) = &result

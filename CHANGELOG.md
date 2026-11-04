@@ -25,6 +25,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The dialog after a directory could not be read has Retry, Up, Go to, and Cancel in place of OK;
   Retry is the default, or Up where the panel has nothing to show.
 - Replacing a workspace by Save as has No as the default.
+- A shell of `!` or `:` that cannot run, and an edited remote file whose changes did not go back,
+  say so in parts too, with the code of the system and where the edited copy stays.
 
 ### Fixed
 

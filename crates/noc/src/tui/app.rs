@@ -4941,7 +4941,7 @@ impl App {
             Location::Local(_) => None,
         };
         let Some(handle) = handle else {
-            self.keep_edit(&path, &editing.file);
+            self.keep_edit(path, &editing.file, &fl!("error-connection-closed"));
             return Vec::new();
         };
         self.last_job += 1;
@@ -5223,9 +5223,9 @@ impl App {
 
     /// Takes the end of a shell command, or why the shell could not run; both panels read
     /// their directories again, as in mc, since the command may have changed anything.
-    pub(crate) fn ran(&mut self, result: Result<(), String>) -> Vec<Effect> {
-        if let Err(reason) = result {
-            self.show_error(&cells::sanitize(reason.as_bytes()));
+    pub(crate) fn ran(&mut self, result: Result<(), Problem>) -> Vec<Effect> {
+        if let Err(problem) = result {
+            self.show_problem(&problem.sanitized());
         }
         let mut dirs: Vec<Location> = Vec::new();
         for side in [self.active, self.active.other()] {
@@ -5405,10 +5405,11 @@ impl App {
             .unwrap_or(host)
     }
 
-    /// Says that the edited copy of `path` could not go back, and where it stays.
-    fn keep_edit(&mut self, path: &str, file: &Path) {
+    /// Says that the edited copy of `path` could not go back, `why`, and where it stays.
+    fn keep_edit(&mut self, path: String, file: &Path, why: &str) {
         let copy = cells::sanitize(file.as_os_str().as_bytes());
-        self.show_error(&fl!("edit-kept", path = path, copy = copy));
+        let reason = [why.to_owned(), fl!("edit-kept-copy", copy = copy)].join("\n");
+        self.show_problem(&Problem::new(fl!("edit-kept"), reason).at(path));
     }
 
     /// Takes the part [`Effect::Read`] read for the viewer `id`, and reads the next one it
@@ -6147,7 +6148,8 @@ impl App {
                 .collect(),
             (Then::Discard { copy, .. }, true) => vec![Effect::Discard(copy)],
             (Then::Discard { copy, remote }, false) => {
-                self.keep_edit(&location_text(&remote), &copy);
+                let why = fl!("edit-kept-stopped");
+                self.keep_edit(location_text(&remote), &copy, &why);
                 Vec::new()
             }
         }
@@ -12545,9 +12547,14 @@ mod tests {
                 .iter()
                 .any(|effect| matches!(effect, Effect::Discard(_)))
         );
-        let text = screen_of(&mut app, 12);
+        let text = screen_of(&mut app, 16);
         assert!(
-            text.contains("The changes to web:/home/deploy/notes did not go back"),
+            shows_problem(
+                &text,
+                "The changes did not go back to",
+                Some("web:/home/deploy/notes"),
+                "The copy back did not finish"
+            ),
             "{text}"
         );
         assert!(text.contains(&*copy.to_string_lossy()), "{text}");
@@ -12560,7 +12567,9 @@ mod tests {
         app.closed("web", connection, Some("Broken pipe"));
         app.handle(action(Action::Cancel));
         assert!(app.edited(Ok(true)).is_empty());
-        assert!(screen_of(&mut app, 12).contains("did not go back"));
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("did not go back"), "{text}");
+        assert!(text.contains("The connection is closed"), "{text}");
     }
 
     #[test]
@@ -12593,7 +12602,7 @@ mod tests {
                 .iter()
                 .any(|effect| matches!(effect, Effect::Discard(_)))
         );
-        let text = screen_of(&mut app, 12);
+        let text = screen_of(&mut app, 16);
         assert!(text.contains("did not go back"), "{text}");
         assert!(text.contains(&*copy.to_string_lossy()), "{text}");
     }
@@ -15748,8 +15757,25 @@ mod tests {
         assert!(app.take_run().is_none());
         let effects = app.ran(Ok(()));
         assert_eq!(effects.len(), 2, "both panels read /srv again");
-        app.ran(Err("cannot run /bin/nosh".to_owned()));
-        assert!(screen_of(&mut app, 12).contains("cannot run /bin/nosh"));
+        let missing = Reason {
+            text: "No such file or directory".to_owned(),
+            code: Some(Code::Os(2)),
+        };
+        app.ran(Err(Problem::new(
+            "Cannot run /bin/nosh".to_owned(),
+            missing,
+        )));
+        let text = screen_of(&mut app, 12);
+        assert!(
+            shows_problem(
+                &text,
+                "Cannot run /bin/nosh",
+                None,
+                "No such file or directory"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("Code: 2"), "{text}");
     }
 
     #[test]

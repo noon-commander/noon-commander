@@ -23,6 +23,21 @@ impl App {
                     return self.revealed(side);
                 }
             }
+            Action::GoToTab | Action::LastTab => {
+                let index = if action == Action::LastTab {
+                    self.tabs(side).len().checked_sub(1)
+                } else {
+                    let digit = self.extra.char.and_then(|c| c.to_digit(10));
+                    digit.and_then(|digit| usize::try_from(digit).ok()?.checked_sub(1))
+                };
+                // A number past the last tab does nothing, as `g t` after such a count.
+                self.end_search(side);
+                if let Some(index) = index
+                    && self.tabs_mut(side).select(index)
+                {
+                    return self.revealed(side);
+                }
+            }
             _ => {}
         }
         Vec::new()

@@ -13,8 +13,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the last local directory of the panel, `:path` starts there, and `:/…` and `:~/…` are local,
   with Tab completing them. A name that starts with a colon is `./:name`
   ([ADR 0065](docs/adr/0065-a-colon-without-a-host-is-local.md)).
+- Alt+1 … Alt+9 show the tab of that number in the active panel, as `2g t` does, and Alt+0 the
+  last tab; Ctrl+x before them, the other panel's. They work in Visual mode too.
 
 ### Changed
+
+- Visual mode stays with its tab: going to the other panel (Ctrl+w, Tab, a click) or to another
+  tab keeps the rows selected, which show there and are selected again once the panel or the tab
+  has the keys. Ctrl+x runs its command on them
+  ([ADR 0066](docs/adr/0066-visual-mode-stays-with-its-tab.md)).
 
 - F10 and `Z Z` always ask before quitting: Yes is the default, or No while jobs run.
 - A notice of ssh, such as a request to touch a security key or to use Touch ID, turns the dots

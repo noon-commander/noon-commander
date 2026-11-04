@@ -1007,8 +1007,9 @@ pub(crate) struct App {
     last_tab: u64,
     active: Side,
     /// The panel that Ctrl+x took the keys from for a command of the other one, and gives them
-    /// back to once it ends (ADR 0051).
-    returns: Option<Side>,
+    /// back to once it ends (ADR 0051), with the mode the other panel had, which its command may
+    /// end in too: Visual mode, if it kept that (ADR 0066).
+    returns: Option<(Side, Mode)>,
     /// The right panel is drawn on the left.
     swapped: bool,
     /// Whether `K` shows the whole name under the cursor below the panels, until it is asked

@@ -557,6 +557,64 @@ fn dialogs_take_alt_and_a_letter_as_their_hotkeys_in_every_mode() {
     assert_eq!(typed(help, &["j"]), actions(&[Action::Down]));
 }
 
+#[test]
+fn alt_and_a_digit_show_a_tab_in_the_panels_with_the_digit() {
+    let digit = |c| Extra {
+        char: Some(c),
+        ..Extra::default()
+    };
+    for place in [PANEL, VISUAL_PANEL] {
+        assert_eq!(
+            typed(place, &["alt-2"]),
+            with(Action::GoToTab, digit('2')),
+            "{place:?}"
+        );
+        assert_eq!(typed(place, &["alt-9"]), with(Action::GoToTab, digit('9')));
+        assert_eq!(typed(place, &["alt-0"]), actions(&[Action::LastTab]));
+        // Bound, they no longer stand for Esc and the digit, nor does an Esc and a quick
+        // digit.
+        let keymap = Keymap::default();
+        assert_eq!(
+            keymap.alt_as_esc(&KeyState::default(), place, key("alt-2")),
+            None
+        );
+    }
+    assert_eq!(
+        typed(PANEL, &["ctrl-x", "alt-3"]),
+        with(
+            Action::GoToTab,
+            Extra {
+                other: true,
+                ..digit('3')
+            }
+        )
+    );
+    let help = Keymap::default().help(Mode::Normal, Context::Panel);
+    let keys = |action| help.iter().find(|(bound, _)| *bound == action).cloned();
+    assert_eq!(
+        keys(Action::GoToTab),
+        Some((Action::GoToTab, "Alt+1 … Alt+9".to_owned()))
+    );
+    assert_eq!(
+        keys(Action::LastTab),
+        Some((Action::LastTab, "Alt+0".to_owned()))
+    );
+}
+
+#[test]
+fn runs_of_keys_that_differ_by_a_digit_are_written_as_their_ends() {
+    assert_eq!(shorten_runs("Alt+1, Alt+2, Alt+3"), "Alt+1 … Alt+3");
+    assert_eq!(
+        shorten_runs("g t, Alt+1, Alt+2, Alt+3, Alt+4, ] t"),
+        "g t, Alt+1 … Alt+4, ] t"
+    );
+    assert_eq!(shorten_runs("Alt+1, Alt+2"), "Alt+1, Alt+2", "two stay");
+    assert_eq!(shorten_runs("F9, F10, F11"), "F9, F10, F11");
+    assert_eq!(shorten_runs("Alt+1, Ctrl+2, Alt+3"), "Alt+1, Ctrl+2, Alt+3");
+    assert_eq!(shorten_runs("Alt+1, Alt+3, Alt+4"), "Alt+1, Alt+3, Alt+4");
+    assert_eq!(shorten_runs("1, 2, 3, é"), "1, 2, 3, é");
+}
+
 /// `place` with a field of `kind` that searches in the focus.
 fn searching((mode, context): (Mode, Context), kind: Kind) -> Place {
     Place {

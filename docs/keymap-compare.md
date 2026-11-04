@@ -143,10 +143,10 @@ the next one in the other panel, then gives the keys back, as vim's Ctrl+o in In
 command of Normal mode: g l opens the location menu of the active panel, as Far's Alt+F1 and
 Alt+F2 that of a side, and Ctrl+x g l that of the other. Ctrl+x comes with the command, as a
 register does, and takes any, as if the other panel were active: Ctrl+x j moves its cursor, and
-Ctrl+x F5 copies from it to this one. The keys come back once the command ends, at once or when
-its window closes. Its count goes after it, as Ctrl+x 2g t. Esc gives it up, and so does Ctrl+x
-again; after it, mc's Ctrl+x letters do what they do in the other panel.
-/ searches down and ? up, as in vim and yazi; n and N
+Ctrl+x F5 copies from it to this one, the rows it selects if it kept Visual mode. The keys come
+back once the command ends, at once or when its window closes. Its count goes after it, as Ctrl+x
+2g t. Esc gives it up, and so does Ctrl+x again; after it, mc's Ctrl+x letters do what they do in
+the other panel. / searches down and ? up, as in vim and yazi; n and N
 repeat the last quick search, the way it went and the other way, as in vim, yazi, and ranger;
 Shift+F7, mc's and Far's key to search again, repeats it forward too. Y and y y copy, as vim's yank
 lines, and y p copies the entry under the cursor beside it, as vim's y y p puts a copy of a line
@@ -155,11 +155,12 @@ Visual mode and in quick search too, as their sections say.
 
 A count goes before a motion, a mark, n, or N, and repeats it: 3j goes three rows down. Before G or
 g g, it goes to the row of that number, 5G to the fifth; before g t, to the tab of that number, 2g t
-to the second. Each tab keeps a jump list, as vim's windows do: changing the directory, G, g g, n,
-N, and a quick search that finds a match put where it was in the list, even when they stay on the
-row, as in vim, but a directory that cannot be read does not. Ctrl+o goes back through it, and
-Ctrl+i forward again; without the kitty keyboard protocol, Tab too, which such terminals send as
-Ctrl+i, and which goes to the other panel where they tell them apart. A count goes that many jumps,
+to the second, as Alt+2 does; Alt+0 goes to the last. Each tab keeps a jump list, as vim's windows
+do: changing the directory, G, g g, n, N, and a quick search that finds a match put where it was
+in the list, even when they stay on the row, as in vim, but a directory that cannot be read does
+not. Ctrl+o goes back through it, and Ctrl+i forward again; without the kitty keyboard protocol,
+Tab too, which such terminals send as Ctrl+i, and which goes to the other panel where they tell
+them apart. A count goes that many jumps,
 and one past the end of the list goes nowhere, as in vim. The rows scroll as vim's window does, with
 five rows kept above and below the cursor, as vim's defaults.vim sets 'scrolloff': Ctrl+d and Ctrl+u
 scroll half a page and move the cursor as far, and Ctrl+f and Ctrl+b scroll a page less two rows,
@@ -199,6 +200,8 @@ section says: the commands of files act on the rows it selects, which become the
 | Close this tab; the last one stays | `close_tab` | ✅ | t c<br>g c | — | — | — | Ctrl+w<br>g c |
 | The next tab in this panel; after a count, the tab of that number | `next_tab` | ⏳ | g t<br>] t | — | — | ] | Tab<br>Alt+Right<br>g t |
 | The previous tab in this panel | `prev_tab` | ⏳ | g T<br>[ t | — | — | [ | Shift+Tab<br>Alt+Left<br>g T |
+| The tab of that number in this panel; nothing past the last (ranger: a new one) | `go_to_tab` | ⏳ | Alt+1 … Alt+9 | — | — | 1…9 | Alt+1…9 |
+| The last tab in this panel, as vim's `:tablast` | `last_tab` | ⏳ | Alt+0 | — | — | — | — |
 | The tabs of this panel, in a menu, to choose one; the keys stay with the active panel | `tab_list` | ⏳ | t t | — | — | — | — |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ✅ | t w | — | — | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ✅ | t W | — | — | — | — |
@@ -311,7 +314,6 @@ section says: the commands of files act on the rows it selects, which become the
 | Screen list | — | ⏳ | — | Alt+\` | F12 | — | — |
 | Bring back the tab closed last | — | ⏳ | — | — | — | — | u q |
 | Rename this tab | — | ⏳ | — | — | — | t r | — |
-| Show tab 1…9 (noc: a count before g t, as 2g t) | — | ⏳ | — | — | — | 1…9 | Alt+1…9 (a new one if there is none) |
 | Move this tab left / right | — | ⏳ | — | — | — | { / } | Alt+l / Alt+r |
 | Directory history (list) | — | ⏳ | — | Alt+H | Alt+F12 | — | — |
 | View and edit history | — | ⏳ | — | Alt+E | Alt+F11 | — | — |
@@ -421,11 +423,13 @@ Visual mode ends, and the cursor goes to the first row, as after vim's operators
 them as d does, as vim's delete the lines selected. Space marks them beside the marks already
 there, and Esc and Ctrl+c leave Visual mode, as does the key of v and V that started it, while the
 other switches its kind, as in vim; g v, in Normal mode, selects the same rows again. The other
-F-keys and the keys of Ctrl+w that go to another panel end Visual mode and do what they do in
-Normal mode, and so do Alt and a key, as Esc and the key; other keys that neither binds
-do nothing. yazi's and ranger's visual modes mark the rows that the cursor moves over with the
-keys of their panels, whose commands then act on the marks, so their columns here have only the
-keys that leave it.
+F-keys end Visual mode and do what they do in Normal mode, and so do Alt and a key, as Esc and the
+key; other keys that neither binds do nothing. The keys of Ctrl+w and Tab go to the other panel,
+and Alt+1 … Alt+9 and Alt+0 to another tab, as in Normal mode, without ending Visual mode: each tab
+keeps its own, as it keeps its cursor, and has it again with the keys, unlike vim's windows
+([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). yazi's and ranger's visual modes mark the
+rows that the cursor moves over with the keys of their panels, whose commands then act on the
+marks, so their columns here have only the keys that leave it.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -457,9 +461,11 @@ keys that leave it.
 | Leave Visual mode, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
 | Leave Visual mode, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
 | Leave Visual mode, and quit | `quit` | ⏳ | F10 | — | — | — | — |
-| Leave Visual mode, and go to the other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | — | — | — | — |
-| Leave Visual mode, and go to the left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
-| Leave Visual mode, and go to the right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
+| The other panel; this one keeps its Visual mode | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | — | — | — | — |
+| The left panel, wherever the panels were swapped; this one keeps its Visual mode | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
+| The right panel, wherever the panels were swapped; this one keeps its Visual mode | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
+| The tab of that number in this panel; this tab keeps its Visual mode | `go_to_tab` | ⏳ | Alt+1 … Alt+9 | — | — | — | — |
+| The last tab in this panel; this tab keeps its Visual mode | `last_tab` | ⏳ | Alt+0 | — | — | — | — |
 
 ## Editing text (`input`, Insert mode)
 

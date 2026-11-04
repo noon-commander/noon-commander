@@ -139,6 +139,21 @@ fn ctrl_x_runs_any_command_in_the_other_panel_and_gives_the_keys_back() {
 }
 
 #[test]
+fn ctrl_x_gives_the_keys_back_from_a_panel_that_kept_visual_mode() {
+    let mut app = loaded();
+    keys(&mut app, &["ctrl-w", "w", "v", "ctrl-w", "w"]);
+    assert_eq!(app.place(), (Mode::Normal, Context::Panel));
+    // Its command ends in the Visual mode it kept, which j extends.
+    keys(&mut app, &["ctrl-x", "j"]);
+    assert_eq!(app.active, Side::Left);
+    assert_eq!(app.panel(Side::Right).visual_size(), Some(1));
+    assert_eq!(cursor_name(&app, Side::Right), "left");
+    keys(&mut app, &["ctrl-x", "v"]);
+    assert_eq!(app.active, Side::Left, "once it ends it too");
+    assert!(!app.panel(Side::Right).visual());
+}
+
+#[test]
 fn the_other_panel_has_the_keys_until_the_command_of_ctrl_x_ends() {
     let mut app = loaded();
     keys(&mut app, &["ctrl-x", "v", "j"]);

@@ -16,7 +16,7 @@ use crate::tui::tab_menu::TabMenu;
 use crate::tui::workspaces::WorkspacesWindow;
 use crossterm::event::{KeyCode, KeyEvent};
 
-use super::{App, Completes, Effect, Front, MAX_REPEAT, Side, Viewing};
+use super::{App, Completes, Effect, Front, MAX_REPEAT, Viewing};
 
 impl App {
     /// Where keys go now.
@@ -247,7 +247,7 @@ impl App {
     }
 
     /// Takes what keys resolved to, after giving up the part of a command that the keymap gave
-    /// up; then lets Visual mode go in the panels that no longer have the keys.
+    /// up.
     fn take_typed(&mut self, keys: &mut KeyState, typed: Vec<Typed>) -> Vec<Effect> {
         if keys.take_dropped() {
             self.give_up_command();
@@ -256,7 +256,6 @@ impl App {
         for typed in typed {
             effects.extend(self.typed(typed));
         }
-        self.settle_visual();
         effects
     }
 
@@ -311,20 +310,6 @@ impl App {
         }
     }
 
-    /// Ends Visual mode in the panels that do not have the keys: the other side, and the tabs
-    /// that do not show.
-    pub(super) fn settle_visual(&mut self) {
-        let active = self.active;
-        for side in [Side::Left, Side::Right] {
-            let shown = self.tabs(side).index();
-            for (index, tab) in self.tabs_mut(side).iter_mut().enumerate() {
-                if side != active || index != shown {
-                    tab.panel.end_visual();
-                }
-            }
-        }
-    }
-
     /// Takes keys resolved with what came with them: a count repeats a motion where keys
     /// move a cursor over rows; a text field, the commands that take a count as a number,
     /// such as `G`, and those that take a register or a character read them themselves. After
@@ -333,8 +318,9 @@ impl App {
     pub(crate) fn typed(&mut self, typed: Typed) -> Vec<Effect> {
         let Typed { resolved, extra } = typed;
         if extra.other && self.returns.is_none() {
-            self.returns = Some(self.active);
-            self.active = self.active.other();
+            let side = self.active;
+            self.active = side.other();
+            self.returns = Some((side, self.mode()));
         }
         let times = match resolved {
             Resolved::Action(action) if self.repeats(action) => extra.times().min(MAX_REPEAT),
@@ -362,14 +348,17 @@ impl App {
     }
 
     /// Gives the keys back to the panel that Ctrl+x took them from, once the command it ran in
-    /// the other panel ends: when that panel has the keys in Normal mode again, with nothing in
-    /// front of it and no program to hand the terminal to, as vim goes back to Insert mode
-    /// after the command of Ctrl+o.
+    /// the other panel ends: when that panel has the keys in Normal mode again, or in the Visual
+    /// mode it kept, with nothing in front of it and no program to hand the terminal to, as vim
+    /// goes back to Insert mode after the command of Ctrl+o.
     pub(crate) fn come_back(&mut self) {
+        let (mode, context) = self.place();
         if self.handover.is_none()
-            && self.place() == (Mode::Normal, Context::Panel)
-            && let Some(side) = self.returns.take()
+            && context == Context::Panel
+            && let Some((side, lent)) = self.returns
+            && (mode == Mode::Normal || mode == lent)
         {
+            self.returns = None;
             self.active = side;
         }
     }

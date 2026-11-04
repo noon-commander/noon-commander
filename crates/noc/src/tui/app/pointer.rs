@@ -50,7 +50,6 @@ impl App {
         }
         let effects = self.route_pointer(pointer);
         self.clicked = (pointer.press == Press::Click && self.front() == front).then_some(front);
-        self.settle_visual();
         effects
     }
 

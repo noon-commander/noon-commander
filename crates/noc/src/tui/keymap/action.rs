@@ -375,6 +375,10 @@ pub(crate) enum Action {
     NextTab,
     /// Shows the panel's previous tab, round.
     PrevTab,
+    /// Shows the panel's tab of the digit of its key, as `g t` after that count.
+    GoToTab,
+    /// Shows the panel's last tab, as vim's `:tablast`.
+    LastTab,
     /// Lists the panel's tabs to choose one.
     TabList,
     /// Asks for a name and saves the tabs of both panels as a workspace.
@@ -603,6 +607,19 @@ impl Action {
         )
     }
 
+    /// Whether the action opens, closes, or shows a tab of a panel.
+    pub(crate) fn of_tabs(self) -> bool {
+        matches!(
+            self,
+            Self::NewTab
+                | Self::CloseTab
+                | Self::NextTab
+                | Self::PrevTab
+                | Self::GoToTab
+                | Self::LastTab
+        )
+    }
+
     /// How the action moves a page of text, the help's and the viewer's, if it does.
     pub(crate) fn motion(self) -> Option<Motion> {
         Some(match self {
@@ -687,6 +704,8 @@ impl Action {
         Self::CloseTab,
         Self::NextTab,
         Self::PrevTab,
+        Self::GoToTab,
+        Self::LastTab,
         Self::TabList,
         Self::SaveWorkspace,
         Self::Workspaces,

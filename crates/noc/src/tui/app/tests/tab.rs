@@ -125,6 +125,51 @@ fn disconnecting_tones_down_hidden_tabs_on_the_host_too() {
 }
 
 #[test]
+fn alt_and_a_digit_show_the_tab_of_that_number_and_alt_0_the_last() {
+    let mut app = with_files(&["a", "b"]);
+    keys(&mut app, &["t", "n", "t", "n"]);
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 4));
+    keys(&mut app, &["alt-1"]);
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 1));
+    keys(&mut app, &["alt-2"]);
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 3));
+    keys(&mut app, &["alt-0"]);
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 4));
+    // A number past the last tab does nothing, as `g t` after such a count.
+    keys(&mut app, &["alt-1", "alt-4"]);
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 1));
+    // After Ctrl+x, the other panel's tab, and the keys come back.
+    keys(&mut app, &["ctrl-x", "t", "n"]);
+    assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 5], 5));
+    keys(&mut app, &["ctrl-x", "alt-1"]);
+    assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 5], 2));
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3, 4], 1));
+    assert_eq!(app.active, Side::Left);
+}
+
+#[test]
+fn a_tab_keeps_its_visual_mode_while_another_shows() {
+    let mut app = with_files(&["a", "b", "c", "d"]);
+    keys(&mut app, &["t", "n", "alt-1", "j", "v", "j"]);
+    assert_eq!(app.place(), (Mode::Visual, Context::Panel));
+    keys(&mut app, &["alt-2"]);
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
+    assert_eq!(
+        app.place(),
+        (Mode::Normal, Context::Panel),
+        "this tab's mode"
+    );
+    keys(&mut app, &["g", "shift-t"]);
+    assert_eq!(app.place(), (Mode::Visual, Context::Panel), "back again");
+    assert_eq!(app.panel(Side::Left).visual_size(), Some(2));
+    assert_eq!(cursor_name(&app, Side::Left), "b");
+    // So it does while the other panel has the keys.
+    keys(&mut app, &["alt-0", "ctrl-w", "w", "ctrl-w", "w", "alt-1"]);
+    assert_eq!(app.place(), (Mode::Visual, Context::Panel));
+    assert_eq!(app.panel(Side::Left).visual_size(), Some(2));
+}
+
+#[test]
 fn the_list_of_tabs_shows_the_one_chosen() {
     let mut app = loaded();
     app.handle(action(Action::NewTab));

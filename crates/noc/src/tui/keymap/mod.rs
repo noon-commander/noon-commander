@@ -28,6 +28,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(crate) use action::{Action, Context, Mode, Place};
 
+use crate::tui::glyphs;
+
 /// How long a sequence such as `g g` waits for its next key.
 pub(crate) const SEQUENCE_TIMEOUT: Duration = Duration::from_secs(1);
 
@@ -58,7 +60,8 @@ pub(crate) struct Extra {
     /// The count typed before the register, which `count` takes in: `2` in `2"a3d`, for the
     /// command to show as typed.
     pub(crate) outer: Option<usize>,
-    /// The character typed after an action that takes one: `x` in `fx`.
+    /// The character typed after an action that takes one: `x` in `fx`; for `GoToTab`, the
+    /// digit of its own key: `2` in Alt+2.
     pub(crate) char: Option<char>,
     /// Ctrl+x came before it: it runs in the other panel, which has the keys until it ends.
     pub(crate) other: bool,
@@ -562,7 +565,13 @@ impl Keymap {
             state.awaiting = Some((action, keys));
             return None;
         }
-        let extra = state.take_extra();
+        let mut extra = state.take_extra();
+        if action == Action::GoToTab {
+            extra.char = state.keys.last().and_then(|key| match key.codes.first() {
+                KeyCode::Char(c) => Some(*c),
+                _ => None,
+            });
+        }
         state.reset();
         Some(Typed {
             resolved: Resolved::Action(action),
@@ -699,6 +708,9 @@ impl Keymap {
                 }
                 None => rows.push((*action, keys)),
             }
+        }
+        for (_, keys) in &mut rows {
+            *keys = shorten_runs(keys);
         }
         rows
     }
@@ -845,6 +857,9 @@ impl Keymap {
                 }),
             }
         }
+        for row in &mut rows {
+            row.keys = shorten_runs(&row.keys);
+        }
         rows
     }
 
@@ -900,6 +915,9 @@ impl Keymap {
                     more: longer,
                 }),
             }
+        }
+        for hint in &mut hints {
+            hint.keys = shorten_runs(&hint.keys);
         }
         hints
     }
@@ -991,6 +1009,48 @@ fn describe_key(key: KeyCombination) -> String {
     }
     text.push_str(&names.join("+"));
     text
+}
+
+/// `keys`, a list such as `Alt+1, Alt+2, Alt+3`, with each run of three or more keys that differ
+/// only by a digit one higher than the key before written as its first and last: `Alt+1 … Alt+3`.
+fn shorten_runs(keys: &str) -> String {
+    let keys: Vec<&str> = keys.split(", ").collect();
+    let mut parts: Vec<String> = Vec::new();
+    let mut start = 0;
+    while start < keys.len() {
+        let mut end = start + 1;
+        while end < keys.len() && follows(keys[end - 1], keys[end]) {
+            end += 1;
+        }
+        if end - start >= 3 {
+            parts.push(format!(
+                "{} {} {}",
+                keys[start],
+                glyphs::KEY_RANGE,
+                keys[end - 1]
+            ));
+        } else {
+            parts.extend(keys[start..end].iter().map(|key| (*key).to_owned()));
+        }
+        start = end;
+    }
+    parts.join(", ")
+}
+
+/// Whether `next` is `key` with its digit one higher, as Alt+2 after Alt+1; F2 after F1 too,
+/// but not F11 after F10, whose digit is not the whole number.
+fn follows(key: &str, next: &str) -> bool {
+    fn split(key: &str) -> Option<(&str, u32)> {
+        let (at, last) = key.char_indices().last()?;
+        let lead = &key[..at];
+        let numbered = !lead.is_empty() && !lead.ends_with(|c: char| c.is_ascii_digit());
+        numbered.then_some((lead, last.to_digit(10)?))
+    }
+    matches!(
+        (split(key), split(next)),
+        (Some((lead, digit)), Some((next_lead, next_digit)))
+            if lead == next_lead && next_digit == digit + 1
+    )
 }
 
 /// A key as vim's `showcmd` shows it: a character as it is, Ctrl and a letter as `^W`, and

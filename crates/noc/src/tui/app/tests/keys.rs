@@ -221,7 +221,7 @@ fn alt_and_a_key_do_nothing_on_a_password() {
 }
 
 #[test]
-fn visual_mode_keeps_its_rows_and_ends_where_the_keys_go_elsewhere() {
+fn visual_mode_keeps_its_rows_and_stays_with_its_panel() {
     let mut app = with_files(&["a", "b", "c", "d", "e"]);
     keys(&mut app, &["3", "j", "v", "j"]);
     assert_eq!(cursor_name(&app, Side::Left), "d");
@@ -242,15 +242,22 @@ fn visual_mode_keeps_its_rows_and_ends_where_the_keys_go_elsewhere() {
     // A count does not mark more once Space ends Visual mode.
     keys(&mut app, &["g", "g", "v", "j", "3", "space"]);
     assert_eq!(chosen_names(&app, Side::Left), ["a", "c", "d"]);
-    // Another panel takes the keys: this one leaves Visual mode.
-    keys(&mut app, &["v", "ctrl-w", "w", "ctrl-w", "w"]);
-    assert_eq!(app.place(), (Mode::Normal, Context::Panel));
-    keys(&mut app, &["v"]);
+    // Another panel takes the keys: this one keeps Visual mode, and has it again with them.
+    keys(&mut app, &["v", "j", "ctrl-w", "w"]);
+    assert_eq!(
+        app.place(),
+        (Mode::Normal, Context::Panel),
+        "the other's mode"
+    );
+    assert_eq!(app.panel(Side::Left).visual_size(), Some(2));
+    keys(&mut app, &["ctrl-w", "w"]);
+    assert_eq!(app.place(), (Mode::Visual, Context::Panel));
     screen_of(&mut app, 12);
     press(&mut app, Press::Click, 100, 4);
     assert_eq!(app.active, Side::Right);
-    assert!(!app.panel(Side::Left).visual(), "after a click too");
-    keys(&mut app, &["ctrl-w", "w"]);
+    assert!(app.panel(Side::Left).visual(), "after a click too");
+    keys(&mut app, &["ctrl-w", "w", "esc"]);
+    assert_eq!(app.place(), (Mode::Normal, Context::Panel));
     // An F-key that does not act on the selection ends Visual mode and does what it does.
     keys(&mut app, &["v", "f7"]);
     assert_eq!(app.context(), Context::PathInput, "F7 asks for a name");

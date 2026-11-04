@@ -153,9 +153,7 @@ impl App {
             Action::FocusLeft | Action::FocusRight => {
                 self.active = self.drawn_on(action == Action::FocusLeft);
             }
-            Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab => {
-                return self.tab_action(self.active, action);
-            }
+            _ if action.of_tabs() => return self.tab_action(self.active, action),
             Action::TabList => self.open_tab_menu(self.active),
             // The active panel moves to the other side and stays active, as in mc.
             Action::SwapPanels => self.swapped = !self.swapped,
@@ -322,8 +320,9 @@ impl App {
 
     /// Takes a key while a panel selects rows in Visual mode: the motions extend the
     /// selection, Space marks it, and the commands of files act on what it selects, which they
-    /// find marked. Any other command, such as an F-key or one of the pull-down menu, ends
-    /// Visual mode and runs as in Normal mode: `None` then.
+    /// find marked. The keys to another panel or tab keep it; any other command, such as an
+    /// F-key or one of the pull-down menu, ends Visual mode and runs as in Normal mode: `None`
+    /// then.
     fn handle_visual(&mut self, action: Action) -> Option<Vec<Effect>> {
         let id = self.shown(self.active);
         let count = self.extra.count;
@@ -361,6 +360,13 @@ impl App {
                     return Some(self.open(id, request));
                 }
             }
+            // The panel or the tab left keeps its Visual mode, and has it again with the keys
+            // (ADR 0066).
+            Action::SwitchPanel
+            | Action::FocusLeft
+            | Action::FocusRight
+            | Action::GoToTab
+            | Action::LastTab => return None,
             _ => {
                 panel.end_visual();
                 return None;

@@ -115,6 +115,7 @@ not:
 | t n<br>t c | `new_tab`<br>`close_tab` | noc | t n (noc); g n (ranger)<br>t c (noc); g c (ranger) | Same | Group `t`: n for new, c for close. |
 | g n<br>g c | `new_tab`<br>`close_tab` | ranger | t n (noc); g n (ranger)<br>t c (noc); g c (ranger) | Same | ranger's keys for a new tab and to close one. vim's g n selects the next match of the search; vim binds no g c, which nvim comments with. |
 | ] t<br>[ t | `next_tab`<br>`prev_tab` | yazi | g t (vim); ] t (yazi)<br>g T (vim); [ t (yazi) | Same | yazi goes through the tabs with ] and [; t says what to go to, as in vim's pairs of ] and [ (] s, ] c). vim binds no ] t; nvim 0.11 goes through tags with it. |
+| Alt+1 … Alt+9<br>Alt+0 | `go_to_tab`<br>`last_tab` | ranger, noc | 2g t (vim)<br>— | An Esc and a quick digit show the tab too, rather than give up what is typed and start a count | The tab of the digit, as ranger's Alt+1 … Alt+9 and the browsers' keys; past the last tab nothing, as vim's g t after such a count, where ranger makes a new one. Alt+0, the last tab, as vim's `:tablast`, which has no key. Ctrl+x Alt+2, the other panel's. In Visual mode they keep it in the tab left, which has it again when it shows ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). vim binds no Alt keys; an Esc and a quick digit arrive as them without the kitty keyboard protocol, and Esc then a count is rare in a listing. |
 | t t | `tab_list` | noc | t t (noc) | Same | Group `t`: the tabs of the panel, listed in a menu, as vim's `:tabs` lists them; Ctrl+x t t, the other panel's. yazi makes a new tab with t t, which t n does here. |
 | t w<br>t W | `workspaces`<br>`save_workspace` | noc | t w (noc)<br>t W (noc) | Same | Group `t`: w for workspaces, and W saves one. |
 | o h | `toggle_hidden` | noc | o h (noc) | Same | Group `o`, with what the rows show. ranger switches the hidden names with z h, which scrolls the names left here, as vim's does. |
@@ -150,7 +151,8 @@ not:
 | F8 | `delete` | mc | d, D, X (vim) | Same | As in Normal mode, on the rows selected. |
 | f # | `checksum` | noc | f # (noc) | Same | As in Normal mode, on the rows selected. |
 | F1<br>F3<br>F4<br>Shift+F5<br>Shift+F6<br>F7<br>Shift+F7<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`duplicate`<br>`rename`<br>`mkdir`<br>`next_match`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | mc's F-keys work in Visual mode too ([ADR 0022](adr/0022-vim-modes.md)). These do not act on the rows selected, so they end Visual mode, then do what they do in Normal mode. |
-| Tab | `switch_panel` | mc, Far | Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p (vim) | Nothing, as Ctrl+i in Visual mode, as in vim | As in Normal mode; it ends Visual mode first. |
+| Tab | `switch_panel` | mc, Far | Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p (vim) | Nothing, as Ctrl+i in Visual mode, as in vim | As in Normal mode. Visual mode does not end: the panel left keeps it, as it keeps its cursor, and has it again with the keys ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). |
+| Alt+1 … Alt+9<br>Alt+0 | `go_to_tab`<br>`last_tab` | ranger, noc | — | An Esc and a quick digit show the tab too, rather than leave Visual mode and start a count | As in Normal mode. Visual mode does not end: the tab left keeps it, as it keeps its cursor, and has it again when it shows ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). |
 
 ## Quick search (`quick_search`, Insert mode)
 

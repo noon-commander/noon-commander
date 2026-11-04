@@ -733,6 +733,8 @@ fn works_unconnected(action: Action) -> bool {
             | Action::CloseTab
             | Action::NextTab
             | Action::PrevTab
+            | Action::GoToTab
+            | Action::LastTab
             | Action::TabList
             | Action::LocationMenu
             | Action::OtherPanel

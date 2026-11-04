@@ -22,6 +22,11 @@ const SEARCH_INPUT: Bound = &[
     (Action::CaseMatch, &["ctrl-s m"]),
 ];
 
+/// The keys of the tabs by their numbers, in Normal and Visual mode alike.
+const GO_TO_TAB: &[&str] = &[
+    "alt-1", "alt-2", "alt-3", "alt-4", "alt-5", "alt-6", "alt-7", "alt-8", "alt-9",
+];
+
 pub(super) const PRESET: Preset = &[
     // Everywhere but the output of commands: the other contexts fall back to it last. `"`
     // names a register wherever keys are commands, as in vim, so that the name is never one;
@@ -79,6 +84,9 @@ pub(super) const PRESET: Preset = &[
             (Action::CloseTab, &["t c", "g c"]),
             (Action::NextTab, &["g t", "] t"]),
             (Action::PrevTab, &["g shift-t", "[ t"]),
+            // As ranger's and the browsers': the tab of the digit, Alt+0 the last.
+            (Action::GoToTab, GO_TO_TAB),
+            (Action::LastTab, &["alt-0"]),
             (Action::TabList, &["t t"]),
             (Action::Workspaces, &["t w"]),
             (Action::SaveWorkspace, &["t shift-w"]),
@@ -144,8 +152,9 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // Rows selected in a panel, from where Visual mode started to the cursor. The commands of
-    // files act on them, as on marked entries; Space marks them. The other F-keys, and Ctrl+w
-    // to another panel, end Visual mode and do what they do in Normal mode.
+    // files act on them, as on marked entries; Space marks them. The other F-keys end Visual
+    // mode and do what they do in Normal mode; the panel or the tab that Ctrl+w or Alt and a
+    // digit leave keeps it, and has it again with the keys (ADR 0066).
     (
         Mode::Visual,
         Context::Panel,
@@ -186,6 +195,8 @@ pub(super) const PRESET: Preset = &[
             ),
             (Action::FocusLeft, &["ctrl-w h"]),
             (Action::FocusRight, &["ctrl-w l"]),
+            (Action::GoToTab, GO_TO_TAB),
+            (Action::LastTab, &["alt-0"]),
         ],
     ),
     // What the text fields share in Insert mode: quick search, the field of an entry renamed in

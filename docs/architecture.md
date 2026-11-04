@@ -697,7 +697,9 @@ row and names the tab that shows by its whole location:
 - `t n` opens a new tab after the one that shows, on the same directory with the same listing
   and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
   one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes
-  to the tab of that number, as in vim; `t t` opens the tab menu of the active panel, as vim's
+  to the tab of that number, as in vim, and so does Alt and its digit, as in ranger (`go_to_tab`,
+  the digit in `Extra::char`); Alt+0 goes to the last, as vim's `:tablast`. A number past the
+  last tab does nothing. `t t` opens the tab menu of the active panel, as vim's
   `:tabs` lists them: the tabs with their whole locations, centered over both panels, to show
   one, under the title `Tabs`, which names no side; it grows with the widest location up to the
   width of the other lists, 76 cells. Ctrl+x
@@ -1436,9 +1438,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mode says `VISUAL LINE`. Space marks the rows selected; `y`, `x`, `d`, `D`, `X`, F5, F6, F8,
   `f #`, and `g x` make them the marked entries and act on them, as on any marks, and put the
   cursor on the first row, as vim's operators do. The line of the mode shows how many entries it
-  selects, without `..`. The other F-keys, Ctrl+w to the other panel, and the commands of the
-  pull-down menu end Visual mode and do what they do in Normal mode, and so does the panel losing
-  the keys to the other one or to another tab. The selection is held by the entries on its ends,
+  selects, without `..`. The other F-keys and the commands of the pull-down menu end Visual mode
+  and do what they do in Normal mode. Visual mode is the tab's, as its cursor is: Ctrl+w and Tab to
+  the other panel, a click there, and Alt+1 … Alt+9 and Alt+0 to another tab leave it in the panel
+  or the tab left, which draws the rows it selects and has it again with the keys; Ctrl+x runs its
+  command there in Visual mode, and gives the keys back once that panel is in Normal mode or still
+  in the Visual mode it kept ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). The
+  selection is held by the entries on its ends,
   so that a listing of the same directory or another sort order keeps it on them.
 - **Jumps.** Each tab keeps a jump list, as vim does with `jumpoptions=stack`: going to another
   directory (Enter, `h`, Go to directory, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`,
@@ -1651,13 +1657,15 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   command of Normal mode ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It
   comes with the command, as a register does (`Extra`), with the count and the register after it
   (`Ctrl+x 2g t`); those typed before it go, and Esc and Ctrl+x again give it up. `App::typed`
-  makes the other panel active for the command and keeps where the keys were (`returns`), so any
-  command works there as in the active panel, those of the cursor, the marks, and the files too,
-  and needs nothing of its own. `App::come_back` gives the keys back once the panel has them in
-  Normal mode with nothing in front and no program to hand the terminal to: after the key, or, as
-  the event loop asks before each frame, once the mouse closed its window or the program it ran
-  returned. Windows of a panel open centered over both, as every window does; the panel drawn
-  active, after Ctrl+x the other one, says which they act on.
+  makes the other panel active for the command and keeps where the keys were and the mode it had
+  (`returns`), so any command works there as in the active panel, those of the cursor, the marks,
+  and the files too, and needs nothing of its own. `App::come_back` gives the keys back once the
+  panel has them in Normal mode, or in the Visual mode it kept
+  ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)), with nothing in front and no program
+  to hand the terminal to: after the key, or, as the event loop asks before each frame, once the
+  mouse closed its window or the program it ran returned. Windows of a panel open centered over
+  both, as every window does; the panel drawn active, after Ctrl+x the other one, says which they
+  act on.
 - **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
   it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
   `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after

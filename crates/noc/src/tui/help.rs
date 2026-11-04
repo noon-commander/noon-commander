@@ -1127,6 +1127,8 @@ fn describe_tabs(context: Context, action: Action) -> Option<String> {
         Action::CloseTab => fl!("help-close-tab"),
         Action::NextTab => fl!("help-next-tab"),
         Action::PrevTab => fl!("help-prev-tab"),
+        Action::GoToTab => fl!("help-go-to-tab"),
+        Action::LastTab => fl!("help-last-tab"),
         Action::TabList => fl!("help-tab-list"),
         Action::SaveWorkspace => fl!("help-save-workspace"),
         Action::Workspaces => fl!("help-workspaces-open"),

@@ -43,9 +43,9 @@ struct Row {
 
 impl Row {
     /// Whether Enter runs it: not a command that takes the character typed after it, as `f`
-    /// does, which the list has no key for.
+    /// does, which the list has no key for, nor the tab of a digit, whose key says which.
     fn runs(&self) -> bool {
-        !self.action.takes_char()
+        !self.action.takes_char() && self.action != Action::GoToTab
     }
 }
 

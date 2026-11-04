@@ -295,6 +295,10 @@ pub(crate) const NO_NEWLINE: &str = "⏎";
 /// parts its sections.
 pub(crate) const MODE_SEPARATOR: char = '·';
 
+/// Between the first and the last of keys that differ only by their digit, in the help and the
+/// key hints: `Alt+1 … Alt+9`, as the docs write them.
+pub(crate) const KEY_RANGE: char = '…';
+
 /// In a secret field, as mc draws it.
 pub(crate) const SECRET: char = '*';
 

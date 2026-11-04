@@ -45,6 +45,7 @@ of the host shared. A new connection has a new session, and the job could not ta
   while any question waits.
 - `noc-ops` knows nothing of connections. It tries the step again on Retry, as it always did; the
   app holds the answer until the host is back.
-- A file whose copy was cut off is copied again in whole: there is no resuming within a file.
+- A file whose copy was cut off is copied again in whole: there is no resuming within a file
+  yet. The roadmap has it, under resumable transfers.
 - A job that the host lost before its failure reached the app may ask about that failure once the
   host is back, as the error came after the new connection. Retry then works.

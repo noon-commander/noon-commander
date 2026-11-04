@@ -305,7 +305,17 @@
   not do yet, and the tools differ (`sha256sum`, `shasum`, `b3sum`), so it needs an ADR.
   OpenSSH's server has no SFTP `check-file` extension.
 - CRC32, for `.sfv` files.
-- Resumable transfers.
+- Resumable transfers: Retry after a failure, such as a lost connection
+  ([ADR 0064](adr/0064-jobs-wait-for-a-lost-host.md)) or a full disk, goes on from where the
+  file was cut off rather than writing it again. Where it goes on is the part from the start that
+  the target took without a gap (`FileWriter`), not the size of the file, as an SFTP writer has
+  several writes in flight, which the server may answer out of order. It goes on only if the
+  source has the size and the time it had when it was counted, and the target is no shorter;
+  else, or where a backend cannot write from an offset (a default of `Vfs`), the file is written
+  again. To check, the last 64 KiB before that point are read again on both ends, as
+  `rsync --append-verify` does. The part kept counts as done, not as copied, so the speed stays
+  what it is (ADR 0056). Perhaps later, Resume in the question about a taken name, as in Far, for
+  a file that an earlier job or run left short.
 - Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on
   `/proc/self/mountinfo` on Linux) instead of reading them each time the location menu opens;
   eject from the menu.

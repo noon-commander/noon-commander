@@ -532,6 +532,9 @@ dialog-abort = &Abort
 # with Skip and Abort, or Cancel.
 dialog-overwrite = &Overwrite
 dialog-rename = &Rename…
+# Buttons of an error, before Cancel: try again; connect to the host, which is not connected;
+# open again the dialog where it was typed, to change it.
+dialog-change = &Change…
 # Title of error dialogs.
 dialog-error = Error
 # Under why something failed: the number the system gave it, or the status of SFTP on a host,

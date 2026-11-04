@@ -57,7 +57,7 @@ pub(crate) enum CommandEvent {
 }
 
 /// A shell command for the event loop to run, and where.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Run {
     pub(crate) place: Place,
     /// What runs it: `shell.run`, or the `run` of the host it runs on.
@@ -70,7 +70,7 @@ pub(crate) struct Run {
 }
 
 /// Where a command runs: in a local directory, or in a directory on a connected host.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum Place {
     Local(PathBuf),
     Remote { handle: HostHandle, dir: RemotePath },

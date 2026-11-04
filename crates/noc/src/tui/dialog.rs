@@ -97,6 +97,8 @@ pub(crate) enum Button {
     Overwrite,
     /// Give the file that would replace another a name of its own.
     Rename,
+    /// Open again the dialog where what an error is about was typed.
+    Change,
     /// Take what the panel shows.
     UseCurrent,
     /// Go to the row, as in mc's results of Find File; or to a path typed.
@@ -136,6 +138,7 @@ impl Button {
             Self::Abort => fl!("dialog-abort"),
             Self::Overwrite => fl!("dialog-overwrite"),
             Self::Rename => fl!("dialog-rename"),
+            Self::Change => fl!("dialog-change"),
             Self::UseCurrent => fl!("dialog-use-current"),
             Self::GoTo => fl!("dialog-go-to"),
             Self::View => fl!("dialog-view"),
@@ -3202,6 +3205,8 @@ mod tests {
             vec![Button::Retry, Button::Up, Button::GoTo, Button::Cancel],
             vec![Button::Overwrite, Button::Rename, Button::Cancel],
             vec![Button::Connect, Button::Local, Button::Cancel],
+            vec![Button::Retry, Button::Connect, Button::Cancel],
+            vec![Button::Change, Button::Cancel],
         ];
         for buttons in questions {
             let name = format!("{buttons:?}");

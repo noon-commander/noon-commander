@@ -161,10 +161,10 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
             connection,
             reason,
         } => tasks.run(app.closed(&host, connection, reason.as_deref())),
-        Done::HostSaved(result) => tasks.run(app.host_saved(result)),
-        Done::ConfigSaved(result) => app.config_saved(result),
-        Done::Workspaces { changed, result } => app.workspaces_changed(changed, result),
-        Done::History(result) => app.history_changed(result),
+        Done::HostSaved { name, host, result } => tasks.run(app.host_saved(name, host, result)),
+        Done::ConfigSaved { old, new, result } => app.config_saved(old, new, result),
+        Done::Workspaces { change, result } => app.workspaces_changed(change, result),
+        Done::History { change, result } => app.history_changed(change, result),
         Done::Recent(result) => app.recent_loaded(result),
         Done::Jumps { generation, result } => app.jumps(generation, result),
         Done::Found { generation, found } => app.found(generation, found),
@@ -537,6 +537,7 @@ async fn hand_over(
             (told.events()?, app.edited(result))
         }
         Handover::Run(run) => {
+            let again = run.clone();
             let result = match suspended {
                 Ok(()) => {
                     let command = pin!(output::run_command(run, (&keymap, told)));
@@ -552,7 +553,10 @@ async fn hand_over(
                 meanwhile(key, done, &mut held, &mut take).await;
                 output::after_key(ran);
             }
-            (events, app.ran(result.map(drop)))
+            (
+                events,
+                app.ran(result.map(drop).map_err(|problem| (problem, again))),
+            )
         }
         Handover::UserScreen => {
             let mut events = told.events()?;

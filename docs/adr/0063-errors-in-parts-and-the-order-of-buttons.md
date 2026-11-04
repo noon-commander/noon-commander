@@ -72,6 +72,20 @@ had No.
   file: the path, New and Existing with their sizes and times, each viewing its file, and
   Overwrite, Rename…, and Cancel, the default. For a save, New views the bytes it would write and
   has no time. Rename… offers a free name; a rename takes a name in its directory alone.
+- **An error that has a way on offers it first, the default, and Cancel** (`Way`):
+
+  | Way | Errors | What it does |
+  | --- | --- | --- |
+  | Retry | F7, a rename, a save, F3, a part F3 could not read, the editor of F4, an edited copy that did not go back, the shell of `!` and `:`, the configuration, the settings of a host, the workspaces, the history | Does the same again (`Again`) |
+  | Connect | What could not start as its host is not connected: F5, F6, F8, F7, a rename, a save, `f #`, F4, `!` and `:` | Connects to the host; the user does it again |
+  | Change… | F5 or F6 onto or into the source, F7 onto a name that is taken | Opens the dialog again with what was typed |
+
+  Retry for work on a host that is not connected has Connect after it, which connects and asks
+  again, for Retry once connected: an edited copy can only go back so. Cancel after the editor
+  could not run ends the edit, as if the file did not change. What Retry would fail at again
+  keeps OK: `g x`, whose program ran and said no, a name that cannot be a name, and what else
+  was typed wrong in a form, over which most of these show. F3 over the question about a taken
+  name keeps OK too, as its line views the file again.
 - **Replacing a workspace by Save as has No as the default**, as renaming one onto another has.
 - **Errors that had their reason in a sentence show it in parts too**: a shell of `!` or `:` that
   could not run (`Cannot run /bin/zsh`, then why and its code), and an edited copy of a remote
@@ -90,3 +104,7 @@ had No.
 - A run of failures of one kind, such as files that may not be read among many, can be passed
   by while the others still ask.
 - On a terminal too short for the dialog, its buttons are cut off first, as before.
+- Most errors are one key from trying again, or from the dialog to mend what was typed.
+- A failed request carries what it asked for back to the app, which keeps it while its error
+  waits: the bytes of a save, the old and the new configuration, a change of the workspaces or
+  of the history.

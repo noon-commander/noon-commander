@@ -88,7 +88,7 @@ pub(crate) enum Done {
     Created {
         panel: PanelId,
         location: Location,
-        result: Result<(), Reason>,
+        result: Result<(), Unmade>,
     },
     /// The host of [`Effect::Connect`] is connected; its listings go through `handle`.
     Connected {
@@ -133,18 +133,29 @@ pub(crate) enum Done {
     },
     /// The settings of [`Effect::SaveHost`] are saved, and these are all the host settings
     /// now; or why not.
-    HostSaved(Result<Arc<Hosts>, Reason>),
+    HostSaved {
+        name: String,
+        host: Option<HostConfig>,
+        result: Result<Arc<Hosts>, Reason>,
+    },
     /// The settings of [`Effect::SaveConfig`] are written, or why not.
-    ConfigSaved(Result<(), Reason>),
+    ConfigSaved {
+        old: Box<Config>,
+        new: Box<Config>,
+        result: Result<(), Reason>,
+    },
     /// The workspaces as `workspaces.toml` holds them after an [`Effect::Workspaces`], or why
     /// it could not be read, or changed if `changed`.
     Workspaces {
-        changed: bool,
+        change: WorkspaceChange,
         result: Result<Workspaces, Reason>,
     },
     /// The commands of `history.toml`, oldest first, after a change, or why it could not be
     /// read or written.
-    History(Result<Vec<HistoryEntry>, Reason>),
+    History {
+        change: HistoryChange,
+        result: Result<Vec<HistoryEntry>, Reason>,
+    },
     /// The hosts and volumes of `recent.toml`, of [`RecentChange::Load`], or why they could not
     /// be read.
     Recent(Result<Recent, String>),
@@ -223,6 +234,24 @@ pub(crate) struct TakenName {
     pub(crate) target_metadata: Metadata,
     pub(crate) free: Vec<u8>,
     pub(crate) reply: oneshot::Sender<Conflict>,
+}
+
+/// Why a directory was not made.
+#[derive(Debug)]
+pub(crate) enum Unmade {
+    /// Something has the name.
+    Taken(Reason),
+    Failed(Reason),
+}
+
+impl Unmade {
+    fn of(error: &VfsError) -> Self {
+        let reason = describe::vfs_reason(error);
+        match error {
+            VfsError::AlreadyExists(..) => Self::Taken(reason),
+            _ => Self::Failed(reason),
+        }
+    }
 }
 
 /// Why a rename or a write of a file left everything as it was.
@@ -707,8 +736,9 @@ impl Tasks {
         let context = Arc::clone(&self.context);
         let done = self.done.clone();
         tokio::spawn(async move {
+            let (saving, config) = (name.clone(), host.clone());
             let saved = tokio::task::spawn_blocking(move || {
-                save_host(&context.hosts_file, &name, host.as_ref())?;
+                save_host(&context.hosts_file, &saving, config.as_ref())?;
                 context.reload_hosts()?;
                 Ok::<_, ConfigError>(context.hosts())
             })
@@ -717,7 +747,7 @@ impl Tasks {
                 Ok(result) => result.map_err(|error| describe::reason(&error)),
                 Err(error) => Err(error.to_string().into()),
             };
-            let _ = done.send(Done::HostSaved(result));
+            let _ = done.send(Done::HostSaved { name, host, result });
         });
     }
 
@@ -792,7 +822,7 @@ impl Tasks {
                     let result = LocalFs
                         .create_dir(&path)
                         .await
-                        .map_err(|error| describe::vfs_reason(&error));
+                        .map_err(|error| Unmade::of(&error));
                     let _ = done.send(Done::Created {
                         panel,
                         location,
@@ -801,7 +831,7 @@ impl Tasks {
                 });
             }
             (Location::Remote { .. }, None) => {
-                let result = Err(fl!("error-connection-closed").into());
+                let result = Err(Unmade::Failed(fl!("error-connection-closed").into()));
                 let _ = self.done.send(Done::Created {
                     panel,
                     location,
@@ -959,12 +989,14 @@ fn save_configs(
     tokio::spawn(async move {
         while let Some((old, new)) = changes.recv().await {
             let path = path.clone();
-            let saved = tokio::task::spawn_blocking(move || save_config(&path, &old, &new)).await;
+            let (old, new) = (Box::new(old), Box::new(new));
+            let (from, to) = (old.clone(), new.clone());
+            let saved = tokio::task::spawn_blocking(move || save_config(&path, &from, &to)).await;
             let result = match saved {
                 Ok(result) => result.map_err(|error| describe::reason(&error)),
                 Err(error) => Err(error.to_string().into()),
             };
-            if done.send(Done::ConfigSaved(result)).is_err() {
+            if done.send(Done::ConfigSaved { old, new, result }).is_err() {
                 break;
             }
         }
@@ -982,8 +1014,8 @@ fn change_workspaces(
     tokio::spawn(async move {
         while let Some(change) = receiver.recv().await {
             let path = path.clone();
-            let changed = change != WorkspaceChange::Load;
-            let result = tokio::task::spawn_blocking(move || match change {
+            let asked = change.clone();
+            let result = tokio::task::spawn_blocking(move || match asked {
                 WorkspaceChange::Load => Workspaces::load(&path),
                 WorkspaceChange::Save(workspace) => save_workspace(&path, &workspace),
                 WorkspaceChange::Remove(name) => remove_workspace(&path, &name),
@@ -994,7 +1026,7 @@ fn change_workspaces(
                 Ok(result) => result.map_err(|error| describe::reason(&error)),
                 Err(error) => Err(error.to_string().into()),
             };
-            if done.send(Done::Workspaces { changed, result }).is_err() {
+            if done.send(Done::Workspaces { change, result }).is_err() {
                 break;
             }
         }
@@ -1012,7 +1044,8 @@ fn change_history(
     tokio::spawn(async move {
         while let Some(change) = receiver.recv().await {
             let path = path.clone();
-            let result = tokio::task::spawn_blocking(move || match change {
+            let asked = change.clone();
+            let result = tokio::task::spawn_blocking(move || match asked {
                 HistoryChange::Load => History::load(&path),
                 HistoryChange::Add { entry, size } => add_command(&path, &entry, size),
                 HistoryChange::Remove { host, command } => {
@@ -1026,7 +1059,7 @@ fn change_history(
                     .map_err(|error| describe::reason(&error)),
                 Err(error) => Err(error.to_string().into()),
             };
-            if done.send(Done::History(result)).is_err() {
+            if done.send(Done::History { change, result }).is_err() {
                 break;
             }
         }
@@ -2321,7 +2354,7 @@ impl HostTask {
         let result = fs
             .create_dir(&path)
             .await
-            .map_err(|error| describe::vfs_reason(&error));
+            .map_err(|error| Unmade::of(&error));
         let location = Location::Remote {
             host: self.host.clone(),
             path,

@@ -187,6 +187,12 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   host, or stops connecting to it. Panels on a connected host stay there with their entries
   toned down, as after a lost connection, and no dialog asks; a panel that only waited for the
   host stays where it was.
+- An error that has a way on offers it first, the default, then Cancel (`App::show_problem_way`,
+  [ADR 0063](adr/0063-errors-in-parts-and-the-order-of-buttons.md)): Retry does the same again
+  (`Again`), Connect connects a host that was not connected, and the user does it again,
+  Change… opens F5, F6, or F7 again with what was typed. Retry on a host that is not connected
+  has Connect after it, which asks again once it connects. Errors that Retry would not mend,
+  such as a name typed wrong, keep OK.
 - A directory that cannot be read opens a dialog, Error, as every error dialog shows a problem:
   `Cannot open the directory`, the path on a line of its own, and the reason under a line across
   the frame (`Dialog::failure`, `Problem`). The panel keeps what it showed. Retry reads it again;

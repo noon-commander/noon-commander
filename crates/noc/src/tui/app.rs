@@ -69,7 +69,7 @@ use super::spinner::{self, Spin, Wait};
 use super::sums::{Mark, SumRow, SumsEvent, SumsWindow, Verdict};
 use super::tab_menu::{TabMenu, TabMenuEvent};
 use super::tabs::{self, Bar, PanelId, Tab, Tabs};
-use super::tasks::{HostHandle, JobEvent, Refused, TakenFile, TakenName};
+use super::tasks::{HostHandle, JobEvent, Refused, TakenFile, TakenName, Unmade};
 use super::theme::{ColorDepth, Theme};
 use super::transfer::{self, Sources};
 use super::which_key;
@@ -428,6 +428,7 @@ enum Purpose {
         panel: PanelId,
         dir: Location,
         names: Vec<Vec<u8>>,
+        sources: Sources,
         offered: Option<(String, Location)>,
     },
     /// A failure in the job `job`, which waits for `reply`.
@@ -479,6 +480,8 @@ enum Purpose {
     NotConnected { panel: PanelId },
     /// F10 while jobs run: Yes quits and stops them.
     Quit,
+    /// `problem`, an error, with a way on from it besides Cancel, which `way` says.
+    Problem { problem: Problem, way: Way },
     /// Something to read, such as an error.
     Info,
     /// An error about the dialog after it, which shows under it and has the keys again once
@@ -501,6 +504,105 @@ enum Answer {
     /// The dialog that saves a file: Overwrite writes `bytes` over the file there; Rename…
     /// writes them under another name.
     Save { bytes: Vec<u8> },
+}
+
+/// What an error dialog offers besides Cancel, its first button and the default (ADR 0063).
+#[derive(Debug)]
+enum Way {
+    /// Retry does it again.
+    Again(Again),
+    /// Connect connects to the host, which was not connected; the user does it again then.
+    Connect(String),
+    /// Change… opens the dialog it came from again, with what was typed there.
+    Change(Change),
+}
+
+/// What Retry does again after an error.
+#[derive(Debug)]
+enum Again {
+    /// F7 makes the directory at `location` for `panel`.
+    CreateDir {
+        panel: PanelId,
+        location: Location,
+    },
+    /// Shift+F6 renames `from` to `to` for `panel`.
+    Rename {
+        panel: PanelId,
+        from: Location,
+        to: Location,
+    },
+    /// The dialog that saves a file writes `bytes` to `location`.
+    Write {
+        location: Location,
+        bytes: Vec<u8>,
+    },
+    /// F3 views the file at `location`.
+    View(Location),
+    /// The viewer reads the part it stopped at.
+    ReadMore,
+    /// F4 runs the editor again; Cancel ends the edit as if the file did not change.
+    Edit(Editing),
+    /// The edited `copy` of `remote` goes back; `dir` is read again then.
+    SendBack {
+        copy: PathBuf,
+        remote: Location,
+        dir: Location,
+    },
+    /// `!` or `:` runs the command again.
+    Run(Run),
+    /// The configuration is written again.
+    SaveConfig {
+        old: Box<Config>,
+        new: Box<Config>,
+    },
+    /// The settings of the host `name` are written again.
+    SaveHost {
+        name: String,
+        host: Option<HostConfig>,
+    },
+    Workspaces(WorkspaceChange),
+    History(HistoryChange),
+}
+
+impl Again {
+    /// The host it works on, if any, which must be connected for it to work.
+    fn host(&self) -> Option<&str> {
+        let location = match self {
+            Self::CreateDir { location, .. }
+            | Self::Write { location, .. }
+            | Self::View(location) => location,
+            Self::Rename { from, .. } => from,
+            Self::Edit(editing) => editing.remote.as_ref()?,
+            Self::SendBack { remote, .. } => remote,
+            Self::ReadMore
+            | Self::Run(_)
+            | Self::SaveConfig { .. }
+            | Self::SaveHost { .. }
+            | Self::Workspaces(_)
+            | Self::History(_) => return None,
+        };
+        match location {
+            Location::Remote { host, .. } => Some(host),
+            Location::Local(_) => None,
+        }
+    }
+}
+
+/// The dialog that Change… opens again, with the text typed in it.
+#[derive(Debug)]
+enum Change {
+    /// F5, F6, or Shift+F5, by `kind`, in `panel` on `dir`, for `names`, which the prompt names
+    /// as `sources`.
+    Transfer {
+        kind: transfer::Kind,
+        panel: PanelId,
+        dir: Location,
+        names: Vec<Vec<u8>>,
+        sources: Sources,
+        text: String,
+    },
+    /// F7 in `panel`.
+    Mkdir { panel: PanelId, text: String },
 }
 
 /// What a dialog about workspaces is for.
@@ -583,8 +685,13 @@ enum JobKind {
 enum Then {
     /// The copy for the editor is there: open it.
     Edit,
-    /// The edited `copy` went back to `remote`: remove it.
-    Discard { copy: PathBuf, remote: Location },
+    /// The edited `copy` went back to `remote`, whose directory `dir` panels read again: remove
+    /// it.
+    Discard {
+        copy: PathBuf,
+        remote: Location,
+        dir: Location,
+    },
 }
 
 /// What a checksum job was asked for, and the checksums it has found.
@@ -3799,7 +3906,11 @@ impl App {
 
     /// Takes the end of an [`Effect::Workspaces`]: the workspaces as `workspaces.toml` holds
     /// them now, or why it could not be read, or changed if `changed`.
-    pub(crate) fn workspaces_changed(&mut self, changed: bool, result: Result<Workspaces, Reason>) {
+    pub(crate) fn workspaces_changed(
+        &mut self,
+        change: WorkspaceChange,
+        result: Result<Workspaces, Reason>,
+    ) {
         match result {
             Ok(workspaces) => {
                 self.workspaces = workspaces;
@@ -3809,12 +3920,13 @@ impl App {
             }
             Err(reason) => {
                 let reason = reason.sanitized();
-                let head = if changed {
-                    fl!("workspaces-save-error")
-                } else {
+                let head = if change == WorkspaceChange::Load {
                     fl!("workspaces-load-error")
+                } else {
+                    fl!("workspaces-save-error")
                 };
-                self.show_problem(&Problem::new(head, reason));
+                let again = Again::Workspaces(change);
+                self.show_problem_way(Problem::new(head, reason), Way::Again(again));
             }
         }
     }
@@ -4402,10 +4514,15 @@ impl App {
     }
 
     /// Takes the result of an [`Effect::SaveConfig`].
-    pub(crate) fn config_saved(&mut self, result: Result<(), Reason>) {
+    pub(crate) fn config_saved(
+        &mut self,
+        old: Box<Config>,
+        new: Box<Config>,
+        result: Result<(), Reason>,
+    ) {
         if let Err(reason) = result {
-            let reason = reason.sanitized();
-            self.show_problem(&Problem::new(fl!("config-save-error"), reason));
+            let problem = Problem::new(fl!("config-save-error"), reason.sanitized());
+            self.show_problem_way(problem, Way::Again(Again::SaveConfig { old, new }));
         }
     }
 
@@ -4581,6 +4698,7 @@ impl App {
                 panel,
                 dir,
                 names,
+                sources,
                 offered,
             } if ok => {
                 self.copy_choices.preserve = transfer::preserve(dialog);
@@ -4589,7 +4707,15 @@ impl App {
                     _ => self.resolve_target(panel, dialog.text()),
                 };
                 if let Some(target) = target {
-                    return self.start_transfer(kind, dir, &names, target);
+                    let typed = Change::Transfer {
+                        kind,
+                        panel,
+                        dir: dir.clone(),
+                        names: names.clone(),
+                        sources,
+                        text: dialog.text().to_owned(),
+                    };
+                    return self.start_transfer(kind, dir, &names, target, typed);
                 }
             }
             Purpose::Failure { job, reply } => {
@@ -4643,6 +4769,7 @@ impl App {
             | Purpose::Transfer { .. }
             | Purpose::Info
             | Purpose::InfoOver => {}
+            Purpose::Problem { problem, way } => return self.problem_closed(problem, way, event),
         }
         Vec::new()
     }
@@ -4834,9 +4961,7 @@ impl App {
             return Vec::new();
         };
         let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
-            let problem = Problem::new(fl!("edit-error"), fl!("error-connection-closed"))
-                .at(location_text(&location));
-            self.show_problem(&problem);
+            self.show_not_connected(fl!("edit-error"), &location);
             return Vec::new();
         };
         let (handle, on) = (handle.clone(), host.clone());
@@ -4915,24 +5040,35 @@ impl App {
         let Some(editing) = self.editing.take() else {
             return Vec::new();
         };
-        let path = editing.remote.as_ref().map_or_else(
-            || location_text(&Location::Local(editing.file.clone())),
-            location_text,
-        );
-        let changed = match result {
-            Ok(changed) => changed,
+        match result {
+            Ok(changed) => self.finish_edit(editing, changed),
             Err(reason) => {
-                let reason = reason.sanitized();
-                self.show_problem(&Problem::new(fl!("edit-error"), reason).at(path.clone()));
-                false
+                let path = editing.remote.as_ref().map_or_else(
+                    || location_text(&Location::Local(editing.file.clone())),
+                    location_text,
+                );
+                let problem = Problem::new(fl!("edit-error"), reason.sanitized()).at(path);
+                self.show_problem_way(problem, Way::Again(Again::Edit(editing)));
+                Vec::new()
             }
-        };
+        }
+    }
+
+    /// Ends the edit of `editing`: panels on a local file's directory read it again; the copy of
+    /// a remote file goes back if it `changed`, and goes away if not.
+    fn finish_edit(&mut self, editing: Editing, changed: bool) -> Vec<Effect> {
         let Some(remote) = editing.remote else {
             return self.reload(&editing.dir);
         };
         if !changed {
             return vec![Effect::Discard(editing.file)];
         }
+        self.send_back(editing.file, remote, editing.dir)
+    }
+
+    /// Copies `copy`, the edited copy of `remote`, back over it, and removes it then; panels on
+    /// `dir` read it again.
+    fn send_back(&mut self, copy: PathBuf, remote: Location, dir: Location) -> Vec<Effect> {
         let handle = match &remote {
             Location::Remote { host, .. } => match self.hosts.get(host) {
                 Some(Host::Connected { handle, .. }) => Some(handle.clone()),
@@ -4941,27 +5077,28 @@ impl App {
             Location::Local(_) => None,
         };
         let Some(handle) = handle else {
-            self.keep_edit(path, &editing.file, &fl!("error-connection-closed"));
+            self.keep_edit(copy, remote, dir, &fl!("error-connection-closed"));
             return Vec::new();
         };
         self.last_job += 1;
         let id = self.last_job;
         let cancel = CancellationToken::new();
         let then = Then::Discard {
-            copy: editing.file.clone(),
+            copy: copy.clone(),
             remote: remote.clone(),
+            dir: dir.clone(),
         };
         let job = Job::new(
             id,
             JobKind::Transfer(transfer::Kind::Copy),
-            vec![editing.dir],
+            vec![dir],
             cancel.clone(),
         )
         .then(then);
         self.jobs.push(job);
         vec![Effect::Copy {
             id,
-            sources: vec![Location::Local(editing.file)],
+            sources: vec![Location::Local(copy)],
             target: remote,
             hosts: (None, Some(handle)),
             options: CopyOptions {
@@ -5063,7 +5200,7 @@ impl App {
                     Location::Local(path) => Place::Local(path.clone()),
                     Location::Remote { host, path } => {
                         let Some(Host::Connected { handle, .. }) = self.hosts.get(host) else {
-                            self.show_error(&fl!("error-connection-closed"));
+                            self.show_not_connected(fl!("command-failed"), &dir);
                             return Vec::new();
                         };
                         if let Some(run) = self.host_settings.get(host).and_then(HostConfig::run) {
@@ -5206,7 +5343,11 @@ impl App {
 
     /// Takes the commands as `history.toml` holds them after a change, or why it could not
     /// be read or written.
-    pub(crate) fn history_changed(&mut self, result: Result<Vec<HistoryEntry>, Reason>) {
+    pub(crate) fn history_changed(
+        &mut self,
+        change: HistoryChange,
+        result: Result<Vec<HistoryEntry>, Reason>,
+    ) {
         match result {
             Ok(history) => {
                 self.history = history;
@@ -5215,17 +5356,17 @@ impl App {
                 }
             }
             Err(reason) => {
-                let reason = reason.sanitized();
-                self.show_problem(&Problem::new(fl!("history-error"), reason));
+                let problem = Problem::new(fl!("history-error"), reason.sanitized());
+                self.show_problem_way(problem, Way::Again(Again::History(change)));
             }
         }
     }
 
     /// Takes the end of a shell command, or why the shell could not run; both panels read
     /// their directories again, as in mc, since the command may have changed anything.
-    pub(crate) fn ran(&mut self, result: Result<(), Problem>) -> Vec<Effect> {
-        if let Err(problem) = result {
-            self.show_problem(&problem.sanitized());
+    pub(crate) fn ran(&mut self, result: Result<(), (Problem, Run)>) -> Vec<Effect> {
+        if let Err((problem, run)) = result {
+            self.show_problem_way(problem.sanitized(), Way::Again(Again::Run(run)));
         }
         let mut dirs: Vec<Location> = Vec::new();
         for side in [self.active, self.active.other()] {
@@ -5405,11 +5546,14 @@ impl App {
             .unwrap_or(host)
     }
 
-    /// Says that the edited copy of `path` could not go back, `why`, and where it stays.
-    fn keep_edit(&mut self, path: String, file: &Path, why: &str) {
-        let copy = cells::sanitize(file.as_os_str().as_bytes());
-        let reason = [why.to_owned(), fl!("edit-kept-copy", copy = copy)].join("\n");
-        self.show_problem(&Problem::new(fl!("edit-kept"), reason).at(path));
+    /// Says that `copy`, the edited copy of `remote`, could not go back, `why`, and where it
+    /// stays; Retry sends it again.
+    fn keep_edit(&mut self, copy: PathBuf, remote: Location, dir: Location, why: &str) {
+        let shown = cells::sanitize(copy.as_os_str().as_bytes());
+        let reason = [why.to_owned(), fl!("edit-kept-copy", copy = shown)].join("\n");
+        let problem = Problem::new(fl!("edit-kept"), reason).at(location_text(&remote));
+        let again = Again::SendBack { copy, remote, dir };
+        self.show_problem_way(problem, Way::Again(again));
     }
 
     /// Takes the part [`Effect::Read`] read for the viewer `id`, and reads the next one it
@@ -5435,18 +5579,25 @@ impl App {
                 let reason = reason.sanitized();
                 if viewing.viewer.loading() {
                     let asked = viewing.question.is_some();
+                    let location = match &viewing.source {
+                        Source::File { location, .. } => Some(location.clone()),
+                        Source::Text { .. } => None,
+                    };
                     self.close_viewer();
                     let problem = Problem::new(fl!("viewer-error"), reason).at(path);
-                    // Over the question, which is in sight under it.
-                    if asked {
-                        self.show_problem_over(&problem);
-                    } else {
-                        self.show_problem(&problem);
+                    // Over the question, which is in sight under it, and whose line views the
+                    // file again.
+                    match (asked, location) {
+                        (true, _) => self.show_problem_over(&problem),
+                        (false, Some(location)) => {
+                            self.show_problem_way(problem, Way::Again(Again::View(location)));
+                        }
+                        (false, None) => self.show_problem(&problem),
                     }
                 } else {
                     viewing.viewer.stop();
                     let problem = Problem::new(fl!("viewer-read-error"), reason).at(path);
-                    self.show_problem(&problem);
+                    self.show_problem_way(problem, Way::Again(Again::ReadMore));
                 }
                 return Vec::new();
             }
@@ -5560,9 +5711,7 @@ impl App {
                 if let Some(Host::Connected { handle, .. }) = self.hosts.get(host) {
                     Some(handle.clone())
                 } else {
-                    let reason = fl!("error-connection-closed");
-                    let problem = Problem::new(fl!("delete-error"), reason).at(location_text(&dir));
-                    self.show_problem(&problem);
+                    self.show_not_connected(fl!("delete-error"), &dir);
                     return Vec::new();
                 }
             }
@@ -5671,13 +5820,27 @@ impl App {
         kind: transfer::Kind,
         sources: &Sources,
         names: Vec<Vec<u8>>,
-        (text, cursor): (String, usize),
+        field: (String, usize),
         offered: Option<(String, Location)>,
     ) {
         let dir = self.panel(self.active).location().clone();
+        let panel = self.shown(self.active);
+        self.open_transfer_in((panel, dir), kind, sources, names, field, offered);
+    }
+
+    /// Opens the dialog of F5, F6, and Shift+F5 as [`App::open_transfer`] does, for `panel` on
+    /// `dir`.
+    fn open_transfer_in(
+        &mut self,
+        (panel, dir): (PanelId, Location),
+        kind: transfer::Kind,
+        sources: &Sources,
+        names: Vec<Vec<u8>>,
+        (text, cursor): (String, usize),
+        offered: Option<(String, Location)>,
+    ) {
         let preserve = self.copy_choices.preserve;
         let dialog = transfer::dialog(kind, sources, (&text, cursor), preserve);
-        let panel = self.shown(self.active);
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Transfer {
@@ -5685,6 +5848,7 @@ impl App {
                 panel,
                 dir,
                 names,
+                sources: sources.clone(),
                 offered,
             },
         });
@@ -5712,16 +5876,17 @@ impl App {
         dir: Location,
         names: &[Vec<u8>],
         target: Location,
+        typed: Change,
     ) -> Vec<Effect> {
         let sources: Vec<Location> = names.iter().map(|name| child(&dir, name)).collect();
         let error = |reason: String| Problem::new(kind.error(), reason).at(location_text(&target));
         if target == dir || sources.contains(&target) {
-            self.show_problem(&error(fl!("transfer-same")));
+            self.show_problem_way(error(fl!("transfer-same")), Way::Change(typed));
             return Vec::new();
         }
         if let Some(source) = sources.iter().find(|source| within(source, &target)) {
             let reason = fl!("transfer-into-itself", path = location_text(source));
-            self.show_problem(&error(reason));
+            self.show_problem_way(error(reason), Way::Change(typed));
             return Vec::new();
         }
         let handle = |location: &Location| match location {
@@ -5732,7 +5897,9 @@ impl App {
             Location::Local(_) => Ok(None),
         };
         let (Ok(from), Ok(to)) = (handle(&dir), handle(&target)) else {
-            self.show_problem(&error(fl!("error-connection-closed")));
+            let away = if handle(&dir).is_err() { &dir } else { &target };
+            let away = away.clone();
+            self.show_not_connected(kind.error(), &away);
             return Vec::new();
         };
         // The source, and the target if a panel shows it.
@@ -6147,9 +6314,9 @@ impl App {
                 .into_iter()
                 .collect(),
             (Then::Discard { copy, .. }, true) => vec![Effect::Discard(copy)],
-            (Then::Discard { copy, remote }, false) => {
+            (Then::Discard { copy, remote, dir }, false) => {
                 let why = fl!("edit-kept-stopped");
-                self.keep_edit(location_text(&remote), &copy, &why);
+                self.keep_edit(copy, remote, dir, &why);
                 Vec::new()
             }
         }
@@ -6299,9 +6466,8 @@ impl App {
         for group in groups {
             let Some(first) = group.first() else { continue };
             let Ok(handle) = self.handle_for(first) else {
-                let reason = fl!("error-connection-closed");
-                let problem = Problem::new(fl!("checksum-error"), reason).at(location_text(first));
-                self.show_problem(&problem);
+                let first = first.clone();
+                self.show_not_connected(fl!("checksum-error"), &first);
                 return Vec::new();
             };
             if let Location::Remote { host, .. } = first {
@@ -6496,8 +6662,7 @@ impl App {
     /// Writes `bytes` to the file at `location`, over what is there if `replace`.
     fn write_file(&mut self, location: Location, bytes: Vec<u8>, replace: bool) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&location) else {
-            let reason = fl!("error-connection-closed");
-            self.show_problem(&save::error(location_text(&location), reason));
+            self.show_not_connected(fl!("save-error"), &location);
             return Vec::new();
         };
         self.saving.insert(location.clone(), bytes.clone());
@@ -6530,8 +6695,12 @@ impl App {
                 Vec::new()
             }
             Err(Refused::Failed(reason)) => {
-                let reason = reason.sanitized();
-                self.show_problem(&save::error(location_text(location), reason));
+                let problem = save::error(location_text(location), reason.sanitized());
+                let again = Again::Write {
+                    location: location.clone(),
+                    bytes,
+                };
+                self.show_problem_way(problem, Way::Again(again));
                 Vec::new()
             }
         }
@@ -6572,9 +6741,14 @@ impl App {
 
     /// Opens the dialog of F7 for the active panel, with an empty field.
     fn ask_mkdir(&mut self) {
-        let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
-        let dialog = Dialog::form(&title, &prompt, "", &[]).with_completion();
         let panel = self.shown(self.active);
+        self.ask_mkdir_in(panel, "");
+    }
+
+    /// Opens the dialog of F7 for `panel`, with `text` in its field.
+    fn ask_mkdir_in(&mut self, panel: PanelId, text: &str) {
+        let (title, prompt) = (fl!("mkdir-title"), fl!("mkdir-prompt"));
+        let dialog = Dialog::form(&title, &prompt, text, &[]).with_completion();
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Mkdir { panel },
@@ -6615,19 +6789,46 @@ impl App {
         &mut self,
         panel: PanelId,
         location: &Location,
-        result: Result<(), Reason>,
+        result: Result<(), Unmade>,
     ) -> Vec<Effect> {
+        let problem = |reason: Reason| {
+            Problem::new(fl!("mkdir-error"), reason.sanitized()).at(location_text(location))
+        };
         let effects = match result {
             Ok(()) => self.show_new(panel, location),
-            Err(reason) => {
-                let path = location_text(location);
-                let reason = reason.sanitized();
-                self.show_problem(&Problem::new(fl!("mkdir-error"), reason).at(path));
+            Err(Unmade::Taken(reason)) => {
+                let text = self.typed_in(panel, location);
+                self.show_problem_way(problem(reason), Way::Change(Change::Mkdir { panel, text }));
+                Vec::new()
+            }
+            Err(Unmade::Failed(reason)) => {
+                let way = match location {
+                    Location::Remote { host, .. } if !self.reachable(host) => {
+                        Way::Connect(host.clone())
+                    }
+                    _ => Way::Again(Again::CreateDir {
+                        panel,
+                        location: location.clone(),
+                    }),
+                };
+                self.show_problem_way(problem(reason), way);
                 Vec::new()
             }
         };
         self.end_work(panel, location);
         effects
+    }
+
+    /// The text that names `location` from the directory of `panel`, as F7 takes it: its name
+    /// alone where it is in that directory, its path otherwise.
+    fn typed_in(&self, panel: PanelId, location: &Location) -> String {
+        let here = self.panel_of(panel).map(Panel::location);
+        let name = file_name(location).filter(|_| location.parent().as_ref() == here);
+        match (name, location) {
+            (Some(name), _) => String::from_utf8_lossy(&name).into_owned(),
+            (None, Location::Local(path)) => path.display().to_string(),
+            (None, Location::Remote { path, .. }) => path.display().into_owned(),
+        }
     }
 
     /// `panel` waits for work that makes `location`, with dots on its title, as for a listing.
@@ -6762,9 +6963,7 @@ impl App {
         replace: bool,
     ) -> Vec<Effect> {
         let Ok(host) = self.handle_for(&from) else {
-            let reason = fl!("error-connection-closed");
-            let problem = Problem::new(fl!("rename-error"), reason).at(location_text(&from));
-            self.show_problem(&problem);
+            self.show_not_connected(fl!("rename-error"), &from);
             return Vec::new();
         };
         let noted = from.parent().map_or_else(Vec::new, |dir| self.note(&dir));
@@ -6819,7 +7018,12 @@ impl App {
             Err(Refused::Failed(reason)) => {
                 let reason = reason.sanitized();
                 let problem = Problem::new(fl!("rename-error"), reason).at(location_text(from));
-                self.show_problem(&problem);
+                let again = Again::Rename {
+                    panel,
+                    from: from.clone(),
+                    to: to.clone(),
+                };
+                self.show_problem_way(problem, Way::Again(again));
                 Vec::new()
             }
         }
@@ -6857,6 +7061,141 @@ impl App {
             dialog: Dialog::problem(problem),
             purpose: Purpose::InfoOver,
         });
+    }
+
+    /// Shows `problem` in an error dialog, after the dialogs open before it, with `way` on
+    /// from it first, the default, and Cancel (ADR 0063). Retry for work on a host that is not
+    /// connected has Connect after it, which connects and asks again.
+    fn show_problem_way(&mut self, problem: Problem, way: Way) {
+        let mut buttons = match &way {
+            Way::Again(_) => vec![Button::Retry],
+            Way::Connect(_) => vec![Button::Connect],
+            Way::Change(_) => vec![Button::Change],
+        };
+        if let Way::Again(again) = &way
+            && again.host().is_some_and(|host| !self.reachable(host))
+        {
+            buttons.push(Button::Connect);
+        }
+        buttons.push(Button::Cancel);
+        self.dialogs.push_back(Open {
+            dialog: Dialog::failure(&problem, buttons, 0),
+            purpose: Purpose::Problem { problem, way },
+        });
+    }
+
+    /// Says that `head` cannot be done at `location`, as its host is not connected, with
+    /// Connect, after which the user does it again.
+    fn show_not_connected(&mut self, head: String, location: &Location) {
+        let problem =
+            Problem::new(head, fl!("error-connection-closed")).at(location_text(location));
+        match location {
+            Location::Remote { host, .. } => {
+                self.show_problem_way(problem, Way::Connect(host.clone()));
+            }
+            Location::Local(_) => self.show_problem(&problem),
+        }
+    }
+
+    /// Whether `host` is connected, or on its way.
+    fn reachable(&self, host: &str) -> bool {
+        matches!(
+            self.hosts.get(host),
+            Some(Host::Connected { .. } | Host::Connecting { .. })
+        )
+    }
+
+    /// Connects to `host` unless it is connected or on its way; a host that waits for an
+    /// answer to whether to try again tries again.
+    fn connect_to(&mut self, host: &str) -> Vec<Effect> {
+        if self.reachable(host) {
+            return Vec::new();
+        }
+        self.hosts.remove(host);
+        let effects = self.connect(host);
+        self.sync_connected();
+        effects
+    }
+
+    /// Does what the error dialog of `problem` offered, once `event` closed it: Retry, Connect,
+    /// or Change… as `way` says; Cancel and Esc do nothing, but end an edit.
+    fn problem_closed(&mut self, problem: Problem, way: Way, event: DialogEvent) -> Vec<Effect> {
+        match (way, event) {
+            (Way::Again(again), DialogEvent::Pressed(Button::Retry)) => self.again(again),
+            (Way::Again(again), DialogEvent::Pressed(Button::Connect)) => {
+                let effects = again
+                    .host()
+                    .map(str::to_owned)
+                    .map_or_else(Vec::new, |host| self.connect_to(&host));
+                self.show_problem_way(problem, Way::Again(again));
+                effects
+            }
+            (Way::Connect(host), DialogEvent::Pressed(Button::Connect)) => self.connect_to(&host),
+            (Way::Change(change), DialogEvent::Pressed(Button::Change)) => {
+                self.change(change);
+                Vec::new()
+            }
+            (Way::Again(Again::Edit(editing)), _) => self.finish_edit(editing, false),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Does `again` again.
+    fn again(&mut self, again: Again) -> Vec<Effect> {
+        match again {
+            Again::CreateDir { panel, location } => self.create_dir(panel, location),
+            Again::Rename { panel, from, to } => self.rename_entry(panel, from, to, false),
+            Again::Write { location, bytes } => self.write_file(location, bytes, false),
+            Again::View(location) => {
+                let dir = location.parent().unwrap_or_else(|| location.clone());
+                self.view_file(location, &dir, None)
+            }
+            Again::ReadMore => {
+                if let Some(viewing) = &mut self.viewing {
+                    viewing.viewer.resume();
+                }
+                self.read_more()
+            }
+            Again::Edit(editing) => {
+                self.handover = Some(Handover::Edit {
+                    file: editing.file.clone(),
+                    line: editing.line,
+                });
+                self.editing = Some(editing);
+                Vec::new()
+            }
+            Again::SendBack { copy, remote, dir } => self.send_back(copy, remote, dir),
+            Again::Run(run) => {
+                self.handover = Some(Handover::Run(run));
+                Vec::new()
+            }
+            Again::SaveConfig { old, new } => vec![Effect::SaveConfig {
+                old,
+                new,
+                config: Box::new(self.config.clone()),
+            }],
+            Again::SaveHost { name, host } => vec![Effect::SaveHost { name, host }],
+            Again::Workspaces(change) => vec![Effect::Workspaces(change)],
+            Again::History(change) => vec![Effect::History(change)],
+        }
+    }
+
+    /// Opens the dialog of `change` again, with what was typed in it.
+    fn change(&mut self, change: Change) {
+        match change {
+            Change::Transfer {
+                kind,
+                panel,
+                dir,
+                names,
+                sources,
+                text,
+            } => {
+                let field = (text.clone(), text.chars().count());
+                self.open_transfer_in((panel, dir), kind, &sources, names, field, None);
+            }
+            Change::Mkdir { panel, text } => self.ask_mkdir_in(panel, &text),
+        }
     }
 
     /// Opens the dialog of `g +` (`mark`) or `g -` for the active panel, as mc's `+`
@@ -7010,15 +7349,20 @@ impl App {
 
     /// Takes the end of an [`Effect::SaveHost`]: the host settings now, which the location menu
     /// shows at once, or why they could not be saved.
-    pub(crate) fn host_saved(&mut self, result: Result<Arc<Hosts>, Reason>) -> Vec<Effect> {
+    pub(crate) fn host_saved(
+        &mut self,
+        name: String,
+        host: Option<HostConfig>,
+        result: Result<Arc<Hosts>, Reason>,
+    ) -> Vec<Effect> {
         match result {
             Ok(hosts) => {
                 self.host_settings = hosts;
                 self.reload_menu()
             }
             Err(reason) => {
-                let reason = reason.sanitized();
-                self.show_problem(&Problem::new(fl!("host-save-error"), reason));
+                let problem = Problem::new(fl!("host-save-error"), reason.sanitized());
+                self.show_problem_way(problem, Way::Again(Again::SaveHost { name, host }));
                 Vec::new()
             }
         }
@@ -10812,8 +11156,12 @@ mod tests {
         // A directory that is not made ends the wait as well, in an error.
         app.created(panel, &local("/srv/x"), Ok(()));
         assert!(
-            app.created(panel, &location, Err("taken".to_owned().into()))
-                .is_empty()
+            app.created(
+                panel,
+                &location,
+                Err(Unmade::Failed("busy".to_owned().into()))
+            )
+            .is_empty()
         );
         for side in Side::BOTH {
             app.panel_mut(side).cancel();
@@ -10858,17 +11206,19 @@ mod tests {
     #[test]
     fn a_directory_that_cannot_be_made_is_an_error_dialog() {
         let mut app = loaded();
+        let panel = app.shown(Side::Left);
+        // A name that is taken: Change… opens F7 again with it, to change it.
         let effects = app.created(
-            app.shown(Side::Left),
+            panel,
             &local("/srv/left"),
-            Err(Reason {
+            Err(Unmade::Taken(Reason {
                 text: "already exists".to_owned(),
                 code: Some(Code::Os(17)),
-            }),
+            })),
         );
         assert!(effects.is_empty());
         assert_eq!(app.context(), Context::Dialog);
-        let text = screen(&mut app);
+        let text = screen_of(&mut app, 16);
         assert!(text.contains("Error"), "{text}");
         assert!(
             shows_problem(
@@ -10879,8 +11229,23 @@ mod tests {
             ),
             "{text}"
         );
+        assert!(text.contains("{ Change… } [ Cancel ]"), "{text}");
         app.handle(action(Action::Confirm));
+        assert_eq!(app.context(), Context::PathInput);
+        let field = app.dialogs.front().map(|open| open.dialog.text());
+        assert_eq!(field, Some("left"), "the name typed");
+        app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Panel);
+
+        // Anything else: Retry makes it again.
+        let denied = Reason {
+            text: "Permission denied".to_owned(),
+            code: Some(Code::Os(13)),
+        };
+        app.created(panel, &local("/srv/new"), Err(Unmade::Failed(denied)));
+        assert!(screen_of(&mut app, 16).contains("{ Retry } [ Cancel ]"));
+        let (_, location, _) = create_dir(app.handle(action(Action::Confirm)));
+        assert_eq!(location, local("/srv/new"));
 
         // A directory elsewhere reads no panel again.
         assert!(
@@ -12190,7 +12555,12 @@ mod tests {
             ),
             "{text}"
         );
+        // Change… opens the dialog again, with what was typed, to change it.
+        assert!(text.contains("{ Change… } [ Cancel ]"), "{text}");
         app.handle(action(Action::Confirm));
+        assert_eq!(field_text(&app), "report.pdf");
+        assert!(screen(&mut app).contains("Copy \"report.pdf\" to:"));
+        app.handle(action(Action::Cancel));
 
         // A directory's name is whole; elsewhere is typed as for F5.
         cursor_on(&mut app, "docs");
@@ -12404,6 +12774,13 @@ mod tests {
             ),
             "{text}"
         );
+        // Retry runs the editor again; Cancel ends the edit, and the panels read /srv again.
+        assert!(text.contains("{ Retry } [ Cancel ]"), "{text}");
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        assert_eq!(app.take_edit(), Some(PathBuf::from("/srv/notes")));
+        app.edited(Err("cannot run nano: not found".to_owned().into()));
+        assert_eq!(app.handle(action(Action::Cancel)).len(), 2);
+        assert_eq!(app.take_edit(), None);
     }
 
     #[test]
@@ -12558,7 +12935,23 @@ mod tests {
             "{text}"
         );
         assert!(text.contains(&*copy.to_string_lossy()), "{text}");
-        app.handle(action(Action::Confirm));
+        assert!(text.contains("{ Retry } [ Cancel ]"), "{text}");
+        // Retry sends it again, and it goes once it went back.
+        let (id, sources, target, _, _) = copy_job(app.handle(action(Action::Confirm)));
+        assert_eq!(
+            (sources, target),
+            (
+                vec![Location::Local(copy.clone())],
+                remote("web", "/home/deploy/notes")
+            )
+        );
+        let effects = app.job_event(id, JobEvent::Finished { complete: true });
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::Discard(path) if *path == copy)),
+            "{effects:?}"
+        );
 
         // So does one whose host is gone by then.
         let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
@@ -12570,6 +12963,18 @@ mod tests {
         let text = screen_of(&mut app, 16);
         assert!(text.contains("did not go back"), "{text}");
         assert!(text.contains("The connection is closed"), "{text}");
+        // Connect connects, and asks again, for Retry once it is connected.
+        assert!(text.contains("{ Retry } [ Connect ] [ Cancel ]"), "{text}");
+        app.handle(action(Action::Right));
+        let effects = app.handle(action(Action::Confirm));
+        assert!(
+            matches!(&effects[..], [Effect::Connect { host, .. }] if host == "web"),
+            "{effects:?}"
+        );
+        assert!(
+            screen_of(&mut app, 16).contains("did not go back"),
+            "asks again"
+        );
     }
 
     #[test]
@@ -12627,6 +13032,70 @@ mod tests {
             ),
             "{text}"
         );
+        // Retry views it again.
+        let Effect::Read(ReadRequest { location, .. }) = one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected a read");
+        };
+        assert_eq!(location, local("/srv/secret"));
+        assert_eq!(app.context(), Context::Viewer);
+    }
+
+    #[test]
+    fn an_error_on_a_host_that_is_not_connected_offers_to_connect() {
+        let (mut app, connection) = on_a_host();
+        // F8 on the host, whose connection is lost while it asks: Connect connects, and the
+        // user deletes again.
+        app.handle(action(Action::Down));
+        app.handle(action(Action::Delete));
+        app.closed("web", connection, Some("Broken pipe"));
+        assert!(app.handle(action(Action::Confirm)).is_empty());
+        app.handle(action(Action::Cancel));
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("Cannot delete"), "{text}");
+        assert!(text.contains("The connection is closed"), "{text}");
+        assert!(text.contains("{ Connect } [ Cancel ]"), "{text}");
+        let effects = app.handle(action(Action::Confirm));
+        assert!(
+            matches!(&effects[..], [Effect::Connect { host, .. }] if host == "web"),
+            "{effects:?}"
+        );
+        assert!(app.dialogs.is_empty(), "nothing more");
+    }
+
+    #[test]
+    fn retry_renames_and_writes_again_and_cancel_does_nothing() {
+        let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+        answer(&mut app, effects, &Listing::Dir(vec![file("a", 1)]));
+        let panel = app.shown(Side::Left);
+        let (from, to) = (local("/srv/a"), local("/srv/b"));
+        let busy = || Err(Refused::Failed("Busy".to_owned().into()));
+        app.entry_renamed(panel, &from, &to, busy());
+        assert!(screen_of(&mut app, 16).contains("{ Retry } [ Cancel ]"));
+        let again = one(app.handle(action(Action::Confirm)));
+        assert!(
+            matches!(&again, Effect::Rename { from: f, to: t, replace: false, .. }
+                if *f == from && *t == to),
+            "{again:?}"
+        );
+        app.entry_renamed(panel, &from, &to, busy());
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+        assert!(app.dialogs.is_empty());
+
+        // A save that failed writes the same bytes again.
+        let location = local("/srv/SUMS");
+        let write = one(app.write_file(location.clone(), b"x".to_vec(), false));
+        assert!(matches!(write, Effect::WriteFile { .. }));
+        app.written(&location, busy());
+        let Effect::WriteFile {
+            location: again,
+            bytes,
+            ..
+        } = one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected the file to be written again");
+        };
+        assert_eq!((again, bytes), (location, b"x".to_vec()));
     }
 
     /// The viewer of `/srv/big` with the read it starts.
@@ -12768,6 +13237,15 @@ mod tests {
             ),
             "{text}"
         );
+        // Retry reads the same part again.
+        let Effect::Read(ReadRequest {
+            id, want: again, ..
+        }) = one(app.handle(action(Action::Confirm)))
+        else {
+            panic!("expected the part again");
+        };
+        assert_eq!(again, want);
+        app.read(id, Err("broken pipe".to_owned().into()));
         app.handle(action(Action::Cancel));
         assert_eq!(app.context(), Context::Viewer);
         let text = screen_of(&mut app, 16);
@@ -13097,7 +13575,7 @@ mod tests {
 
         let mut hosts = Hosts::default();
         hosts.hosts.insert("web".to_owned(), prod.clone());
-        let effects = app.host_saved(Ok(Arc::new(hosts)));
+        let effects = app.host_saved("web".to_owned(), None, Ok(Arc::new(hosts)));
         assert!(
             matches!(&effects[..], [Effect::ListPlaces { .. }]),
             "the menu reads the hosts again"
@@ -13113,11 +13591,15 @@ mod tests {
         };
         assert_eq!(host, None);
 
-        app.host_saved(Err("cannot write /cfg/hosts.toml: denied"
-            .to_owned()
-            .into()));
+        let denied = "cannot write /cfg/hosts.toml: denied".to_owned().into();
+        app.host_saved("web".to_owned(), Some(prod.clone()), Err(denied));
         let text = screen_of(&mut app, 20);
         assert!(text.contains("Cannot save the host settings"), "{text}");
+        // Retry writes them again.
+        let Effect::SaveHost { name, host } = one(app.handle(action(Action::Confirm))) else {
+            panic!("expected the settings to be saved again");
+        };
+        assert_eq!((name.as_str(), host.as_ref()), ("web", Some(&prod)));
     }
 
     #[test]
@@ -13652,7 +14134,8 @@ mod tests {
             panic!("expected the menu bar to be saved: {effects:?}");
         };
         assert_eq!(old.ui.theme, "terminal", "after the theme");
-        app.config_saved(Err("cannot write config.toml".to_owned().into()));
+        let (old, new) = (Box::new(Config::default()), Box::new(app.config.clone()));
+        app.config_saved(old, new, Err("cannot write config.toml".to_owned().into()));
         assert!(app.dialogs.front().is_some(), "a failure says so");
         app.handle(action(Action::Cancel));
         assert!(app.configuration.is_some());
@@ -14965,7 +15448,7 @@ mod tests {
         let workspaces = Workspaces {
             workspaces: saved.to_vec(),
         };
-        app.workspaces_changed(true, Ok(workspaces));
+        app.workspaces_changed(WorkspaceChange::Load, Ok(workspaces));
     }
 
     /// A workspace: on the left `~/src`, sorted by time, with the cursor on `notes`, then `web:/var/www`,
@@ -15249,11 +15732,37 @@ mod tests {
     #[test]
     fn a_file_that_cannot_be_read_or_written_says_why() {
         let mut app = loaded();
-        app.workspaces_changed(false, Err("invalid workspace".to_owned().into()));
+        let invalid = Err("invalid workspace".to_owned().into());
+        app.workspaces_changed(WorkspaceChange::Load, invalid);
         assert!(screen_of(&mut app, 16).contains("Cannot read the workspaces"));
-        app.handle(action(Action::Confirm));
-        app.workspaces_changed(true, Err("cannot write".to_owned().into()));
-        assert!(screen_of(&mut app, 16).contains("Cannot save the workspaces"));
+        // Retry reads it again.
+        let again = one(app.handle(action(Action::Confirm)));
+        assert!(
+            matches!(again, Effect::Workspaces(WorkspaceChange::Load)),
+            "{again:?}"
+        );
+        let removed = WorkspaceChange::Remove("noon".to_owned());
+        app.workspaces_changed(removed, Err("cannot write".to_owned().into()));
+        let text = screen_of(&mut app, 16);
+        assert!(text.contains("Cannot save the workspaces"), "{text}");
+        assert!(text.contains("{ Retry } [ Cancel ]"), "{text}");
+        assert!(app.handle(action(Action::Cancel)).is_empty());
+
+        // The configuration and the history are written again too.
+        let (old, new) = (Box::new(Config::default()), Box::new(app.config.clone()));
+        app.config_saved(old, new, Err("cannot write".to_owned().into()));
+        let again = one(app.handle(action(Action::Confirm)));
+        assert!(matches!(again, Effect::SaveConfig { .. }), "{again:?}");
+        let change = HistoryChange::Remove {
+            host: None,
+            command: "ls".to_owned(),
+        };
+        app.history_changed(change.clone(), Err("cannot write".to_owned().into()));
+        let again = one(app.handle(action(Action::Confirm)));
+        assert!(
+            matches!(&again, Effect::History(asked) if *asked == change),
+            "{again:?}"
+        );
     }
 
     #[test]
@@ -15741,12 +16250,15 @@ mod tests {
             "{effects:?}"
         );
         assert_eq!(app.context(), Context::Panel);
-        let Some(Run {
+        let Some(ran) = app.take_run() else {
+            panic!("expected a local command");
+        };
+        let Run {
             place: Place::Local(dir),
             command,
             prompt,
             ..
-        }) = app.take_run()
+        } = &ran
         else {
             panic!("expected a local command");
         };
@@ -15761,10 +16273,8 @@ mod tests {
             text: "No such file or directory".to_owned(),
             code: Some(Code::Os(2)),
         };
-        app.ran(Err(Problem::new(
-            "Cannot run /bin/nosh".to_owned(),
-            missing,
-        )));
+        let problem = Problem::new("Cannot run /bin/nosh".to_owned(), missing);
+        app.ran(Err((problem, ran)));
         let text = screen_of(&mut app, 12);
         assert!(
             shows_problem(
@@ -15776,6 +16286,10 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("Code: 2"), "{text}");
+        // Retry runs the command again.
+        app.handle(action(Action::Confirm));
+        let again = app.take_run().map(|run| run.command);
+        assert_eq!(again.as_deref(), Some("make\nls"));
     }
 
     #[test]
@@ -15832,18 +16346,21 @@ mod tests {
         run(&mut app, "ls");
         assert!(run(&mut app, " secret").is_empty(), "a space keeps it out");
         // A command of another host does not come up here.
-        app.history_changed(Ok(vec![
-            entry.clone(),
-            HistoryEntry {
-                command: "uptime".to_owned(),
-                host: Some("web".to_owned()),
-                ..entry.clone()
-            },
-            HistoryEntry {
-                command: "ls".to_owned(),
-                ..entry.clone()
-            },
-        ]));
+        app.history_changed(
+            HistoryChange::Load,
+            Ok(vec![
+                entry.clone(),
+                HistoryEntry {
+                    command: "uptime".to_owned(),
+                    host: Some("web".to_owned()),
+                    ..entry.clone()
+                },
+                HistoryEntry {
+                    command: "ls".to_owned(),
+                    ..entry.clone()
+                },
+            ]),
+        );
         app.handle(action(Action::Shell));
         type_text(&mut app, "dr");
         app.handle(action(Action::Up));
@@ -15865,7 +16382,8 @@ mod tests {
 
         app.config.shell.history_size = 0;
         assert!(run(&mut app, "make").is_empty(), "no history at all");
-        app.history_changed(Err("history.toml: invalid".to_owned().into()));
+        let invalid = Err("history.toml: invalid".to_owned().into());
+        app.history_changed(HistoryChange::Load, invalid);
         assert!(screen_of(&mut app, 12).contains("Cannot keep the command history"));
     }
 
@@ -15878,7 +16396,10 @@ mod tests {
             dir: "/srv".to_owned(),
             time: 0,
         };
-        app.history_changed(Ok(vec![entry("make", None), entry("uptime", Some("web"))]));
+        app.history_changed(
+            HistoryChange::Load,
+            Ok(vec![entry("make", None), entry("uptime", Some("web"))]),
+        );
         app.handle(action(Action::CommandHistory));
         assert_eq!(
             app.context(),

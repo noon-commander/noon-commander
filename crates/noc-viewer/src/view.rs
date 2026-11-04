@@ -161,6 +161,8 @@ pub struct Viewer {
     stamp: Option<Stamp>,
     goal: Option<Goal>,
     pull: Option<Pull>,
+    /// What it wanted when it stopped, which [`resume`](Self::resume) wants again.
+    stopped: Option<(Option<Goal>, Option<Pull>)>,
     /// The first held line on screen, and its first row there. The line after the last is the
     /// one that marks the end of the text.
     top: (usize, usize),
@@ -191,6 +193,7 @@ impl Viewer {
             stamp: None,
             goal: None,
             pull: None,
+            stopped: None,
             top: (0, 0),
             column: 0,
             wrap: true,
@@ -294,10 +297,17 @@ impl Viewer {
         }
     }
 
-    /// Stops wanting parts until the next move.
+    /// Stops wanting parts until the next move, or until it resumes.
     pub fn stop(&mut self) {
-        self.goal = None;
-        self.pull = None;
+        self.stopped = Some((self.goal.take(), self.pull.take()));
+    }
+
+    /// Wants again what it wanted when it stopped, unless it moved since.
+    pub fn resume(&mut self) {
+        if let Some((goal, pull)) = self.stopped.take() {
+            self.goal = goal;
+            self.pull = pull;
+        }
     }
 
     /// Forgets the parts of the file, which changed, to read it again up to the line on top.
@@ -437,6 +447,7 @@ impl Viewer {
 
     /// Scrolls, or switches wrapping.
     pub fn handle(&mut self, command: Command) {
+        self.stopped = None;
         match command {
             Command::Scroll(motion) => self.scroll(motion),
             Command::Top(line) => self.go_to(Goal::Line(line)),
@@ -1427,8 +1438,13 @@ mod tests {
         assert_eq!(viewer.want(), Some(next));
         viewer.stop();
         assert_eq!(viewer.want(), None, "stopped until the next move");
+        viewer.resume();
+        assert_eq!(viewer.want(), Some(next), "or until it resumes");
+        viewer.stop();
         viewer.handle(Command::Scroll(Motion::Down));
         assert_eq!(viewer.want(), Some(next));
+        viewer.resume();
+        assert_eq!(viewer.want(), Some(next), "the move wants it now");
         viewer.take(reply(&viewer));
         assert_eq!(viewer.want(), None, "the screen is filled");
         viewer.handle(Command::Scroll(Motion::End));

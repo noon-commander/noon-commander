@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/panel.rs
+source: crates/noc/src/tui/panel/tests/rename.rs
 expression: terminal.backend()
 ---
 "╔ / /srv ═════╤═══════╤════════════════╗"

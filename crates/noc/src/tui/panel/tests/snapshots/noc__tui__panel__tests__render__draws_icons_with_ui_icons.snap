@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/panel.rs
+source: crates/noc/src/tui/panel/tests/render.rs
 expression: terminal.backend()
 ---
 "╔  /srv ═════╤═══════╤════════════════╗"

@@ -22,10 +22,10 @@ check of ADR 0050, where it is off by 2 to 4%.
 
 ## Decision
 
-- The task that runs a job (`forward` in `tui/tasks.rs`) sends its reports of progress together,
-  each with the time the job made it (ADR 0050): the first after a quiet spell at once, then at
-  most one batch each 20 ms (`BATCH`). Reports that wait go once the 20 ms are up, whether or not
-  another comes.
+- The task that runs a job (`forward` in `tui/tasks/batching.rs`) sends its reports of progress
+  together, each with the time the job made it (ADR 0050): the first after a quiet spell at once,
+  then at most one batch each 20 ms (`BATCH`). Reports that wait go once the 20 ms are up, whether
+  or not another comes.
 - None is left out: the window counts each report of a batch at its time (`JobView::passed`) and
   shows the last (`JobView::working`), so the speed and the time left are those of the reports one
   by one. The entry's location goes once a batch.

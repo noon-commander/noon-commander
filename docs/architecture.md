@@ -1005,8 +1005,8 @@ counted. `bytes_copied` counts only
 bytes read and written and never goes back, so the UI derives the speed from it and the time
 left from both. Both count a byte written once it has arrived: a copy reports as the writer's
 `written` grows, and after the last chunk of a file reports what arrives as it settles the rest,
-so that an upload follows the link rather than running up to 2 MiB ahead of it. The task that
-runs a job passes its reports on as it takes them (`forward` in `tui/tasks.rs`), in the job's own
+so that an upload follows the link rather than running up to 2 MiB ahead of it. The task that runs a
+job passes its reports on as it takes them (`forward` in `tui/tasks/batching.rs`), in the job's own
 task, with the time it takes each: when the job made it. Reports of progress go in batches, the
 first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and those that wait go
 before a question or the end. Reports of counting go in the same batches, only the last of those

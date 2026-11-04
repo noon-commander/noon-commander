@@ -1811,7 +1811,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode), and, in the panels, noc's Ctrl+x before
   it, which runs it in the other panel. The app repeats a motion over rows a count's
   times, and gives the count to what takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the
-  text fields, whose editor (`tui/edit.rs`) reads it itself. `Esc` acts at once: it never waits for
+  text fields, whose editor (`tui/edit/`) reads it itself. `Esc` acts at once: it never waits for
   a key after it, and while a command is pending it gives the command up; so does a key that cannot
   go on with it, which in Normal and Visual mode goes too, as in vim (`g x` and Ctrl+w `e` do
   nothing), unless what came before it does something alone. The keymap says so
@@ -1856,7 +1856,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   folds it. The text scrolls as the viewer does, with the keys it does not take in the
   sections and with the wheel too, stopping with its last line at the bottom, with no line after it,
   a scroll bar, and how far down it is in its bottom frame.
-- **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit.rs`
+- **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit/`
   `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
   cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,
   Ctrl+r and a register, and Ctrl+v edit around it. Ctrl+v types the next character, or Tab, as it

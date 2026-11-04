@@ -1,5 +1,5 @@
 ---
-source: crates/noc/src/tui/progress.rs
+source: crates/noc/src/tui/progress/tests.rs
 expression: "draw_at(&view, start + secs(75))"
 ---
 "                                                                                "

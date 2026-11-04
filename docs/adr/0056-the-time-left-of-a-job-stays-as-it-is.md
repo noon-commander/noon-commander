@@ -41,7 +41,7 @@ its file, another case does not help.
 ## Decision
 
 - **The time left of a job stays as it is**: `Forecast`, `Sums`, `Skips`, and `count_down` in
-  `crates/noc/src/tui/progress.rs`, their constants, and what `noc-ops` reports for them.
+  `crates/noc/src/tui/progress/mod.rs`, their constants, and what `noc-ops` reports for them.
 - **It changes for defects only.** A defect is: it does other than ADR 0050 says; it shows what
   makes no sense, such as a time left of years or a panic; or a change elsewhere, in what
   `noc-ops` reports or how reports reach the window, breaks what it takes for granted, such as a

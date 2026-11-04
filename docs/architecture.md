@@ -175,7 +175,7 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   frame, not the frame, title, or headers; quick search, being typed, is not dim. The cursor and
   marks stay; a rename in its row ends.
 - In it, the keys that look through the entries work: moving the cursor and scrolling, quick
-  search, sorting, marking, Visual mode (`works_offline` in `app.rs`). A key that needs the host
+  search, sorting, marking, Visual mode (`works_offline` in `app/hosts.rs`). A key that needs the host
   opens the dialog Connection, `Not connected to web`, with Connect (the default), which reads
   the directory again, Local, which goes to the last local directory of the panel's jump list or
   else the home directory, and Cancel; so do the keys that look through entries where the panel

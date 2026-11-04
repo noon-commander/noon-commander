@@ -41,7 +41,7 @@ section, what the buffer is.
   Windows with the same keys share a kind: the Configuration dialog, the search of a tree, the
   jobs, and the checksums are `Dialog`; the location menu and the zoxide window are `List`. No
   title or name of a window goes there. The panels show the mode alone.
-- **`window_kind` in `crates/noc/src/tui/app.rs` maps every context**, without a wildcard, so
+- **`window_kind` in `crates/noc/src/tui/app/render.rs` maps every context**, without a wildcard, so
   that a new context does not build until it gets a kind. A new kind comes only with keys of
   its own.
 - **The command line takes the line only while it has the keys.** A window over it, such as the

@@ -53,7 +53,7 @@ a panel is gone.
   says so without hiding where the panel was. A rename in its row ends. A panel that never read
   its directory has nothing to keep.
 - **The keys that look through them work**: moving the cursor and scrolling, quick search,
-  sorting, marking and Visual mode (`works_offline` in `app.rs`). Reading the directory again
+  sorting, marking and Visual mode (`works_offline` in `app/hosts.rs`). Reading the directory again
   keeps the marks on names still there, as `R` does.
 - **A key that needs the host asks**: Connection, `Not connected to web`, with Connect, the
   default, which reads the directory again, Local, which goes to the last local directory of

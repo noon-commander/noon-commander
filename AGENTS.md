@@ -198,8 +198,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
   (`List`, `Menu`, `Dialog`, `Help`, `Viewer`, `Quick search`, `Rename`), as `NORMAL · List`.
   The panels show the mode alone. It is never empty (ADR 0032).
 - Same keys, same kind. Never put a window's title or own name there.
-- A new `Context` gets its kind in `window_kind` (`crates/noc/src/tui/app.rs`), whose match has
-  no wildcard. A new kind comes only with keys of its own, with its `window-` Fluent text.
+- A new `Context` gets its kind in `window_kind` (`crates/noc/src/tui/app/render.rs`), whose
+  match has no wildcard. A new kind comes only with keys of its own, with its `window-` Fluent text.
 
 ### Settings
 

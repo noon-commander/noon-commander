@@ -478,7 +478,7 @@ enum Purpose {
     /// A key in `panel`, which is on a host that is not connected: Connect reads its directory
     /// again, Local goes to the last local directory of the panel.
     NotConnected { panel: PanelId },
-    /// F10 while jobs run: Yes quits and stops them.
+    /// F10: Yes quits, and stops the jobs that run.
     Quit,
     /// An error, with a way on from it besides Cancel, which `way` says.
     Problem { way: Way },
@@ -2843,15 +2843,21 @@ impl App {
         Help::new(&self.keymap, &self.about).at(self.help_spot)
     }
 
-    /// Quits, after asking if jobs would stop.
+    /// Asks before quitting; Yes is the default unless jobs would stop.
     fn ask_quit(&mut self) {
-        if self.jobs.is_empty() {
-            self.quit = true;
-            return;
-        }
-        let message = fl!("quit-jobs", count = self.jobs.len());
+        let (message, default) = if self.jobs.is_empty() {
+            (fl!("quit-ask"), 0)
+        } else {
+            (fl!("quit-jobs", count = self.jobs.len()), 1)
+        };
         let buttons = vec![Button::Yes, Button::No];
-        let dialog = Dialog::question(&fl!("quit-title"), &message, buttons, 1, Tone::Warning);
+        let dialog = Dialog::question(
+            &fl!("quit-title"),
+            &message,
+            buttons,
+            default,
+            Tone::Warning,
+        );
         self.dialogs.push_back(Open {
             dialog,
             purpose: Purpose::Quit,
@@ -11732,7 +11738,10 @@ mod tests {
         app.job_event(second, JobEvent::Finished { complete: true });
         assert!(!screen(&mut app).contains(" job"));
         app.handle(action(Action::Quit));
-        assert!(app.quits(), "nothing to ask");
+        let text = screen_of(&mut app, 12);
+        assert!(text.contains("Quit Noon Commander?"), "{text}");
+        app.handle(action(Action::Confirm));
+        assert!(app.quits(), "Yes, the default, quits");
     }
 
     #[test]
@@ -15049,6 +15058,12 @@ mod tests {
         assert!(app.take_redraw());
         assert!(!app.take_redraw(), "a redraw is requested once");
         app.handle(action(Action::Quit));
+        assert!(!app.quits(), "it asks first");
+        assert_eq!(app.context(), Context::Dialog);
+        app.handle(action(Action::Cancel));
+        assert!(!app.quits(), "Esc stays");
+        app.handle(action(Action::Quit));
+        app.handle(action(Action::Confirm));
         assert!(app.quits());
     }
 

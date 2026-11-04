@@ -1575,9 +1575,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   behind the panels open over whatever is on screen, in turn with other dialogs, and the top
   right corner, where Far has its clock, says how many run and how far they are together
   (`2 jobs 37%`, the mean of their gauges). The jobs of F4 stay in front, so that the editor
-  does not open in the middle of other work. F10 asks before quitting while jobs run;
-  quitting stops them and waits up to five seconds, so that a copy removes its unfinished
-  file before the connections close.
+  does not open in the middle of other work. F10 always asks before quitting, with Yes as the
+  default, or No while jobs run; quitting stops them and waits up to five seconds, so that a
+  copy removes its unfinished file before the connections close.
 - **Checksums.** `f #` (not in mc) asks for an algorithm (a combo box, the last one chosen,
   SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,

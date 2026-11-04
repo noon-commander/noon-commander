@@ -60,7 +60,7 @@ had No.
   | --- | --- | --- |
   | Abort | Stops a job that runs: some of its work is done, and what is left is not | The failure of a job, the question of a job about a taken name, the window of a job, the list of jobs |
   | Cancel | Does nothing: nothing has begun, or what it gives up is one thing | Forms, Connection, a host not connected, a directory that could not be read, a rename or a save onto a file, the settings of a host, the results of a search, a password of ssh |
-  | No | Answers a question asked as one | Delete, Quit while jobs run, replacing a workspace, the questions of ssh |
+  | No | Answers a question asked as one | Delete, Quit, replacing a workspace, the questions of ssh |
   | OK | Takes a form, or closes what has nothing to decide | Forms, and every error with nothing to do but read it |
 
   Abort has a letter; Cancel has none, as Esc and F10 cancel. So one question, about a taken name,

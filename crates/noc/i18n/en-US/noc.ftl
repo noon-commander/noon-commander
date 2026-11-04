@@ -1054,8 +1054,9 @@ jobs-running = { $count ->
         [one] { $count } job
        *[other] { $count } jobs
     } { $percent }%
-# F10 while jobs run.
+# F10 and Z Z.
 quit-title = Quit
+quit-ask = Quit Noon Commander?
 quit-jobs = { $count ->
         [one] { $count } job is still running. Quit and stop it?
        *[other] { $count } jobs are still running. Quit and stop them?

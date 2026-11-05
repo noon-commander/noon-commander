@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use jiff::tz::TimeZone;
 use noc_config::{
-    Config, HistoryEntry, HostConfig, Hosts, Recent, UiConfig, Workspace, Workspaces,
+    Config, HistoryEntry, HostConfig, Hosts, LogConfig, Recent, UiConfig, Workspace, Workspaces,
 };
 use noc_ops::{Algorithm, Conflict, CopyOptions, Resolution, Sum};
 use noc_vfs::{DirEntry, Location, RemotePath, Volume};
@@ -208,6 +208,8 @@ pub(crate) enum Effect {
     Detect(Tool),
     /// Make the formats that `ui.formats` names, use them, and tell [`App::formats_changed`].
     Formats(String),
+    /// Log as the settings say from now on: with their filter, and keeping as many files.
+    Log(LogConfig),
     /// Ask zoxide for the directories that match `keywords`, without `exclude`, and pass them
     /// to [`App::jumps`].
     ZoxideQuery {

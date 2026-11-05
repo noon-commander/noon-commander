@@ -298,6 +298,38 @@ fn transfer_and_ssh_settings_apply_at_once() {
 }
 
 #[test]
+fn the_settings_of_the_log_apply_at_once() {
+    let mut app = loaded();
+    open_configuration(&mut app);
+    config_category(&mut app, 9);
+    let effects = app.handle(action(Action::Right));
+    let [Effect::SaveConfig { new, .. }, Effect::Log(log)] = &effects[..] else {
+        panic!("expected the level to be saved and used: {effects:?}");
+    };
+    assert_eq!(
+        (new.log.level, log.level),
+        (LogLevel::Debug, LogLevel::Debug)
+    );
+    app.handle(action(Action::Down));
+    app.handle(action(Action::Down));
+    edit_field(&mut app, "3");
+    let effects = app.handle(action(Action::Up));
+    let [Effect::SaveConfig { .. }, Effect::Log(log)] = &effects[..] else {
+        panic!("expected the files to keep to be saved and used: {effects:?}");
+    };
+    assert_eq!(log.keep.get(), 3);
+    // Other settings leave the log alone.
+    config_category(&mut app, 1);
+    let effects = app.handle(action(Action::Toggle));
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Log(_))),
+        "{effects:?}"
+    );
+}
+
+#[test]
 fn the_menu_bar_stays_above_the_panels_with_ui_menu_bar() {
     let mut app = loaded();
     let top = |app: &mut App| screen_of(app, 10).lines().next().unwrap_or("").to_owned();

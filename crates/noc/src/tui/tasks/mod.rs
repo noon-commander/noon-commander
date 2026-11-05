@@ -415,6 +415,9 @@ impl Tasks {
                 } => self.list_commands(generation, dirs, prefix, with_dirs),
                 Effect::Detect(tool) => self.detect(tool),
                 Effect::Formats(setting) => self.formats(setting),
+                Effect::Log(config) => {
+                    tokio::task::spawn_blocking(move || crate::logging::apply(&config));
+                }
                 Effect::ZoxideQuery {
                     generation,
                     keywords,

@@ -4,8 +4,8 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use crossterm::event::KeyEvent;
 use noc_config::{
-    AnimationsConfig, MenuBar, PanelSide, SearchMode, SftpHost, TabBar, TransferConfig, Wheel,
-    ZoxideConfig,
+    AnimationsConfig, LogLevel, MenuBar, PanelSide, SearchMode, SftpHost, TabBar, TransferConfig,
+    Wheel, ZoxideConfig,
 };
 use noc_ops::{Choice, Decision, Later, Rest, Step};
 use noc_ssh::askpass::PromptKind;

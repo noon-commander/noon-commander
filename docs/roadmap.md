@@ -251,8 +251,8 @@
       ([ADR 0031](adr/0031-who-and-where-on-screen.md))
 - [x] Letters in every dialog, as in Far and mc: Alt and the letter puts the focus in a field,
       switches a check box, opens a combo box, or presses a button, while typing too;
-      Alt+1 … Alt+8 open the categories of the Configuration dialog, and Alt and a letter the
-      sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
+      Alt+1 … Alt+9 and Alt+0 open the categories of the Configuration dialog, and Alt and a
+      letter the sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
 - [x] Windows grow from their middle as they open and shrink back as they close, the menus of
       F9 drop from their bar; `animations.windows`; `--slow-windows` and `--show-sizes` in debug
       builds ([ADR 0034](adr/0034-animated-windows.md))

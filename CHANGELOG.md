@@ -15,8 +15,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0065](docs/adr/0065-a-colon-without-a-host-is-local.md)).
 - Alt+1 … Alt+9 show the tab of that number in the active panel, as `2g t` does, and Alt+0 the
   last tab; Ctrl+x before them, the other panel's. They work in Visual mode too.
-- Settings of the log, `[log]`: `level`, `filter` (directives such as `info,noc_ssh=trace` in
-  place of the level), and `keep`, how many log files are kept, 10 by default.
+- Settings of the log, `[log]`, in a new category of Options → Configuration…, Log: `level`,
+  `filter` (directives such as `info,noc_ssh=trace` in place of the level), and `keep`, how many
+  log files are kept, 10 by default. They take effect at once.
 
 ### Changed
 

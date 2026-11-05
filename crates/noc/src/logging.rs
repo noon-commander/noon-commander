@@ -9,16 +9,29 @@ use std::io::{self, BufWriter, Write};
 use std::num::NonZeroUsize;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
 
 use noc_config::{LogConfig, Paths};
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::layer::SubscriberExt as _;
+use tracing_subscriber::util::SubscriberInitExt as _;
+use tracing_subscriber::{EnvFilter, Registry, reload};
 
 /// How the names of log files start and end; others in the directory are left alone.
 const PREFIX: &str = "noc-";
 const SUFFIX: &str = ".log";
+
+/// What a change of the settings changes while the TUI runs.
+struct Control {
+    filter: reload::Handle<EnvFilter, Registry>,
+    dir: PathBuf,
+    /// The file of this run, which is always kept.
+    file: PathBuf,
+}
+
+static CONTROL: OnceLock<Control> = OnceLock::new();
 
 /// The log of this run. Dropping it ends the log: the events before then reach the file.
 pub(crate) struct Log {
@@ -43,11 +56,22 @@ pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
     };
     // `Context::load` checked the filter.
     let filter = filter(config).unwrap_or_else(|_| EnvFilter::new(config.level.as_str()));
-    let _ = tracing_subscriber::fmt()
+    let (filter, handle) = reload::Layer::new(filter);
+    let layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.lines())
-        .with_ansi(false)
-        .with_env_filter(filter)
-        .try_init();
+        .with_ansi(false);
+    if tracing_subscriber::registry()
+        .with(filter)
+        .with(layer)
+        .try_init()
+        .is_ok()
+    {
+        let _ = CONTROL.set(Control {
+            filter: handle,
+            dir: dir.clone(),
+            file: path.clone(),
+        });
+    }
     tracing::info!(
         pid = std::process::id(),
         version = env!("CARGO_PKG_VERSION"),
@@ -59,6 +83,21 @@ pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
     Log {
         file: Some(path),
         _writer: Some(writer),
+    }
+}
+
+/// Uses `config` from now on: its filter, and as many files as it keeps.
+///
+/// Blocking: removes files.
+pub(crate) fn apply(config: &LogConfig) {
+    let Some(control) = CONTROL.get() else {
+        return;
+    };
+    if let Ok(filter) = filter(config) {
+        let _ = control.filter.reload(filter);
+    }
+    if let Err(error) = prune(&control.dir, &control.file, config.keep) {
+        tracing::warn!(dir = %control.dir.display(), %error, "cannot remove old logs");
     }
 }
 

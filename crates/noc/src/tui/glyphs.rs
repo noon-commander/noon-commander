@@ -261,6 +261,8 @@ pub(crate) mod categories {
     pub(crate) const SEARCH: &str = "󰍉";
     // nf-md-eye.
     pub(crate) const VIEWER: &str = "󰈈";
+    // The icon of a `.log` file in devicons.
+    pub(crate) const LOG: &str = "󰌱";
     pub(crate) const ABOUT: &str = "󰋽";
     pub(crate) const KEYS: &str = "󰌌";
 }

@@ -721,13 +721,13 @@ nothing there. Every element but Cancel has a letter, highlighted in its label, 
 on the element from anywhere in the dialog, in every mode, as in Far and mc: a text field gets the
 focus, in Insert mode, a check box switches, the list of a combo box opens, and a button is
 pressed; on a combo box, Space opens its list too, and Enter presses the default button. In
-the Configuration dialog, Alt+1 … Alt+8 open its categories, and the letter of a setting does what
-Space or Enter does on it, or puts the focus in its text field. Alt and a letter that nothing has
-do nothing, and here and in the text fields of dialogs Alt and a key never stand for Esc and the
-key ([ADR 0033](adr/0033-letters-in-dialogs.md)). Each dialog has letters of its own, so the
-preset lists none. The yazi column has the keys of its confirmations (confirm), its list of tasks
-(tasks), and its help; the ranger column, those of its list of tasks, since ranger asks its
-questions on the console.
+the Configuration dialog, Alt+1 … Alt+9 and Alt+0 open its categories, and the letter of a
+setting does what Space or Enter does on it, or puts the focus in its text field. Alt and a letter
+that nothing has do nothing, and here and in the text fields of dialogs Alt and a key never stand
+for Esc and the key ([ADR 0033](adr/0033-letters-in-dialogs.md)). Each dialog has letters of its
+own, so the preset lists none. The yazi column has the keys of its confirmations (confirm), its
+list of tasks (tasks), and its help; the ranger column, those of its list of tasks, since ranger
+asks its questions on the console.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

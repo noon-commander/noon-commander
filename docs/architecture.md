@@ -814,10 +814,10 @@ settings window: there is no OK or Cancel, and every change takes effect as it i
   them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text
   field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a
   text field in Insert mode takes a first Esc to Normal mode).
-- Alt+1 … Alt+8 open the categories, from anywhere in the dialog, the digit shown in front of
-  each, and each setting has a letter, unique within its page: Alt and it do what Space or Enter
-  does on the row, or put the focus in its text field, in Insert mode, as the letters of every
-  dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
+- Alt+1 … Alt+9 and Alt+0 open the categories, from anywhere in the dialog, the digit shown in
+  front of each, and each setting has a letter, unique within its page: Alt and it do what Space
+  or Enter does on the row, or put the focus in its text field, in Insert mode, as the letters of
+  every dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
 - Space or Enter switches a check box or opens the list of a combo box, where Enter takes the
   choice, and `h` and `l` take the choice before and the next without the list: each takes effect
   at once. The dialog opens on the language, a text field, in Insert mode; a text field
@@ -908,9 +908,10 @@ Only the TUI logs, to a file of its own for each run in `~/.local/state/noc/logs
 `noc-<UTC start, 20261105T142301Z>-<pid>.log`, mode 0600; the subcommands write no log
 ([ADR 0067](adr/0067-a-log-file-for-each-run.md)). `crates/noc/src/logging.rs` starts it once the
 config is read and the terminal checked, and removes the oldest `noc-*.log` files over
-`log.keep`. `log.level`, or `log.filter` (`EnvFilter` directives) unless empty, sets the filter.
-Each event goes whole over a channel to the thread `noc-log`, which writes the file, so no event
-waits for the disk; ending the log, after the TUI, waits for the last lines.
+`log.keep`. `log.level`, or `log.filter` (`EnvFilter` directives) unless empty, sets the filter,
+which the Configuration dialog changes at once through `tracing_subscriber::reload`. Each event
+goes whole over a channel to the thread `noc-log`, which writes the file, so no event waits for
+the disk; ending the log, after the TUI, waits for the last lines.
 
 ## Async model
 

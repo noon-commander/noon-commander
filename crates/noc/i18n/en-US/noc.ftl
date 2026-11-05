@@ -505,6 +505,21 @@ config-viewer-part-invalid = "{ $text }" is not a number of MiB: it takes a whol
 config-viewer-window = &Window, MiB
 config-viewer-window-hint = F3 holds at most so many MiB of a file, and at least two parts; scrolled back past them, it reads them again. Takes effect at the next F3.
 config-viewer-window-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 1 or more.
+config-log = Log
+config-log-level = &Level
+config-log-level-hint = The least severe events the log of this run gets, in a file of its own under ~/.local/state/noc/logs. Debug and Trace say much more, to find out what went wrong.
+config-log-level-off = Off
+config-log-level-error = Errors
+config-log-level-warn = Warnings
+config-log-level-info = Info
+config-log-level-debug = Debug
+config-log-level-trace = Trace
+config-log-filter = &Filter
+config-log-filter-hint = Takes the place of Level unless empty: a level, then one for each crate or module named, such as info,noc_ssh=trace.
+config-log-filter-invalid = "{ $text }" is not a filter of the log: { $reason }
+config-log-keep = &Keep files
+config-log-keep-hint = How many log files are kept, this run's among them; older ones are removed. 1 or more.
+config-log-keep-invalid = "{ $text }" is not a number of files: it takes a whole number, 1 or more.
 # After the hint of a setting that the running Noon Commander cannot change.
 config-restart = Takes effect after a restart.
 # Over why, on a line of its own, which names the file.

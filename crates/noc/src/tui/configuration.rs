@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use noc_config::{
-    Borders, Config, MenuBar, Pause, Run, RunError, SearchMode, TabBar, UiConfig, Wheel,
+    Borders, Config, LogLevel, MenuBar, Pause, Run, RunError, SearchMode, TabBar, UiConfig, Wheel,
 };
 use noc_scroll::Motion;
 use noc_scroll::scrollbar::{self, Bar};
@@ -77,6 +77,9 @@ enum Key {
     MaxPerFile,
     ViewerPart,
     ViewerWindow,
+    LogLevel,
+    LogFilter,
+    LogKeep,
 }
 
 /// A value and how it is edited.
@@ -204,7 +207,8 @@ impl Setting {
             | Key::MaxResults
             | Key::MaxPerFile
             | Key::ViewerPart
-            | Key::ViewerWindow => self.apply_number(config)?,
+            | Key::ViewerWindow
+            | Key::LogKeep => self.apply_number(config)?,
             Key::MenuBar => {
                 ui.menu_bar = match text {
                     "always" => MenuBar::Always,
@@ -247,7 +251,30 @@ impl Setting {
                     _ => Pause::Always,
                 };
             }
+            Key::LogLevel | Key::LogFilter => self.apply_log(config)?,
         }
+        Ok(())
+    }
+
+    /// Writes the level or the filter of the log into `config`, or says why the filter is not
+    /// valid.
+    fn apply_log(&self, config: &mut Config) -> Result<(), String> {
+        let text = self.text();
+        if self.key == Key::LogLevel {
+            config.log.level = LOG_LEVELS
+                .into_iter()
+                .find(|level| level.as_str() == text)
+                .unwrap_or_default();
+            return Ok(());
+        }
+        let mut log = config.log.clone();
+        text.trim().clone_into(&mut log.filter);
+        crate::logging::filter(&log).map_err(|reason| {
+            let text = cells::sanitize(log.filter.as_bytes());
+            let reason = cells::sanitize(reason.as_bytes());
+            fl!("config-log-filter-invalid", text = text, reason = reason)
+        })?;
+        config.log = log;
         Ok(())
     }
 
@@ -307,6 +334,9 @@ impl Setting {
                 config.viewer.window_mib = number(text, |text| {
                     fl!("config-viewer-window-invalid", text = text)
                 })?;
+            }
+            Key::LogKeep => {
+                config.log.keep = number(text, |text| fl!("config-log-keep-invalid", text = text))?;
             }
             _ => {}
         }
@@ -511,6 +541,7 @@ impl Configuration {
                 shell(config),
                 search(config, home),
                 viewer(config),
+                log(config),
             ],
             category: 0,
             focus: Focus::Settings,
@@ -1582,6 +1613,56 @@ fn search(config: &Config, home: &Path) -> Category {
     }
 }
 
+/// The levels of the log, from the least to the most it writes.
+const LOG_LEVELS: [LogLevel; 6] = [
+    LogLevel::Off,
+    LogLevel::Error,
+    LogLevel::Warn,
+    LogLevel::Info,
+    LogLevel::Debug,
+    LogLevel::Trace,
+];
+
+/// Log, `[log]`: what the log of the TUI gets, and how many files of it are kept.
+fn log(config: &Config) -> Category {
+    let log = &config.log;
+    let levels: Vec<(&str, String)> = LOG_LEVELS
+        .into_iter()
+        .map(|level| {
+            let text = match level {
+                LogLevel::Off => fl!("config-log-level-off"),
+                LogLevel::Error => fl!("config-log-level-error"),
+                LogLevel::Warn => fl!("config-log-level-warn"),
+                LogLevel::Info => fl!("config-log-level-info"),
+                LogLevel::Debug => fl!("config-log-level-debug"),
+                LogLevel::Trace => fl!("config-log-level-trace"),
+            };
+            (level.as_str(), text)
+        })
+        .collect();
+    Category {
+        icon: categories::LOG,
+        title: fl!("config-log"),
+        settings: vec![
+            Setting::new(
+                Key::LogLevel,
+                (fl!("config-log-level"), fl!("config-log-level-hint")),
+                choice(&levels, log.level.as_str()),
+            ),
+            Setting::new(
+                Key::LogFilter,
+                (fl!("config-log-filter"), fl!("config-log-filter-hint")),
+                text(&log.filter),
+            ),
+            Setting::new(
+                Key::LogKeep,
+                (fl!("config-log-keep"), fl!("config-log-keep-hint")),
+                text(&log.keep.to_string()),
+            ),
+        ],
+    }
+}
+
 /// Viewer, `[viewer]`: how much of a file F3 reads at once, and how much it keeps.
 fn viewer(config: &Config) -> Category {
     let viewer = &config.viewer;
@@ -1896,6 +1977,12 @@ mod tests {
         typed(&mut dialog, "/opt/rg");
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "fdfind");
+        category(&mut dialog, 9);
+        dialog.handle(action(Action::Right));
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, " info,noc_ssh=trace ");
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "3");
         assert!(dialog.handle(action(Action::Cancel)).closed);
         let mut expected = Config::default();
         expected.ui.language = "de".to_owned();
@@ -1923,6 +2010,9 @@ mod tests {
         expected.shell.run = Run::try_from(run.to_vec()).unwrap();
         expected.search.program = PathBuf::from("/opt/rg");
         expected.search.fd = PathBuf::from("fdfind");
+        expected.log.level = LogLevel::Debug;
+        expected.log.filter = "info,noc_ssh=trace".to_owned();
+        expected.log.keep = NonZeroUsize::new(3).unwrap();
         assert_eq!(dialog.applied, expected);
         assert_eq!(
             run_text(&expected.shell.run),
@@ -1932,7 +2022,7 @@ mod tests {
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 15] = [
+        let cases: [(usize, usize, &str, &str); 17] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 1, "not a tag", "is not auto, iso, or a language tag"),
             (0, 9, "0", "is not a step of the wheel"),
@@ -1948,6 +2038,8 @@ mod tests {
             (7, 0, "", "The ripgrep program cannot be empty"),
             (7, 1, " ", "The fd program cannot be empty"),
             (7, 2, "0", "is not a number of results"),
+            (9, 1, "noc_ssh=loud", "is not a filter of the log"),
+            (9, 2, "0", "is not a number of files"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();
@@ -2134,7 +2226,7 @@ mod tests {
             dialog.category_labels().iter().map(Label::letter).collect();
         assert_eq!(
             digits,
-            "123456789".chars().map(Some).collect::<Vec<_>>(),
+            "1234567890".chars().map(Some).collect::<Vec<_>>(),
             "the categories have their digits"
         );
     }
@@ -2156,13 +2248,13 @@ mod tests {
                 .collect();
             (underlined, terminal.backend().to_string())
         };
-        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8s9MweKdna");
+        assert_eq!(underlined(76).0, "1L2F3T4B5I6h7r8s9M0weKdna");
         // Names cut short keep the letter before the cut, as Command line its 7 and Show hidden
         // files its h, and lose one after it, as Default search mode its s and Key hints delay
         // its d.
         let (letters, screen) = underlined(40);
         assert!(screen.contains(" 7 Co"), "{screen}");
-        assert_eq!(letters, "1L2F3T4B5I6h7r89MweKna", "{screen}");
+        assert_eq!(letters, "1L2F3T4B5I6h7r89M0weKna", "{screen}");
     }
 
     #[test]
@@ -2185,7 +2277,11 @@ mod tests {
         assert_eq!(dialog.handle(Resolved::Hotkey('9')), ConfigEvent::default());
         assert_eq!((dialog.category, dialog.focus), (8, Focus::Sidebar));
         assert_eq!(dialog.handle(Resolved::Hotkey('0')), ConfigEvent::default());
-        assert_eq!((dialog.category, dialog.focus), (8, Focus::Sidebar));
+        assert_eq!(
+            (dialog.category, dialog.focus),
+            (9, Focus::Sidebar),
+            "the tenth"
+        );
     }
 
     #[test]

@@ -202,6 +202,7 @@ impl App {
             }
         }
         let formats = (old.ui.formats != new.ui.formats).then(|| new.ui.formats.clone());
+        let log = (old.log != new.log).then(|| new.log.clone());
         self.copy_choices.atomic = config.transfer.atomic_upload;
         self.parallel_jobs = config.transfer.parallel_jobs.get();
         self.config = config.clone();
@@ -223,6 +224,7 @@ impl App {
                 .map(|(tool, _)| Effect::Detect(tool)),
         );
         effects.extend(formats.map(Effect::Formats));
+        effects.extend(log.map(Effect::Log));
         effects.extend(self.start_queued());
         effects
     }

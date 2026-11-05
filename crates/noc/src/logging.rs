@@ -15,6 +15,7 @@ use std::thread::JoinHandle;
 
 use noc_config::{LogConfig, Paths};
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Registry, reload};
@@ -59,7 +60,8 @@ pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
     let (filter, handle) = reload::Layer::new(filter);
     let layer = tracing_subscriber::fmt::layer()
         .with_writer(writer.lines())
-        .with_ansi(false);
+        .with_ansi(false)
+        .with_span_events(FmtSpan::CLOSE);
     if tracing_subscriber::registry()
         .with(filter)
         .with(layer)

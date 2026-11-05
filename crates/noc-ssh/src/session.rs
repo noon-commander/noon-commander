@@ -13,6 +13,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument as _;
 
 use crate::askpass::AskpassEnv;
 use crate::command::{
@@ -73,21 +74,24 @@ impl StderrTail {
 
     fn drain(&self, pipe: ChildStderr, process: &'static str) -> JoinHandle<()> {
         let tail = self.clone();
-        tokio::spawn(async move {
-            let mut reader = BufReader::new(pipe);
-            let mut line = Vec::new();
-            loop {
-                line.clear();
-                match reader.read_until(b'\n', &mut line).await {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        let text = String::from_utf8_lossy(&line);
-                        tracing::debug!(process, "ssh: {}", text.trim_end());
-                        tail.push(&line);
+        tokio::spawn(
+            async move {
+                let mut reader = BufReader::new(pipe);
+                let mut line = Vec::new();
+                loop {
+                    line.clear();
+                    match reader.read_until(b'\n', &mut line).await {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            let text = String::from_utf8_lossy(&line);
+                            tracing::debug!(process, "ssh: {}", text.trim_end());
+                            tail.push(&line);
+                        }
                     }
                 }
             }
-        })
+            .in_current_span(),
+        )
     }
 }
 
@@ -338,12 +342,27 @@ async fn start_master(
     let role = Role::Master {
         control_path: &control_path,
     };
-    let mut child = session_command(settings, target, role, askpass)
+    let child = session_command(settings, target, role, askpass)
         .spawn()
         .map_err(|source| SshError::Spawn {
             program: settings.program.clone(),
             source,
         })?;
+    // Until the master exits: its stderr and its end are logged in it.
+    let span =
+        tracing::info_span!("ssh_master", destination = %target.destination, pid = child.id());
+    wait_for_master(child, control_path, cancel)
+        .instrument(span)
+        .await
+}
+
+/// Waits until the master `child` has authenticated, as its control socket at `control_path`
+/// shows, and watches it from then on.
+async fn wait_for_master(
+    mut child: Child,
+    control_path: PathBuf,
+    cancel: &CancellationToken,
+) -> Result<Master, SshError> {
     let stderr = StderrTail::default();
     let drain = child.stderr.take().map(|pipe| stderr.drain(pipe, "master"));
     let mut poll = tokio::time::interval(READY_POLL);
@@ -368,18 +387,21 @@ async fn start_master(
             }
         }
     }
-    tracing::debug!(destination = %target.destination, "ssh master is ready");
+    tracing::debug!("ssh master is ready");
     stderr.forget();
     let shutdown = CancellationToken::new();
     let exited = CancellationToken::new();
     let status = Arc::new(Mutex::new(None));
-    let task = tokio::spawn(monitor(
-        child,
-        drain,
-        shutdown.clone(),
-        exited.clone(),
-        Arc::clone(&status),
-    ));
+    let task = tokio::spawn(
+        monitor(
+            child,
+            drain,
+            shutdown.clone(),
+            exited.clone(),
+            Arc::clone(&status),
+        )
+        .in_current_span(),
+    );
     Ok(Master {
         control_path,
         stderr,

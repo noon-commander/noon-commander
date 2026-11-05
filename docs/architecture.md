@@ -911,7 +911,9 @@ config is read and the terminal checked, and removes the oldest `noc-*.log` file
 `log.keep`. `log.level`, or `log.filter` (`EnvFilter` directives) unless empty, sets the filter,
 which the Configuration dialog changes at once through `tracing_subscriber::reload`. Each event
 goes whole over a channel to the thread `noc-log`, which writes the file, so no event waits for
-the disk; ending the log, after the TUI, waits for the last lines.
+the disk; ending the log, after the TUI, waits for the last lines. Spans at level info give the
+events their context and close with how long they took: `host`, `ssh_master`, `job`, `search`,
+and `askpass`.
 
 ## Async model
 

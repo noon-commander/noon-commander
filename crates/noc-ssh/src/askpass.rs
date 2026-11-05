@@ -20,6 +20,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
+use tracing::Instrument as _;
 use zeroize::Zeroizing;
 
 use crate::runtime::{self, ASKPASS_PREFIX, MAX_SOCKET_PATH_LEN};
@@ -264,11 +265,15 @@ async fn serve(listener: UnixListener, token: Arc<str>, events: mpsc::Sender<Ask
                     continue;
                 }
                 let (token, events, ids) = (Arc::clone(&token), events.clone(), Arc::clone(&ids));
-                tokio::spawn(async move {
-                    if let Err(error) = handle(stream, &token, &events, &ids).await {
-                        tracing::debug!(%error, "askpass request failed");
+                let span = tracing::info_span!("askpass", id = tracing::field::Empty);
+                tokio::spawn(
+                    async move {
+                        if let Err(error) = handle(stream, &token, &events, &ids).await {
+                            tracing::debug!(%error, "askpass request failed");
+                        }
                     }
-                });
+                    .instrument(span),
+                );
             }
             Err(error) => {
                 tracing::warn!(%error, "askpass accept failed");
@@ -297,6 +302,7 @@ async fn handle(
         return Ok(());
     }
     let id = ids.fetch_add(1, Ordering::Relaxed);
+    tracing::Span::current().record("id", id);
     let Request {
         context,
         prompt: message,

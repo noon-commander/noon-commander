@@ -23,7 +23,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Each run of the TUI writes a log of its own, `~/.local/state/noc/logs/noc-<time>-<pid>.log`,
   readable by the user alone, and only the last `log.keep` are kept; the subcommands no longer
-  write one. A thread of its own writes it
+  write one. A thread of its own writes it, and its lines say which host, job, search, or
+  prompt they come from, and how long each took
   ([ADR 0067](docs/adr/0067-a-log-file-for-each-run.md)). `~/.local/state/noc/noc.log` is no
   longer written, and can be removed.
 

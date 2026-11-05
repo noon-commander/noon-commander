@@ -22,6 +22,7 @@ use noc_viewer::{Part, Progress, Want, read_part};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument as _;
 
 use super::app::{Effect, FindRequest, HistoryChange, ReadRequest, RecentChange, WorkspaceChange};
 use super::describe::{self, Reason};
@@ -448,16 +449,25 @@ impl Tasks {
     ) {
         let done = self.done.clone();
         self.reap_jobs();
-        self.jobs.spawn(async move {
-            let job = CopyJob {
-                id,
-                options,
-                cancel,
-                done: &done,
-            };
-            let finished = job.run(sources, target, hosts).await;
-            let _ = done.send(finished);
-        });
+        let kind = if options.remove_sources {
+            "move"
+        } else {
+            "copy"
+        };
+        let span = tracing::info_span!("job", id, kind);
+        self.jobs.spawn(
+            async move {
+                let job = CopyJob {
+                    id,
+                    options,
+                    cancel,
+                    done: &done,
+                };
+                let finished = job.run(sources, target, hosts).await;
+                let _ = done.send(finished);
+            }
+            .instrument(span),
+        );
     }
 
     /// Renames `from` to `to` in a task of its own, through the session of `host` if they are
@@ -488,13 +498,17 @@ impl Tasks {
             Ok(server) => Ok(server.env(&host)),
             Err(reason) => Err(reason.clone()),
         };
-        self.hosts.spawn(resolve_address(
-            Arc::clone(&self.context),
-            host.clone(),
-            stop.clone(),
-            Arc::clone(&self.cache),
-            self.done.clone(),
-        ));
+        let span = tracing::info_span!("host", %host, connection);
+        self.hosts.spawn(
+            resolve_address(
+                Arc::clone(&self.context),
+                host.clone(),
+                stop.clone(),
+                Arc::clone(&self.cache),
+                self.done.clone(),
+            )
+            .instrument(span.clone()),
+        );
         let task = HostTask {
             context: Arc::clone(&self.context),
             host,
@@ -502,7 +516,7 @@ impl Tasks {
             stop,
             done: self.done.clone(),
         };
-        self.hosts.spawn(task.run(askpass));
+        self.hosts.spawn(task.run(askpass).instrument(span));
     }
 
     /// Uses `config` from now on, and writes to the config file the settings that differ
@@ -641,16 +655,26 @@ impl Tasks {
                     sent: None,
                     done: done.clone(),
                 };
+                // After the delay, so that a search typed over is no span of its own.
+                let kind = match &query {
+                    FindQuery::Lines(_) => "lines",
+                    FindQuery::Names(_) => "names",
+                };
+                let span = tracing::info_span!("search", generation, kind);
                 let result = match &query {
                     FindQuery::Lines(query) => {
                         let searched = Searched { query, max_results };
                         searched
                             .search(&ripgrep, location, host, &mut batches)
+                            .instrument(span)
                             .await
                     }
                     FindQuery::Names(query) => {
                         let named = Named { query, max_results };
-                        named.search(&fd, location, host, &mut batches).await
+                        named
+                            .search(&fd, location, host, &mut batches)
+                            .instrument(span)
+                            .await
                     }
                 };
                 batches.flush();
@@ -812,18 +836,22 @@ impl Tasks {
         }
         let done = self.done.clone();
         self.reap_jobs();
-        self.jobs.spawn(async move {
-            let finished = if let Some(link) = host {
-                let location = move |path| Location::Remote {
-                    host: on.clone(),
-                    path,
+        let span = tracing::info_span!("job", id, kind = "delete");
+        self.jobs.spawn(
+            async move {
+                let finished = if let Some(link) = host {
+                    let location = move |path| Location::Remote {
+                        host: on.clone(),
+                        path,
+                    };
+                    run_delete(&Rejoin::new(link), remote, cancel, id, &done, location).await
+                } else {
+                    run_delete(&LocalFs, local, cancel, id, &done, Location::Local).await
                 };
-                run_delete(&Rejoin::new(link), remote, cancel, id, &done, location).await
-            } else {
-                run_delete(&LocalFs, local, cancel, id, &done, Location::Local).await
-            };
-            let _ = done.send(finished);
-        });
+                let _ = done.send(finished);
+            }
+            .instrument(span),
+        );
     }
 
     /// Runs the checksum job `id` here.
@@ -836,10 +864,14 @@ impl Tasks {
     ) {
         let done = self.done.clone();
         self.reap_jobs();
-        self.jobs.spawn(async move {
-            let finished = run_checksum(id, targets, algorithm, cancel, &done).await;
-            let _ = done.send(finished);
-        });
+        let span = tracing::info_span!("job", id, kind = "checksum");
+        self.jobs.spawn(
+            async move {
+                let finished = run_checksum(id, targets, algorithm, cancel, &done).await;
+                let _ = done.send(finished);
+            }
+            .instrument(span),
+        );
     }
 
     /// Writes a small file, here or through the session of its host.

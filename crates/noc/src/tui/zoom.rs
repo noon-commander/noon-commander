@@ -107,6 +107,8 @@ struct Now {
     at: Instant,
     border: BorderType,
     shadow: Option<Style>,
+    /// Nothing but time went by since the last frame, so windows are where they were.
+    for_time: bool,
 }
 
 /// The windows on screen, frame after frame, and those growing or shrinking.
@@ -166,11 +168,11 @@ impl Stage {
     }
 
     /// Starts a frame drawn `at` on `screen`, with the viewer on it or not, in `theme`;
-    /// windows animate if `on`. A screen of a new size, or the viewer coming or going, shows
-    /// its windows at once.
+    /// windows animate if `on`, and are where the last frame found them if it is `for_time`
+    /// alone. A screen of a new size, or the viewer coming or going, shows its windows at once.
     pub(crate) fn begin(
         &mut self,
-        on: bool,
+        (on, for_time): (bool, bool),
         (screen, viewing): (Rect, bool),
         theme: &Theme,
         at: Instant,
@@ -184,7 +186,8 @@ impl Stage {
             };
             return;
         }
-        if self.screen != Some((screen, viewing)) {
+        let same = self.screen == Some((screen, viewing));
+        if !same {
             self.settle();
         }
         self.screen = Some((screen, viewing));
@@ -195,6 +198,7 @@ impl Stage {
             at,
             border: theme.border_type(),
             shadow: theme.shadow,
+            for_time: for_time && same && !self.settle,
         });
     }
 
@@ -213,6 +217,17 @@ impl Stage {
     ) {
         if self.now.is_none() && !self.sizes {
             draw(frame);
+            return;
+        }
+        // A window that shows whole where the last frame found it, on a frame for time alone, is
+        // still there: finding it again would copy and compare every cell of the screen.
+        let kept = (self.now)
+            .filter(|now| now.for_time && !self.sizes)
+            .filter(|_| !self.zooms.iter().any(|zoom| zoom.window == window))
+            .and_then(|_| self.shown.iter().find(|(shown, _)| *shown == window));
+        if let Some(&(_, drawn)) = kept {
+            draw(frame);
+            self.drawing.push((window, drawn));
             return;
         }
         let before = frame.buffer_mut().clone();
@@ -491,7 +506,7 @@ mod tests {
                         theme.panel,
                     );
                 }
-                stage.begin(on, (area, false), &theme, at);
+                stage.begin((on, false), (area, false), &theme, at);
                 if let Some(id) = dialog {
                     stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
                         let colors = Colors::plain(&theme);
@@ -617,7 +632,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 let area = frame.area();
-                stage.begin(false, (area, false), &theme, Instant::now());
+                stage.begin((false, false), (area, false), &theme, Instant::now());
                 for (id, title) in [(1, "Below"), (2, "Above")] {
                     stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
                         let colors = Colors::plain(&theme);
@@ -674,6 +689,37 @@ mod tests {
         assert_eq!(stage.due(), None);
     }
 
+    /// Draws the dialog `id` on `stage` at `at` in `area`, on a frame `for_time` alone or not.
+    fn dialog_in(stage: &mut Stage, (id, area): (u64, Rect), (at, for_time): (Instant, bool)) {
+        let mut terminal = Terminal::new(TestBackend::new(WIDTH, HEIGHT)).unwrap();
+        let theme = theme();
+        terminal
+            .draw(|frame| {
+                stage.begin((true, for_time), (frame.area(), false), &theme, at);
+                stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
+                    draw_box(frame, area, SIZE, "Title", Colors::plain(&theme), &theme);
+                });
+                stage.end(frame);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn a_frame_for_time_alone_keeps_where_its_windows_were() {
+        let start = Instant::now();
+        let mut stage = shown(start);
+        let first = stage.shown.clone();
+        let elsewhere = Rect::new(0, 0, 20, HEIGHT);
+        let later = start + Duration::from_secs(1);
+        dialog_in(&mut stage, (1, elsewhere), (later, true));
+        assert_eq!(stage.shown, first, "not looked for again");
+        dialog_in(&mut stage, (1, elsewhere), (later, false));
+        assert_ne!(stage.shown, first, "found where it is now");
+        // A window that opens on a frame for time alone grows as any.
+        dialog_in(&mut stage, (2, elsewhere), (later, true));
+        assert_eq!(stage.due(), Some(later + STEP));
+    }
+
     #[test]
     fn a_settled_frame_shows_what_opened_whole() {
         let start = Instant::now();
@@ -692,7 +738,7 @@ mod tests {
         let theme = theme();
         terminal
             .draw(|frame| {
-                stage.begin(false, (frame.area(), false), &theme, start);
+                stage.begin((false, false), (frame.area(), false), &theme, start);
                 let area = frame.area();
                 stage.show(frame, (Window::Help, Grows::FromMiddle), |frame| {
                     draw_box(frame, area, SIZE, "Title", Colors::plain(&theme), &theme);

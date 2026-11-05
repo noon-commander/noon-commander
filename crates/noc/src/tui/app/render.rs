@@ -7,6 +7,7 @@ use std::time::Instant;
 use jiff::tz::TimeZone;
 use noc_config::{MenuBar, TabBar};
 use ratatui::Frame;
+use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
@@ -47,7 +48,7 @@ impl App {
         for wait in self.waits() {
             match wait.shows() {
                 Some(shows) if shows > drawn => at(shows),
-                Some(_) if turns => at(drawn + wait.step_after(drawn)),
+                Some(_) if turns => at(wait.moves_after(drawn)),
                 _ => {}
             }
         }
@@ -126,9 +127,10 @@ impl App {
         let always = self.config.ui.menu_bar == MenuBar::Always;
         let bar_height = u16::from(always);
         let screen = frame.area();
-        let mut stage = std::mem::take(&mut self.stage);
+        let mut stage = std::mem::take(&mut self.frames.stage);
         let scene = (screen, self.viewing.is_some());
-        stage.begin(self.config.animations.windows, scene, &self.theme, at);
+        let on = (self.config.animations.windows, self.frames.for_time);
+        stage.begin(on, scene, &self.theme, at);
         let prompt = self.command_prompt(screen.width);
         let prompt_text = cells::text_of(&prompt);
         let line_height = self.line_height(&prompt_text, screen);
@@ -181,8 +183,9 @@ impl App {
             for ((side, tabs, line, area), root) in sides.into_iter().zip(roots) {
                 let focused = active == side;
                 let view = if root { &root_view } else { &view };
-                let spots = render_side(frame, tabs, (line, area), focused, view, &self.home);
                 let whole = line.map_or(area, |line| line.union(area));
+                let shown = (focused, view, self.home.as_path());
+                let spots = self.frames.side(frame, (side, tabs), (line, area), shown);
                 self.spots.sides.push((side, whole));
                 let tabs = spots.into_iter().map(|(index, spot)| (side, index, spot));
                 self.spots.tabs.extend(tabs);
@@ -214,7 +217,8 @@ impl App {
             );
         }
         stage.end(frame);
-        self.stage = stage;
+        self.frames.stage = stage;
+        self.frames.for_time = false;
         if let Some(hints) = &self.hints {
             which_key::render(frame, panels, hints, &self.theme);
         }
@@ -727,6 +731,79 @@ fn window_kind(context: Context) -> Option<String> {
         | Context::UserScreen => return None,
     };
     Some(kind)
+}
+
+/// What frames keep from one to the next: the windows, and what each side drew, which a frame
+/// for time alone puts back rather than draw the side again, as that takes most of the time of
+/// a frame (ADR 0069).
+#[derive(Debug, Default)]
+pub(super) struct Frames {
+    /// The windows of the last frame, and those growing or shrinking.
+    pub(super) stage: Stage,
+    /// The next frame is drawn for time alone: nothing but time went by since the last one.
+    pub(super) for_time: bool,
+    /// What each side drew on the last frame, left first.
+    kept: [Option<Kept>; 2],
+}
+
+impl Frames {
+    /// Draws the tab that shows of `tabs` as [`render_side`] does, or, on a frame for time
+    /// alone, puts back what it drew on the last frame if its panel does not move with time.
+    /// Returns where each tab shown is, by its index.
+    fn side(
+        &mut self,
+        frame: &mut Frame<'_>,
+        (side, tabs): (Side, &mut Tabs),
+        (line, area): (Option<Rect>, Rect),
+        (focused, view, home): (bool, &View<'_>, &Path),
+    ) -> Vec<(usize, Rect)> {
+        let whole = line.map_or(area, |line| line.union(area));
+        let kept = &mut self.kept[usize::from(side == Side::Right)];
+        let still = self.for_time && !tabs.active().panel.moves(view);
+        if let Some(kept) = kept.as_ref().filter(|kept| still && kept.area == whole) {
+            return kept.put_back(frame.buffer_mut());
+        }
+        let spots = render_side(frame, tabs, (line, area), focused, view, home);
+        *kept = Some(Kept::new(frame.buffer_mut(), whole, spots.clone()));
+        spots
+    }
+}
+
+/// What a side drew on a frame.
+#[derive(Debug)]
+struct Kept {
+    /// Where it drew: its panel, and its line of tabs if it has one.
+    area: Rect,
+    /// The cells of `area`, row by row.
+    cells: Vec<Cell>,
+    /// Where each tab shown is, by its index.
+    spots: Vec<(usize, Rect)>,
+}
+
+impl Kept {
+    /// What `buffer` holds in `area`, with the tabs at `spots`.
+    fn new(buffer: &Buffer, area: Rect, spots: Vec<(usize, Rect)>) -> Self {
+        let area = area.intersection(buffer.area);
+        let cells = area
+            .rows()
+            .flat_map(|row| {
+                let start = buffer.index_of(row.x, row.y);
+                &buffer.content[start..start + usize::from(row.width)]
+            })
+            .cloned()
+            .collect();
+        Self { area, cells, spots }
+    }
+
+    /// Puts the cells back in `buffer`; where the tabs are.
+    fn put_back(&self, buffer: &mut Buffer) -> Vec<(usize, Rect)> {
+        let width = usize::from(self.area.width);
+        for (row, cells) in self.area.rows().zip(self.cells.chunks(width.max(1))) {
+            let start = buffer.index_of(row.x, row.y);
+            buffer.content[start..start + width].clone_from_slice(cells);
+        }
+        self.spots.clone()
+    }
 }
 
 /// Draws the tab that shows of `tabs` in `area`, and its tabs on `line` if there is one, its

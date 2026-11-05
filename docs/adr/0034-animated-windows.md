@@ -1,6 +1,7 @@
 # 0034. Animated windows
 
-- Status: Accepted; its setting is `animations.windows` since [ADR 0037](0037-spinners.md)
+- Status: Accepted; its setting is `animations.windows` since [ADR 0037](0037-spinners.md);
+  amended by [ADR 0069](0069-a-frame-for-time-alone.md)
 - Date: 2026-10-16
 
 ## Context

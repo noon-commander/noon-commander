@@ -2115,7 +2115,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   names a region's formats in CLDR, through ICU4X. A time shows its date, with the year, and its
   time of day, in digits; every number is grouped. The formats in use are
   global (`noc_locale::current`); a change of the setting makes new ones in a task
-  (`Effect::Formats`) and sorts the panels again. Help → About shows where they come from.
+  (`Effect::Formats`) and sorts the panels again. Help → About shows where they come from. Each
+  `Formats` keeps the texts it wrote, 4,096 at most, so rows drawn again ask the system nothing
+  ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
 - **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
   cursor that replaces the row's colors, a dark gray one under them in the inactive panel,
   yellow headers; directories white, executables green, broken links red, devices magenta; gray
@@ -2215,8 +2217,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   connections made or ended, in a queue of their own, so the dots of a host connecting can be
   watched in the location menu. Each frame goes out as synchronized output (`draw_whole` in
   `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine
-  changes. A spinner's next frame is due 40 ms after a frame that drew the shine of its `Wait`,
-  which remembers it, else 80 ms later, the next frame of the dots.
+  changes. A spinner's next frame is due 40 ms after a frame that drew the shine of its `Wait`
+  moving over a bar, which the shine tells it, else 80 ms later, the next frame of the dots, or
+  sooner when a resting shine sweeps again (`Wait::moves_after`). A frame that only a spinner or
+  a window that grows asked for is for time alone (`App::frame_for_time`): a side whose panel does
+  not move with time puts back the cells it drew on the last frame (`render::Frames`), and a window
+  that shows whole stays where it was found, without `Stage::show` looking for it again
+  ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
   and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text

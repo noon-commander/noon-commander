@@ -28,6 +28,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A window that waits for its rows, such as the location menu or the search of a tree, takes a
+  fifth of the processor it took: a frame that only a spinner asks for puts back what the panels
+  drew rather than draw them again, a shine at rest draws at the pace of the dots, and the times
+  and sizes of rows are written once ([ADR 0069](docs/adr/0069-a-frame-for-time-alone.md)).
 - Each run of the TUI writes a log of its own, `~/.local/state/noc/logs/noc-<time>-<pid>.log`,
   readable by the user alone, and kept for `log.keep_days` days after its last write; the
   subcommands no longer write one. A thread of its own writes it, and its lines say which host,

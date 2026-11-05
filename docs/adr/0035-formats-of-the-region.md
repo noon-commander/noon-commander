@@ -1,6 +1,6 @@
 # 0035. Formats of the region
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0069](0069-a-frame-for-time-alone.md)
 - Date: 2026-10-17
 
 ## Context

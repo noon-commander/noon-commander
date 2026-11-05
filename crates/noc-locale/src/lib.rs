@@ -10,8 +10,9 @@
 //! [`Formats::iso`], and give other formats to the functions that take them.
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::fmt;
-use std::sync::{Arc, LazyLock, PoisonError, RwLock};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError, RwLock};
 
 use fluent_bundle::FluentValue;
 use intl_memoizer::concurrent::IntlLangMemoizer;
@@ -75,6 +76,52 @@ pub struct Formats {
     names_from: Origin,
     /// The most cells of [`Self::date_time`].
     width: usize,
+    memo: Memo,
+}
+
+/// What the formats wrote last, by what they wrote it of: the same times and sizes show again
+/// and again, as the rows of a panel are drawn for every frame, and the system's formatters
+/// take microseconds a call.
+#[derive(Default)]
+struct Memo(Mutex<HashMap<Key, String>>);
+
+/// What a text of [`Memo`] was written of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Key {
+    Integer(u64, bool),
+    /// The bits of the value, the digits of its fraction, and whether it is grouped.
+    Decimal(u64, (usize, usize), bool),
+    Date(Date),
+    Time(DateTime),
+    DateTime(DateTime),
+}
+
+/// Texts the memo keeps at most: it starts over once it has as many, which is a few screens
+/// of rows.
+const MEMO_TEXTS: usize = 4096;
+
+impl Memo {
+    /// The text of `key`, which `write` writes the first time, without the lock, as it may
+    /// write other texts of the memo.
+    fn text(&self, key: Key, write: impl FnOnce() -> String) -> String {
+        let texts = || self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(text) = texts().get(&key) {
+            return text.clone();
+        }
+        let text = write();
+        let mut texts = texts();
+        if texts.len() >= MEMO_TEXTS {
+            texts.clear();
+        }
+        texts.insert(key, text.clone());
+        text
+    }
+}
+
+impl fmt::Debug for Memo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Memo").finish_non_exhaustive()
+    }
 }
 
 impl Formats {
@@ -107,6 +154,7 @@ impl Formats {
             names,
             names_from,
             width: 0,
+            memo: Memo::default(),
         };
         formats.width = formats.measure();
         formats
@@ -141,13 +189,26 @@ impl Formats {
 
     /// `value` with the separator of thousands of the region, such as `1,234,567`.
     pub fn integer(&self, value: u64) -> String {
-        clean(self.numbers.integer(value, true))
+        self.whole(value, true)
     }
 
     /// `value` with exactly `fraction` digits after the decimal separator of the region, such
     /// as `1.5` or `1,5`, and the separator of thousands if `grouping`.
     pub fn decimal(&self, value: f64, fraction: usize, grouping: bool) -> String {
-        clean(self.numbers.decimal(value, (fraction, fraction), grouping))
+        self.fractional(value, (fraction, fraction), grouping)
+    }
+
+    fn whole(&self, value: u64, grouping: bool) -> String {
+        self.memo.text(Key::Integer(value, grouping), || {
+            clean(self.numbers.integer(value, grouping))
+        })
+    }
+
+    fn fractional(&self, value: f64, fraction: (usize, usize), grouping: bool) -> String {
+        let key = Key::Decimal(value.to_bits(), fraction, grouping);
+        self.memo.text(key, || {
+            clean(self.numbers.decimal(value, fraction, grouping))
+        })
     }
 
     /// A number of a message: whole numbers without a fraction unless `min` asks for one,
@@ -163,27 +224,29 @@ impl Formats {
         let whole = value.fract() == 0.0 && min == 0;
         // Whole numbers that fit print exactly, as integers.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let text = if whole && (0.0..9.007_199_254_740_992e15).contains(&value) {
-            self.numbers.integer(value as u64, grouping)
+        if whole && (0.0..9.007_199_254_740_992e15).contains(&value) {
+            self.whole(value as u64, grouping)
         } else {
-            self.numbers.decimal(value, (min, max), grouping)
-        };
-        clean(text)
+            self.fractional(value, (min, max), grouping)
+        }
     }
 
     /// The year, the month, and the day of `date`, the year in two digits but in `iso`.
     pub fn date(&self, date: Date) -> String {
-        clean(self.dates.date(date))
+        self.memo
+            .text(Key::Date(date), || clean(self.dates.date(date)))
     }
 
     /// The hour and the minute of `at`.
     pub fn time(&self, at: DateTime) -> String {
-        clean(self.dates.time(at))
+        self.memo.text(Key::Time(at), || clean(self.dates.time(at)))
     }
 
     /// `at` as every time shows: [`Self::date`] and [`Self::time`].
     pub fn date_time(&self, at: DateTime) -> String {
-        format!("{} {}", self.date(at.date()), self.time(at))
+        self.memo.text(Key::DateTime(at), || {
+            format!("{} {}", self.date(at.date()), self.time(at))
+        })
     }
 
     /// The most cells that [`Self::date_time`] takes, for a column of times.
@@ -310,6 +373,73 @@ mod tests {
         let text = bundle.format_pattern(message.value().unwrap(), Some(&args), &mut errors);
         assert_eq!(text, "1234567 and text");
         assert_eq!(errors.len(), 0, "{errors:?}");
+    }
+
+    /// Writes as `iso` does, and counts how many texts it wrote.
+    #[derive(Debug, Default)]
+    struct Counting(std::sync::atomic::AtomicUsize);
+
+    impl Counting {
+        fn wrote(&self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    impl Numbers for Arc<Counting> {
+        fn integer(&self, value: u64, grouping: bool) -> String {
+            self.wrote();
+            iso::Iso.integer(value, grouping)
+        }
+
+        fn decimal(&self, value: f64, fraction: (usize, usize), grouping: bool) -> String {
+            self.wrote();
+            iso::Iso.decimal(value, fraction, grouping)
+        }
+    }
+
+    impl Dates for Arc<Counting> {
+        fn date(&self, date: Date) -> String {
+            self.wrote();
+            iso::Iso.date(date)
+        }
+
+        fn time(&self, at: DateTime) -> String {
+            self.wrote();
+            iso::Iso.time(at)
+        }
+    }
+
+    #[test]
+    fn what_shows_again_is_written_once() {
+        let counting = Arc::new(Counting::default());
+        let formats = Formats::new(
+            (Box::new(Arc::clone(&counting)), Origin::Iso),
+            (Box::new(Arc::clone(&counting)), Origin::Iso),
+            (icu::Names::new(None), Origin::Iso),
+        );
+        let count = || counting.0.load(std::sync::atomic::Ordering::Relaxed);
+        let before = count();
+        let at = jiff::civil::date(2025, 3, 7).at(9, 5, 0, 0);
+        for _ in 0..3 {
+            assert_eq!(formats.date_time(at), "2025-03-07 09:05");
+            assert_eq!(formats.integer(1_234), "1234");
+            assert_eq!(formats.decimal(1.46, 1, true), "1.5");
+            assert_eq!(formats.number(2.5, (None, None), true), "2.5");
+        }
+        assert_eq!(count() - before, 5, "a date, a time, and three numbers");
+        assert_eq!(formats.decimal(1.46, 2, true), "1.46", "another fraction");
+        assert_eq!(formats.decimal(1.46, 1, false), "1.5", "without grouping");
+        assert_eq!(count() - before, 7);
+    }
+
+    #[test]
+    fn the_memo_starts_over_once_full() {
+        let formats = Formats::iso();
+        for value in 0..u64::try_from(MEMO_TEXTS).unwrap() + 10 {
+            assert_eq!(formats.integer(value), value.to_string());
+        }
+        let texts = formats.memo.0.lock().unwrap().len();
+        assert!(texts <= MEMO_TEXTS, "{texts}");
     }
 
     #[test]

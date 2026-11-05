@@ -123,7 +123,7 @@ impl App {
             viewing.log = Some(under);
         }
         // The windows it covers go at once, rather than shrink over it.
-        self.stage.settle();
+        self.frames.stage.settle();
         self.read_more()
     }
 

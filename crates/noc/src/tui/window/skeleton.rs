@@ -62,7 +62,7 @@ pub(crate) fn draw_skeleton(
     frame: &mut Frame<'_>,
     area: Rect,
     (theme, style): (&Theme, Style),
-    shine: Option<Shine>,
+    shine: Option<Shine<'_>>,
 ) {
     if area.width < 8 {
         return;
@@ -99,7 +99,7 @@ pub(crate) fn status_skeleton(
     width: u16,
     style: Style,
     theme: &Theme,
-    shine: Option<Shine>,
+    shine: Option<Shine<'_>>,
 ) -> Line<'static> {
     let length = if width < 8 {
         0
@@ -117,7 +117,7 @@ const SHINE_HALF: u16 = 5;
 /// Where the middle of `shine` is, in cells from the start of bars of `longest` cells at most:
 /// it comes in at one end and goes out at the other, as fast over every bar. None while it
 /// rests.
-fn shine_middle(shine: Option<Shine>, longest: u16) -> Option<i32> {
+fn shine_middle(shine: Option<Shine<'_>>, longest: u16) -> Option<i32> {
     let cells = shine?.over(longest.saturating_add(2 * SHINE_HALF))?;
     Some(i32::from(cells) - i32::from(SHINE_HALF))
 }
@@ -161,7 +161,7 @@ mod tests {
 
     use super::*;
 
-    fn skeleton_colors(shine: Option<Shine>) -> Vec<Option<Color>> {
+    fn skeleton_colors(shine: Option<Shine<'_>>) -> Vec<Option<Color>> {
         let mut theme = Theme::terminal();
         theme.dialog = Style::new()
             .fg(Color::Rgb(255, 255, 255))

@@ -748,7 +748,8 @@ impl FindWindow {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let items = self.items();
         let colors = Colors::plain(theme);
-        let wait = self.wait();
+        // The field, not `wait()`, which would hold all of `self` while the dialog draws.
+        let wait = (self.state == State::Searching).then_some(&self.wait);
         let shine = wait.and_then(|wait| spin.shine(wait));
         let width = self.dialog.text_width(area);
         let cut = (Align::Left, cells::Cut::End);

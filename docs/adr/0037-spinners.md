@@ -1,7 +1,8 @@
 # 0037. Spinners
 
-- Status: Accepted; amended by [ADR 0039](0039-errors-of-panels-in-dialogs.md) and
-  [ADR 0068](0068-a-panel-hides-the-rows-it-leaves.md)
+- Status: Accepted; amended by [ADR 0039](0039-errors-of-panels-in-dialogs.md),
+  [ADR 0068](0068-a-panel-hides-the-rows-it-leaves.md), and
+  [ADR 0069](0069-a-frame-for-time-alone.md)
 - Date: 2026-10-18
 - Amends: [ADR 0034](0034-animated-windows.md)
 

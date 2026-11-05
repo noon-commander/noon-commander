@@ -22,9 +22,11 @@ const SHINE_REST: Duration = Duration::from_millis(400);
 #[derive(Debug, Default)]
 pub(crate) struct Wait {
     since: Cell<Option<Instant>>,
-    /// The last frame that drew its shine.
-    shone: Cell<Option<Instant>>,
+    shone: Shone,
 }
+
+/// The last frame that drew a shine over a bar, and when the shine moves next after it.
+type Shone = Cell<Option<(Instant, Instant)>>;
 
 impl Wait {
     /// When it began, `at` if this is its first frame.
@@ -41,46 +43,80 @@ impl Wait {
         self.since.get().map(|since| since + DELAY)
     }
 
-    /// How long after the frame drawn at `drawn` its spinner moves next: a step of the shine if
-    /// that frame drew one, else a frame of the dots, so that dots alone draw half as often.
-    pub(crate) fn step_after(&self, drawn: Instant) -> Duration {
-        if self.shone.get().is_some_and(|shone| shone >= drawn) {
-            SHINE_STEP
-        } else {
-            DOTS_FRAME
+    /// When its spinner moves next after the frame drawn at `drawn`: a frame of the dots, or
+    /// sooner the next step of a shine that frame drew over a bar. A shine at rest draws at the
+    /// pace of the dots, and so do dots alone, until the shine sweeps again.
+    pub(crate) fn moves_after(&self, drawn: Instant) -> Instant {
+        let dots = drawn + DOTS_FRAME;
+        match self.shone.get() {
+            Some((shone, next)) if shone >= drawn => next.min(dots),
+            _ => dots,
         }
     }
 }
 
 /// A shine that sweeps over bars, one cell every [`SHINE_STEP`], resting [`SHINE_REST`]
-/// between sweeps: how long it has gone.
+/// between sweeps: how long it has gone, and, if it is of a wait, the frame it is drawn on and
+/// where the wait keeps when it moves next, which it tells as it crosses bars.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Shine(Duration);
+pub(crate) struct Shine<'a> {
+    elapsed: Duration,
+    tells: Option<(Instant, &'a Shone)>,
+}
 
-impl Shine {
+impl Shine<'_> {
     /// How many cells it has come in its sweep over `cells`; none while it rests.
     pub(crate) fn over(self, cells: u16) -> Option<u16> {
         let step = SHINE_STEP.as_millis();
         let sweep = u128::from(cells) * step;
-        let into = self.0.as_millis() % (sweep + SHINE_REST.as_millis());
-        (into < sweep).then(|| u16::try_from(into / step).unwrap_or(cells))
+        let cycle = sweep + SHINE_REST.as_millis();
+        let into = self.elapsed.as_millis() % cycle;
+        if into < sweep {
+            self.moves_in(SHINE_STEP);
+            Some(u16::try_from(into / step).unwrap_or(cells))
+        } else {
+            self.moves_in(Duration::from_millis(
+                u64::try_from(cycle - into).unwrap_or(u64::MAX),
+            ));
+            None
+        }
     }
 
     /// Where it is as it runs to and fro over `cells`, turning at either end without a rest:
     /// the cell from the start.
     pub(crate) fn bounce(self, cells: u16) -> u16 {
+        self.moves_in(SHINE_STEP);
         let last = u128::from(cells.saturating_sub(1));
         if last == 0 {
             return 0;
         }
-        let step = self.0.as_millis() / SHINE_STEP.as_millis() % (2 * last);
+        let step = self.elapsed.as_millis() / SHINE_STEP.as_millis() % (2 * last);
         u16::try_from(if step <= last { step } else { 2 * last - step }).unwrap_or(0)
     }
 
-    /// The shine once it has come `cells` cells.
+    /// Tells its wait that it moves `after` its frame, unless another bar of the frame moves it
+    /// sooner.
+    fn moves_in(self, after: Duration) {
+        let Some((at, shone)) = self.tells else {
+            return;
+        };
+        let next = at + after;
+        let next = match shone.get() {
+            Some((frame, sooner)) if frame == at => sooner.min(next),
+            _ => next,
+        };
+        shone.set(Some((at, next)));
+    }
+}
+
+impl Shine<'static> {
+    /// The shine once it has come `cells` cells, of no wait.
     #[cfg(test)]
     pub(crate) fn after(cells: u32) -> Self {
-        Self(SHINE_STEP * cells)
+        Self {
+            elapsed: SHINE_STEP * cells,
+            tells: None,
+        }
     }
 }
 
@@ -125,14 +161,16 @@ impl Spin {
 
     /// The shine of `wait`, which sweeps from when its dots show on; none before, or without
     /// `animations.spinners`.
-    pub(crate) fn shine(&self, wait: &Wait) -> Option<Shine> {
+    pub(crate) fn shine<'a>(&self, wait: &'a Wait) -> Option<Shine<'a>> {
         let since = wait.since(self.at);
         let elapsed = self.at.checked_duration_since(since)?.checked_sub(DELAY)?;
         if !self.turns {
             return None;
         }
-        wait.shone.set(Some(self.at));
-        Some(Shine(elapsed))
+        Some(Shine {
+            elapsed,
+            tells: Some((self.at, &wait.shone)),
+        })
     }
 
     fn dots_after(&self, elapsed: Duration) -> char {
@@ -225,16 +263,60 @@ mod tests {
         let wait = Wait::default();
         let shown = start + DELAY;
         assert_eq!(spin(start, true).shine(&wait), None);
-        assert_eq!(wait.step_after(start), DOTS_FRAME, "nothing showed yet");
+        assert_eq!(
+            wait.moves_after(start),
+            start + DOTS_FRAME,
+            "nothing showed yet"
+        );
         assert!(spin(shown, true).wait_dots(&wait).is_some());
-        assert_eq!(wait.step_after(shown), DOTS_FRAME, "dots alone");
-        assert!(spin(shown, true).shine(&wait).is_some());
-        assert_eq!(wait.step_after(shown), SHINE_STEP);
+        assert_eq!(wait.moves_after(shown), shown + DOTS_FRAME, "dots alone");
+        let shine = spin(shown, true).shine(&wait).unwrap();
+        assert_eq!(
+            wait.moves_after(shown),
+            shown + DOTS_FRAME,
+            "a shine that crossed no bar"
+        );
+        assert_eq!(shine.over(20), Some(0));
+        assert_eq!(wait.moves_after(shown), shown + SHINE_STEP);
         let later = shown + DOTS_FRAME;
         assert!(spin(later, true).wait_dots(&wait).is_some());
-        assert_eq!(wait.step_after(later), DOTS_FRAME, "the shine went");
+        assert_eq!(
+            wait.moves_after(later),
+            later + DOTS_FRAME,
+            "the shine went"
+        );
         assert_eq!(spin(later, false).shine(&wait), None);
-        assert_eq!(wait.step_after(later), DOTS_FRAME, "a resting shine");
+        assert_eq!(wait.moves_after(later), later + DOTS_FRAME, "spinners off");
+    }
+
+    #[test]
+    fn a_resting_shine_moves_at_the_dots_pace_until_it_sweeps_again() {
+        let start = Instant::now();
+        let wait = Wait::default();
+        let shown = start + DELAY;
+        spin(start, true).wait_dots(&wait);
+        let shine_at = |at| spin(at, true).shine(&wait).unwrap();
+        // A sweep over 20 cells takes 800 ms; the rest then lasts 400 ms.
+        let resting = shown + SHINE_STEP * 20;
+        assert_eq!(shine_at(resting).over(20), None);
+        assert_eq!(wait.moves_after(resting), resting + DOTS_FRAME);
+        let last = resting + SHINE_REST.saturating_sub(Duration::from_millis(30));
+        assert_eq!(shine_at(last).over(20), None);
+        assert_eq!(
+            wait.moves_after(last),
+            last + Duration::from_millis(30),
+            "when it sweeps again"
+        );
+        // A bar that the shine crosses on the same frame moves it at its own pace.
+        let both = shine_at(resting);
+        assert_eq!(both.over(20), None);
+        assert_eq!(both.over(50), Some(20));
+        assert_eq!(both.over(20), None);
+        assert_eq!(wait.moves_after(resting), resting + SHINE_STEP);
+        // One that runs to and fro never rests.
+        let bounce = resting + SHINE_STEP * 100;
+        shine_at(bounce).bounce(10);
+        assert_eq!(wait.moves_after(bounce), bounce + SHINE_STEP);
     }
 
     #[test]

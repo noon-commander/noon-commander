@@ -107,6 +107,38 @@ fn dots_alone_draw_half_as_often_as_a_shine() {
 }
 
 #[test]
+fn a_frame_for_time_alone_puts_back_what_the_panels_drew() {
+    let mut app = loaded();
+    app.config.animations.spinners = true;
+    let start = Instant::now();
+    assert!(screen_at(&mut app, 20, start).contains("left"));
+
+    // Changed behind the event loop's back, which would not ask for a frame for time alone.
+    let reload = app.handle(action(Action::Reload));
+    answer(&mut app, reload, &Listing::Dir(vec![dir("other")]));
+    app.frame_for_time(true);
+    let kept = screen_at(&mut app, 20, start);
+    assert_eq!(kept.matches("/left").count(), 2, "both panels, {kept}");
+    assert!(!kept.contains("other"), "{kept}");
+    let drawn = screen_at(&mut app, 20, start);
+    assert_eq!(
+        drawn.matches("/left").count(),
+        1,
+        "the other panel, {drawn}"
+    );
+    assert!(drawn.contains("/other"), "{drawn}");
+
+    // A panel whose dots turn draws on every frame.
+    let reload = app.handle(action(Action::Reload));
+    assert!(matches!(&reload[..], [Effect::List { .. }]), "{reload:?}");
+    let waits = screen_at(&mut app, 20, start);
+    assert!(waits.contains("╔ / /srv"), "{waits}");
+    app.frame_for_time(true);
+    let turns = screen_at(&mut app, 20, start + spinner::DELAY);
+    assert!(turns.contains("╔ | /srv"), "{turns}");
+}
+
+#[test]
 fn lists_both_panels_at_start() {
     let (_, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
     let sides: Vec<Side> = effects

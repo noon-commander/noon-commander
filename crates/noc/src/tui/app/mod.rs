@@ -51,7 +51,6 @@ use super::theme::{ColorDepth, Theme};
 use super::transfer::{self, Sources};
 use super::window::Tone;
 use super::workspaces::WorkspacesWindow;
-use super::zoom::Stage;
 use crate::about::{Build, Detected, Tool};
 use crate::i18n::fl;
 
@@ -1171,8 +1170,8 @@ pub(crate) struct App {
     /// The thumb of a scroll bar that the left button holds: what its bar scrolls, and by
     /// which of its rows.
     grab: Option<(Scrolled, u16)>,
-    /// The windows of the last frame, and those growing or shrinking.
-    stage: Stage,
+    /// What frames keep from one to the next: the windows, and what the panels drew.
+    frames: render::Frames,
     quit: bool,
     redraw: bool,
 }
@@ -1340,7 +1339,7 @@ impl App {
             spots: Spots::default(),
             clicked: None,
             grab: None,
-            stage: Stage::default(),
+            frames: render::Frames::default(),
             quit: false,
             redraw: false,
         };
@@ -1374,7 +1373,7 @@ impl App {
         let handover = self.handover.take();
         if handover.is_some() {
             // The windows were there before the terminal went; they come back as they were.
-            self.stage.settle();
+            self.frames.stage.settle();
         }
         handover
     }
@@ -1384,14 +1383,21 @@ impl App {
     #[cfg(debug_assertions)]
     pub(crate) fn debug_windows(&mut self, debug: super::DebugOptions) {
         if let Some(whole) = debug.slow_windows {
-            self.stage.slow(whole);
+            self.frames.stage.slow(whole);
         }
-        self.stage.show_sizes(debug.show_sizes);
+        self.frames.stage.show_sizes(debug.show_sizes);
+    }
+
+    /// Whether the next frame is drawn for time `alone`, as nothing but time went by since the
+    /// last one, for a spinner or a window that grows: then what does not move with time shows
+    /// as the last frame drew it, and windows stay where they were found.
+    pub(crate) fn frame_for_time(&mut self, alone: bool) {
+        self.frames.for_time = alone;
     }
 
     /// When the next frame of a window growing or shrinking is due, if one is.
     pub(crate) fn frame_due(&self) -> Option<Instant> {
-        self.stage.due()
+        self.frames.stage.due()
     }
 
     /// Takes pasted text: the command line gets all of it, line breaks included, and runs

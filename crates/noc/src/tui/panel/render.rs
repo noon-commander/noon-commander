@@ -29,10 +29,10 @@ use super::{
 const WAIT_ROWS: u16 = 3;
 
 /// What a veiled panel shows once its wait shows: a skeleton for its rows and status line.
-struct Veil {
+struct Veil<'a> {
     /// The shine that crosses the skeleton; none while it rests, as for a host whose dialog
     /// asks whether to try again.
-    shine: Option<Shine>,
+    shine: Option<Shine<'a>>,
 }
 
 impl Panel {
@@ -64,8 +64,8 @@ impl Panel {
         if inner.height < 3 || inner.width < 2 {
             return;
         }
-        let veil = self.veil(view);
-        if veil.is_none() {
+        let veiled = self.veil(view).is_some();
+        if !veiled {
             self.render_bottom(frame, area, theme);
         }
         let width = usize::from(inner.width);
@@ -75,7 +75,7 @@ impl Panel {
         self.scroll(list_height);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         let columns = DirColumns::for_width(width, column_widths(view.formats));
-        if let Some(Veil { shine }) = veil {
+        if let Some(Veil { shine }) = self.veil(view).filter(|_| veiled) {
             frame.render_widget(columns.header(self.sort, theme), line(inner.y));
             let rows = self.list.height.min(WAIT_ROWS);
             let skeleton = Rect {
@@ -141,6 +141,21 @@ impl Panel {
         self.render_status(frame, line(inner.bottom() - 1), active, view);
     }
 
+    /// Whether the panel would draw otherwise on a frame for time alone, or must draw on every
+    /// frame: while it waits, or its host connects, dots turn in its title; while a name is typed
+    /// in it, it puts the cursor of the terminal there.
+    pub(crate) fn moves(&self, view: &View<'_>) -> bool {
+        if self.wait().is_some() || self.search.is_some() || self.renaming.is_some() {
+            return true;
+        }
+        let location = self
+            .pending
+            .as_ref()
+            .map_or(&self.location, |pending| &pending.location);
+        matches!(location, Location::Remote { host, .. }
+            if (view.hosts)(host).status == HostStatus::Connecting)
+    }
+
     /// The title on the frame: the location, or the one being listed, after one cell that keeps
     /// the path in place: the icon of a directory, or of a host in the color of its status; and
     /// while it is listed, dots that turn, in the color of a host it connects to.
@@ -203,7 +218,7 @@ impl Panel {
 
     /// The skeleton that stands for the rows of a veiled panel, once its wait shows; `None`
     /// while the panel shows its rows.
-    fn veil(&self, view: &View<'_>) -> Option<Veil> {
+    fn veil(&self, view: &View<'_>) -> Option<Veil<'_>> {
         let wait = self.wait().filter(|_| self.veiled())?;
         view.spin.wait_dots(wait)?;
         let stalled = match self.pending.as_ref().map(|pending| &pending.location) {

@@ -104,21 +104,21 @@ pub(crate) struct Body<'a> {
     /// are, as the rows of the search of a tree do.
     pub(crate) fill: bool,
     /// Rows still to come, for a window that waits for them without `loading`.
-    pub(crate) waiting: Option<Waiting>,
+    pub(crate) waiting: Option<Waiting<'a>>,
 }
 
 /// What a window that waits for its rows without [`Loading`] shows meanwhile.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Waiting {
+pub(crate) struct Waiting<'a> {
     /// The dots that turn in front of the title, if they show yet.
     pub(crate) dots: Option<char>,
     /// The lines of the skeleton in place of the first rows, if they are still to come.
     pub(crate) skeleton: Option<u16>,
     /// The shine that crosses the skeleton.
-    pub(crate) shine: Option<Shine>,
+    pub(crate) shine: Option<Shine<'a>>,
 }
 
-impl Body<'_> {
+impl<'a> Body<'a> {
     /// Lines the box has for the rows: those of the skeleton while they are still to come.
     fn shown(&self) -> u16 {
         let lines = self
@@ -146,7 +146,7 @@ impl Body<'_> {
     }
 
     /// The shine that crosses the skeleton.
-    fn shine(&self) -> Option<Shine> {
+    fn shine(&self) -> Option<Shine<'a>> {
         match (self.loading, self.waiting) {
             (Some((loading, spin)), _) => spin.shine(loading.wait()?),
             (None, Some(waiting)) => waiting.shine,

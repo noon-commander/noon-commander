@@ -312,6 +312,8 @@ pub(crate) async fn run(
     // The last event changed nothing, or results that wait for their frame, so the screen stays
     // as it is.
     let mut idle = false;
+    // Something but time woke the loop since the last frame; without, the next is for time alone.
+    let mut news = true;
     let mut drawn = Instant::now();
     let mut pace = Pace::default();
     let context = Arc::new(context);
@@ -343,6 +345,7 @@ pub(crate) async fn run(
                 Err(error) => break Err(error.into()),
             }
             keys = KeyState::default();
+            news = true;
             continue;
         }
         if let Err(error) = take_terminal_requests(&mut terminal, &mut app, &mut asked) {
@@ -351,6 +354,7 @@ pub(crate) async fn run(
         let now = Instant::now();
         take_hints(&mut app, &mut keys);
         if !std::mem::take(&mut idle) {
+            app.frame_for_time(!std::mem::take(&mut news));
             if let Err(error) = draw_whole(&mut terminal, |frame| app.render(frame, now, &tz)) {
                 break Err(error.into());
             }
@@ -360,6 +364,7 @@ pub(crate) async fn run(
         let timer = key_timer(&app, &keys);
         let frame_due = app.frame_due();
         let spin_due = app.spin_due(drawn);
+        let mut for_time = false;
         tokio::select! {
             event = events.next() => match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
@@ -381,11 +386,12 @@ pub(crate) async fn run(
             }
             () = sleep_until(pace.due) => pace.release(Instant::now()),
             // A window growing or shrinking, a spinner, or a clock needs its next frame.
-            () = sleep_until(frame_due) => {}
-            () = sleep_until(spin_due) => {}
+            () = sleep_until(frame_due) => for_time = true,
+            () = sleep_until(spin_due) => for_time = true,
             _ = told.came() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),
         }
+        news |= !for_time;
     };
     shut_down((terminal, restore, &mut asked), &mut app, tasks).await;
     result

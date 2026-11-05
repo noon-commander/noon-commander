@@ -1,17 +1,17 @@
 //! The log of the TUI: a file of its own for each run, named for the time it started and its
-//! process, in the logs directory under the XDG state directory, of which the last `log.keep`
-//! are kept (ADR 0067). The terminal belongs to the UI. A thread of its own writes the file, so
+//! process, in the logs directory under the XDG state directory, kept for `log.keep_days` days
+//! after it was last written to (ADR 0067). The terminal belongs to the UI. A thread of its own writes the file, so
 //! that no event waits for the disk.
 
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Write};
-use std::num::NonZeroUsize;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
+use std::time::{Duration, SystemTime};
 
 use noc_config::{LogConfig, Paths};
 use tracing_subscriber::fmt::MakeWriter;
@@ -49,7 +49,7 @@ pub(crate) struct Failure {
 }
 
 /// Starts the log of this run in the logs directory of `paths`, as `config` says, and removes
-/// the files over its `keep`; without a file to write, nothing is logged.
+/// the files older than its `keep_days`; without a file to write, nothing is logged.
 ///
 /// Blocking: creates and removes files.
 pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
@@ -93,7 +93,7 @@ pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
         version = env!("CARGO_PKG_VERSION"),
         "noc started"
     );
-    if let Err(error) = prune(&dir, &path, config.keep) {
+    if let Err(error) = prune(&dir, &path, config.keep_days, SystemTime::now()) {
         tracing::warn!(dir = %dir.display(), %error, "cannot remove old logs");
     }
     Log {
@@ -102,7 +102,7 @@ pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
     }
 }
 
-/// Uses `config` from now on: its filter, and as many files as it keeps.
+/// Uses `config` from now on: its filter, and the days it keeps the files.
 ///
 /// Blocking: removes files.
 pub(crate) fn apply(config: &LogConfig) {
@@ -112,7 +112,12 @@ pub(crate) fn apply(config: &LogConfig) {
     if let Ok(filter) = filter(config) {
         let _ = control.filter.reload(filter);
     }
-    if let Err(error) = prune(&control.dir, &control.file, config.keep) {
+    if let Err(error) = prune(
+        &control.dir,
+        &control.file,
+        config.keep_days,
+        SystemTime::now(),
+    ) {
         tracing::warn!(dir = %control.dir.display(), %error, "cannot remove old logs");
     }
 }
@@ -144,19 +149,28 @@ fn open(dir: &Path) -> Result<(PathBuf, File), Failure> {
         .map_err(|error| Failure { path, error })
 }
 
-/// Removes the oldest log files in `dir` but `keep`, `current` always among those kept. The
-/// names start with the time in UTC, so they sort as the files were made.
-fn prune(dir: &Path, current: &Path, keep: NonZeroUsize) -> io::Result<()> {
-    let mut others: Vec<PathBuf> = fs::read_dir(dir)?
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
-        .map(|entry| entry.path())
-        .filter(|path| path != current && is_log(path))
-        .collect();
-    others.sort();
-    let over = others.len().saturating_sub(keep.get() - 1);
-    for path in others.drain(..over) {
-        if let Err(error) = fs::remove_file(&path) {
+/// Removes the log files in `dir` last written to more than `days` days before `now`, but
+/// `current`; `0` days keeps them all. A file whose time cannot be read stays.
+fn prune(dir: &Path, current: &Path, days: u16, now: SystemTime) -> io::Result<()> {
+    if days == 0 {
+        return Ok(());
+    }
+    let most = Duration::from_secs(u64::from(days) * 24 * 60 * 60);
+    for entry in fs::read_dir(dir)?.filter_map(Result::ok) {
+        let path = entry.path();
+        if path == current || !is_log(&path) {
+            continue;
+        }
+        // Not followed, so a link counts as no file.
+        let old = entry.metadata().is_ok_and(|metadata| {
+            metadata.is_file()
+                && metadata
+                    .modified()
+                    .ok()
+                    .and_then(|written| now.duration_since(written).ok())
+                    .is_some_and(|age| age > most)
+        });
+        if old && let Err(error) = fs::remove_file(&path) {
             tracing::debug!(path = %path.display(), %error, "cannot remove an old log");
         }
     }
@@ -277,42 +291,54 @@ mod tests {
         names
     }
 
+    /// Makes the file `name` in `dir`, last written to `days_ago` days before `now`, and an hour
+    /// more if `past`.
+    fn written(dir: &Path, name: &str, now: SystemTime, days_ago: u64, past: bool) -> PathBuf {
+        let path = dir.join(name);
+        let file = File::create(&path).unwrap();
+        let hours = days_ago * 24 + u64::from(past);
+        file.set_modified(now - Duration::from_secs(hours * 60 * 60))
+            .unwrap();
+        path
+    }
+
     #[test]
-    fn keeps_the_newest_logs_and_this_runs_and_leaves_other_files_alone() {
+    fn removes_the_logs_not_written_to_for_longer_than_the_days_kept() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        for name in [
-            "noc-20261101T090000Z-11.log",
-            "noc-20261102T090000Z-12.log",
-            "noc-20261103T090000Z-13.log",
-            "noc-20261104T090000Z-14.log",
-            "noc.log",
-            "notes.txt",
-        ] {
-            fs::write(dir.join(name), "").unwrap();
-        }
-        fs::create_dir(dir.join("noc-20261001T090000Z-1.log")).unwrap();
-        // This run's file is older than the others, as after the clock went back.
-        let current = dir.join("noc-20261031T090000Z-10.log");
-        fs::write(&current, "").unwrap();
-        prune(dir, &current, NonZeroUsize::new(3).unwrap()).unwrap();
+        let now = SystemTime::now();
+        written(dir, "noc-20261020T090000Z-1.log", now, 9, false);
+        written(dir, "noc-20261025T090000Z-2.log", now, 7, true);
+        // Started long ago, but written to lately, as a run that lasts.
+        written(dir, "noc-20261001T090000Z-3.log", now, 7, false);
+        written(dir, "noc-20261104T090000Z-4.log", now, 0, false);
+        // Not logs of noc.
+        written(dir, "noc.log", now, 30, false);
+        written(dir, "notes.txt", now, 30, false);
+        fs::create_dir(dir.join("noc-20260901T090000Z-5.log")).unwrap();
+        // This run's file, whatever its time.
+        let current = written(dir, "noc-20261019T090000Z-6.log", now, 30, false);
+        prune(dir, &current, 0, now).unwrap();
+        assert_eq!(names(dir).len(), 8, "0 keeps them all");
+        prune(dir, &current, 7, now).unwrap();
         assert_eq!(
             names(dir),
             [
-                "noc-20261001T090000Z-1.log",
-                "noc-20261031T090000Z-10.log",
-                "noc-20261103T090000Z-13.log",
-                "noc-20261104T090000Z-14.log",
+                "noc-20260901T090000Z-5.log",
+                "noc-20261001T090000Z-3.log",
+                "noc-20261019T090000Z-6.log",
+                "noc-20261104T090000Z-4.log",
                 "noc.log",
                 "notes.txt",
             ]
         );
-        prune(dir, &current, NonZeroUsize::MIN).unwrap();
+        prune(dir, &current, 1, now).unwrap();
         assert_eq!(
             names(dir),
             [
-                "noc-20261001T090000Z-1.log",
-                "noc-20261031T090000Z-10.log",
+                "noc-20260901T090000Z-5.log",
+                "noc-20261019T090000Z-6.log",
+                "noc-20261104T090000Z-4.log",
                 "noc.log",
                 "notes.txt",
             ]

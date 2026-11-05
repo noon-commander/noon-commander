@@ -111,8 +111,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Write these files only through `noc-config`, which replaces them atomically (`write.rs`).
   Edits to `config.toml` and `hosts.toml` keep the user's comments and other keys.
 - Logs: only the TUI logs, a file for each run in `logs/` in XDG state, written by the thread
-  of `crates/noc/src/logging.rs`; `log.keep` files are kept. Settings in `[log]`, no environment
-  variable (ADR 0067).
+  of `crates/noc/src/logging.rs`; a file goes `log.keep_days` days after its last write. Settings
+  in `[log]`, no environment variable (ADR 0067).
 
 ## Code conventions
 

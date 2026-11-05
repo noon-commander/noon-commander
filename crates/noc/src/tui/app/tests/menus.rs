@@ -315,9 +315,9 @@ fn the_settings_of_the_log_apply_at_once() {
     edit_field(&mut app, "3");
     let effects = app.handle(action(Action::Up));
     let [Effect::SaveConfig { .. }, Effect::Log(log)] = &effects[..] else {
-        panic!("expected the files to keep to be saved and used: {effects:?}");
+        panic!("expected the days to keep to be saved and used: {effects:?}");
     };
-    assert_eq!(log.keep.get(), 3);
+    assert_eq!(log.keep_days, 3);
     // Other settings leave the log alone.
     config_category(&mut app, 1);
     let effects = app.handle(action(Action::Toggle));

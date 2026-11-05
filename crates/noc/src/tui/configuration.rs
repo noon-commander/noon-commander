@@ -336,7 +336,9 @@ impl Setting {
                 })?;
             }
             Key::LogKeep => {
-                config.log.keep = number(text, |text| fl!("config-log-keep-invalid", text = text))?;
+                config.log.keep_days = number(text, |text| {
+                    fl!("config-log-keep-days-invalid", text = text, most = u16::MAX)
+                })?;
             }
             _ => {}
         }
@@ -1656,8 +1658,11 @@ fn log(config: &Config) -> Category {
             ),
             Setting::new(
                 Key::LogKeep,
-                (fl!("config-log-keep"), fl!("config-log-keep-hint")),
-                text(&log.keep.to_string()),
+                (
+                    fl!("config-log-keep-days"),
+                    fl!("config-log-keep-days-hint"),
+                ),
+                text(&log.keep_days.to_string()),
             ),
         ],
     }
@@ -2012,7 +2017,7 @@ mod tests {
         expected.search.fd = PathBuf::from("fdfind");
         expected.log.level = LogLevel::Debug;
         expected.log.filter = "info,noc_ssh=trace".to_owned();
-        expected.log.keep = NonZeroUsize::new(3).unwrap();
+        expected.log.keep_days = 3;
         assert_eq!(dialog.applied, expected);
         assert_eq!(
             run_text(&expected.shell.run),
@@ -2039,7 +2044,7 @@ mod tests {
             (7, 1, " ", "The fd program cannot be empty"),
             (7, 2, "0", "is not a number of results"),
             (9, 1, "noc_ssh=loud", "is not a filter of the log"),
-            (9, 2, "0", "is not a number of files"),
+            (9, 2, "-1", "is not a number of days"),
         ];
         for (index, row, text, message) in cases {
             let mut dialog = dialog();

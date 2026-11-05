@@ -53,9 +53,9 @@ pub struct LogConfig {
     /// Directives such as `info,noc_ssh=trace`, which take the place of
     /// [`level`](Self::level) unless empty; the TUI checks them. Default: none.
     pub filter: String,
-    /// How many log files are kept, this run's among them; older ones are removed. Default:
-    /// `10`.
-    pub keep: NonZeroUsize,
+    /// How many days a log file is kept after it was last written to; older ones are removed,
+    /// but never this run's. `0` keeps them all. Default: `7`.
+    pub keep_days: u16,
 }
 
 impl Default for LogConfig {
@@ -63,7 +63,7 @@ impl Default for LogConfig {
         Self {
             level: LogLevel::default(),
             filter: String::new(),
-            keep: NonZeroUsize::new(10).unwrap_or(NonZeroUsize::MIN),
+            keep_days: 7,
         }
     }
 }
@@ -677,7 +677,7 @@ mod tests {
         [log]
         level = "debug"
         filter = "info,noc_ssh=trace"
-        keep = 3
+        keep_days = 30
     "#;
 
     fn full() -> Config {
@@ -747,7 +747,7 @@ mod tests {
             log: LogConfig {
                 level: LogLevel::Debug,
                 filter: "info,noc_ssh=trace".to_owned(),
-                keep: NonZeroUsize::new(3).unwrap(),
+                keep_days: 30,
             },
         }
     }
@@ -795,11 +795,11 @@ mod tests {
         assert_eq!(config.viewer.window_mib.get(), 128);
         assert_eq!(config.log.level, LogLevel::Info);
         assert_eq!(config.log.filter, "");
-        assert_eq!(config.log.keep.get(), 10);
+        assert_eq!(config.log.keep_days, 7);
     }
 
     #[test]
-    fn the_log_has_a_level_and_keeps_a_file_at_least() {
+    fn the_log_has_a_level_and_keeps_whole_days() {
         let level = |text: &str| parse(&format!("[log]\nlevel = \"{text}\"")).log.level;
         for each in [
             LogLevel::Off,
@@ -813,8 +813,16 @@ mod tests {
         }
         assert_parse_error("[log]\nlevel = \"verbose\"");
         assert_parse_error("[log]\nlevel = \"INFO\"");
-        let error = toml::from_str::<Config>("[log]\nkeep = 0").unwrap_err();
-        assert!(error.to_string().contains("nonzero"), "{error}");
+        assert_eq!(
+            parse("[log]\nkeep_days = 0").log.keep_days,
+            0,
+            "keeps them all"
+        );
+        for text in ["-1", "1.5", "65536", "\"7d\""] {
+            assert_parse_error(&format!("[log]\nkeep_days = {text}"));
+        }
+        // It was a number of files.
+        assert_parse_error("[log]\nkeep = 10");
     }
 
     #[test]
@@ -1049,7 +1057,7 @@ mod tests {
         assert!(table["viewer"].get("window_mib").is_some());
         assert!(table["log"].get("level").is_some());
         assert!(table["log"].get("filter").is_some());
-        assert!(table["log"].get("keep").is_some());
+        assert!(table["log"].get("keep_days").is_some());
     }
 
     #[test]

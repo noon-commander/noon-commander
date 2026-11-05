@@ -16,8 +16,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Alt+1 … Alt+9 show the tab of that number in the active panel, as `2g t` does, and Alt+0 the
   last tab; Ctrl+x before them, the other panel's. They work in Visual mode too.
 - Settings of the log, `[log]`, in a new category of Options → Configuration…, Log: `level`,
-  `filter` (directives such as `info,noc_ssh=trace` in place of the level), and `keep`, how many
-  log files are kept, 10 by default. They take effect at once.
+  `filter` (directives such as `info,noc_ssh=trace` in place of the level), and `keep_days`, how
+  many days a log file stays after it was last written to, 7 by default, or always with 0. They
+  take effect at once.
 - A log that cannot be written is said in a dialog at the start, and on the About page of the
   help.
 - Ctrl+\\ views the log of this run from its end, in every mode, and Command → View the log; it
@@ -27,9 +28,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Each run of the TUI writes a log of its own, `~/.local/state/noc/logs/noc-<time>-<pid>.log`,
-  readable by the user alone, and only the last `log.keep` are kept; the subcommands no longer
-  write one. A thread of its own writes it, and its lines say which host, job, search, or
-  prompt they come from, and how long each took
+  readable by the user alone, and kept for `log.keep_days` days after its last write; the
+  subcommands no longer write one. A thread of its own writes it, and its lines say which host,
+  job, search, or prompt they come from, and how long each took
   ([ADR 0067](docs/adr/0067-a-log-file-for-each-run.md)). `~/.local/state/noc/noc.log` is no
   longer written, and can be removed.
 

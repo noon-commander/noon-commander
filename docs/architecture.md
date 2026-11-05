@@ -907,14 +907,15 @@ does not compile without.
 Only the TUI logs, to a file of its own for each run in `~/.local/state/noc/logs/`,
 `noc-<UTC start, 20261105T142301Z>-<pid>.log`, mode 0600; the subcommands write no log
 ([ADR 0067](adr/0067-a-log-file-for-each-run.md)). `crates/noc/src/logging.rs` starts it once the
-config is read and the terminal checked, and removes the oldest `noc-*.log` files over
-`log.keep`. `log.level`, or `log.filter` (`EnvFilter` directives) unless empty, sets the filter,
-which the Configuration dialog changes at once through `tracing_subscriber::reload`. Each event
-goes whole over a channel to the thread `noc-log`, which writes the file, so no event waits for
-the disk; ending the log, after the TUI, waits for the last lines. Spans at level info give the
-events their context and close with how long they took: `host`, `ssh_master`, `job`, `search`,
-and `askpass`. A log that cannot be written is an error dialog at the start and `none:` on the
-About page. Ctrl+\\ views the log of this run in the TUI (see UI).
+config is read and the terminal checked, and removes the `noc-*.log` files last written to more
+than `log.keep_days` days ago (0 keeps them all), never this run's. `log.level`, or `log.filter`
+(`EnvFilter` directives) unless empty, sets the filter, which the Configuration dialog changes at
+once through `tracing_subscriber::reload`. Each event goes whole over a channel to the thread
+`noc-log`, which writes the file, so no event waits for the disk; ending the log, after the TUI,
+waits for the last lines. Spans at level info give the events their context and close with how
+long they took: `host`, `ssh_master`, `job`, `search`, and `askpass`. A log that cannot be written
+is an error dialog at the start and `none:` on the About page. Ctrl+\\ views the log of this run
+in the TUI (see UI).
 
 ## Async model
 
@@ -1267,7 +1268,7 @@ max_per_file = 100               # and takes no more lines of one file
 [log]
 level = "info"                   # "off", "error", "warn", "info", "debug", "trace"
 filter = ""                      # directives in place of level, such as "info,noc_ssh=trace"
-keep = 10                        # log files kept, a file for each run of the TUI
+keep_days = 7                    # days a log file stays after its last write; 0: always
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.

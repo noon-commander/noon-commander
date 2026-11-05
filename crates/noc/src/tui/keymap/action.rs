@@ -387,6 +387,8 @@ pub(crate) enum Action {
     Workspaces,
     /// Reads the directory, or the volumes and hosts, again.
     Reload,
+    /// Opens the Configuration dialog, as Options → Configuration… does.
+    Configuration,
     /// Shows or hides files whose names start with a dot, in both panels.
     ToggleHidden,
     /// Sorts by name; once more: reverses the order. Likewise for the other sort actions.
@@ -713,6 +715,7 @@ impl Action {
         Self::SaveWorkspace,
         Self::Workspaces,
         Self::Reload,
+        Self::Configuration,
         Self::ToggleHidden,
         Self::SortByName,
         Self::SortByExtension,

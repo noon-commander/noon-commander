@@ -181,6 +181,20 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
 }
 
 #[test]
+fn o_o_opens_the_configuration_dialog_and_the_menu_shows_it() {
+    let mut app = loaded();
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('o'));
+    let text = screen_of(&mut app, 20);
+    assert!(line_with(&text, "Configuration…").contains("o o"), "{text}");
+    app.handle(action(Action::Cancel));
+    app.handle(action(Action::Cancel));
+    assert!(keys(&mut app, &["o", "o"]).is_empty());
+    assert!(app.configuration.is_some());
+    assert_eq!(app.context(), Context::DialogInput, "on the language");
+}
+
+#[test]
 fn the_configuration_dialog_applies_and_saves_each_change() {
     let mut app = loaded();
     open_configuration(&mut app);

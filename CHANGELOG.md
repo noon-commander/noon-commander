@@ -24,6 +24,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ctrl+\\ views the log of this run from its end, in every mode, and Command → View the log; it
   opens in front of the menus, windows, and dialogs, which are there again once it closes. Without
   the kitty keyboard protocol Ctrl+\\ arrives as Ctrl+4, which works too.
+- `o o` opens the Configuration dialog, as Options → Configuration… does, which shows the key.
 
 ### Changed
 

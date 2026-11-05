@@ -778,8 +778,8 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
 
 ### Configuration dialog
 
-Options → Configuration… shows the settings of `config.toml` by category, as a modern
-settings window: there is no OK or Cancel, and every change takes effect as it is made
+Options → Configuration…, or `o o`, shows the settings of `config.toml` by category, as a
+modern settings window: there is no OK or Cancel, and every change takes effect as it is made
 ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)):
 
 ```text

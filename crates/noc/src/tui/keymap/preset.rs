@@ -93,7 +93,9 @@ pub(super) const PRESET: Preset = &[
             (Action::TabList, &["t t"]),
             (Action::Workspaces, &["t w"]),
             (Action::SaveWorkspace, &["t shift-w"]),
-            // Items
+            // Items. o is for options, of the panels and, doubled, all of them, as y y and t t
+            // take the whole.
+            (Action::Configuration, &["o o"]),
             (Action::ToggleHidden, &["o h"]),
             (Action::SortByName, &["o n"]),
             (Action::SortByExtension, &["o e"]),

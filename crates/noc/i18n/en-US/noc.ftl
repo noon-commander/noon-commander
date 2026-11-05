@@ -762,6 +762,7 @@ help-other-open = Open the directory under the cursor in the other panel
 help-other-sync = Show this directory in the other panel
 help-reload = Read the directory again
 help-stop = Stop loading or connecting
+help-configuration = The settings, as Options → Configuration…
 help-toggle-hidden = Show or hide names that start with a dot
 help-sort-name = Sort by name; again: reverse
 help-sort-extension = Sort by extension; again: reverse

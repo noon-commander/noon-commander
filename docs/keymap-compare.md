@@ -209,6 +209,7 @@ section says: the commands of files act on the rows it selects, which become the
 | The tabs of this panel, in a menu, to choose one; the keys stay with the active panel | `tab_list` | ⏳ | t t | — | — | — | — |
 | The saved workspaces: restore, rename, or delete one | `workspaces` | ✅ | t w | — | — | — | — |
 | Save the tabs of both panels as a workspace | `save_workspace` | ✅ | t W | — | — | — | — |
+| The settings, as Options → Configuration… (mc, Far: only through the menu) | `configuration` | ⏳ | o o | — | — | — | — |
 | Show or hide names that start with a dot | `toggle_hidden` | ✅ | o h | Alt+. | Ctrl+h | . | z h<br>Ctrl+h<br>Backspace |
 | Sort by name; again: reverse | `sort_by_name` | ✅ | o n | — | Ctrl+F3 | , a<br>, A (reverse) | o b<br>o B (reverse) |
 | Sort by extension; again: reverse | `sort_by_extension` | ✅ | o e | — | Ctrl+F4 | , e<br>, E (reverse) | o e<br>o E (reverse) |

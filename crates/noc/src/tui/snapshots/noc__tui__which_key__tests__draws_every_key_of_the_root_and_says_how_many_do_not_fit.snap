@@ -3,7 +3,7 @@ source: crates/noc/src/tui/which_key.rs
 expression: "draw(&hints, 100, 14)"
 ---
 "╔══════════════════════════════════════════════ Keys ══════════════════════════════════════════════╗"
-"║ k, Up, Ctrl+p   One row up      Tab, Ctrl+i   Forward again, »  o               +5 keys          ║"
+"║ k, Up, Ctrl+p   One row up      Tab, Ctrl+i   Forward again, »  o               +6 keys          ║"
 "║ j, Down, Ctrl+n One row down    R             Read the direct»  v               Visual mode: »   ║"
 "║ Ctrl+b, PgUp    One page up     Ctrl+c        Stop loading or»  V               Visual mode b»   ║"
 "║ Ctrl+f, PgDn    One page down   F9            The pull-down m»  Space           Mark or unmar»   ║"

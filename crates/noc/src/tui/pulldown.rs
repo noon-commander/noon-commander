@@ -45,8 +45,6 @@ pub(crate) enum Command {
     Tabs(Side),
     /// Closes the connection of the host that the panel on that side shows.
     DisconnectPanel(Side),
-    /// Opens the Configuration dialog.
-    Configuration,
     /// Restores the saved workspace at this index in the Workspace menu.
     Workspace(usize),
 }
@@ -275,23 +273,15 @@ fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
 
 /// Options: the Configuration dialog, then settings that switch at once.
 fn options_menu(title: Label) -> Menu {
-    let mut menu = plain_menu(
+    plain_menu(
         title,
         vec![
+            Some((fl!("pulldown-configuration"), Action::Configuration)),
             None,
             Some((fl!("pulldown-hidden"), Action::ToggleHidden)),
             Some((fl!("pulldown-full"), Action::ShowFull)),
         ],
-    );
-    menu.entries.insert(
-        0,
-        Entry::Item(Item {
-            label: Label::parse(&fl!("pulldown-configuration")),
-            command: Command::Configuration,
-            mark: Mark::None,
-        }),
-    );
-    menu
+    )
 }
 
 impl PullDown {
@@ -1102,7 +1092,7 @@ mod tests {
         );
         assert_eq!(menu.menu().title.text, "Options");
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Command::Configuration));
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Configuration)));
         menu.handle(action(Action::Cancel), &status);
         menu.handle(action(Action::Confirm), &status);
         assert!(menu.open, "Enter opens the menu");

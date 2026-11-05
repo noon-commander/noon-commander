@@ -1091,6 +1091,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::OtherPanelSync => fl!("help-other-sync"),
         Action::Reload => fl!("help-reload"),
         Action::Cancel => fl!("help-stop"),
+        Action::Configuration => fl!("help-configuration"),
         Action::ToggleHidden => fl!("help-toggle-hidden"),
         Action::SortByName => fl!("help-sort-name"),
         Action::SortByExtension => fl!("help-sort-extension"),

@@ -203,6 +203,7 @@ impl App {
             Action::GoToDir => self.ask_go_to(),
             Action::SaveWorkspace => self.ask_save_workspace(true),
             Action::Workspaces => self.open_workspaces(),
+            Action::Configuration => self.open_configuration(),
             Action::PullDown => self.open_pulldown(false),
             Action::PullDownLast => self.open_pulldown(true),
             _ => {

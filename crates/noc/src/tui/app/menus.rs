@@ -136,13 +136,6 @@ impl App {
                 Some(host) => self.disconnect(&host),
                 None => Vec::new(),
             },
-            Command::Configuration => {
-                let icons = self.decor.icons();
-                let configuration =
-                    Configuration::new(&self.config, &self.home, Theme::NAMES, icons);
-                self.configuration = Some(configuration);
-                Vec::new()
-            }
             Command::Workspace(index) => match self.workspaces.workspaces.get(index) {
                 Some(workspace) => {
                     let name = workspace.name.clone();
@@ -151,6 +144,13 @@ impl App {
                 None => Vec::new(),
             },
         }
+    }
+
+    /// Opens the Configuration dialog.
+    pub(super) fn open_configuration(&mut self) {
+        let icons = self.decor.icons();
+        let configuration = Configuration::new(&self.config, &self.home, Theme::NAMES, icons);
+        self.configuration = Some(configuration);
     }
 
     /// Gives a key to the Configuration dialog, which applies each change as it is made.
@@ -304,6 +304,7 @@ impl App {
                     | Action::Jobs
                     | Action::SaveWorkspace
                     | Action::Workspaces
+                    | Action::Configuration
                     | Action::ToggleHidden
                     | Action::ShowFull => true,
                     _ => self.supports(action),
@@ -337,10 +338,6 @@ impl App {
             },
             Command::DisconnectPanel(side) => Status {
                 enabled: self.host_of(side).is_some(),
-                ..Status::default()
-            },
-            Command::Configuration => Status {
-                enabled: true,
                 ..Status::default()
             },
             Command::Workspace(index) => Status {

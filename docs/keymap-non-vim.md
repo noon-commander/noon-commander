@@ -88,8 +88,8 @@ Ctrl+w. Each takes a letter whose command in vim works in the text of a line, wh
 not:
 
 - `t`: the tabs and the workspaces. vim's `t` goes to before a character in the line.
-- `o`: the order of the rows, as ranger's sort keys, and the hidden names. vim's `o` opens a line
-  below.
+- `o`: the order of the rows, as ranger's sort keys, the hidden names, and, doubled, the
+  Configuration dialog. vim's `o` opens a line below.
 - `f`: the file operations. It stands for mc's Ctrl+x and keeps its letters for mc's commands:
   `c` chmod, `o` chown, `e` chattr, `l`, `s`, and `v` links, `j` the jobs. mc has no checksums, so
   they take `#`, for a hash; the search of the files below takes `/` and `f`, which mc's Ctrl+x
@@ -119,6 +119,7 @@ not:
 | Alt+1 … Alt+9<br>Alt+0 | `go_to_tab`<br>`last_tab` | ranger, noc | 2g t (vim)<br>— | An Esc and a quick digit show the tab too, rather than give up what is typed and start a count | The tab of the digit, as ranger's Alt+1 … Alt+9 and the browsers' keys; past the last tab nothing, as vim's g t after such a count, where ranger makes a new one. Alt+0, the last tab, as vim's `:tablast`, which has no key. Ctrl+x Alt+2, the other panel's. In Visual mode they keep it in the tab left, which has it again when it shows ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). vim binds no Alt keys; an Esc and a quick digit arrive as them without the kitty keyboard protocol, and Esc then a count is rare in a listing. |
 | t t | `tab_list` | noc | t t (noc) | Same | Group `t`: the tabs of the panel, listed in a menu, as vim's `:tabs` lists them; Ctrl+x t t, the other panel's. yazi makes a new tab with t t, which t n does here. |
 | t w<br>t W | `workspaces`<br>`save_workspace` | noc | t w (noc)<br>t W (noc) | Same | Group `t`: w for workspaces, and W saves one. |
+| o o | `configuration` | noc | o o (noc) | Same | Group `o`: all the options, the Configuration dialog, where o h and the sort keys set one each; doubled as y y and t t take the whole. vim opens its options with `:options`, which has no key. |
 | o h | `toggle_hidden` | noc | o h (noc) | Same | Group `o`, with what the rows show. ranger switches the hidden names with z h, which scrolls the names left here, as vim's does. |
 | o n<br>o e<br>o m<br>o s | `sort_by_name`<br>`sort_by_extension`<br>`sort_by_time`<br>`sort_by_size` | ranger | o n (noc)<br>o e (ranger)<br>o m (ranger)<br>o s (ranger) | Same | Group `o`: ranger's sort keys o e, o m, and o s; n for name, where ranger has o b, for basename. |
 | Space | `mark` | yazi, ranger | Space (yazi, ranger) | Same | Mark and go down, as in yazi and ranger, leaving v to Visual mode. vim's Space goes right as l does. |

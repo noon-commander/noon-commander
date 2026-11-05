@@ -723,6 +723,7 @@ fn works_unconnected(action: Action) -> bool {
             | Action::Redraw
             | Action::UserScreen
             | Action::Jobs
+            | Action::Configuration
             | Action::Cancel
             | Action::NormalMode
             | Action::SwitchPanel

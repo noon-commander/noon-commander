@@ -39,6 +39,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tab keeps the rows selected, which show there and are selected again once the panel or the tab
   has the keys. Ctrl+x runs its command on them
   ([ADR 0066](docs/adr/0066-visual-mode-stays-with-its-tab.md)).
+- A panel that reads another directory, or connects to a host to open one, no longer shows the
+  rows it leaves: once the dots turn in its title, a skeleton of three rows stands in their place
+  and in place of the status line, and the frame shows no totals. Meanwhile the rows take no keys
+  or clicks, sorting and the command line aside; a listing that fails shows them again, with the
+  cursor and the marks ([ADR 0068](docs/adr/0068-a-panel-hides-the-rows-it-leaves.md)).
 
 - F10 and `Z Z` always ask before quitting: Yes is the default, or No while jobs run.
 - A notice of ssh, such as a request to touch a security key or to use Touch ID, turns the dots

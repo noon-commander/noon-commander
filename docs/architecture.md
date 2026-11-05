@@ -2187,8 +2187,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   turn, in the theme's `busy` color, where one cell is all there is: in place of the icon in front
   of the path in a panel's title (a folder, or a host in the color of its status), which shows the
   directory it reads at once (and while a directory of F7 or a rename it started is done, with the
-  reading after it in one wait: `Panel::begin_work`), so the path never moves and the status line
-  under the rows stays as it is; the dots take the color of the host's status while it connects; in
+  reading after it in one wait: `Panel::begin_work`), so the path never moves; the dots take the
+  color of the host's status while it connects. A panel that reads another location, or its first,
+  is veiled (`Panel::veiled`): its rows take no keys, clicks, or wheel, and only the keys that need
+  no entries, sorting, and the command line work (`App::holds_back`); from when the dots show, a
+  skeleton of three rows stands for its rows, in the panel's colors, a bar for its status line, and
+  the frame shows no totals; a failure shows the rows again with the cursor and marks, and reading
+  the same directory again keeps them in sight
+  ([ADR 0068](adr/0068-a-panel-hides-the-rows-it-leaves.md)); in
   place of the file's icon in front of the path in the viewer's title, while its `Reading` window
   shows a gauge; on the icon of a host connecting in the location menu;
   and in front of the titles of the location menu, the zoxide window, and the search of a whole

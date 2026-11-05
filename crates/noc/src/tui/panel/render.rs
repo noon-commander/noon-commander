@@ -15,18 +15,33 @@ use crate::tui::cells::{self, Align, Cut, Marks};
 use crate::tui::glyphs;
 use crate::tui::keymap::Action;
 use crate::tui::search::Prompt;
+use crate::tui::spinner::Shine;
 use crate::tui::theme::Theme;
+use crate::tui::window;
 
 use super::{
     HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Search, Sort, SortKey, View,
     home_text, location_text, short_size, shown_name,
 };
 
+/// Rows of the skeleton that stands for the rows a veiled panel waits for: a few, as more
+/// looked busier than what they stand for, and a directory may hold none.
+const WAIT_ROWS: u16 = 3;
+
+/// What a veiled panel shows once its wait shows: a skeleton for its rows and status line.
+struct Veil {
+    /// The shine that crosses the skeleton; none while it rests, as for a host whose dialog
+    /// asks whether to try again.
+    shine: Option<Shine>,
+}
+
 impl Panel {
     /// Draws the panel: the location in the frame, column headers, the rows, a bar in the frame
     /// beside the marked ones, the size and number of marked entries on the line below them, a status line with the name under the cursor or
     /// quick search, and the totals of the directory and its file system on the bottom of the
-    /// frame. What the panel kept from a host that is not connected is toned down.
+    /// frame. What the panel kept from a host that is not connected is toned down. While it is
+    /// veiled, once its wait shows, a skeleton stands for its rows and its status line, and the
+    /// bottom of the frame is bare.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -49,22 +64,39 @@ impl Panel {
         if inner.height < 3 || inner.width < 2 {
             return;
         }
-        self.render_bottom(frame, area, theme);
+        let veil = self.veil(view);
+        if veil.is_none() {
+            self.render_bottom(frame, area, theme);
+        }
         let width = usize::from(inner.width);
         let list_height = usize::from(inner.height - 3);
         self.page = list_height;
         self.list = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 3);
         self.scroll(list_height);
+        let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
+        let columns = DirColumns::for_width(width, column_widths(view.formats));
+        if let Some(Veil { shine }) = veil {
+            frame.render_widget(columns.header(self.sort, theme), line(inner.y));
+            let rows = self.list.height.min(WAIT_ROWS);
+            let skeleton = Rect {
+                height: rows,
+                ..self.list
+            };
+            window::draw_skeleton(frame, skeleton, (theme, theme.panel), shine);
+            self.render_separator(frame, area, inner.bottom() - 2, (0, 0), theme);
+            self.search_glyphs.set(None);
+            let status = window::status_skeleton(inner.width, theme.panel, theme, shine);
+            frame.render_widget(status, line(inner.bottom() - 1));
+            return;
+        }
         let bar = Rect::new(area.right() - 1, self.list.y, 1, self.list.height);
         let position = (self.rows(), list_height, self.window.top());
         let (style, arrows) = (theme.panel_border, theme.glyphs.scroll_bar);
         self.bar = scrollbar::render(frame, bar, position, style, arrows);
 
-        let columns = DirColumns::for_width(width, column_widths(view.formats));
         self.names = (view.decor, columns.name);
         // Other rows on screen, or a wider column, may need less of the scroll.
         self.shift = self.shift.min(self.shift_limit());
-        let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         frame.render_widget(columns.header(self.sort, theme), line(inner.y));
         let visual = self.visual_rows();
         let mut finder = self.finder();
@@ -95,7 +127,8 @@ impl Panel {
             }
         }
 
-        self.render_separator(frame, area, inner.bottom() - 2, theme);
+        let marked = self.marked_total();
+        self.render_separator(frame, area, inner.bottom() - 2, marked, theme);
         self.column_lines = columns
             .lines()
             .into_iter()
@@ -166,6 +199,19 @@ impl Panel {
         title.spans.extend(path.spans);
         title.spans.push(Span::styled(" ", style));
         title
+    }
+
+    /// The skeleton that stands for the rows of a veiled panel, once its wait shows; `None`
+    /// while the panel shows its rows.
+    fn veil(&self, view: &View<'_>) -> Option<Veil> {
+        let wait = self.wait().filter(|_| self.veiled())?;
+        view.spin.wait_dots(wait)?;
+        let stalled = match self.pending.as_ref().map(|pending| &pending.location) {
+            Some(Location::Remote { host, .. }) => (view.hosts)(host).status == HostStatus::Stalled,
+            _ => false,
+        };
+        let shine = (!stalled).then(|| view.spin.shine(wait)).flatten();
+        Some(Veil { shine })
     }
 
     /// The status line, at `area`: quick search with its cursor in the active panel, or the name
@@ -363,8 +409,15 @@ impl Panel {
     }
 
     /// The line between the listing and the status line, across the panel's frame, with the
-    /// total of the marked entries in the middle.
-    fn render_separator(&self, frame: &mut Frame<'_>, area: Rect, y: u16, theme: &Theme) {
+    /// total of the `marked` entries in the middle: how many, and the bytes in their files.
+    fn render_separator(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        y: u16,
+        (count, bytes): (usize, u64),
+        theme: &Theme,
+    ) {
         let inside = area.width.saturating_sub(2);
         let (left, right) = theme.tees();
         let separator = format!("{left}{}{right}", glyphs::LINE.repeat(usize::from(inside)));
@@ -372,7 +425,6 @@ impl Panel {
             Line::styled(separator, theme.panel_border),
             Rect::new(area.x, y, area.width, 1),
         );
-        let (count, bytes) = self.marked_total();
         if count == 0 {
             return;
         }

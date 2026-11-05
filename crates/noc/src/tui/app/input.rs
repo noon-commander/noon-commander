@@ -130,7 +130,7 @@ impl App {
         let Some(action) = self.search_key(input) else {
             return Vec::new();
         };
-        if self.ask_connect(self.active, action) {
+        if self.holds_back(self.active, action) || self.ask_connect(self.active, action) {
             return Vec::new();
         }
         if let Some(effects) = self.handle_vim(action) {

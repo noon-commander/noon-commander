@@ -417,6 +417,8 @@ pub(crate) struct Panel {
     bar: Option<Bar>,
     generation: u64,
     pending: Option<Pending>,
+    /// Listings that came; none until the first, as the panel has no rows of its own before.
+    listings: u64,
     /// What the user does in the panel, such as F7, by what it makes, until it is done: its
     /// result reads the directory again.
     working: Vec<Location>,
@@ -490,6 +492,7 @@ impl Panel {
             bar: None,
             generation: 0,
             pending: None,
+            listings: 0,
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
@@ -530,6 +533,7 @@ impl Panel {
             bar: None,
             generation: 0,
             pending: None,
+            listings: self.listings,
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
@@ -606,6 +610,7 @@ impl Panel {
                 self.listing = listing;
                 self.space = space;
                 self.disconnected = false;
+                self.listings += 1;
                 self.arrange();
                 self.window.reset();
                 self.cursor = self.row_of(&pending.focus);
@@ -678,6 +683,15 @@ impl Panel {
 
     fn waits(&self) -> bool {
         self.pending.is_some() || !self.working.is_empty()
+    }
+
+    /// Whether the panel waits for rows that are not those it shows: those of another
+    /// location, or its first. Until they come, its rows take no keys, and once its wait shows
+    /// a skeleton stands in their place; a listing that fails shows them again.
+    pub(crate) fn veiled(&self) -> bool {
+        self.pending
+            .as_ref()
+            .is_some_and(|pending| self.listings == 0 || pending.location != self.location)
     }
 
     /// Starts work that makes `location`, such as a directory of F7, which the title waits for.
@@ -878,8 +892,11 @@ impl Panel {
         &self.location
     }
 
-    /// The entry under the cursor; `None` on `..`.
+    /// The entry under the cursor; `None` on `..`, and while the panel is veiled.
     pub(crate) fn entry_under_cursor(&self) -> Option<&DirEntry> {
+        if self.veiled() {
+            return None;
+        }
         match self.row(self.cursor)? {
             Row::Entry(entry) => Some(entry),
             Row::Parent => None,
@@ -900,6 +917,9 @@ impl Panel {
     /// under the cursor. Nothing on `..`.
     pub(crate) fn chosen(&self) -> Vec<&DirEntry> {
         let Listing::Dir(entries) = &self.listing;
+        if self.veiled() {
+            return Vec::new();
+        }
         if !self.marked.is_empty() {
             return self
                 .shown
@@ -921,6 +941,17 @@ impl Panel {
 
     /// Moves the cursor or opens a directory. Returns the listing to request, if any.
     pub(crate) fn handle(&mut self, action: Action) -> Option<ListRequest> {
+        let keeps = matches!(
+            action,
+            Action::SortByName
+                | Action::SortByExtension
+                | Action::SortByTime
+                | Action::SortBySize
+                | Action::Reload
+        );
+        if self.veiled() && !keeps {
+            return None;
+        }
         let rows = self.rows();
         let last = rows.saturating_sub(1);
         let page = self.page.max(1);

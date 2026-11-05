@@ -64,8 +64,12 @@ fn drops_stale_replies() {
     let mut panel = loaded("/srv", listing());
     panel.handle(Action::Down);
     let first = panel.handle(Action::Enter).unwrap();
-    panel.handle(Action::Home);
-    let second = panel.handle(Action::Enter).unwrap();
+    assert_eq!(
+        panel.handle(Action::Enter),
+        None,
+        "its rows wait for the listing"
+    );
+    let second = panel.go(Destination::to(local("/")));
     let stale = vec![entry("stale", FileKind::File, 1)];
     answer(&mut panel, &first, Listing::Dir(stale));
     assert_eq!(
@@ -141,6 +145,55 @@ fn a_failed_listing_keeps_the_directory_and_reports_why() {
 }
 
 #[test]
+fn rows_take_no_keys_while_another_location_is_read() {
+    let (mut panel, request) = Panel::new(local("/srv"), PathBuf::from(HOME), true);
+    assert!(panel.veiled(), "before its first listing");
+    answer(&mut panel, &request, Listing::Dir(listing()));
+    assert!(!panel.veiled());
+    panel.handle(Action::End);
+    panel.handle(Action::Mark);
+    panel.handle(Action::Up);
+    assert!(
+        !panel.veiled(),
+        "reading the same directory again shows its rows"
+    );
+    let request = panel.handle(Action::Reload).unwrap();
+    assert!(!panel.veiled());
+    answer(&mut panel, &request, Listing::Dir(listing()));
+
+    let request = panel.go(Destination::to(local("/tmp")));
+    assert!(panel.veiled());
+    for action in [
+        Action::Down,
+        Action::Mark,
+        Action::InvertMarks,
+        Action::Enter,
+    ] {
+        assert_eq!(panel.handle(action), None, "{action:?}");
+    }
+    assert!(
+        panel.chosen().is_empty(),
+        "the marked entry is out of sight"
+    );
+    assert_eq!(panel.entry_under_cursor(), None);
+    panel.handle(Action::SortBySize);
+    assert_eq!(panel.sort_order(), (SortKey::Size, true), "sorting holds");
+    panel.listed(request.generation, Err(ListError::other("gone".to_owned())));
+    assert!(!panel.veiled(), "a failure shows the rows again");
+    assert_eq!(
+        under_cursor(&panel),
+        "Alpha.md",
+        "with the cursor where it was"
+    );
+    assert_eq!(marked(&panel), ["zeta.txt"], "and the marks");
+
+    // A panel on a host that is lost reads its directory again with its rows in sight.
+    let mut panel = loaded_at(remote("db", "/srv"), Listing::Dir(listing()));
+    panel.lose_host("db");
+    assert!(panel.pending_request().is_some() && !panel.veiled());
+}
+
+#[test]
 fn a_cancelled_request_is_forgotten() {
     let mut panel = loaded("/srv", listing());
     let request = panel.go(Destination::to(remote("web", "")));
@@ -179,8 +232,11 @@ fn a_panel_waiting_shows_dots_in_place_of_its_icon_and_what_it_lists() {
     assert!(title.starts_with("╔ / /srv "), "{title}");
     panel.go(Destination::to(remote("web", "")));
     let ([title, status], [dots, path]) = waiting_lines(&mut panel, HostStatus::Connecting);
-    assert_eq!(title, "╔ … web ══════╤═══════╤════════════════╗");
-    assert_eq!(status, "║..                                    ║");
+    assert_eq!(title, "╔ … web ═══════════════════════════════╗");
+    assert_eq!(
+        status, "║---------                             ║",
+        "a skeleton"
+    );
     let title_style = theme.panel_title_active;
     // The colors a cell shows, which cells keep with every color reset that no style sets.
     let shown = |style: Style| {
@@ -192,7 +248,7 @@ fn a_panel_waiting_shows_dots_in_place_of_its_icon_and_what_it_lists() {
     // A host that does not answer shows its marker in red, still; its dialog asks what to do.
     let ([title, status], [dots, _]) = waiting_lines(&mut panel, HostStatus::Stalled);
     assert!(title.starts_with("╔ ✗ web "), "{title}");
-    assert_eq!(status, "║..                                    ║");
+    assert_eq!(status, "║---------                             ║");
     assert_eq!(shown(dots), shown(title_style.patch(theme.host_failed)));
     // Listing a host that is connected, the dots are busy as any other.
     let ([title, _], [dots, _]) = waiting_lines(&mut panel, HostStatus::Connected);

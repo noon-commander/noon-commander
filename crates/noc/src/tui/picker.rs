@@ -726,7 +726,7 @@ impl Picker {
             if body.fill {
                 area.height = area.height.min(skeleton);
             }
-            draw_skeleton(frame, area, theme, shine);
+            draw_skeleton(frame, area, (theme, theme.dialog), shine);
             if body.fill {
                 let footer = (full, body.footer, body.footer_column);
                 draw_below(frame, inner, below, footer, theme);

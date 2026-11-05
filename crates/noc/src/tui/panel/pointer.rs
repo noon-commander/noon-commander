@@ -12,7 +12,7 @@ use super::Panel;
 impl Panel {
     /// The row at `at` on screen at the last render, if there is one there.
     fn row_at(&self, at: Position) -> Option<usize> {
-        if !self.list.contains(at) {
+        if !self.list.contains(at) || self.veiled() {
             return None;
         }
         let row = self.window.top() + usize::from(at.y - self.list.y);
@@ -40,6 +40,9 @@ impl Panel {
     /// moves only to stay on screen, with its margin. Where the rows cannot scroll that way, as
     /// when they all fit, the cursor moves as far instead, as in mc and Far.
     pub(crate) fn wheel(&mut self, step: Wheel, down: bool) {
+        if self.veiled() {
+            return;
+        }
         let page = self.page.max(1);
         let rows = match step {
             Wheel::Lines(lines) => usize::from(lines),
@@ -69,6 +72,9 @@ impl Panel {
     /// a page as Ctrl+b and Ctrl+f, and its thumb to where it was dragged; the cursor moves
     /// only to stay on screen, or as Ctrl+f moves it.
     pub(crate) fn scroll_bar(&mut self, scroll: Scroll) {
+        if self.veiled() {
+            return;
+        }
         let rows = self.rows();
         let page = self.page.max(1);
         match scroll {

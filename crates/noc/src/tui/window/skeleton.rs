@@ -54,13 +54,14 @@ pub(crate) const SKELETON_ROWS: u16 = 1;
 /// over and over, so that rows under each other do not look alike.
 const SKELETON_BARS: [(u16, u16); 4] = [(6, 3), (4, 3), (7, 2), (5, 3)];
 
-/// Draws a skeleton on every line of `area`, where rows are still to come: a faint bar on the
-/// left for a name and one on the right for what is known of it. A `shine`, if any, crosses
-/// every bar at once, lighting them where it passes.
+/// Draws a skeleton on every line of `area`, where rows are still to come, in the colors of
+/// `style`, the dialog's or the panel's: a faint bar on the left for a name and one on the right
+/// for what is known of it. A `shine`, if any, crosses every bar at once, lighting them where it
+/// passes.
 pub(crate) fn draw_skeleton(
     frame: &mut Frame<'_>,
     area: Rect,
-    theme: &Theme,
+    (theme, style): (&Theme, Style),
     shine: Option<Shine>,
 ) {
     if area.width < 8 {
@@ -79,13 +80,13 @@ pub(crate) fn draw_skeleton(
         .unwrap_or(0);
     let middle = shine_middle(shine, longest);
     for (y, (left, right)) in (area.y..area.bottom()).zip(bars) {
-        let line: Line<'_> = shine_bar(left, middle, &glyph, theme.dialog)
+        let line: Line<'_> = shine_bar(left, middle, &glyph, style)
             .into_iter()
             .chain([Span::styled(
                 " ".repeat(usize::from(area.width - left - right)),
-                theme.dialog,
+                style,
             )])
-            .chain(shine_bar(right, middle, &glyph, theme.dialog))
+            .chain(shine_bar(right, middle, &glyph, style))
             .collect();
         frame.render_widget(line, Rect::new(area.x, y, area.width, 1));
     }
@@ -167,7 +168,7 @@ mod tests {
             .bg(Color::Rgb(0, 0, 0));
         let mut terminal = Terminal::new(TestBackend::new(30, 1)).unwrap();
         terminal
-            .draw(|frame| draw_skeleton(frame, frame.area(), &theme, shine))
+            .draw(|frame| draw_skeleton(frame, frame.area(), (&theme, theme.dialog), shine))
             .unwrap();
         let buffer = terminal.backend().buffer();
         (0..30).map(|x| buffer[(x, 0)].style().fg).collect()
@@ -210,7 +211,7 @@ mod tests {
         let theme = Theme::terminal();
         let mut terminal = Terminal::new(TestBackend::new(24, 5)).unwrap();
         terminal
-            .draw(|frame| draw_skeleton(frame, frame.area(), &theme, None))
+            .draw(|frame| draw_skeleton(frame, frame.area(), (&theme, theme.dialog), None))
             .unwrap();
         let buffer = terminal.backend().buffer();
         let lines: Vec<String> = (0..5)

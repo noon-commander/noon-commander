@@ -8,6 +8,38 @@ fn draws_the_listing() {
 }
 
 #[test]
+fn a_skeleton_stands_for_the_rows_of_another_location_once_the_wait_shows() {
+    let mut panel = loaded("/srv", listing());
+    panel.handle(Action::Down);
+    panel.handle(Action::Mark);
+    panel.go(Destination::to(remote("web", "")));
+    let theme = Theme::terminal();
+    let hosts = |_: &str| HostState::default();
+    let mut terminal = Terminal::new(TestBackend::new(50, 12)).unwrap();
+    let start = Instant::now();
+    let mut screen = |at: Instant| {
+        let view = View {
+            hosts: &hosts,
+            decor: Decor::new(false),
+            theme: &theme,
+            spin: Spin::new(at, start, false, theme.glyphs.spinners),
+            tz: &TimeZone::UTC,
+            formats: &Formats::iso(),
+        };
+        terminal
+            .draw(|frame| panel.render(frame, frame.area(), true, &view))
+            .unwrap();
+        terminal.backend().to_string()
+    };
+    let first = screen(start);
+    assert!(
+        first.contains("alpha-link"),
+        "a quick listing shows no wait: {first}"
+    );
+    insta::assert_snapshot!(screen(start + spinner::DELAY));
+}
+
+#[test]
 fn the_frame_shows_the_space_of_the_file_system_while_it_fits() {
     let (mut panel, request) = Panel::new(local("/srv"), PathBuf::from(HOME), true);
     let space = Space {

@@ -469,6 +469,24 @@ impl App {
         true
     }
 
+    /// Whether `action` waits in the panel on `side`, which is veiled while it reads another
+    /// location: what needs its entries does nothing, as the rows it would act on are gone from
+    /// sight. Sorting holds for the rows to come, and the command line, whose prompt says where
+    /// it runs, needs no entries.
+    pub(super) fn holds_back(&self, side: Side, action: Action) -> bool {
+        let works = matches!(
+            action,
+            Action::SortByName
+                | Action::SortByExtension
+                | Action::SortByTime
+                | Action::SortBySize
+                | Action::Shell
+                | Action::Command
+                | Action::CommandHistory
+        );
+        self.panel(side).veiled() && !works_unconnected(action) && !works
+    }
+
     /// Takes the button that closed the dialog of [`App::ask_connect`].
     pub(super) fn not_connected_closed(
         &mut self,

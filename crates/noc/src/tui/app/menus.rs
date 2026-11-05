@@ -122,7 +122,11 @@ impl App {
                 side,
                 action @ (Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab),
             ) => self.tab_action(side, action),
-            Command::On(side, action) if self.ask_connect(side, action) => Vec::new(),
+            Command::On(side, action)
+                if self.holds_back(side, action) || self.ask_connect(side, action) =>
+            {
+                Vec::new()
+            }
             Command::On(side, action) => match self.panel_mut(side).handle(action) {
                 Some(request) => self.open(self.shown(side), request),
                 None => Vec::new(),

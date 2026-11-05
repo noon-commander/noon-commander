@@ -15,6 +15,11 @@ fn a_click_moves_the_cursor_and_a_double_click_opens() {
         (panel.side, request.location),
         (Side::Right, local("/srv/left"))
     );
+    // Until the directory comes, its rows take no clicks.
+    press(&mut app, Press::Click, 90, 4);
+    assert_eq!(app.panel(Side::Right).name_under_cursor(), None);
+    app.panel_mut(Side::Right).cancel();
+    assert_eq!(cursor_name(&app, Side::Right), "left");
 
     // Below the last row the panel only gets the keys.
     app.active = Side::Left;
@@ -183,6 +188,7 @@ fn the_mouse_chooses_in_menus_and_presses_the_buttons_of_windows() {
         Side::Left,
         "the keys come back to the active panel"
     );
+    app.panel_mut(Side::Right).cancel();
     app.handle(action(Action::FocusRight));
     open_menu(&mut app, Side::Right);
     screen_of(&mut app, 12);

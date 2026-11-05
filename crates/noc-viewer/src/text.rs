@@ -169,13 +169,51 @@ pub(crate) fn width(line: &str) -> usize {
     line.chars().map(|c| c.width().unwrap_or(0)).sum()
 }
 
-/// Whether `line` takes more than `cells` cells; it stops counting there, however long the line.
-pub(crate) fn wider_than(line: &str, cells: usize) -> bool {
-    let mut used = 0;
-    line.chars().any(|c| {
-        used += c.width().unwrap_or(0);
-        used > cells
-    })
+/// Characters between the marks of [`Columns`].
+const STRIDE: usize = 1024;
+
+/// The cells of a line, counted once, with a mark every [`STRIDE`] characters: so that a line of
+/// megabytes is not counted from its start again for each frame it shows in.
+#[derive(Debug)]
+pub(crate) struct Columns {
+    /// The byte each mark is at and the cells before it, the first at the start of the line.
+    marks: Vec<(usize, usize)>,
+    width: usize,
+}
+
+impl Columns {
+    pub(crate) fn of(line: &str) -> Self {
+        let mut marks = Vec::with_capacity(line.len() / STRIDE + 1);
+        let mut cells = 0;
+        for (count, (byte, c)) in line.char_indices().enumerate() {
+            if count % STRIDE == 0 {
+                marks.push((byte, cells));
+            }
+            cells += c.width().unwrap_or(0);
+        }
+        if marks.is_empty() {
+            marks.push((0, 0));
+        }
+        Self {
+            marks,
+            width: cells,
+        }
+    }
+
+    /// The cells of the line, as [`width`] counts them.
+    pub(crate) fn width(&self) -> usize {
+        self.width
+    }
+
+    /// The last mark no further than cell `cell`: its byte, and the cells before it. [`cut`]
+    /// from there, `cell` less those cells in, gives what it gives from the start.
+    pub(crate) fn before(&self, cell: usize) -> (usize, usize) {
+        let after = self.marks.partition_point(|&(_, cells)| cells <= cell);
+        self.marks
+            .get(after.saturating_sub(1))
+            .copied()
+            .unwrap_or((0, 0))
+    }
 }
 
 /// The cells `skip` … `skip + width` of `line`; a wide character cut in two shows as a space.
@@ -290,11 +328,33 @@ mod tests {
     fn counts_cells_as_cut_does() {
         assert_eq!(width("a文\u{301}b"), 4);
         assert_eq!(width(""), 0);
-        assert!(wider_than("abc", 2));
-        assert!(!wider_than("abc", 3));
-        assert!(wider_than("文", 1));
-        assert!(!wider_than("", 0));
-        assert!(!wider_than("\u{301}", 0), "nothing shows");
+        assert_eq!(Columns::of("").width(), 0);
+        assert_eq!(Columns::of("\u{301}").width(), 0, "nothing shows");
+    }
+
+    #[test]
+    fn a_long_line_cuts_from_its_marks_as_from_its_start() {
+        let mut line = String::new();
+        for n in 0..3 * STRIDE {
+            // A wide character at each mark, which a cut can halve.
+            line.push(match n % 8 {
+                0 => '文',
+                3 => '\u{301}',
+                _ => 'a',
+            });
+        }
+        let columns = Columns::of(&line);
+        assert_eq!(columns.width(), width(&line));
+        assert_eq!(columns.marks.len(), 3);
+        for skip in 0..columns.width() + 3 {
+            let (byte, before) = columns.before(skip);
+            assert!(before <= skip && line.is_char_boundary(byte));
+            assert_eq!(
+                cut(&line[byte..], skip - before, 20),
+                cut(&line, skip, 20),
+                "from cell {skip}"
+            );
+        }
     }
 
     #[test]

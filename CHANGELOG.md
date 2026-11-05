@@ -98,6 +98,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   last line of the picture of `VisualHostKey`. The reason is now what ssh wrote after it
   connected, else the signal that ended ssh, such as when it was killed, else that the
   connection is closed.
+- The viewer froze on a file of lines of megabytes, such as one of zero bytes: each frame
+  counted the cells of every line on screen from its start, wrapped or cut, wrapped its lines
+  twice when it held the whole file, and wrapped them all again for each part it read. A line
+  is counted and wrapped once now.
 
 ## [0.3.1] - 2026-11-01
 

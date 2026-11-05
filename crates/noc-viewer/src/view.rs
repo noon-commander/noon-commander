@@ -1,7 +1,6 @@
 //! The viewer on screen: a file's text, scrolled, with long lines wrapped or cut.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use noc_scroll::scrollbar::{self, Bar, BarGlyphs};
@@ -13,15 +12,14 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use crate::i18n::fl;
+use crate::kept::{Change, Kept};
 use crate::parts::{Known, Parts};
 use crate::read::{Part, Stamp, Want};
-use crate::text::{cut, row_of, row_starts, rows_of_lines, wider_than, width};
+use crate::text::{Columns, cut, row_of, row_starts, rows_of_lines, width};
 
-/// Long lines whose rows are kept, as wrapped: more than a few screens take.
-const WRAPPED_LINES: usize = 1024;
-
-/// Where the rows of lines start, by line.
-type Wrapped = HashMap<usize, Rc<[usize]>>;
+/// Lines of more bytes have their cells counted once, as [`Columns`], rather than for each
+/// frame.
+const LONG_LINE: usize = 1 << 12;
 
 /// Whether rows after the first of a wrapped line start with a mark in `width` cells: not
 /// where it would leave no room for text.
@@ -177,8 +175,12 @@ pub struct Viewer {
     /// The rows of the whole text wrapped, and the width they were counted in.
     measured: Option<(usize, usize)>,
     /// Where the rows of the long lines wrapped lately start, by line, and the width they were
-    /// wrapped in: moving a row on in a line of megabytes must not wrap it all again.
-    wrapped: RefCell<(usize, Wrapped)>,
+    /// wrapped in, the last first: moving a row on in a line of megabytes must not wrap it all
+    /// again. Two widths, as a render wraps in the whole width to tell whether the text needs
+    /// the scroll bar, then in the width beside it.
+    wrapped: RefCell<[(usize, Kept<[usize]>); 2]>,
+    /// The cells of the long lines cut lately, by line.
+    columns: RefCell<Kept<Columns>>,
 }
 
 impl Viewer {
@@ -202,6 +204,7 @@ impl Viewer {
             bar: None,
             measured: None,
             wrapped: RefCell::default(),
+            columns: RefCell::default(),
         }
     }
 
@@ -320,12 +323,16 @@ impl Viewer {
         self.state = State::Loading;
         self.pull = None;
         self.top = (0, 0);
-        self.forget_rows();
+        self.lines_changed(Change::All);
     }
 
-    fn forget_rows(&mut self) {
+    /// Forgets the rows of the whole text, and moves what is kept of each line with it.
+    fn lines_changed(&mut self, change: Change) {
         self.measured = None;
-        self.wrapped.borrow_mut().1.clear();
+        for (_, rows) in self.wrapped.get_mut() {
+            rows.change(change);
+        }
+        self.columns.get_mut().change(change);
     }
 
     /// Whether the file ends with the held parts.
@@ -348,23 +355,27 @@ impl Viewer {
     /// place.
     fn place(&mut self, index: usize, new: Vec<String>) {
         let held = self.parts.held();
-        match &mut self.state {
+        let change = match &mut self.state {
             State::Text { lines } if index == held.end => {
                 lines.extend(new);
                 self.parts.set_held(held.start..index + 1);
+                Change::After
             }
             State::Text { lines } if index + 1 == held.start => {
-                self.top.0 += new.len();
+                let count = new.len();
+                self.top.0 += count;
                 lines.splice(0..0, new);
                 self.parts.set_held(index..held.end);
+                Change::Before(count)
             }
             _ => {
                 self.state = State::Text { lines: new };
                 self.top = (0, 0);
                 self.parts.set_held(index..index + 1);
+                Change::All
             }
-        }
-        self.forget_rows();
+        };
+        self.lines_changed(change);
     }
 
     /// After a part was taken: goes to the goal if it is held now, lets go of parts beyond
@@ -422,17 +433,19 @@ impl Viewer {
             let State::Text { lines } = &mut self.state else {
                 return;
             };
-            if self.top.0 >= front {
+            let change = if self.top.0 >= front {
                 lines.drain(..front);
                 self.top.0 -= front;
                 self.parts.set_held(held.start + 1..held.end);
+                Change::FirstWent(front)
             } else if bottom + back < lines.len() {
                 lines.truncate(lines.len() - back);
                 self.parts.set_held(held.start..held.end - 1);
+                Change::RestWent(lines.len())
             } else {
                 return;
-            }
-            self.forget_rows();
+            };
+            self.lines_changed(change);
         }
     }
 
@@ -488,8 +501,30 @@ impl Viewer {
 
     /// The cells of the longest line on screen at the last render, lines cut.
     fn longest_on_screen(&self) -> usize {
-        let lines = self.lines().iter().skip(self.top.0).take(self.page);
-        lines.map(|line| width(line)).max().unwrap_or(0)
+        let on_screen = (self.top.0..self.lines().len()).take(self.page);
+        on_screen
+            .map(|index| self.width_of(index))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The cells of line `index`.
+    fn width_of(&self, index: usize) -> usize {
+        match self.columns(index) {
+            Some(columns) => columns.width(),
+            None => self.lines().get(index).map_or(0, |line| width(line)),
+        }
+    }
+
+    /// The cells of line `index`, counted once while it is among the last ones cut; `None` for
+    /// a line short enough to count each time.
+    fn columns(&self, index: usize) -> Option<Rc<Columns>> {
+        let line = self.lines().get(index)?;
+        if line.len() <= LONG_LINE {
+            return None;
+        }
+        let mut columns = self.columns.borrow_mut();
+        Some(columns.get(index, || Rc::new(Columns::of(line))))
     }
 
     /// How far the lines can scroll left: until the end of the longest line on screen is at the
@@ -517,15 +552,15 @@ impl Viewer {
             return None;
         }
         let mut wrapped = self.wrapped.borrow_mut();
-        let (width, lines) = &mut *wrapped;
-        if *width != self.width || lines.len() >= WRAPPED_LINES {
-            *width = self.width;
-            lines.clear();
+        if wrapped[0].0 != self.width {
+            wrapped.swap(0, 1);
+            if wrapped[0].0 != self.width {
+                wrapped[0] = (self.width, Kept::default());
+            }
         }
-        let starts = lines
-            .entry(index)
-            .or_insert_with(|| row_starts(line, self.width, continued(self.width)).into());
-        Some(Rc::clone(starts))
+        Some(wrapped[0].1.get(index, || {
+            row_starts(line, self.width, continued(self.width)).into()
+        }))
     }
 
     /// The position `count` rows after `from`, or the end of the text.
@@ -662,8 +697,11 @@ impl Viewer {
         if self.at_file_end() {
             self.top = self.top.min(self.last_top());
         }
-        // Other lines on screen, or a wider screen, may need less of the scroll.
-        self.column = self.column.min(self.last_column());
+        // Other lines on screen, or a wider screen, may need less of the scroll. Wrapped lines
+        // never scroll sideways, and need not be counted.
+        if !self.wrap {
+            self.column = self.column.min(self.last_column());
+        }
         let row = |index: u16| Rect::new(area.x, area.y + index, area.width, 1);
         // Rows of text leave the scroll bar's column alone, which the end line's style would dim.
         let text_width = u16::try_from(self.width).unwrap_or(area.width);
@@ -705,7 +743,7 @@ impl Viewer {
                 push_text(&mut spans, text, styles);
                 Line::from(spans)
             } else {
-                self.cut_line(line, styles)
+                self.cut_line(position.0, line, styles)
             };
             frame.render_widget(text, text_row(y));
             let next = self.after(position, 1);
@@ -716,19 +754,26 @@ impl Viewer {
         }
     }
 
-    /// The cells of `line` that show from the column on, with the marks of `styles` where text
-    /// goes on past either edge: a mark takes the place of the cell of text under it.
-    fn cut_line(&self, line: &str, styles: &Styles) -> Line<'static> {
+    /// The cells of `line`, line `index`, that show from the column on, with the marks of
+    /// `styles` where text goes on past either edge: a mark takes the place of the cell of text
+    /// under it.
+    fn cut_line(&self, index: usize, line: &str, styles: &Styles) -> Line<'static> {
         let (marks, mark) = (styles.marks, styles.mark);
-        let extends = wider_than(line, self.column + self.width);
-        let precedes = self.column > 0 && wider_than(line, 0) && (self.width > 1 || !extends);
+        let columns = self.columns(index);
+        let cells = columns
+            .as_ref()
+            .map_or_else(|| width(line), |columns| columns.width());
+        let extends = cells > self.column + self.width;
+        let precedes = self.column > 0 && cells > 0 && (self.width > 1 || !extends);
         let taken = usize::from(precedes) + usize::from(extends);
         let room = self.width.saturating_sub(taken);
         let mut spans = Vec::with_capacity(3);
         if precedes {
             spans.push(Span::styled(marks.before, mark));
         }
-        let mut text = cut(line, self.column + usize::from(precedes), room);
+        let skip = self.column + usize::from(precedes);
+        let (byte, before) = columns.map_or((0, 0), |columns| columns.before(skip));
+        let mut text = cut(&line[byte..], skip - before, room);
         if extends {
             // A wide character that does not fit leaves a gap before the mark at the edge.
             let gap = room.saturating_sub(width(&text));
@@ -1374,6 +1419,87 @@ mod tests {
         assert_eq!(viewer.column, 6, "the end of the line of 25 at the edge");
         let rows: Vec<&str> = screen.lines().collect();
         assert!(rows[1].starts_with("\"«yyyyyyyyyyyyyyyyyy"), "{screen}");
+    }
+
+    #[test]
+    fn a_line_of_many_marks_is_cut_where_it_shows() {
+        let mut viewer = Viewer::new("f".to_owned(), SIZES);
+        let line: String = ('a'..='z').cycle().take(10_000).collect();
+        assert!(line.len() > LONG_LINE);
+        viewer.show(format!("{line}\nshort\n").as_bytes());
+        viewer.handle(Command::ToggleWrap);
+        draw(&mut viewer, 20, 6);
+        viewer.handle(Command::ScrollRight(5000));
+        let screen = draw(&mut viewer, 20, 6);
+        let row = format!("\"«{}»\"", &line[5001..5019]);
+        assert!(screen.contains(&row), "{screen}");
+        viewer.handle(Command::ScrollEnd);
+        assert_eq!(viewer.column, 9980);
+        let screen = draw(&mut viewer, 20, 6);
+        let row = format!("\"«{}\"", &line[9981..]);
+        assert!(screen.contains(&row), "{screen}");
+        assert_eq!(viewer.columns.borrow().iter().count(), 1);
+    }
+
+    #[test]
+    fn a_render_keeps_the_rows_of_both_widths_it_wraps_in() {
+        let mut viewer = Viewer::new("f".to_owned(), SIZES);
+        viewer.show(&[b'a'; 500]);
+        let widths = |viewer: &mut Viewer| {
+            draw(viewer, 20, 6);
+            let wrapped = viewer.wrapped.borrow();
+            let kept = wrapped
+                .iter()
+                .map(|(width, rows)| (*width, rows.iter().count()));
+            kept.collect::<Vec<_>>()
+        };
+        // Whether the text fits in the whole width, then beside the scroll bar.
+        assert_eq!(widths(&mut viewer), [(19, 1), (20, 1)]);
+        assert_eq!(widths(&mut viewer), [(19, 1), (20, 1)]);
+    }
+
+    #[test]
+    fn the_rows_kept_move_with_their_lines_as_parts_come_and_go() {
+        use std::fmt::Write as _;
+        let mut text = String::new();
+        // Lines of one to four rows, no two in a row of the same length.
+        for n in 1..=60 {
+            let letter = ('a'..='z').cycle().nth(n).unwrap();
+            let rest: String = std::iter::repeat_n(letter, n * 7 % 11 * 3 + 9).collect();
+            writeln!(text, "{n:02}{rest}").unwrap();
+        }
+        let sizes = Sizes {
+            part: 128,
+            window: 256,
+        };
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        let step = |viewer: &mut Viewer, command| {
+            viewer.handle(command);
+            while let Some(want) = viewer.want() {
+                viewer.take(crate::read::part_of(text.as_bytes(), want));
+            }
+            draw(viewer, 11, 6);
+            let mut kept = 0;
+            for (width, wrapped) in &*viewer.wrapped.borrow() {
+                for (index, starts) in wrapped.iter() {
+                    let line = &viewer.lines()[index];
+                    let fresh = row_starts(line, *width, continued(*width));
+                    assert_eq!(*starts, *fresh, "line {index} after {command:?}");
+                    kept += 1;
+                }
+            }
+            kept
+        };
+        step(&mut viewer, Command::Scroll(Motion::Home));
+        while viewer.parts.held().start == 0 {
+            step(&mut viewer, Command::Scroll(Motion::End));
+        }
+        assert_eq!(viewer.parts.held().start, 1, "the first part let go");
+        assert!(step(&mut viewer, Command::Scroll(Motion::Home)) > 0);
+        assert_eq!(viewer.parts.held().start, 0, "read again before the others");
+        for _ in 0..10 {
+            step(&mut viewer, Command::Scroll(Motion::WindowDown));
+        }
     }
 
     #[test]

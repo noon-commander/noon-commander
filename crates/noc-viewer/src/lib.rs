@@ -8,6 +8,7 @@
 //! and closes the viewer itself.
 
 mod i18n;
+mod kept;
 mod parts;
 mod read;
 mod text;

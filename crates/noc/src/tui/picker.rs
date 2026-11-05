@@ -24,7 +24,8 @@ use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
 use super::spinner::{Shine, Spin};
 use super::theme::Theme;
 use super::window::{
-    Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around, right_frame,
+    self, Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
+    right_frame,
 };
 use crate::i18n::fl;
 
@@ -642,7 +643,7 @@ impl Picker {
         };
         self.bar = None;
         self.glyphs = None;
-        if boxed.height < 3 || boxed.width < 4 {
+        if boxed.height < window::MIN_HEIGHT || boxed.width < 4 {
             return;
         }
         self.draw_inside(frame, boxed, theme, body, row);

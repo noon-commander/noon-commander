@@ -27,6 +27,7 @@ use crate::tui::reading::Reading;
 use crate::tui::spinner::{self, Spin, Wait};
 use crate::tui::tabs::{self, Bar, Tabs};
 use crate::tui::which_key;
+use crate::tui::window;
 use crate::tui::zoom::{self, Grows, Stage};
 
 use super::{
@@ -302,7 +303,7 @@ impl App {
     /// panels, as `K` asks for it: single lines, in the colors of dialogs, which set it apart
     /// from the panels.
     fn render_full(&self, frame: &mut Frame<'_>, area: Rect) {
-        if area.height < 3 {
+        if area.height < window::MIN_HEIGHT {
             return;
         }
         let theme = &self.theme;

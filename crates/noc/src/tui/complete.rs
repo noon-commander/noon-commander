@@ -15,7 +15,7 @@ use super::cells::{self, Align};
 use super::keymap::Action;
 use super::mouse::{Drawn, Pointer, Press};
 use super::theme::Theme;
-use super::window::{Colors, pop_up};
+use super::window::{self, Colors, pop_up};
 
 /// Rows the list of choices shows at most, and how far the page keys go in it.
 const MAX_ROWS: usize = 10;
@@ -425,7 +425,7 @@ impl Choices {
         let outer = pop_up(field, area, x, (field.width.saturating_add(2), height));
         self.drawn = Drawn::default();
         self.bar = None;
-        if outer.height < 3 || outer.width < 4 {
+        if outer.height < window::MIN_HEIGHT || outer.width < 4 {
             return;
         }
         self.drawn.frame = outer;

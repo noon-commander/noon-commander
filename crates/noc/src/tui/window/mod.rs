@@ -20,6 +20,9 @@ pub(crate) const WIDTH: u16 = 76;
 /// Fewest cells across a window's frame takes where the screen is too narrow to leave its
 /// sides free, or the whole screen if narrower.
 pub(crate) const MIN_WIDTH: u16 = 20;
+/// Fewest rows a window takes, borders included: a row inside its frame. One with less room is
+/// not drawn.
+pub(crate) const MIN_HEIGHT: u16 = 3;
 /// Cells a window's frame leaves free on either side of the screen, for its margin and its
 /// shadow.
 const SIDES: u16 = 2;

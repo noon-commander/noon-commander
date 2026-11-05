@@ -26,6 +26,7 @@ use super::keymap::{Action, Resolved};
 use super::label::{self, Label};
 use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
 
 /// Cells between a command's name and its key.
@@ -708,7 +709,7 @@ impl PullDown {
         let height = u16::try_from(menu.entries.len() + 2)
             .unwrap_or(u16::MAX)
             .min(area.height);
-        if width < 4 || height < 3 {
+        if width < 4 || height < window::MIN_HEIGHT {
             return;
         }
         // As in mc, the frame starts a cell left of the title, and stays on screen.

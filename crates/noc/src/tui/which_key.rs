@@ -10,7 +10,7 @@ use super::cells::{self, Align, Cut, Fitted};
 use super::help;
 use super::keymap::{Action, Hint, Hints, Place};
 use super::theme::Theme;
-use super::window::{Colors, draw_frame};
+use super::window::{self, Colors, draw_frame};
 use crate::i18n::fl;
 
 /// Widest the key column gets; longer lists of keys are cut.
@@ -89,7 +89,7 @@ fn grid(count: usize, natural: usize, (width, height): (usize, usize)) -> Grid {
 /// Draws `hints` across the bottom of `area`.
 pub(crate) fn render(frame: &mut Frame<'_>, area: Rect, hints: &Hints, theme: &Theme) {
     let rows = rows(hints);
-    if rows.is_empty() || area.width < 8 || area.height < 3 {
+    if rows.is_empty() || area.width < 8 || area.height < window::MIN_HEIGHT {
         return;
     }
     let inner_width = usize::from(area.width.saturating_sub(4));

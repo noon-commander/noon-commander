@@ -19,7 +19,7 @@ use super::mouse::{Pointer, Press, Scroll};
 use super::panel::home_text;
 use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
-use super::window::{Colors, draw_box, right_frame};
+use super::window::{self, Colors, draw_box, right_frame};
 use crate::about::{Build, Fact, Report, Topic, Value};
 use crate::i18n::fl;
 
@@ -744,8 +744,8 @@ impl Help {
     /// [`HEIGHT_PERCENT`] of its height, with the scroll bar of its text on the right of the
     /// frame.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let width = percent(area.width, WIDTH_PERCENT).max(20);
-        let height = percent(area.height, HEIGHT_PERCENT).max(3);
+        let width = percent(area.width, WIDTH_PERCENT).max(window::MIN_WIDTH);
+        let height = percent(area.height, HEIGHT_PERCENT).max(window::MIN_HEIGHT);
         let colors = Colors::plain(theme);
         let size = (width, height);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);

@@ -20,7 +20,7 @@ use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press};
 use super::scroll::Window;
 use super::theme::Theme;
-use super::window::{Colors, pop_up};
+use super::window::{self, Colors, pop_up};
 
 /// Rows the list shows at most, as the list of completions.
 const MAX_ROWS: usize = 10;
@@ -314,7 +314,7 @@ impl ComboBox {
             .max(anchor.width);
         let x = anchor.x.min(area.right().saturating_sub(width)).max(area.x);
         let outer = pop_up(anchor, area, x, (width, height));
-        if outer.height < 3 || outer.width < 4 {
+        if outer.height < window::MIN_HEIGHT || outer.width < 4 {
             return;
         }
         drawn.frame = outer;

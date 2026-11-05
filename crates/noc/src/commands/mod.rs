@@ -17,11 +17,18 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
         None => {
             let context = Context::load(paths, &config_path)?;
+            crate::tui::check_terminal()?;
+            // Only the TUI logs: the subcommands have the terminal to say what they do.
+            let (paths, config) = (context.paths.clone(), context.config());
+            let log =
+                tokio::task::spawn_blocking(move || crate::logging::start(&paths, &config.log))
+                    .await?;
             crate::i18n::select(&context.config().ui.language);
             let start = std::env::current_dir().wrap_err("cannot read the current directory")?;
-            crate::tui::run(
+            let ran = Box::pin(crate::tui::run(
                 context,
                 start,
+                log.file.as_deref(),
                 #[cfg(debug_assertions)]
                 crate::tui::DebugOptions {
                     slow_spinners: cli.slow_spinners,
@@ -29,8 +36,11 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
                     slow_windows: cli.slow_windows,
                     show_sizes: cli.show_sizes,
                 },
-            )
-            .await?;
+            ))
+            .await;
+            // Ending the log waits for the last lines to reach the file.
+            let _ = tokio::task::spawn_blocking(move || drop(log)).await;
+            ran?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Command::Config(ConfigCommand::Init { force })) => config::init(&config_path, force),

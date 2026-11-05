@@ -106,7 +106,6 @@ impl Sandbox {
             .env("XDG_RUNTIME_DIR", self.runtime.path())
             .env_remove("NOC_ASKPASS_SOCKET")
             .env_remove("NOC_ASKPASS_TOKEN")
-            .env_remove("NOC_LOG")
             .stdin(Stdio::null());
         command
     }
@@ -266,6 +265,36 @@ fn the_tui_needs_a_terminal() {
         output.stdout.is_empty(),
         "no escape codes without a terminal"
     );
+    assert!(!sandbox.path("state/noc/logs").exists(), "nor a log");
+}
+
+#[test]
+fn rejects_an_invalid_filter_of_the_log() {
+    let sandbox = Sandbox::new(&[]);
+    sandbox.write_config("[log]\nfilter = \"noc_ssh=loud\"\n");
+    let output = sandbox.run(&[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        stderr(&output).contains("invalid `log.filter`"),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn the_subcommands_write_no_log() {
+    let sandbox = Sandbox::new(&[]);
+    sandbox.write_config("[log]\nlevel = \"trace\"\n");
+    std::fs::write(sandbox.path("ssh_config"), "Host web\n").unwrap();
+    for args in [
+        &["debug", "hosts"][..],
+        &["debug", "ls"],
+        &["config", "paths"],
+    ] {
+        let output = sandbox.run(args);
+        assert!(output.status.success(), "{args:?}: {}", stderr(&output));
+    }
+    assert!(!sandbox.path("state/noc/logs").exists());
 }
 
 #[test]

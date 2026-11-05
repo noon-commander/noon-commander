@@ -38,10 +38,8 @@ impl Clone for Context {
 }
 
 impl Context {
-    /// Starts logging, then reads and validates the config file at `config_path` and the
-    /// host settings next to it.
+    /// Reads and validates the config file at `config_path` and the host settings next to it.
     pub(crate) fn load(paths: Paths, config_path: &Path) -> Result<Self> {
-        crate::logging::init(&paths);
         let config = Config::load(config_path, &paths.home)?;
         noc_ssh::args::validate(&config.ssh.args)
             .wrap_err_with(|| format!("invalid `ssh.args` in {}", config_path.display()))?;
@@ -59,6 +57,12 @@ impl Context {
                 config_path.display(),
                 config.ui.theme,
                 crate::tui::theme_names().join(", ")
+            );
+        }
+        if let Err(reason) = crate::logging::filter(&config.log) {
+            bail!(
+                "invalid `log.filter` in {}: {reason}",
+                config_path.display()
             );
         }
         let hosts = Hosts::load(&Paths::hosts_file(config_path))?;

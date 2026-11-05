@@ -264,17 +264,24 @@ fn release(
     sender
 }
 
-/// Runs the TUI with both panels on the local directory `start` until the user quits or the
-/// process gets SIGTERM, SIGHUP, or SIGINT. In debug builds, `debug` holds back the results of
-/// background work, slows down windows, and has them show their sizes.
-pub(crate) async fn run(
-    context: Context,
-    start: PathBuf,
-    #[cfg(debug_assertions)] debug: DebugOptions,
-) -> Result<()> {
+/// Fails unless stdout is a terminal, which [`run`] needs.
+pub(crate) fn check_terminal() -> Result<()> {
     if !io::stdout().is_terminal() {
         bail!("the TUI needs a terminal; in scripts, use the subcommands (`noc --help`)");
     }
+    Ok(())
+}
+
+/// Runs the TUI with both panels on the local directory `start` until the user quits or the
+/// process gets SIGTERM, SIGHUP, or SIGINT; `log` is the file of the log, if there is one. In
+/// debug builds, `debug` holds back the results of background work, slows down windows, and has
+/// them show their sizes.
+pub(crate) async fn run(
+    context: Context,
+    start: PathBuf,
+    log: Option<&Path>,
+    #[cfg(debug_assertions)] debug: DebugOptions,
+) -> Result<()> {
     // Raw mode turns Ctrl+c into a key, but these can still come from elsewhere, such as `kill`
     // or a closed terminal window; quitting through them restores the terminal.
     let mut told = Told::listen();
@@ -310,7 +317,7 @@ pub(crate) async fn run(
     #[cfg(debug_assertions)]
     let done_tx = slow_down(done_tx, debug);
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
-    let (mut app, effects) = start_app(&context, &start, (&tz, system), asked.modes.keys());
+    let (mut app, effects) = start_app(&context, (&start, log), (&tz, system), asked.modes.keys());
     #[cfg(debug_assertions)]
     app.debug_windows(debug);
     tasks.run(effects);
@@ -409,10 +416,10 @@ fn give_back(mut terminal: DefaultTerminal) {
 
 /// The app with both panels on `start`, set up for this terminal and `system`, and the work it
 /// asks for first: the saved workspaces, the history, the places used last, and the volumes,
-/// which tell which one a panel is on.
+/// which tell which one a panel is on; the About page shows `log`, else the logs directory.
 fn start_app(
     context: &Context,
-    start: &Path,
+    (start, log): (&Path, Option<&Path>),
     (tz, system): (&TimeZone, System),
     keyboard: Keyboard,
 ) -> (App, Vec<app::Effect>) {
@@ -455,7 +462,7 @@ fn start_app(
             workspaces: paths.workspaces_file(),
             history: paths.history_file(),
             recent: paths.recent_file(),
-            log: paths.log_file(),
+            log: log.map_or_else(|| paths.log_dir(), Path::to_path_buf),
         }),
     });
     let path = std::env::var_os("PATH").unwrap_or_default();

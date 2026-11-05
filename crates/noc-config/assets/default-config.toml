@@ -162,4 +162,15 @@ part_mib = 16
 # when scrolling comes back to them. At least two parts; less counts as two.
 window_mib = 128
 
+[log]
+# Each run of Noon Commander writes a log of its own in the logs directory under the state
+# directory (~/.local/state/noc/logs), named for the time it started (UTC) and its process ID.
+# The least severe events it writes: "off", "error", "warn", "info", "debug", or "trace".
+level = "info"
+# Directives that take the place of level unless empty, as RUST_LOG takes them, such as
+# `info,noc_ssh=trace`: a level for everything, then one for each crate or module named.
+filter = ""
+# How many log files are kept, this run's among them; older ones are removed. At least 1.
+keep = 10
+
 # Per-host settings (labels, start directories) live in hosts.toml next to this file.

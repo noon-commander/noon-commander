@@ -39,6 +39,61 @@ pub struct Config {
     pub search: SearchConfig,
     /// `[viewer]`: how the viewer, F3, reads a file.
     pub viewer: ViewerConfig,
+    /// `[log]`: what the TUI writes to its log.
+    pub log: LogConfig,
+}
+
+/// The `[log]` section: the TUI writes a log file of its own for each run, in the state
+/// directory, and keeps the last few (ADR 0067).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct LogConfig {
+    /// The least severe events it writes. Default: `info`.
+    pub level: LogLevel,
+    /// Directives such as `info,noc_ssh=trace`, which take the place of
+    /// [`level`](Self::level) unless empty; the TUI checks them. Default: none.
+    pub filter: String,
+    /// How many log files are kept, this run's among them; older ones are removed. Default:
+    /// `10`.
+    pub keep: NonZeroUsize,
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            level: LogLevel::default(),
+            filter: String::new(),
+            keep: NonZeroUsize::new(10).unwrap_or(NonZeroUsize::MIN),
+        }
+    }
+}
+
+/// The least severe events the log gets: `log.level`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogLevel {
+    /// None at all.
+    Off,
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    /// As `config.toml` writes it, which is also a directive of a filter.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Error => "error",
+            Self::Warn => "warn",
+            Self::Info => "info",
+            Self::Debug => "debug",
+            Self::Trace => "trace",
+        }
+    }
 }
 
 /// The `[viewer]` section: the viewer reads a file in parts and keeps a window of them, so
@@ -539,9 +594,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, MenuBar, Pause,
-        SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig, UiConfig,
-        ViewerConfig, VolumesConfig, Wheel, ZoxideConfig,
+        AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, LogConfig, LogLevel,
+        MenuBar, Pause, SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig,
+        UiConfig, ViewerConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, Run, write_default_config};
 
@@ -618,6 +673,11 @@ mod tests {
         [viewer]
         part_mib = 4
         window_mib = 64
+
+        [log]
+        level = "debug"
+        filter = "info,noc_ssh=trace"
+        keep = 3
     "#;
 
     fn full() -> Config {
@@ -684,6 +744,11 @@ mod tests {
                 part_mib: NonZeroUsize::new(4).unwrap(),
                 window_mib: NonZeroUsize::new(64).unwrap(),
             },
+            log: LogConfig {
+                level: LogLevel::Debug,
+                filter: "info,noc_ssh=trace".to_owned(),
+                keep: NonZeroUsize::new(3).unwrap(),
+            },
         }
     }
 
@@ -728,6 +793,28 @@ mod tests {
         assert_eq!(config.search.max_per_file.get(), 100);
         assert_eq!(config.viewer.part_mib.get(), 16);
         assert_eq!(config.viewer.window_mib.get(), 128);
+        assert_eq!(config.log.level, LogLevel::Info);
+        assert_eq!(config.log.filter, "");
+        assert_eq!(config.log.keep.get(), 10);
+    }
+
+    #[test]
+    fn the_log_has_a_level_and_keeps_a_file_at_least() {
+        let level = |text: &str| parse(&format!("[log]\nlevel = \"{text}\"")).log.level;
+        for each in [
+            LogLevel::Off,
+            LogLevel::Error,
+            LogLevel::Warn,
+            LogLevel::Info,
+            LogLevel::Debug,
+            LogLevel::Trace,
+        ] {
+            assert_eq!(level(each.as_str()), each);
+        }
+        assert_parse_error("[log]\nlevel = \"verbose\"");
+        assert_parse_error("[log]\nlevel = \"INFO\"");
+        let error = toml::from_str::<Config>("[log]\nkeep = 0").unwrap_err();
+        assert!(error.to_string().contains("nonzero"), "{error}");
     }
 
     #[test]
@@ -960,6 +1047,9 @@ mod tests {
         assert!(table["search"].get("fd").is_some());
         assert!(table["viewer"].get("part_mib").is_some());
         assert!(table["viewer"].get("window_mib").is_some());
+        assert!(table["log"].get("level").is_some());
+        assert!(table["log"].get("filter").is_some());
+        assert!(table["log"].get("keep").is_some());
     }
 
     #[test]

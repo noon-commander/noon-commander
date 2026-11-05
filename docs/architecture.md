@@ -902,9 +902,15 @@ program` names it. The facts are `about::Fact::ALL`, in order, which the About p
 shows too, each under the title of its `Topic`; the help names each in a `match` that a new fact
 does not compile without.
 
-`--config FILE` replaces `~/.config/noc/config.toml`. Logs go to
-`~/.local/state/noc/noc.log`; `NOC_LOG` sets the filter, for example
-`NOC_LOG=debug`.
+`--config FILE` replaces `~/.config/noc/config.toml`.
+
+Only the TUI logs, to a file of its own for each run in `~/.local/state/noc/logs/`,
+`noc-<UTC start, 20261105T142301Z>-<pid>.log`, mode 0600; the subcommands write no log
+([ADR 0067](adr/0067-a-log-file-for-each-run.md)). `crates/noc/src/logging.rs` starts it once the
+config is read and the terminal checked, and removes the oldest `noc-*.log` files over
+`log.keep`. `log.level`, or `log.filter` (`EnvFilter` directives) unless empty, sets the filter.
+Each event goes whole over a channel to the thread `noc-log`, which writes the file, so no event
+waits for the disk; ending the log, after the TUI, waits for the last lines.
 
 ## Async model
 
@@ -1193,7 +1199,7 @@ variables:
 | --- | --- |
 | Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
 | Data (workspaces, bookmarks) | `~/.local/share/noc/` (`workspaces.toml`) |
-| State (`history.toml`, `recent.toml`, last directories, logs) | `~/.local/state/noc/` |
+| State (`history.toml`, `recent.toml`, last directories, `logs/`) | `~/.local/state/noc/` |
 | Cache (`ssh -G` results) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
@@ -1253,6 +1259,11 @@ program = "rg"                   # ripgrep for f /, name in PATH or a path; rg o
 fd = "fd"                        # fd for f f, files and dirs, likewise; fd or fdfind on hosts
 max_results = 10000              # it stops after finding so many lines, or files and dirs
 max_per_file = 100               # and takes no more lines of one file
+
+[log]
+level = "info"                   # "off", "error", "warn", "info", "debug", "trace"
+filter = ""                      # directives in place of level, such as "info,noc_ssh=trace"
+keep = 10                        # log files kept, a file for each run of the TUI
 ```
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.

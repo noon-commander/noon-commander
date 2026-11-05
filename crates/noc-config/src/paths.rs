@@ -104,9 +104,9 @@ impl Paths {
         self.state_dir.join("recent.toml")
     }
 
-    /// The log: `noc.log` in [`state_dir`](Self::state_dir).
-    pub fn log_file(&self) -> PathBuf {
-        self.state_dir.join("noc.log")
+    /// The logs, a file for each run of the TUI: `logs` in [`state_dir`](Self::state_dir).
+    pub fn log_dir(&self) -> PathBuf {
+        self.state_dir.join("logs")
     }
 
     /// Creates [`runtime_dir`](Self::runtime_dir) with mode 0700 if it is missing, and checks
@@ -207,10 +207,7 @@ mod tests {
             paths.recent_file().as_os_str(),
             "/home/u/.local/state/noc/recent.toml"
         );
-        assert_eq!(
-            paths.log_file().as_os_str(),
-            "/home/u/.local/state/noc/noc.log"
-        );
+        assert_eq!(paths.log_dir().as_os_str(), "/home/u/.local/state/noc/logs");
     }
 
     #[test]

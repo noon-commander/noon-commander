@@ -15,8 +15,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0065](docs/adr/0065-a-colon-without-a-host-is-local.md)).
 - Alt+1 … Alt+9 show the tab of that number in the active panel, as `2g t` does, and Alt+0 the
   last tab; Ctrl+x before them, the other panel's. They work in Visual mode too.
+- Settings of the log, `[log]`: `level`, `filter` (directives such as `info,noc_ssh=trace` in
+  place of the level), and `keep`, how many log files are kept, 10 by default.
 
 ### Changed
+
+- Each run of the TUI writes a log of its own, `~/.local/state/noc/logs/noc-<time>-<pid>.log`,
+  readable by the user alone, and only the last `log.keep` are kept; the subcommands no longer
+  write one. A thread of its own writes it
+  ([ADR 0067](docs/adr/0067-a-log-file-for-each-run.md)). `~/.local/state/noc/noc.log` is no
+  longer written, and can be removed.
 
 - Visual mode stays with its tab: going to the other panel (Ctrl+w, Tab, a click) or to another
   tab keeps the rows selected, which show there and are selected again once the panel or the tab
@@ -58,6 +66,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The question of ssh about a host key shows in the colors of warnings. A yes/no question from
   a server shows as a question of its own, in the colors of dialogs, whose No answers `no`; it can
   no longer pass for one about a host key ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
+
+### Removed
+
+- `NOC_LOG`: `log.level` and `log.filter` take its place.
 
 ### Fixed
 

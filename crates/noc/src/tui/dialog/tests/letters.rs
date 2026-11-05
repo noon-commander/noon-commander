@@ -86,7 +86,7 @@ fn letters_stand_out_where_they_are_drawn() {
     let buffer = terminal.backend().buffer();
     let find = |text: &str| crate::tui::mouse::find(buffer, text);
     let fg = |at: Position, offset: u16| buffer[(at.x + offset, at.y)].fg;
-    let colors = Colors::of(&Theme::mc_classic(), Tone::Plain);
+    let colors = Colors::plain(&Theme::mc_classic());
     assert_eq!(colors.hotkey_style(false).fg, Some(Color::Blue));
     let prompt = find("Pattern:");
     assert_eq!((fg(prompt, 0), fg(prompt, 1)), (Color::Blue, Color::Black));

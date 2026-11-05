@@ -11,9 +11,6 @@ use ratatui::text::Line;
 use tokio_util::sync::CancellationToken;
 
 use super::cells::{self, Align};
-use super::dialog::{
-    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around,
-};
 use super::keymap::{Action, Resolved};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer};
@@ -21,7 +18,9 @@ use super::panel::short_size;
 use super::progress::{gauge, ratio, unknown_gauge};
 use super::spinner::{DELAY, Spin, Wait};
 use super::theme::Theme;
-use super::window;
+use super::window::{
+    self, Colors, button_line, button_spots, draw_box, draw_separator, frame_around,
+};
 use crate::i18n::fl;
 
 /// A button of the window.
@@ -166,7 +165,7 @@ impl Reading {
             return;
         }
         self.shown.set(true);
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         // Borders, where the part starts, the gauge, how much it read, a line, the buttons.
         let inner = draw_box(
             frame,

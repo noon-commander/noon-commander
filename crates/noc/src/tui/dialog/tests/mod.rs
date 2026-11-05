@@ -1,7 +1,7 @@
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use secrecy::ExposeSecret as _;
 
 use super::field::SECRET_CAPACITY;
@@ -9,8 +9,8 @@ use super::*;
 use crate::tui::keymap::{Extra, Typed};
 use crate::tui::mouse::{Pointer, Press};
 use crate::tui::picker::MenuLine;
-use crate::tui::spinner::Shine;
 use crate::tui::theme::Theme;
+use crate::tui::window::Colors;
 
 mod basics;
 mod colors;
@@ -23,7 +23,6 @@ mod parts;
 mod pickers;
 mod pointer;
 mod rows;
-mod skeleton;
 
 fn action(action: Action) -> Resolved {
     Resolved::Action(action)

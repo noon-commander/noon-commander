@@ -10,14 +10,13 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Extra, Hints, Keymap, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
 use super::which_key;
-use super::window;
+use super::window::{self, Colors};
 use crate::i18n::fl;
 
 /// Widest the column of keys gets; longer lists of keys are cut.
@@ -168,7 +167,7 @@ impl KeyHintsWindow {
             full,
             ..Body::default()
         };
-        let focused = Colors::of(theme, Tone::Plain).focused_style();
+        let focused = Colors::plain(theme).focused_style();
         self.picker
             .render(frame, area, theme, body, &mut |shown_row| {
                 let row = shown[shown_row.index];

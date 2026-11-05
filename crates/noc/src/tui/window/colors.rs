@@ -1,24 +1,24 @@
-//! The colors of a dialog by its tone.
+//! The colors of a window by its tone.
 
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Span;
 
 use crate::tui::theme::Theme;
 
-/// The colors of a dialog box.
+/// The colors of a window: a dialog, a list, or any other.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Colors {
-    pub(super) body: Style,
-    pub(super) title: Style,
-    pub(super) button: Style,
-    pub(super) focused: Style,
+    pub(crate) body: Style,
+    pub(crate) title: Style,
+    pub(crate) button: Style,
+    pub(crate) focused: Style,
     /// The marks of text cut short, over `body`.
-    pub(super) mark: Style,
+    pub(crate) mark: Style,
     /// The letters of labels, over the rest, and over what has the focus.
     hotkey: Style,
     hotkey_focused: Style,
     /// Text fields and combo boxes, and the lists the boxes open.
-    pub(super) input: Style,
+    pub(crate) input: Style,
     /// The letters of the choices of those lists, over `input`.
     input_hotkey: Style,
     /// The brackets of check boxes and combo boxes, and their checks and arrows, over `body`
@@ -88,7 +88,7 @@ impl Colors {
     }
 
     /// The same colors, for what cannot be used: the body faint.
-    pub(super) fn disabled(self, theme: &Theme) -> Self {
+    pub(crate) fn disabled(self, theme: &Theme) -> Self {
         Self {
             body: self.body.patch(theme.disabled),
             ..self
@@ -116,7 +116,12 @@ impl Colors {
         ]
     }
 
-    /// The colors of a dialog in `tone`: errors red, as mc draws them, and warnings on a
+    /// The colors of a window in plain tone, as every list has them.
+    pub(crate) fn plain(theme: &Theme) -> Self {
+        Self::of(theme, Tone::Plain)
+    }
+
+    /// The colors of a window in `tone`: errors red, as mc draws them, and warnings on a
     /// background of their own, each with its own fields, brackets, and checks.
     pub(crate) fn of(theme: &Theme, tone: Tone) -> Self {
         match tone {
@@ -163,7 +168,7 @@ impl Colors {
     }
 }
 
-/// What a dialog says, which its colors show.
+/// What a window says, which its colors show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tone {
     /// Anything else.

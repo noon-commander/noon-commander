@@ -15,12 +15,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, pop_up};
 use super::keymap::{Action, Extra};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press};
 use super::scroll::Window;
 use super::theme::Theme;
+use super::window::{Colors, pop_up};
 
 /// Rows the list shows at most, as the list of completions.
 const MAX_ROWS: usize = 10;
@@ -377,7 +377,7 @@ mod tests {
     use ratatui::style::{Modifier, Style};
 
     use super::*;
-    use crate::tui::dialog::Tone;
+    use crate::tui::window::Tone;
 
     fn algorithms() -> ComboBox {
         let items = ["SHA-&256", "SHA-&512", "SHA-&1", "&MD5", "&BLAKE3"].map(str::to_owned);
@@ -521,7 +521,7 @@ mod tests {
             assert_eq!(cell("BLAKE3").bg, input, "a row");
             assert_eq!(buffer[(2, 1)].bg, input, "the frame");
             let under = cell("SHA-512");
-            let want = Colors::of(&theme, Tone::Plain).selected_style();
+            let want = Colors::plain(&theme).selected_style();
             assert_eq!(
                 (Some(under.fg), Some(under.bg)),
                 (want.fg, want.bg),

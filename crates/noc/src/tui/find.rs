@@ -23,7 +23,7 @@ use tokio_util::sync::CancellationToken;
 use super::cells::{self, Align};
 use super::combo_box::ComboBox;
 use super::decor::Decor;
-use super::dialog::{Button, Colors, Dialog, DialogEvent, Field, Tone, status_skeleton};
+use super::dialog::{Button, Dialog, DialogEvent, Field};
 use super::edit::Registers;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
 use super::mouse::Pointer;
@@ -32,6 +32,7 @@ use super::picker::{Body, MenuLine, Picker, Waiting};
 use super::search::{Case, Input, Kind, Way};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
+use super::window::{Colors, status_skeleton};
 use crate::i18n::fl;
 
 /// Cells of text kept before the first match of a line that is too long to show whole.
@@ -746,7 +747,7 @@ impl FindWindow {
     /// the shine of `spin` while it searches, and what kept it from finding all.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let items = self.items();
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         let wait = self.wait();
         let shine = wait.and_then(|wait| spin.shine(wait));
         let width = self.dialog.text_width(area);

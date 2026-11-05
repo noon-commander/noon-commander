@@ -13,7 +13,7 @@ use crate::i18n::fl;
 use crate::tui::cells::{self};
 use crate::tui::configuration::{run_of, run_text};
 use crate::tui::describe::Reason;
-use crate::tui::dialog::{Ask, Button, Dialog, DialogEvent, Problem, Reply, Tone};
+use crate::tui::dialog::{Ask, Button, Dialog, DialogEvent, Problem, Reply};
 use crate::tui::keymap::Action;
 use crate::tui::panel::{
     Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
@@ -21,6 +21,7 @@ use crate::tui::panel::{
 use crate::tui::places::volume_of;
 use crate::tui::tabs::PanelId;
 use crate::tui::tasks::HostHandle;
+use crate::tui::window::Tone;
 
 use super::{
     Again, Answer, App, Effect, HOST_OTHER_DIR, HOST_RUN, HOST_START_DIR, Host, Open, Purpose,

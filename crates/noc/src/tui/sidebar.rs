@@ -6,10 +6,10 @@ use ratatui::layout::Rect;
 use ratatui::text::Line;
 
 use super::cells;
-use super::dialog::Colors;
 use super::glyphs;
 use super::label::Label;
 use super::theme::Theme;
+use super::window::Colors;
 
 /// The rows of a sidebar and which one is chosen.
 #[derive(Debug, Clone, Copy)]

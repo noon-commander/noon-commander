@@ -13,13 +13,12 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Marks};
-use super::dialog::{Colors, Tone, inner_width};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
-use super::window;
+use super::window::{self, Colors, inner_width};
 use crate::i18n::fl;
 
 /// Rows of commands the window shows at most.
@@ -248,7 +247,7 @@ impl HistoryWindow {
             footer,
             ..Body::default()
         };
-        let focused = Colors::of(theme, Tone::Plain).focused_style();
+        let focused = Colors::plain(theme).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             let entry = shown[row.index];
             let dir_width = DIR_WIDTH.min(row.width / 4);

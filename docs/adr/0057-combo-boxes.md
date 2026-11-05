@@ -42,7 +42,7 @@ want.
   is on, where it had `x` without icons. Two marks, as the menus of Windows and GTK have, so that
   one among others does not read as a setting to turn off.
 - **Its list opens under it**, or above it where there is more room, over the dialog and past its
-  frame, as the list of completions (`dialog::pop_up`): a frame, at most ten rows, a scroll bar on
+  frame, as the list of completions (`window::pop_up`): a frame, at most ten rows, a scroll bar on
   the frame when they do not all fit, and the cursor on the choice. The choice has the dot of a
   radio button in front of it, `•`, as Far's `(•)`, or a Nerd Font dot with `ui.icons`, in the
   color of titles but under the cursor: one among others, where the check of a check box is on or

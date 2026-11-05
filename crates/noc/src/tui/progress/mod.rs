@@ -9,9 +9,6 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{
-    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around, shine_bar,
-};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
 use super::label::Label;
@@ -19,7 +16,9 @@ use super::mouse::{Drawn, Pointer};
 use super::panel::short_size;
 use super::spinner::{Shine, Spin, Wait};
 use super::theme::Theme;
-use super::window;
+use super::window::{
+    self, Colors, button_line, button_spots, draw_box, draw_separator, frame_around, shine_bar,
+};
 use crate::i18n::fl;
 
 /// Work the speed needs behind it before it means anything.
@@ -1328,7 +1327,7 @@ impl JobView {
         theme: &Theme,
         (now, spin): (Instant, &Spin),
     ) {
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         // Borders, what it does, where, the gauge, the count, the time, a line, the buttons.
         let inner = draw_box(frame, area, (window::WIDTH, 9), &self.title, colors, theme);
         let width = usize::from(inner.width);

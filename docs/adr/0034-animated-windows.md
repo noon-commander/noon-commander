@@ -13,7 +13,7 @@ Noon Commander has many windows, each with its own `Option` or queue in `App` an
 renderer: dialogs, the location and tab menus, the zoxide window, the workspaces, the command
 history, the search of a tree, the Configuration dialog, the help, the list of jobs, a job in
 front, the results of checksums, the list of key hints, and the menus of F9. Most of them draw
-their frame through `dialog::draw_box`, the menus of F9 their own. Closing a window drops its
+their frame through `window::draw_box`, the menus of F9 their own. Closing a window drops its
 state at once, so nothing of it is left to draw while it shrinks. The event loop redraws only
 after an event, or on the spinner's tick while something spins.
 

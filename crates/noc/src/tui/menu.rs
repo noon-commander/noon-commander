@@ -19,7 +19,6 @@ use ratatui::text::{Line, Span};
 use super::app::Side;
 use super::cells::{self, Align};
 use super::decor::Decor;
-use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
@@ -29,7 +28,7 @@ use super::places::{KnownHost, Places, volume_name, volume_of};
 use super::search::{Input, Kind};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
-use super::window;
+use super::window::{self, Colors};
 use crate::i18n::fl;
 
 /// Places of a group that show while the filter is empty, besides those always shown.
@@ -383,7 +382,7 @@ impl LocationMenu {
             decor,
             hosts,
             dots: spin.dots(),
-            focused: Colors::of(theme, Tone::Plain).focused_style(),
+            focused: Colors::plain(theme).focused_style(),
         };
         let full = items.get(self.picker.cursor()).map(|item| {
             let texts = texts(*item).join("  ");

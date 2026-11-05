@@ -99,7 +99,7 @@ too, which some users want and others do not, apart from windows.
   first line, a stage of the job rather than a wait, and its gauge, which has no percentage yet, is
   a faint bar of `▒` over which the shine of the skeleton of rows runs to and fro, turning at its
   ends with no rest, with the same width, colors, and speed in cells, from the same delay
-  (`dialog::shine_bar` draws both): an empty gauge at 0% read as a job that stood. It runs to and
+  (`window::shine_bar` draws both): an empty gauge at 0% read as a job that stood. It runs to and
   fro rather than sweeping, so that a stage of a job does not read as rows to come. No dots turn in
   its title: the gauge already shows that it works. A stop leaves the bar still: no more is to come.
   The list of jobs says `waiting`, `counting`, or `aborting` in place of the percentage, in a column

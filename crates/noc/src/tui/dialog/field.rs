@@ -17,8 +17,7 @@ use crate::tui::keymap::{Action, Extra, Mode};
 use crate::tui::label::Label;
 use crate::tui::search::{GlyphSpots, Input};
 use crate::tui::theme::Theme;
-
-use super::Colors;
+use crate::tui::window::Colors;
 
 /// Bytes a secret may have. Reserved up front, so typing never moves it in memory and leaves
 /// no copy behind.

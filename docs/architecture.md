@@ -2049,11 +2049,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   and gives a list the count before Ctrl+f or Ctrl+b, which scrolls as many pages at once.
 - **Width of a window.** Dialogs, lists, and the windows of jobs, progress, and reading are 76
   cells wide, borders included (`window::WIDTH`); the help takes a share of the screen.
-  `dialog::draw_box` draws the frame of every window, as wide as the
+  `tui/window/` holds what they share: the width, the colors by tone (`Colors`, `Tone`), the
+  frame, the buttons, and the skeleton with its shine.
+  `window::draw_box` draws the frame of every window, as wide as the
   window asks but leaving two cells free on either side of the screen, for the margin and the
-  shadow (`dialog::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is
-  narrower. What lays out text to that width asks `dialog::inner_width`. The key hints along the
-  bottom of the screen span it (`dialog::draw_frame`).
+  shadow (`window::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is
+  narrower. What lays out text to that width asks `window::inner_width`. The key hints along the
+  bottom of the screen span it (`window::draw_frame`).
 - **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]`
   after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the
   colors of text fields (`dialog_input`), its brackets faint (`dialog_bracket`) and its arrow in
@@ -2065,7 +2067,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `tui/combo_box.rs`, which the dialogs
   (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration
   dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where
-  there is more room, as the list of completions (`dialog::pop_up`), over the dialog and past its
+  there is more room, as the list of completions (`window::pop_up`), over the dialog and past its
   frame, in the colors of fields too, apart from the dialog's: at most ten rows that scroll with a
   scroll bar, the choice marked with the dot of a radio button, `•` (`󰧞` with `ui.icons`), in the
   color of titles, the cursor on it. The
@@ -2190,13 +2192,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   place of the file's icon in front of the path in the viewer's title, while its `Reading` window
   shows a gauge; on the icon of a host connecting in the location menu;
   and in front of the titles of the location menu, the zoxide window, and the search of a whole
-  tree, drawn over the line of the frame by `dialog::draw_title_dots`, so the title stays in place;
-  until their first rows come, `dialog::draw_skeleton` draws rows of faint bars, as many as the
+  tree, drawn over the line of the frame by `window::draw_title_dots`, so the title stays in place;
+  until their first rows come, `window::draw_skeleton` draws rows of faint bars, as many as the
   window had the last time it opened (`App` keeps them in memory, one the first time), which a shine
   crosses at once from when the dots show, one cell every 40 ms, in their place; the status line of
   the search has a bar of its own, crossed with them. Until a job knows how far it is, its gauge is
   a faint bar of `▒` with no percentage, over which the same shine runs to and fro as fast, turning
-  at its ends (`dialog::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`). Each
+  at its ends (`window::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`). Each
   waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows until
   150 ms later, so quick work does not flicker. Frames come from the time since the app's first
   frame, so spinners move together and tests draw given instants; `App::spin_due` tells the event

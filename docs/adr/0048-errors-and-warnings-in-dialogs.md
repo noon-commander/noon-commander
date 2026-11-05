@@ -13,7 +13,7 @@ title and its flag; only an error with OK had a function of its own.
 
 ## Decision
 
-- **A dialog has a tone** (`dialog::Tone`): plain, an error, or a warning. Its colors follow from
+- **A dialog has a tone** (`window::Tone`): plain, an error, or a warning. Its colors follow from
   it (`Colors::of`).
 - **An error is red**, as in mc: its body, frame, title, and buttons (`error_dialog`,
   `error_title`, …). Errors: a job that failed, a directory that could not be read, a host that

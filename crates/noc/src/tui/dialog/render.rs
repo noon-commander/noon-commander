@@ -12,10 +12,12 @@ use crate::tui::label::{self, Label};
 use crate::tui::picker::{Body, ShownRow};
 use crate::tui::spinner::Spin;
 use crate::tui::theme::Theme;
+use crate::tui::window::{
+    Colors, button_line, button_spots, draw_box, draw_separator, draw_title_dots, right_frame,
+};
 
 use super::{
-    Colors, Dialog, Focus, Part, PickerDraw, Text, button_line, button_spots, draw_box, draw_field,
-    draw_separator, draw_title_dots, even_lines, label_spans, placeholder_line, right_frame,
+    Dialog, Focus, Part, PickerDraw, Text, draw_field, even_lines, label_spans, placeholder_line,
 };
 
 impl Dialog {

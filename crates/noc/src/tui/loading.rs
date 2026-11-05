@@ -3,8 +3,8 @@
 //! many lines the last one had, so that the skeleton of the next list is as tall (ADR 0037).
 
 use super::cells;
-use super::dialog::SKELETON_ROWS;
 use super::spinner::Wait;
+use super::window::SKELETON_ROWS;
 
 /// The wait of a list for its rows.
 #[derive(Debug)]

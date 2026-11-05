@@ -5,11 +5,12 @@ use noc_config::{PanelSide, Workspace, Workspaces};
 use crate::i18n::fl;
 use crate::tui::cells::{self};
 use crate::tui::describe::Reason;
-use crate::tui::dialog::{Button, Dialog, DialogEvent, Problem, Tone};
+use crate::tui::dialog::{Button, Dialog, DialogEvent, Problem};
 use crate::tui::keymap::Resolved;
 use crate::tui::label::{self};
 use crate::tui::search::Slot;
 use crate::tui::tabs::{PanelId, Tab, Tabs};
+use crate::tui::window::Tone;
 use crate::tui::workspaces::{self, WorkspacesEvent, WorkspacesWindow};
 
 use super::{Again, App, Effect, Open, Purpose, Side, Way, WorkspaceChange, WorkspaceQuestion};

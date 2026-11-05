@@ -10,14 +10,13 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{
-    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
-};
 use super::keymap::{Action, Resolved};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
-use super::window;
+use super::window::{
+    self, Colors, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
+};
 use crate::i18n::fl;
 
 /// Columns for what a job does, how far it is, and the time it has left, unless the words in
@@ -183,7 +182,7 @@ impl JobsList {
 
     /// Draws the list centered in `area`: a row for each job, scrolled to the selected one.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, rows: &[Row]) {
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         let listed = u16::try_from(rows.len().max(1)).unwrap_or(u16::MAX);
         // Borders, the rows, a line, the buttons.
         let size = (window::WIDTH, listed.saturating_add(4));

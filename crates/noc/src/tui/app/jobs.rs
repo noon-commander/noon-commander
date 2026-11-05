@@ -10,12 +10,13 @@ use tokio_util::sync::CancellationToken;
 use crate::i18n::fl;
 use crate::tui::cells::{self};
 use crate::tui::describe::Reason;
-use crate::tui::dialog::{Button, Dialog, Problem, Tone};
+use crate::tui::dialog::{Button, Dialog, Problem};
 use crate::tui::jobs::{JobsEvent, Row};
 use crate::tui::keymap::Resolved;
 use crate::tui::panel::{child, location_text};
 use crate::tui::progress::JobButton;
 use crate::tui::tasks::{HostHandle, HostLink, JobEvent, Relink};
+use crate::tui::window::Tone;
 
 use super::{
     Again, App, Effect, Handover, Host, Job, JobKind, Open, Purpose, Shown, Sight, Then,

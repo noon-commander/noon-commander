@@ -12,7 +12,6 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, Tone, draw_box, right_frame};
 use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Keymap, Mode, Resolved};
 use super::label::Label;
@@ -20,6 +19,7 @@ use super::mouse::{Pointer, Press, Scroll};
 use super::panel::home_text;
 use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
+use super::window::{Colors, draw_box, right_frame};
 use crate::about::{Build, Fact, Report, Topic, Value};
 use crate::i18n::fl;
 
@@ -746,7 +746,7 @@ impl Help {
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let width = percent(area.width, WIDTH_PERCENT).max(20);
         let height = percent(area.height, HEIGHT_PERCENT).max(3);
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         let size = (width, height);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);
         let rows = self.sidebar_rows();

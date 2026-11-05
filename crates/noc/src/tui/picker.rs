@@ -14,10 +14,7 @@ use ratatui::layout::{Position, Rect};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{
-    Colors, Field, Tone, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
-    right_frame,
-};
+use super::dialog::Field;
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
@@ -26,6 +23,9 @@ use super::scroll::Window;
 use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
 use super::spinner::{Shine, Spin};
 use super::theme::Theme;
+use super::window::{
+    Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around, right_frame,
+};
 use crate::i18n::fl;
 
 /// The lines the whole text of the row under the cursor takes, under the rows, and the whole
@@ -629,7 +629,7 @@ impl Picker {
         body: Body<'_>,
         row: &mut dyn FnMut(ShownRow) -> Line<'static>,
     ) {
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         // Borders, and what is inside them.
         let height = self.height(&body).saturating_add(2);
         let boxed = draw_box(frame, area, (body.width, height), body.title, colors, theme);
@@ -709,7 +709,7 @@ impl Picker {
         if self.filters_rows {
             self.glyphs = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
         } else {
-            draw_separator(frame, inner, inner.y, Colors::of(theme, Tone::Plain), theme);
+            draw_separator(frame, inner, inner.y, Colors::plain(theme), theme);
         }
         let room = inner.height.saturating_sub(top + below);
         self.page = usize::from(room).max(1);
@@ -848,13 +848,7 @@ impl Picker {
                 inner.y,
             ));
         }
-        draw_separator(
-            frame,
-            inner,
-            inner.y + 1,
-            Colors::of(theme, Tone::Plain),
-            theme,
-        );
+        draw_separator(frame, inner, inner.y + 1, Colors::plain(theme), theme);
         glyphs
     }
 }
@@ -894,13 +888,7 @@ fn draw_footer(
     theme: &Theme,
 ) {
     let top = inner.height.saturating_sub(below);
-    draw_separator(
-        frame,
-        inner,
-        inner.y + top,
-        Colors::of(theme, Tone::Plain),
-        theme,
-    );
+    draw_separator(frame, inner, inner.y + top, Colors::plain(theme), theme);
     for (index, text) in (top + 1..inner.height).zip(footer) {
         frame.render_widget(text, Rect::new(inner.x, inner.y + index, inner.width, 1));
     }

@@ -25,36 +25,21 @@ use super::mouse::Scroll;
 use super::picker::{Body, Picker, ShownRow};
 use super::search::{GlyphSpots, Input, Kind, Switch};
 use super::spinner::Wait;
-use super::window;
+use super::window::{self, Tone, box_width};
 use crate::i18n::fl;
 
-mod colors;
-mod drawing;
 mod field;
 mod input;
 mod render;
+mod text;
 
 #[cfg(test)]
 mod tests;
 
-pub(crate) use colors::{Colors, Tone};
-use drawing::label_spans;
-pub(crate) use drawing::{
-    SKELETON_ROWS, box_width, button_line, button_spots, draw_box, draw_frame, draw_separator,
-    draw_skeleton, draw_title_dots, even_lines, frame_around, inner_width, pop_up, right_frame,
-    shine_bar, status_skeleton,
-};
 pub(crate) use field::{Field, field_line};
 use field::{LabelledField, draw_field, placeholder_line};
-
-/// Cells between a dialog's frame and its edge, as mc leaves them.
-const MARGIN: u16 = 1;
-/// Cells a window's frame leaves free on either side of the screen, for its margin and its
-/// shadow.
-const SIDES: u16 = 2;
-/// Fewest cells across a window's frame takes where the screen is too narrow to leave its
-/// sides free, or the whole screen if narrower.
-const MIN_WIDTH: u16 = 20;
+pub(crate) use text::even_lines;
+use text::label_spans;
 
 /// The id of the last dialog made.
 static LAST_ID: AtomicU64 = AtomicU64::new(0);
@@ -567,7 +552,7 @@ impl Dialog {
 
     /// The width of the box drawn in `area`, borders included.
     fn box_width(&self, area: Rect) -> u16 {
-        box_width(self.width.max(MIN_WIDTH), area)
+        box_width(self.width.max(window::MIN_WIDTH), area)
     }
 
     /// The same dialog with the focus on its default button.

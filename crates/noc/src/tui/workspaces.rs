@@ -14,7 +14,6 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, Tone, inner_width};
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
@@ -22,7 +21,7 @@ use super::panel::{Destination, Panel, SortKey};
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
-use super::window;
+use super::window::{self, Colors, inner_width};
 use crate::i18n::fl;
 
 /// Rows the window shows at most.
@@ -268,7 +267,7 @@ impl WorkspacesWindow {
             footer_column,
             ..Body::default()
         };
-        let focused = Colors::of(theme, Tone::Plain).focused_style();
+        let focused = Colors::plain(theme).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             // The name, a space, the tabs of the left panel, a line, those of the right one.
             let name_width = row.width.saturating_sub(count_width + 1);

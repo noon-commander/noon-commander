@@ -454,7 +454,7 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::style::Color;
 
-    use super::super::dialog::{Colors, Tone, draw_box};
+    use super::super::window::{Colors, draw_box};
     use super::*;
 
     const WIDTH: u16 = 30;
@@ -494,7 +494,7 @@ mod tests {
                 stage.begin(on, (area, false), &theme, at);
                 if let Some(id) = dialog {
                     stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
-                        let colors = Colors::of(&theme, Tone::Plain);
+                        let colors = Colors::plain(&theme);
                         draw_box(frame, area, SIZE, "Title", colors, &theme);
                     });
                 }
@@ -620,7 +620,7 @@ mod tests {
                 stage.begin(false, (area, false), &theme, Instant::now());
                 for (id, title) in [(1, "Below"), (2, "Above")] {
                     stage.show(frame, (Window::Dialog(id), Grows::FromMiddle), |frame| {
-                        let colors = Colors::of(&theme, Tone::Plain);
+                        let colors = Colors::plain(&theme);
                         draw_box(frame, area, SIZE, title, colors, &theme);
                     });
                 }
@@ -695,14 +695,7 @@ mod tests {
                 stage.begin(false, (frame.area(), false), &theme, start);
                 let area = frame.area();
                 stage.show(frame, (Window::Help, Grows::FromMiddle), |frame| {
-                    draw_box(
-                        frame,
-                        area,
-                        SIZE,
-                        "Title",
-                        Colors::of(&theme, Tone::Plain),
-                        &theme,
-                    );
+                    draw_box(frame, area, SIZE, "Title", Colors::plain(&theme), &theme);
                 });
                 stage.end(frame);
             })

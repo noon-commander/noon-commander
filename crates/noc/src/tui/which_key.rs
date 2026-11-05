@@ -7,10 +7,10 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Cut, Fitted};
-use super::dialog::{Colors, Tone, draw_frame};
 use super::help;
 use super::keymap::{Action, Hint, Hints, Place};
 use super::theme::Theme;
+use super::window::{Colors, draw_frame};
 use crate::i18n::fl;
 
 /// Widest the key column gets; longer lists of keys are cut.
@@ -117,7 +117,7 @@ pub(crate) fn render(frame: &mut Frame<'_>, area: Rect, hints: &Hints, theme: &T
         .typed
         .clone()
         .unwrap_or_else(|| fl!("which-key-title"));
-    let colors = Colors::of(theme, Tone::Plain);
+    let colors = Colors::plain(theme);
     let inner = draw_frame(frame, strip, (area.width, height), &title, colors, theme);
     render_cells(frame, inner, grid, &rows, theme);
     let close = format!(" {} ", fl!("which-key-close"));

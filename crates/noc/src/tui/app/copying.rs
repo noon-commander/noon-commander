@@ -10,12 +10,13 @@ use tokio_util::sync::CancellationToken;
 
 use crate::i18n::fl;
 use crate::tui::cells::{self};
-use crate::tui::dialog::{Button, Dialog, DialogEvent, Problem, Tone};
+use crate::tui::dialog::{Button, Dialog, DialogEvent, Problem};
 use crate::tui::label::{self};
 use crate::tui::panel::{self, child, location_text, stem_chars};
 use crate::tui::tabs::PanelId;
 use crate::tui::tasks::{TakenFile, TakenName};
 use crate::tui::transfer::{self, Sources};
+use crate::tui::window::Tone;
 
 use super::{
     Again, Answer, App, Change, Effect, Job, JobKind, Open, Purpose, Way, file_name,

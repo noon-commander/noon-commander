@@ -13,7 +13,7 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::Bar;
 
 use super::cells::{self, Align, Marks};
-use super::dialog::{Button, Colors, Dialog, DialogEvent, Text, Tone, even_lines};
+use super::dialog::{Button, Dialog, DialogEvent, Text, even_lines};
 use super::edit::Registers;
 use super::glyphs;
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
@@ -21,6 +21,7 @@ use super::mouse::{Pointer, Scroll};
 use super::picker::{Body, MenuLine, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
+use super::window::{Colors, Tone};
 use crate::i18n::fl;
 
 /// Most rows the list shows at once; it scrolls.
@@ -225,7 +226,7 @@ impl SumsWindow {
             self.dialog.render(frame, area, theme);
             return;
         };
-        let colors = Colors::of(theme, Tone::Plain);
+        let colors = Colors::plain(theme);
         let room = self.dialog.text_width(area).max(1);
         let shown = picker.shown(self.rows.iter());
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();

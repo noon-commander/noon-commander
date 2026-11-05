@@ -23,7 +23,7 @@ impl App {
     pub(crate) fn context(&self) -> Context {
         if self.key_hints.is_some() {
             Context::KeyHints
-        } else if let Some(open) = self.dialogs.front() {
+        } else if let Some(open) = self.dialog_in_front() {
             if self.lists(Completes::Field) && open.dialog.completes() {
                 Context::Completion
             } else {
@@ -88,7 +88,7 @@ impl App {
     pub(crate) fn mode(&self) -> Mode {
         if let Some(window) = &self.key_hints {
             window.mode()
-        } else if let Some(open) = self.dialogs.front() {
+        } else if let Some(open) = self.dialog_in_front() {
             if self.context() == Context::Completion {
                 Mode::Insert
             } else {
@@ -194,7 +194,7 @@ impl App {
         if self.key_hints.is_some() {
             return None;
         }
-        if let Some(open) = self.dialogs.front() {
+        if let Some(open) = self.dialog_in_front() {
             return open.dialog.pending();
         }
         if let Some(configuration) = &self.configuration {
@@ -453,7 +453,9 @@ impl App {
         if self.key_hints.is_some() {
             return false;
         }
-        if !self.dialogs.is_empty() || matches!(self.front(), Front::Find | Front::Results(_)) {
+        if self.dialog_in_front().is_some()
+            || matches!(self.front(), Front::Find | Front::Results(_))
+        {
             return true;
         }
         let over = self.menu.is_some()

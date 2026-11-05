@@ -20,7 +20,7 @@ impl App {
         if self.key_hints.is_some() {
             return Some(self.handle_key_hints(input));
         }
-        if !self.dialogs.is_empty() {
+        if self.dialog_in_front().is_some() {
             return Some(self.handle_dialog(input));
         }
         if self.viewer_over() {
@@ -302,6 +302,11 @@ impl App {
             Action::Redraw => {
                 self.give_up_command();
                 self.redraw = true;
+            }
+            // So does the log, which opens in front of it, the dialogs too.
+            Action::ViewLog => {
+                self.give_up_command();
+                return Some(self.view_log());
             }
             // As in a text field, Ctrl+r types the text of a register in the filter of a list.
             Action::PasteRegister if self.filtering() => {

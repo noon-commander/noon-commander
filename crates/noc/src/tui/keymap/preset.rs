@@ -39,6 +39,9 @@ pub(super) const PRESET: Preset = &[
             (Action::Register, &["\""]),
             (Action::UserScreen, &["g <"]),
             (Action::Redraw, &["ctrl-l"]),
+            // No Ctrl and letter is left in every mode. Without the kitty keyboard protocol,
+            // Ctrl+\ arrives as Ctrl+4, the byte both send.
+            (Action::ViewLog, &["ctrl-\\", "ctrl-4"]),
         ],
     ),
     // The panels.

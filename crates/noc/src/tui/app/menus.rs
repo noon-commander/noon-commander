@@ -285,6 +285,11 @@ impl App {
                     Action::Disconnect => self
                         .chosen_host()
                         .is_some_and(|host| self.hosts.contains_key(&host)),
+                    Action::ViewLog => self
+                        .about
+                        .files
+                        .as_ref()
+                        .is_some_and(|files| files.log.is_ok()),
                     Action::Select
                     | Action::Unselect
                     | Action::InvertMarks

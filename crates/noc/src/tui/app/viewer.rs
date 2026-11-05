@@ -93,11 +93,58 @@ impl App {
         self.read_more()
     }
 
-    /// Whether the viewer is in front of the windows, for a question about a taken name.
+    /// Views the log of this run from its end, in front of the windows and the dialogs, which
+    /// are there again once it closes; a dialog that comes in front of them later stands in
+    /// front of it. Without a log, says why there is none.
+    pub(super) fn view_log(&mut self) -> Vec<Effect> {
+        let log = self.about.files.as_ref().map(|files| &files.log);
+        let path = match log {
+            Some(Ok(path)) => path.clone(),
+            Some(Err(reason)) => {
+                let reason = cells::sanitize(reason.as_bytes());
+                self.message = Some(fl!("log-none", reason = reason));
+                return Vec::new();
+            }
+            None => return Vec::new(),
+        };
+        let location = Location::Local(path);
+        let mut viewer = Viewer::new(location_text(&location), self.viewer_sizes());
+        viewer.handle(ViewerCommand::Top(usize::MAX));
+        self.open_viewer(
+            viewer,
+            Source::File {
+                location,
+                host: None,
+            },
+        );
+        // A question that the viewer it replaces held is among the dialogs again by now.
+        let under = self.dialogs.iter().map(|open| open.dialog.id()).collect();
+        if let Some(viewing) = &mut self.viewing {
+            viewing.log = Some(under);
+        }
+        // The windows it covers go at once, rather than shrink over it.
+        self.stage.settle();
+        self.read_more()
+    }
+
+    /// Whether the viewer is in front of the windows: for a question about a taken name, or
+    /// with the log.
     pub(super) fn viewer_over(&self) -> bool {
         self.viewing
             .as_ref()
-            .is_some_and(|viewing| viewing.question.is_some())
+            .is_some_and(|viewing| viewing.question.is_some() || viewing.log.is_some())
+    }
+
+    /// The dialog in front, unless the log covers it: the log stands in front of the dialogs
+    /// that were open when it opened.
+    pub(super) fn dialog_in_front(&self) -> Option<&Open> {
+        let open = self.dialogs.front()?;
+        let covered = self
+            .viewing
+            .as_ref()
+            .and_then(|viewing| viewing.log.as_ref())
+            .is_some_and(|under| under.contains(&open.dialog.id()));
+        (!covered).then_some(open)
     }
 
     /// Views the checksums of the window `results` as the lines of a file of them, under the
@@ -146,6 +193,7 @@ impl App {
             finished: None,
             cancel: CancellationToken::new(),
             question: None,
+            log: None,
         });
     }
 
@@ -208,6 +256,7 @@ impl App {
                 let reason = reason.sanitized();
                 if viewing.viewer.loading() {
                     let asked = viewing.question.is_some();
+                    let log = viewing.log.is_some();
                     let location = match &viewing.source {
                         Source::File { location, .. } => Some(location.clone()),
                         Source::Text { .. } => None,
@@ -218,6 +267,9 @@ impl App {
                     // file again.
                     match (asked, location) {
                         (true, _) => self.show_problem_over(&problem),
+                        (false, Some(_)) if log => {
+                            self.show_problem_way(&problem, Way::Again(Again::ViewLog));
+                        }
                         (false, Some(location)) => {
                             self.show_problem_way(&problem, Way::Again(Again::View(location)));
                         }

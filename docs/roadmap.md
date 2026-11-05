@@ -279,6 +279,8 @@
 - [x] Combo boxes in place of radio buttons and `< … >`: the algorithm of `f #`, the mode of the
       search of a tree, and the choices of the Configuration dialog; a list that opens under the
       box and has the keys, context `combo_box` ([ADR 0057](adr/0057-combo-boxes.md))
+- [x] Ctrl+\\ (Ctrl+4 without the kitty keyboard protocol) views the log of this run from its end,
+      in every mode, in front of the menus, windows, and dialogs, which come back once it closes
 - [ ] Combo boxes that take typed text, filtering their list or giving a value of their own
 - [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the
       kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads

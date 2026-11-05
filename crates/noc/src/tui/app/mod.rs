@@ -580,6 +580,8 @@ enum Again {
     },
     /// F3 views the file at `location`.
     View(Location),
+    /// Ctrl+\ views the log of this run.
+    ViewLog,
     /// The viewer reads the part it stopped at.
     ReadMore,
     /// F4 runs the editor again; Cancel ends the edit as if the file did not change.
@@ -623,7 +625,8 @@ impl Again {
             Self::Rename { from, .. } => vec![from],
             Self::Edit(editing) => editing.remote.iter().collect(),
             Self::SendBack { remote, .. } => vec![remote],
-            Self::ReadMore
+            Self::ViewLog
+            | Self::ReadMore
             | Self::Run(_)
             | Self::SaveConfig { .. }
             | Self::SaveHost { .. }
@@ -922,6 +925,10 @@ struct Viewing {
     /// The question about a taken name whose file it views, which waits for it to close; the
     /// viewer is in front of every window but the dialogs until then.
     question: Option<Box<Open>>,
+    /// It views the log of this run, in front of every window and of the dialogs open when it
+    /// opened, by their ids, which stay as they were under it; a dialog that comes in front of
+    /// them later stands in front of it.
+    log: Option<Vec<u64>>,
 }
 
 impl Viewing {

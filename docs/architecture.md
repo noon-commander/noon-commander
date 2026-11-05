@@ -914,7 +914,7 @@ goes whole over a channel to the thread `noc-log`, which writes the file, so no 
 the disk; ending the log, after the TUI, waits for the last lines. Spans at level info give the
 events their context and close with how long they took: `host`, `ssh_master`, `job`, `search`,
 and `askpass`. A log that cannot be written is an error dialog at the start and `none:` on the
-About page.
+About page. Ctrl+\\ views the log of this run in the TUI (see UI).
 
 ## Async model
 
@@ -1533,6 +1533,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G`
   and Home/End the ends, and F3, F10, `q`, or Esc to close; F1 or `g ?` shows the help over
   it.
+- **Ctrl+\\ views the log** of this run (Ctrl+4 without the kitty keyboard protocol, which sends
+  the same byte), in every mode, and Command → View the log: the viewer on the file of the log,
+  from its end (`App::view_log`). As the viewer of a question about a taken name, it stands in front
+  of every window, the menus, the help, Configuration, the pull-down menu, and find among them
+  (`App::viewer_over`), and in front of the dialogs open when it opened too, whose ids it keeps
+  (`Viewing.log`): `App::dialog_in_front` leaves them out of the keys, the mouse, and the screen
+  while it shows, and they stay as they were, so everything is there again once it closes. A dialog
+  that comes in front of them later stands in front of it: one over them, or a prompt of ssh while
+  no other dialog waits; queued behind them, it waits as it would anyway. Again, it reads
+  the log anew, in place of the viewer on screen. Without a log it says why, as the About page does.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
   copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory

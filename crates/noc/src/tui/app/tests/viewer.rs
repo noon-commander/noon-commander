@@ -1,4 +1,133 @@
 use super::*;
+use crate::tui::help::Files;
+
+/// The files of the About page, with `log` for the file of the log.
+fn files(log: Result<PathBuf, String>) -> Files {
+    Files {
+        home: PathBuf::from("/home/me"),
+        config: PathBuf::from("/home/me/.config/noc/config.toml"),
+        hosts: PathBuf::from("/home/me/.config/noc/hosts.toml"),
+        workspaces: PathBuf::from("/home/me/.local/share/noc/workspaces.toml"),
+        history: PathBuf::from("/home/me/.local/state/noc/history.toml"),
+        recent: PathBuf::from("/home/me/.local/state/noc/recent.toml"),
+        log,
+    }
+}
+
+const LOG: &str = "/home/me/.local/state/noc/logs/noc-20261105T120000Z-42.log";
+
+#[test]
+fn the_log_shows_from_its_end_in_front_of_what_is_open_which_comes_back() {
+    let mut app = with_files(&["a1"]);
+    app.about.files = Some(files(Ok(PathBuf::from(LOG))));
+    app.handle(action(Action::Help));
+    assert_eq!(app.context(), Context::Help);
+    let help = screen_of(&mut app, 30);
+    assert!(help.contains("Search and renaming"), "{help}");
+    let Effect::Read(ReadRequest {
+        id, location, host, ..
+    }) = one(app.handle(action(Action::ViewLog)))
+    else {
+        panic!("expected a read");
+    };
+    assert_eq!((location, host.is_none()), (local(LOG), true));
+    assert_eq!(app.context(), Context::Viewer);
+    let text = (1..=40)
+        .map(|n| format!("line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    app.read(id, Ok(whole(text)));
+    let screen = screen_of(&mut app, 30);
+    assert!(
+        screen.contains("line 40") && !screen.contains("line 1 "),
+        "{screen}"
+    );
+    assert!(
+        !screen.contains("Search and renaming"),
+        "the help is behind it: {screen}"
+    );
+    // F1 would open the help under it.
+    app.handle(action(Action::Help));
+    assert_eq!(app.context(), Context::Viewer);
+    app.handle(action(Action::Cancel));
+    assert_eq!(app.context(), Context::Help);
+}
+
+#[test]
+fn the_log_shows_in_front_of_the_viewer_and_a_text_field_in_insert_mode() {
+    let mut app = with_files(&["a1"]);
+    app.about.files = Some(files(Ok(PathBuf::from(LOG))));
+    app.handle(action(Action::Command));
+    assert_eq!(app.place().0, Mode::Insert);
+    let Effect::Read(ReadRequest { location, .. }) = one(app.handle(action(Action::ViewLog)))
+    else {
+        panic!("expected a read");
+    };
+    assert_eq!(location, local(LOG));
+    assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
+    app.handle(action(Action::Quit));
+    assert_eq!(app.place().1, Context::CommandLine);
+    assert!(!app.quits());
+}
+
+#[test]
+fn the_log_shows_in_front_of_a_dialog_which_comes_back_as_it_was() {
+    let mut app = with_files(&["a1"]);
+    app.about.files = Some(files(Ok(PathBuf::from(LOG))));
+    app.handle(action(Action::Mkdir));
+    typed(&mut app, "new");
+    assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::ViewLog))) else {
+        panic!("expected a read");
+    };
+    assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
+    app.read(id, Ok(whole("the last line\n")));
+    let screen = screen_of(&mut app, 30);
+    assert!(screen.contains("the last line"), "{screen}");
+    assert!(!screen.contains("Create a new directory"), "{screen}");
+    // A dialog that comes after it stands in front of it.
+    app.show_error_over("boom");
+    assert_eq!(app.context(), Context::Dialog);
+    assert!(screen_of(&mut app, 30).contains("boom"));
+    app.handle(action(Action::Confirm));
+    assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
+    app.handle(action(Action::Cancel));
+    assert_eq!(app.place(), (Mode::Insert, Context::PathInput));
+    let screen = screen_of(&mut app, 30);
+    assert!(
+        screen.contains("Create a new directory") && screen.contains("new"),
+        "{screen}"
+    );
+}
+
+#[test]
+fn without_a_log_it_says_why() {
+    let mut app = with_files(&["a1"]);
+    app.about.files = Some(files(Err("Permission denied".to_owned())));
+    assert!(app.handle(action(Action::ViewLog)).is_empty());
+    assert_eq!(app.context(), Context::Panel);
+    assert_eq!(
+        app.message.as_deref(),
+        Some("This run has no log: Permission denied")
+    );
+}
+
+#[test]
+fn a_log_that_cannot_be_read_is_viewed_again_by_retry() {
+    let mut app = with_files(&["a1"]);
+    app.about.files = Some(files(Ok(PathBuf::from(LOG))));
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::ViewLog))) else {
+        panic!("expected a read");
+    };
+    app.read(id, Err("no such file".to_owned().into()));
+    assert_eq!(app.context(), Context::Dialog);
+    let Effect::Read(ReadRequest { location, .. }) = one(app.handle(action(Action::Confirm)))
+    else {
+        panic!("expected a read");
+    };
+    assert_eq!(location, local(LOG));
+    assert!(app.viewer_over(), "in front again");
+}
 
 #[test]
 fn f3_views_files_and_opens_directories() {

@@ -443,6 +443,7 @@ impl App {
                 let dir = location.parent().unwrap_or_else(|| location.clone());
                 self.view_file(location, &dir, None)
             }
+            Again::ViewLog => self.view_log(),
             Again::ReadMore => {
                 if let Some(viewing) = &mut self.viewing {
                     viewing.viewer.resume();

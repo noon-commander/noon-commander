@@ -57,7 +57,7 @@ impl App {
     pub(super) fn front(&self) -> Front {
         if self.key_hints.is_some() {
             Front::KeyHints
-        } else if let Some(open) = self.dialogs.front() {
+        } else if let Some(open) = self.dialog_in_front() {
             Front::Dialog(open.dialog.id())
         } else if self.viewer_over() {
             if self.viewing.as_ref().is_some_and(Viewing::window_shown) {

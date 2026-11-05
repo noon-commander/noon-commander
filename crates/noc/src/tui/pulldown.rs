@@ -358,6 +358,7 @@ impl PullDown {
                     None,
                     Some((fl!("pulldown-help"), Action::Help)),
                     Some((fl!("pulldown-redraw"), Action::Redraw)),
+                    Some((fl!("pulldown-view-log"), Action::ViewLog)),
                 ],
             ),
             options_menu(options),
@@ -1162,7 +1163,7 @@ mod tests {
         menu.handle(action(Action::Right), &status);
         menu.handle(action(Action::End), &status);
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Redraw)));
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::ViewLog)));
     }
 
     #[test]

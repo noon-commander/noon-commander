@@ -108,7 +108,10 @@ output of commands over whatever is in front, which is there again afterwards; m
 show the panels with Ctrl+o in the panels and on their command line, and mc in its viewer and editor
 too. noc's Ctrl+o is vim's, which goes back through the jump list. Ctrl+l redraws the screen under
 whatever is in front, which stays as it was, quick search too, as mc's Ctrl+l does in its panels,
-dialogs, viewer, and editor.
+dialogs, viewer, and editor. Ctrl+\\ views the log of this run in every mode, from its end, in front
+of the windows and dialogs, which are there again once it closes, as ranger's W shows its log; a
+dialog that comes in front later, such as a prompt of ssh while no other dialog waits, stands in
+front of it. Without the kitty keyboard protocol it arrives as Ctrl+4, which is bound too.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -116,6 +119,7 @@ dialogs, viewer, and editor.
 | The register for the next command: a … z, which text fields share, and A … Z to append to it | `register` | ⏳ | " | — | — | — | — |
 | The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | g < | Ctrl+o | Ctrl+o | — | — |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
+| The log of this run, from its end, in front of the windows and dialogs (ranger: its log of messages, in the panels) | `view_log` | ⏳ | Ctrl+\\<br>Ctrl+4 | — | — | — | W |
 | Help: the keys of what is in front, and what they do | — | ⏳ | — | F1 | F1 | \~<br>F1 | — |
 
 ## Panels (`panel`, Normal mode)
@@ -409,7 +413,6 @@ section says: the commands of files act on the rows it selects, which become the
 | Filters: rotate / clear / decompose / pop / show | — | ⏳ | — | — | — | — | . r / . c / . \* / . p / . . |
 | Read the directory again or not (freeze) | — | ⏳ | — | — | — | — | F |
 | Forget the directories read and read this one again | — | ⏳ | — | — | — | — | Ctrl+r |
-| The log of messages | — | ⏳ | — | — | — | — | W |
 | The console, with the command before | — | ⏳ | — | — | — | — | Ctrl+p |
 
 ## Panels (`panel`, Visual mode)
@@ -924,10 +927,11 @@ choices with radio buttons. yazi and ranger ask their questions in their input b
 
 ## Viewer (`viewer`, Normal mode)
 
-g f or F3, in Normal mode; it falls back to `global`. yazi has no viewer: it previews the file
-under the cursor beside the list. The ranger column has the keys of its pager, which shows files,
-the output of commands, and the log. Ctrl+f and Ctrl+b turn the page but for two rows, as in vim;
-Space, f, and b turn the whole page, and u and d half of it, as in less. Unlike vim's, every key
+g f or F3, in Normal mode, and Ctrl+\\ for the log; it falls back to `global`. yazi has no
+viewer: it previews the file under the cursor beside the list. The ranger column has the keys of
+its pager, which shows files, the output of commands, and the log. Ctrl+f and Ctrl+b turn the page
+but for two rows, as in vim; Space, f, and b turn the whole page, and u and d half of it, as in
+less. Unlike vim's, every key
 down stops with the end of the text at the bottom, where a dimmed line marks it; the help scrolls
 the same way. Lines cut show `«` and `»` where they go on past the screen, as vim's 'listchars'
 `precedes` and `extends`, and the z keys scroll them as vim's do; wrapped lines start each row

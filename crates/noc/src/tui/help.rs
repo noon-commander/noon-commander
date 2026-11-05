@@ -986,6 +986,7 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Global, Action::KeyHints) => fl!("help-key-hints"),
         (Context::Global, Action::UserScreen) => fl!("help-user-screen"),
         (Context::Global, Action::Redraw) => fl!("help-redraw"),
+        (Context::Global, Action::ViewLog) => fl!("help-view-log"),
         (Context::Global, Action::Register) => fl!("help-register"),
         (Context::PullDown, Action::Cancel) => fl!("help-pulldown-close"),
         (Context::PullDown, Action::Up) => fl!("help-pulldown-up"),

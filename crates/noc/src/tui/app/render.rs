@@ -82,7 +82,7 @@ impl App {
 
     /// What waits on screen, each with a spinner.
     fn waits(&self) -> Vec<&Wait> {
-        let dialog = self.dialogs.front().and_then(|open| open.dialog.wait());
+        let dialog = self.dialog_in_front().and_then(|open| open.dialog.wait());
         if let Some(viewing) = &self.viewing {
             return viewing
                 .viewer
@@ -393,6 +393,10 @@ impl App {
         spin: &Spin,
         stage: &mut Stage,
     ) {
+        // The log covers it.
+        if self.dialog_in_front().is_none() {
+            return;
+        }
         let middle = |window| (window, Grows::FromMiddle);
         let theme = &self.theme;
         if let Some(open) = self.dialogs.front() {

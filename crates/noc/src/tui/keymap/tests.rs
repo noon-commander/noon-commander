@@ -1148,8 +1148,18 @@ fn global_keys_work_in_every_mode() {
         for &mode in Mode::ALL {
             let mut state = KeyState::default();
             assert_eq!(
-                feed(&keymap, &mut state, (mode, context), &["ctrl-k", "ctrl-l"]),
-                actions(&[Action::KeyHints, Action::Redraw]),
+                feed(
+                    &keymap,
+                    &mut state,
+                    (mode, context),
+                    &["ctrl-k", "ctrl-l", "ctrl-\\", "ctrl-4"]
+                ),
+                actions(&[
+                    Action::KeyHints,
+                    Action::Redraw,
+                    Action::ViewLog,
+                    Action::ViewLog
+                ]),
                 "{mode:?} {context:?}"
             );
         }
@@ -1273,6 +1283,7 @@ fn describes_keys_as_the_docs_write_them() {
         ("alt-+", "Alt++"),
         ("\"", "\""),
         ("ctrl-f3", "Ctrl+F3"),
+        ("ctrl-\\", "Ctrl+\\"),
     ] {
         assert_eq!(described(keys), text, "{keys}");
     }

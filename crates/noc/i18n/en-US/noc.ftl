@@ -370,6 +370,7 @@ pulldown-edit-host = Edit &host settings…
 pulldown-disconnect-host = &Disconnect host
 pulldown-help = He&lp
 pulldown-redraw = Red&raw screen
+pulldown-view-log = &View the log
 # Options.
 pulldown-configuration = &Configuration…
 pulldown-hidden = Show &hidden files
@@ -526,6 +527,8 @@ config-restart = Takes effect after a restart.
 config-save-error = Cannot save the configuration
 # At the start, over the file or directory and why; Noon Commander runs on without a log.
 log-open-error = Cannot write the log
+# Ctrl+\ when the log could not be written; the reason says why.
+log-none = This run has no log: { $reason }
 # The language field holds something else.
 config-language-invalid = "{ $text }" is not auto or a language tag such as en-US.
 # The formats field holds something else.
@@ -808,6 +811,7 @@ help-workspaces-close = Close the window
 help-help = This help
 help-quit = Quit
 help-redraw = Redraw the screen
+help-view-log = The log of this run, from its end, in front of what is open, which is there again once it closes
 help-disconnect = Disconnect the host under the cursor
 help-edit-host = Edit the settings of the host under the cursor
 help-menu-open = Open the volume or host in the panel

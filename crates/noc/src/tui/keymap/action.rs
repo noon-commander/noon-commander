@@ -589,6 +589,9 @@ pub(crate) enum Action {
     Quit,
     /// Redraws the whole screen.
     Redraw,
+    /// Views the log of this run from its end, in front of whatever is open, dialogs too, which
+    /// stays as it was.
+    ViewLog,
 }
 
 impl Action {
@@ -802,6 +805,7 @@ impl Action {
         Self::KeyHints,
         Self::Quit,
         Self::Redraw,
+        Self::ViewLog,
     ];
 }
 

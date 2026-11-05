@@ -913,7 +913,8 @@ which the Configuration dialog changes at once through `tracing_subscriber::relo
 goes whole over a channel to the thread `noc-log`, which writes the file, so no event waits for
 the disk; ending the log, after the TUI, waits for the last lines. Spans at level info give the
 events their context and close with how long they took: `host`, `ssh_master`, `job`, `search`,
-and `askpass`.
+and `askpass`. A log that cannot be written is an error dialog at the start and `none:` on the
+About page.
 
 ## Async model
 

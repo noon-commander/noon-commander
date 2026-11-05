@@ -524,6 +524,8 @@ config-log-keep-invalid = "{ $text }" is not a number of files: it takes a whole
 config-restart = Takes effect after a restart.
 # Over why, on a line of its own, which names the file.
 config-save-error = Cannot save the configuration
+# At the start, over the file or directory and why; Noon Commander runs on without a log.
+log-open-error = Cannot write the log
 # The language field holds something else.
 config-language-invalid = "{ $text }" is not auto or a language tag such as en-US.
 # The formats field holds something else.
@@ -643,6 +645,8 @@ help-about-workspaces = Workspaces
 help-about-history = History
 help-about-recent = Recent places
 help-about-log = Log
+# In place of the file of the log, which could not be written.
+help-about-log-none = none: { $reason }
 # A fact that could not be found.
 help-about-unknown = unknown
 # A program that is not there.

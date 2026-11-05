@@ -36,9 +36,16 @@ static CONTROL: OnceLock<Control> = OnceLock::new();
 
 /// The log of this run. Dropping it ends the log: the events before then reach the file.
 pub(crate) struct Log {
-    /// The file it writes, if it could make one.
-    pub(crate) file: Option<PathBuf>,
+    /// The file it writes, or why there is none.
+    pub(crate) file: Result<PathBuf, Failure>,
     _writer: Option<Writer>,
+}
+
+/// Why the log cannot be written: what failed at `path`.
+#[derive(Debug)]
+pub(crate) struct Failure {
+    pub(crate) path: PathBuf,
+    pub(crate) error: io::Error,
 }
 
 /// Starts the log of this run in the logs directory of `paths`, as `config` says, and removes
@@ -47,13 +54,20 @@ pub(crate) struct Log {
 /// Blocking: creates and removes files.
 pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
     let dir = paths.log_dir();
-    let started =
-        open(&dir).and_then(|(path, file)| Writer::start(file).map(|writer| (path, writer)));
-    let Ok((path, writer)) = started else {
-        return Log {
-            file: None,
-            _writer: None,
-        };
+    let started = match open(&dir) {
+        Ok((path, file)) => Writer::start(file)
+            .map(|writer| (path.clone(), writer))
+            .map_err(|error| Failure { path, error }),
+        Err(failure) => Err(failure),
+    };
+    let (path, writer) = match started {
+        Ok(started) => started,
+        Err(failure) => {
+            return Log {
+                file: Err(failure),
+                _writer: None,
+            };
+        }
     };
     // `Context::load` checked the filter.
     let filter = filter(config).unwrap_or_else(|_| EnvFilter::new(config.level.as_str()));
@@ -83,7 +97,7 @@ pub(crate) fn start(paths: &Paths, config: &LogConfig) -> Log {
         tracing::warn!(dir = %dir.display(), %error, "cannot remove old logs");
     }
     Log {
-        file: Some(path),
+        file: Ok(path),
         _writer: Some(writer),
     }
 }
@@ -114,16 +128,20 @@ pub(crate) fn filter(config: &LogConfig) -> Result<EnvFilter, String> {
 }
 
 /// Creates `dir` and a new file in it for this run, readable by the user alone.
-fn open(dir: &Path) -> io::Result<(PathBuf, File)> {
-    fs::create_dir_all(dir)?;
+fn open(dir: &Path) -> Result<(PathBuf, File), Failure> {
+    fs::create_dir_all(dir).map_err(|error| Failure {
+        path: dir.to_path_buf(),
+        error,
+    })?;
     let started = jiff::Timestamp::now().strftime("%Y%m%dT%H%M%SZ");
     let path = dir.join(format!("{PREFIX}{started}-{}{SUFFIX}", std::process::id()));
-    let file = OpenOptions::new()
+    OpenOptions::new()
         .append(true)
         .create_new(true)
         .mode(0o600)
-        .open(&path)?;
-    Ok((path, file))
+        .open(&path)
+        .map(|file| (path.clone(), file))
+        .map_err(|error| Failure { path, error })
 }
 
 /// Removes the oldest log files in `dir` but `keep`, `current` always among those kept. The
@@ -332,11 +350,12 @@ mod tests {
     }
 
     #[test]
-    fn no_log_is_made_under_a_file() {
+    fn says_where_the_log_cannot_be_made() {
         let tmp = tempfile::tempdir().unwrap();
         let blocker = tmp.path().join("state");
         fs::write(&blocker, "").unwrap();
-        assert!(open(&blocker.join("logs")).is_err());
+        let failure = open(&blocker.join("logs")).unwrap_err();
+        assert_eq!(failure.path, blocker.join("logs"));
     }
 
     #[test]

@@ -122,3 +122,19 @@ fn f1_opens_the_help_under_any_prompt() {
     assert_eq!(app.context(), Context::Panel);
     assert!(!app.quits());
 }
+
+#[test]
+fn says_at_the_start_that_it_cannot_write_the_log() {
+    let mut app = loaded();
+    let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    app.cannot_log(Path::new("/home/me/.local/state/noc/logs"), &error);
+    let text = screen_of(&mut app, 24);
+    assert!(
+        text.contains("Cannot write the log")
+            && text.contains("/home/me/.local/state/noc/logs")
+            && text.contains("permission denied"),
+        "{text}"
+    );
+    app.handle(action(Action::Cancel));
+    assert_eq!(app.context(), Context::Panel, "and runs on");
+}

@@ -1,5 +1,8 @@
 //! Dialogs: their keys, their answers, and the errors they show.
 
+use std::io;
+use std::path::Path;
+
 use noc_config::{HostConfig, SftpHost};
 use noc_ops::{Decision, Later, Resolution};
 use noc_vfs::Location;
@@ -8,6 +11,7 @@ use crate::i18n::fl;
 use crate::tui::command::CommandLine;
 use crate::tui::complete::{self, ChoicesEvent};
 use crate::tui::configuration::run_of;
+use crate::tui::describe;
 use crate::tui::dialog::{Button, Dialog, DialogEvent, Problem};
 use crate::tui::keymap::{Action, Context, Resolved, Typed};
 use crate::tui::panel::{self, location_text};
@@ -288,6 +292,13 @@ impl App {
             dialog: Dialog::problem(problem),
             purpose: Purpose::Info,
         });
+    }
+
+    /// Says that the log of this run cannot be written, as `error` at `path` failed.
+    pub(crate) fn cannot_log(&mut self, path: &Path, error: &io::Error) {
+        let problem = Problem::new(fl!("log-open-error"), describe::reason(error).sanitized())
+            .at(location_text(&Location::Local(path.to_path_buf())));
+        self.show_problem(&problem);
     }
 
     /// Shows `problem` in an error dialog over the dialog in front, which stays open, and in

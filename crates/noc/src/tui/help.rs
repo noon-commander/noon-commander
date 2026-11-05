@@ -76,7 +76,8 @@ pub(crate) struct Files {
     pub(crate) workspaces: PathBuf,
     pub(crate) history: PathBuf,
     pub(crate) recent: PathBuf,
-    pub(crate) log: PathBuf,
+    /// The log of this run, or why there is none.
+    pub(crate) log: Result<PathBuf, String>,
 }
 
 /// A part of the app with keys of its own, a group under Keys; the tips come last.
@@ -340,7 +341,16 @@ fn about_entries(about: &About) -> Vec<Entry> {
             path(fl!("help-about-workspaces"), &files.workspaces),
             path(fl!("help-about-history"), &files.history),
             path(fl!("help-about-recent"), &files.recent),
-            path(fl!("help-about-log"), &files.log),
+            match &files.log {
+                Ok(log) => path(fl!("help-about-log"), log),
+                Err(reason) => Entry::Fact {
+                    name: fl!("help-about-log"),
+                    value: fl!(
+                        "help-about-log-none",
+                        reason = cells::sanitize(reason.as_bytes())
+                    ),
+                },
+            },
         ]);
     }
     entries
@@ -2029,12 +2039,39 @@ mod tests {
                 workspaces: PathBuf::from("/home/me/.local/share/noc/workspaces.toml"),
                 history: PathBuf::from("/home/me/.local/state/noc/history.toml"),
                 recent: PathBuf::from("/home/me/.local/state/noc/recent.toml"),
-                log: PathBuf::from("/var/log/noc/noc.log"),
+                log: Ok(PathBuf::from("/var/log/noc/noc.log")),
             }),
         };
         let mut help = Help::new(&Keymap::default(), &about);
         help.handle(action(Action::NextField));
         help.handle(action(Action::Home));
         insta::assert_snapshot!(draw(&mut help, 120, 68));
+    }
+
+    #[test]
+    fn says_why_there_is_no_log() {
+        let about = About {
+            files: Some(Files {
+                home: PathBuf::from("/home/me"),
+                config: PathBuf::from("/home/me/.config/noc/config.toml"),
+                hosts: PathBuf::from("/home/me/.config/noc/hosts.toml"),
+                workspaces: PathBuf::from("/home/me/.local/share/noc/workspaces.toml"),
+                history: PathBuf::from("/home/me/.local/state/noc/history.toml"),
+                recent: PathBuf::from("/home/me/.local/state/noc/recent.toml"),
+                log: Err("Permission denied\x1b[2J".to_owned()),
+            }),
+            ..About::new(Build::current())
+        };
+        let log = about_entries(&about)
+            .into_iter()
+            .find_map(|entry| match entry {
+                Entry::Fact { name, value } if name == "Log" => Some(value),
+                _ => None,
+            });
+        assert_eq!(
+            log.as_deref(),
+            Some("none: Permission denied?[2J"),
+            "{log:?}"
+        );
     }
 }

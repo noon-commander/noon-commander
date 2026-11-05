@@ -84,6 +84,7 @@ use told::Told;
 use crate::about::{self, Build, Report, System, Tool};
 use crate::context::Context;
 use crate::i18n::fl;
+use crate::logging::Failure;
 
 pub(crate) use places::read_volumes;
 pub(crate) use theme::ColorDepth;
@@ -273,13 +274,13 @@ pub(crate) fn check_terminal() -> Result<()> {
 }
 
 /// Runs the TUI with both panels on the local directory `start` until the user quits or the
-/// process gets SIGTERM, SIGHUP, or SIGINT; `log` is the file of the log, if there is one. In
-/// debug builds, `debug` holds back the results of background work, slows down windows, and has
-/// them show their sizes.
+/// process gets SIGTERM, SIGHUP, or SIGINT; `log` is the file of the log, or why there is none,
+/// which it says first. In debug builds, `debug` holds back the results of background work,
+/// slows down windows, and has them show their sizes.
 pub(crate) async fn run(
     context: Context,
     start: PathBuf,
-    log: Option<&Path>,
+    log: &Result<PathBuf, Failure>,
     #[cfg(debug_assertions)] debug: DebugOptions,
 ) -> Result<()> {
     // Raw mode turns Ctrl+c into a key, but these can still come from elsewhere, such as `kill`
@@ -414,16 +415,19 @@ fn give_back(mut terminal: DefaultTerminal) {
     }
 }
 
-/// The app with both panels on `start`, set up for this terminal and `system`, and the work it
-/// asks for first: the saved workspaces, the history, the places used last, and the volumes,
-/// which tell which one a panel is on; the About page shows `log`, else the logs directory.
+/// The app with both panels on `start`, set up for this terminal and `system`, saying why it
+/// cannot write `log` if it cannot, and the work it asks for first: the saved workspaces, the
+/// history, the places used last, and the volumes, which tell which one a panel is on.
 fn start_app(
     context: &Context,
-    (start, log): (&Path, Option<&Path>),
+    (start, log): (&Path, &Result<PathBuf, Failure>),
     (tz, system): (&TimeZone, System),
     keyboard: Keyboard,
 ) -> (App, Vec<app::Effect>) {
     let (mut app, mut effects) = App::new(start, &context.paths.home, &context.config());
+    if let Err(failure) = log {
+        app.cannot_log(&failure.path, &failure.error);
+    }
     effects.push(app::Effect::Workspaces(app::WorkspaceChange::Load));
     effects.push(app::Effect::History(app::HistoryChange::Load));
     effects.push(app::Effect::Recent(app::RecentChange::Load));
@@ -462,7 +466,10 @@ fn start_app(
             workspaces: paths.workspaces_file(),
             history: paths.history_file(),
             recent: paths.recent_file(),
-            log: log.map_or_else(|| paths.log_dir(), Path::to_path_buf),
+            log: log
+                .as_ref()
+                .cloned()
+                .map_err(|failure| describe::reason(&failure.error).text),
         }),
     });
     let path = std::env::var_os("PATH").unwrap_or_default();

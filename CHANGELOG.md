@@ -18,6 +18,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Settings of the log, `[log]`, in a new category of Options → Configuration…, Log: `level`,
   `filter` (directives such as `info,noc_ssh=trace` in place of the level), and `keep`, how many
   log files are kept, 10 by default. They take effect at once.
+- A log that cannot be written is said in a dialog at the start, and on the About page of the
+  help.
 
 ### Changed
 

@@ -28,7 +28,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
             let ran = Box::pin(crate::tui::run(
                 context,
                 start,
-                log.file.as_deref(),
+                &log.file,
                 #[cfg(debug_assertions)]
                 crate::tui::DebugOptions {
                     slow_spinners: cli.slow_spinners,

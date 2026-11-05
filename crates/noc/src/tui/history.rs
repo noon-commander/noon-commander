@@ -13,12 +13,13 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align, Marks};
-use super::dialog::{Colors, MAX_WIDTH, Tone, inner_width};
+use super::dialog::{Colors, Tone, inner_width};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
 
 /// Rows of commands the window shows at most.
@@ -205,7 +206,7 @@ impl HistoryWindow {
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
         let cursor = self.picker.cursor().min(shown.len().saturating_sub(1));
         let footer = shown.get(cursor).map_or_else(Vec::new, |entry| {
-            let width = inner_width(MAX_WIDTH, area);
+            let width = inner_width(window::WIDTH, area);
             preview_rows(&entry.command, width)
                 .into_iter()
                 .map(|text| Line::styled(text, theme.dialog))
@@ -239,7 +240,7 @@ impl HistoryWindow {
         let title = fl!("history-title");
         let body = Body {
             title: &title,
-            width: MAX_WIDTH,
+            width: window::WIDTH,
             lines: &lines,
             max_lines: Some(MAX_ROWS),
             note: Some(Line::raw(scope)),

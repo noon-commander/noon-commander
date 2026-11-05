@@ -25,6 +25,7 @@ use super::mouse::Scroll;
 use super::picker::{Body, Picker, ShownRow};
 use super::search::{GlyphSpots, Input, Kind, Switch};
 use super::spinner::Wait;
+use super::window;
 use crate::i18n::fl;
 
 mod colors;
@@ -46,9 +47,6 @@ pub(crate) use drawing::{
 pub(crate) use field::{Field, field_line};
 use field::{LabelledField, draw_field, placeholder_line};
 
-/// Width of a dialog, in cells, borders included, where the screen has room; `with_width`
-/// sets another.
-pub(crate) const MAX_WIDTH: u16 = 76;
 /// Cells between a dialog's frame and its edge, as mc leaves them.
 const MARGIN: u16 = 1;
 /// Cells a window's frame leaves free on either side of the screen, for its margin and its
@@ -592,7 +590,7 @@ impl Dialog {
             buttons,
             default: 0,
             focus: Focus::Button(0),
-            width: MAX_WIDTH,
+            width: window::WIDTH,
             tone: Tone::Plain,
             answers_no: false,
             completes: false,
@@ -639,6 +637,7 @@ impl Dialog {
     }
 
     /// The same dialog, `width` cells wide where the screen has room.
+    #[cfg(test)]
     pub(crate) fn with_width(mut self, width: u16) -> Self {
         self.width = width;
         self

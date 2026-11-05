@@ -21,10 +21,8 @@ use super::panel::short_size;
 use super::progress::{gauge, ratio, unknown_gauge};
 use super::spinner::{DELAY, Spin, Wait};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
-
-/// Width of the window, borders included.
-const WIDTH: u16 = 50;
 
 /// A button of the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -173,7 +171,7 @@ impl Reading {
         let inner = draw_box(
             frame,
             area,
-            (WIDTH, 7),
+            (window::WIDTH, 7),
             &fl!("viewer-reading"),
             colors,
             theme,

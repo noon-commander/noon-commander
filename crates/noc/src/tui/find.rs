@@ -34,8 +34,6 @@ use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Widest the dialog gets, in cells, borders included.
-const WIDTH: u16 = 120;
 /// Cells of text kept before the first match of a line that is too long to show whole.
 const BEFORE_MATCH: usize = 8;
 /// The fields of the dialog, and its check boxes.
@@ -237,7 +235,6 @@ impl FindWindow {
         let modes = [fl!("find-mode-text"), fl!("find-mode-names")];
         let chosen = find.choice();
         let dialog = Dialog::fields(&title, &[], &[], buttons(chosen))
-            .with_width(WIDTH)
             .with_combo_box(&fl!("find-mode"), &modes, chosen)
             .with_field(&fl!("find-text"), "")
             .with_field(&fl!("find-files"), "")

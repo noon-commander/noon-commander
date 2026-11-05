@@ -24,10 +24,9 @@ use super::picker::{Body, MenuLine, Pick, Picker, ShownRow};
 use super::search::{Input, Kind};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
 
-/// Widest the window gets, in cells, borders included: paths are long.
-const WIDTH: u16 = 78;
 /// Rows the window shows at most.
 const MAX_ROWS: u16 = 16;
 
@@ -221,7 +220,7 @@ impl JumpMenu {
         let title = fl!("jump-title");
         let body = Body {
             title: &title,
-            width: WIDTH,
+            width: window::WIDTH,
             lines: &lines,
             max_lines: Some(MAX_ROWS),
             prompt: Some(|text| fl!("jump-keywords", text = text)),

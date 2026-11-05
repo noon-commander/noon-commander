@@ -8,18 +8,14 @@ use ratatui::layout::Rect;
 
 use super::app::Side;
 use super::cells::{self, Align, Cut};
-use super::dialog::{Colors, MAX_WIDTH, Tone};
+use super::dialog::{Colors, Tone};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
-
-/// Narrowest the menu gets, in cells, borders included; it grows with the widest location up
-/// to [`MAX_WIDTH`], as wide as the other lists, and shows the whole row under the cursor below
-/// the rows.
-const MIN_WIDTH: u16 = 30;
 
 /// What a key did in the menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,14 +122,9 @@ impl TabMenu {
         let shown = self.picker.shown(&self.titles);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
         let title = fl!("tabs-title");
-        let widest = self.titles.iter().map(|title| cells::width(title)).max();
-        // The frame, and a cell of room on either side.
-        let width = u16::try_from(widest.unwrap_or(0) + 4)
-            .unwrap_or(u16::MAX)
-            .clamp(MIN_WIDTH, MAX_WIDTH);
         let body = Body {
             title: &title,
-            width,
+            width: window::WIDTH,
             lines: &lines,
             full: shown
                 .get(self.picker.cursor())
@@ -241,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn grows_with_the_widest_location_as_wide_as_the_other_lists() {
+    fn is_as_wide_as_the_other_lists_whatever_its_locations() {
         let frame_width = |text: &str| {
             let top = text.lines().find(|line| line.contains('╔')).unwrap_or("");
             let start = top.chars().position(|c| c == '╔');
@@ -252,11 +243,19 @@ mod tests {
         let short = vec!["~/src".to_owned()];
         let mut menu = TabMenu::new(Side::Left, short, 0, input());
         let text = draw(&mut menu, 120, 10);
-        assert_eq!(frame_width(&text), Some(usize::from(MIN_WIDTH)), "{text}");
+        assert_eq!(
+            frame_width(&text),
+            Some(usize::from(window::WIDTH)),
+            "{text}"
+        );
         let long = vec![format!("~/{}", "a".repeat(200))];
         let mut menu = TabMenu::new(Side::Left, long, 0, input());
         let text = draw(&mut menu, 120, 10);
-        assert_eq!(frame_width(&text), Some(usize::from(MAX_WIDTH)), "{text}");
+        assert_eq!(
+            frame_width(&text),
+            Some(usize::from(window::WIDTH)),
+            "{text}"
+        );
     }
 
     #[test]

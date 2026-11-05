@@ -75,8 +75,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The question of ssh about a host key shows in the colors of warnings. A yes/no question from
   a server shows as a question of its own, in the colors of dialogs, whose No answers `no`; it can
   no longer pass for one about a host key ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
-- The dialogs of `g +` and `g -` are as wide as the other dialogs, 76 cells, where the screen
-  has room.
+- Every dialog and list is 76 cells wide where the screen has room: the dialogs of `g +` and
+  `g -`, Find file… (`f /`), the location menu (`g l`), the zoxide window (`g z`), the
+  workspaces, the tab menu (`t t`), which no longer grows with its locations, and the window
+  over the viewer while it reads.
 
 ### Removed
 

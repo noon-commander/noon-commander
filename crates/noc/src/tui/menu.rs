@@ -29,10 +29,9 @@ use super::places::{KnownHost, Places, volume_name, volume_of};
 use super::search::{Input, Kind};
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
 
-/// Widest the menu gets, in cells, borders included.
-const WIDTH: u16 = 48;
 /// Places of a group that show while the filter is empty, besides those always shown.
 const SHOWN: usize = 10;
 
@@ -392,7 +391,7 @@ impl LocationMenu {
         });
         let body = Body {
             title: &title,
-            width: WIDTH,
+            width: window::WIDTH,
             lines: &lines,
             note,
             message,

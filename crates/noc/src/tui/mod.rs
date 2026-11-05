@@ -46,6 +46,7 @@ mod theme;
 mod told;
 mod transfer;
 mod which_key;
+mod window;
 mod workspaces;
 mod zoom;
 

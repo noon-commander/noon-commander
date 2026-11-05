@@ -11,13 +11,13 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::dialog::{
-    Colors, MAX_WIDTH, Tone, button_line, button_spots, draw_box, draw_separator, frame_around,
-    right_frame,
+    Colors, Tone, button_line, button_spots, draw_box, draw_separator, frame_around, right_frame,
 };
 use super::keymap::{Action, Resolved};
 use super::label::Label;
 use super::mouse::{Drawn, Pointer, Press, Scroll};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
 
 /// Columns for what a job does, how far it is, and the time it has left, unless the words in
@@ -186,7 +186,7 @@ impl JobsList {
         let colors = Colors::of(theme, Tone::Plain);
         let listed = u16::try_from(rows.len().max(1)).unwrap_or(u16::MAX);
         // Borders, the rows, a line, the buttons.
-        let size = (MAX_WIDTH, listed.saturating_add(4));
+        let size = (window::WIDTH, listed.saturating_add(4));
         let title = fl!("jobs-title");
         let inner = draw_box(frame, area, size, &title, colors, theme);
         let width = usize::from(inner.width);

@@ -22,10 +22,9 @@ use super::panel::{Destination, Panel, SortKey};
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
+use super::window;
 use crate::i18n::fl;
 
-/// Widest the window gets, in cells, borders included.
-const WIDTH: u16 = 60;
 /// Rows the window shows at most.
 const MAX_ROWS: u16 = 16;
 /// Lines of tabs each column under the rows shows at most; the last says how many more there
@@ -248,7 +247,7 @@ impl WorkspacesWindow {
         let separator = format!(" {} ", glyphs::COLUMN);
         let count_width = count_widths.0 + cells::width(&separator) + count_widths.1;
         // The room inside the box the picker draws.
-        let width = inner_width(WIDTH, area);
+        let width = inner_width(window::WIDTH, area);
         // As many for every workspace, so that the box keeps its height as the cursor moves.
         let tab_lines = (self.rows.iter().map(Row::tab_lines).max())
             .unwrap_or(0)
@@ -261,7 +260,7 @@ impl WorkspacesWindow {
         let title = fl!("workspaces-title");
         let body = Body {
             title: &title,
-            width: WIDTH,
+            width: window::WIDTH,
             lines: &lines,
             max_lines: Some(MAX_ROWS),
             message: self.rows.is_empty().then(|| fl!("workspaces-none")),

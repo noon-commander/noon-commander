@@ -701,8 +701,8 @@ row and names the tab that shows by its whole location:
   the digit in `Extra::char`); Alt+0 goes to the last, as vim's `:tablast`. A number past the
   last tab does nothing. `t t` opens the tab menu of the active panel, as vim's
   `:tabs` lists them: the tabs with their whole locations, centered over both panels, to show
-  one, under the title `Tabs`, which names no side; it grows with the widest location up to the
-  width of the other lists, 76 cells. Ctrl+x
+  one, under the title `Tabs`, which names no side; it is as wide as the other lists, 76 cells.
+  Ctrl+x
   before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count after
   Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under
   the cursor there as `t c`
@@ -2047,7 +2047,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   search of a tree, the window of checksums): the app gives it the count with the key, as the
   editor of a field reads it; elsewhere, in the lists, the app repeats a motion as many times,
   and gives a list the count before Ctrl+f or Ctrl+b, which scrolls as many pages at once.
-- **Width of a window.** `dialog::draw_box` draws the frame of every window, as wide as the
+- **Width of a window.** Dialogs, lists, and the windows of jobs, progress, and reading are 76
+  cells wide, borders included (`window::WIDTH`); the help takes a share of the screen.
+  `dialog::draw_box` draws the frame of every window, as wide as the
   window asks but leaving two cells free on either side of the screen, for the margin and the
   shadow (`dialog::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is
   narrower. What lays out text to that width asks `dialog::inner_width`. The key hints along the

@@ -73,6 +73,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cancel or Esc on a password, a code, or a server's question did not stop connecting: ssh sent
   the server an empty answer and asked again. It stops connecting now, and sends nothing
   ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
+- A lost connection could give as its reason something ssh wrote while it connected, such as the
+  last line of the picture of `VisualHostKey`. The reason is now what ssh wrote after it
+  connected, else the signal that ended ssh, such as when it was killed, else that the
+  connection is closed.
 
 ## [0.3.1] - 2026-11-01
 

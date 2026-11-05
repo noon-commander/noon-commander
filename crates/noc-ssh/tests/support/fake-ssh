@@ -8,6 +8,8 @@
 #   FAKE_SSH_PASSWORD     ask for a password through $SSH_ASKPASS and require this answer
 #   FAKE_SSH_FAIL         fail authentication with this message
 #   FAKE_SSH_HANG         never finish authentication
+#   FAKE_SSH_GREETING     write this to stderr while connecting, as VisualHostKey does
+#   FAKE_SSH_LAST_WORDS   write this to stderr when the master is told to end
 #   FAKE_SSH_USER, FAKE_SSH_HOSTNAME, FAKE_SSH_PORT   values printed by `ssh -G`
 #   FAKE_SSH_ROOT         start directory of sftp-server and of remote commands (default: $HOME)
 #   FAKE_SSH_SFTP_SERVER  sftp-server binary (default: /usr/libexec/sftp-server)
@@ -73,6 +75,9 @@ if [ $# -lt 2 ] || [ "$subsystem" = yes ] || [ "$mode" != session ] || [ -n "$co
 fi
 
 authenticate() {
+    if [ -n "${FAKE_SSH_GREETING:-}" ]; then
+        printf '%s\n' "$FAKE_SSH_GREETING" >&2
+    fi
     if [ -n "${FAKE_SSH_HANG:-}" ]; then
         exec sleep 600
     fi
@@ -121,7 +126,7 @@ case $mode in
         ;;
     master)
         authenticate
-        trap 'rm -f "$sock"; exit 0' TERM INT
+        trap 'rm -f "$sock"; [ -z "${FAKE_SSH_LAST_WORDS:-}" ] || printf "%s\n" "$FAKE_SSH_LAST_WORDS" >&2; exit 0' TERM INT
         echo $$ >"$sock"
         while :; do
             sleep 1 &

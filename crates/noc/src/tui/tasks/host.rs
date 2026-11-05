@@ -370,11 +370,15 @@ impl HostTask {
             }
         };
         match fs {
-            Ok(fs) => Ok(Connection {
-                session,
-                fs,
-                process,
-            }),
+            Ok(fs) => {
+                // Without multiplexing the channel connected; with it, the master did.
+                process.stderr().forget();
+                Ok(Connection {
+                    session,
+                    fs,
+                    process,
+                })
+            }
             Err(error) => {
                 // Without multiplexing, authentication happens here, and ssh says what failed.
                 let _ = tokio::time::timeout(CHANNEL_EXIT_WAIT, process.wait()).await;
@@ -438,14 +442,11 @@ impl HostTask {
                 }
                 () = self.stop.cancelled() => break None,
                 () = session.closed() => {
-                    let error = SshError::Disconnected { stderr: session.stderr() };
-                    break describe::ssh_error(&error);
+                    break Some(describe::lost(&session.stderr(), session.exit_status()));
                 }
                 // Without multiplexing the channel is the connection.
-                _ = process.wait() => {
-                    let stderr = process.stderr().text();
-                    break Some(describe::last_line(&stderr)
-                        .map_or_else(|| fl!("error-connection-closed"), str::to_owned));
+                status = process.wait() => {
+                    break Some(describe::lost(&process.stderr().text(), status));
                 }
             }
         };

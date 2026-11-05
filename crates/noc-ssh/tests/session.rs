@@ -6,6 +6,7 @@
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::ExitStatusExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
@@ -480,13 +481,7 @@ async fn notices_when_the_master_goes_away() {
     }
     let fake = Fake::new(&[]);
     let session = fake.connect(&fake.settings).await.unwrap();
-    let control_path = &fake.runtime_entries()[0];
-    let pid: i32 = std::fs::read_to_string(control_path)
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
-    kill_process(Pid::from_raw(pid).unwrap(), Signal::TERM).unwrap();
+    kill_process(master_pid(&fake), Signal::TERM).unwrap();
 
     tokio::time::timeout(Duration::from_secs(5), session.closed())
         .await
@@ -497,6 +492,49 @@ async fn notices_when_the_master_goes_away() {
         session.open_sftp(),
         Err(SshError::Disconnected { .. })
     ));
+    session.close().await;
+}
+
+fn master_pid(fake: &Fake) -> Pid {
+    let control_path = &fake.runtime_entries()[0];
+    let pid: i32 = std::fs::read_to_string(control_path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    Pid::from_raw(pid).unwrap()
+}
+
+#[tokio::test]
+async fn keeps_only_what_the_master_says_once_connected() {
+    let greeting = "+----[SHA256]-----+";
+    let fake = Fake::new(&[
+        ("FAKE_SSH_GREETING", greeting),
+        (
+            "FAKE_SSH_LAST_WORDS",
+            "Connection to web closed by remote host.",
+        ),
+    ]);
+    let session = fake.connect(&fake.settings).await.unwrap();
+    kill_process(master_pid(&fake), Signal::TERM).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), session.closed())
+        .await
+        .unwrap();
+    assert_eq!(session.stderr(), "Connection to web closed by remote host.");
+    session.close().await;
+
+    // Killed, ssh says nothing, and the greeting is no reason.
+    let fake = Fake::new(&[("FAKE_SSH_GREETING", greeting)]);
+    let session = fake.connect(&fake.settings).await.unwrap();
+    kill_process(master_pid(&fake), Signal::KILL).unwrap();
+    tokio::time::timeout(Duration::from_secs(5), session.closed())
+        .await
+        .unwrap();
+    assert_eq!(session.stderr(), "");
+    assert_eq!(
+        session.exit_status().and_then(|status| status.signal()),
+        Some(9)
+    );
     session.close().await;
 }
 

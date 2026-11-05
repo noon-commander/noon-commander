@@ -47,6 +47,15 @@ impl StderrTail {
             .join("\n")
     }
 
+    /// Drops the lines so far. Once connected, what ssh said while it connected, such as the
+    /// picture of `VisualHostKey`, is not why the connection ends.
+    pub fn forget(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
+
     fn push(&self, line: &[u8]) {
         let line = String::from_utf8_lossy(line);
         let line = line.trim_end();
@@ -360,11 +369,13 @@ async fn start_master(
         }
     }
     tracing::debug!(destination = %target.destination, "ssh master is ready");
+    stderr.forget();
     let shutdown = CancellationToken::new();
     let exited = CancellationToken::new();
     let status = Arc::new(Mutex::new(None));
     let task = tokio::spawn(monitor(
         child,
+        drain,
         shutdown.clone(),
         exited.clone(),
         Arc::clone(&status),
@@ -381,6 +392,7 @@ async fn start_master(
 
 async fn monitor(
     mut child: Child,
+    drain: Option<JoinHandle<()>>,
     shutdown: CancellationToken,
     exited: CancellationToken,
     slot: Arc<Mutex<Option<ExitStatus>>>,
@@ -391,6 +403,10 @@ async fn monitor(
     };
     if let Some(status) = status {
         tracing::debug!(%status, "ssh master exited");
+    }
+    // ssh's last words, which say why it ended, may still be in the pipe.
+    if let Some(drain) = drain {
+        let _ = tokio::time::timeout(STDERR_GRACE, drain).await;
     }
     *slot.lock().unwrap_or_else(PoisonError::into_inner) = status;
     exited.cancel();
@@ -471,6 +487,16 @@ mod tests {
         assert_eq!(text.lines().count(), STDERR_LINES);
         assert!(text.starts_with("line 10\n"));
         assert!(text.ends_with("line 29"));
+    }
+
+    #[test]
+    fn stderr_tail_forgets_what_came_before() {
+        let tail = StderrTail::default();
+        tail.push(b"+----[SHA256]-----+\n");
+        tail.forget();
+        assert_eq!(tail.text(), "");
+        tail.push(b"Connection closed by remote host\n");
+        assert_eq!(tail.text(), "Connection closed by remote host");
     }
 
     #[test]

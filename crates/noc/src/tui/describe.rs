@@ -2,6 +2,8 @@
 
 use std::error::Error;
 use std::io;
+use std::os::unix::process::ExitStatusExt as _;
+use std::process::ExitStatus;
 
 use noc_ssh::SshError;
 use noc_tools::ToolError;
@@ -125,6 +127,18 @@ pub(crate) fn ssh_error(error: &SshError) -> Option<String> {
     Some(text)
 }
 
+/// Why a connection that was up ended: ssh's last words since it connected, else the signal
+/// that ended it, as when it was killed, else that it is closed.
+pub(crate) fn lost(stderr: &str, status: Option<ExitStatus>) -> String {
+    if let Some(line) = last_line(stderr) {
+        return line.to_owned();
+    }
+    match status.and_then(|status| status.signal()) {
+        Some(signal) => fl!("error-ssh-signal", signal = signal),
+        None => fl!("error-connection-closed"),
+    }
+}
+
 /// Why zoxide gave no answer: it is not installed, or its own last words.
 pub(crate) fn zoxide_error(error: &ToolError) -> String {
     match error {
@@ -226,10 +240,7 @@ pub(crate) fn last_line(text: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
-    use std::os::unix::process::ExitStatusExt as _;
     use std::path::PathBuf;
-    use std::process::ExitStatus;
 
     use super::*;
 
@@ -288,6 +299,21 @@ mod tests {
             Some("Cannot run /no/ssh: entity not found")
         );
         assert_eq!(ssh_error(&SshError::Cancelled), None);
+    }
+
+    #[test]
+    fn describes_a_lost_connection() {
+        let killed = Some(ExitStatus::from_raw(9));
+        assert_eq!(
+            lost("Connection to web closed by remote host.\n", killed),
+            "Connection to web closed by remote host."
+        );
+        assert_eq!(lost("", killed), "ssh was ended by signal 9");
+        assert_eq!(
+            lost("", Some(ExitStatus::from_raw(255 << 8))),
+            "The connection is closed"
+        );
+        assert_eq!(lost("", None), "The connection is closed");
     }
 
     #[test]

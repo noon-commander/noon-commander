@@ -162,6 +162,7 @@ list-failed = Cannot open the directory
 
 error-connection-closed = The connection is closed
 error-ssh-exited = ssh ended with { $status }
+error-ssh-signal = ssh was ended by signal { $signal }
 error-ssh-spawn = Cannot run { $program }: { $reason }
 error-ssh-too-old = OpenSSH { $found } is too old; Noon Commander needs { $required } or newer
 error-not-openssh = { $program } is not OpenSSH

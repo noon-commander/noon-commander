@@ -383,8 +383,6 @@ const SHOWCMD_WIDTH: usize = 10;
 /// The fewest cells the prompt keeps for the directory before it leaves out the user, and
 /// then the directory.
 const PROMPT_DIR_WIDTH: usize = 8;
-/// Width of the dialogs of `g +` and `g -`, as of mc's `+` and `-`.
-const PATTERN_DIALOG_WIDTH: u16 = 50;
 /// The fields of the dialog of F4 on a host.
 const HOST_LABEL: usize = 0;
 const HOST_START_DIR: usize = 1;

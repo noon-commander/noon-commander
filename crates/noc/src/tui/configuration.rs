@@ -20,7 +20,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::combo_box::{ComboBox, ComboEvent};
-use super::dialog::{Colors, Field, Tone, draw_box, draw_separator, right_frame};
+use super::dialog::{Colors, Field, MAX_WIDTH, Tone, draw_box, draw_separator, right_frame};
 use super::edit::Registers;
 use super::glyphs::{self, categories};
 use super::keymap::{Action, Context, Mode, Resolved, Typed};
@@ -30,8 +30,7 @@ use super::sidebar::{self, Sidebar};
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Widest and tallest the dialog gets, in cells, borders included.
-const WIDTH: u16 = 76;
+/// Tallest the dialog gets, in cells, borders included.
 const HEIGHT: u16 = 20;
 /// Cells between a setting's name and its value.
 const LABEL_GAP: usize = 2;
@@ -1068,7 +1067,7 @@ impl Configuration {
     /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::of(theme, Tone::Plain);
-        let size = (WIDTH, HEIGHT.min(area.height.saturating_sub(2)));
+        let size = (MAX_WIDTH, HEIGHT.min(area.height.saturating_sub(2)));
         let inner = draw_box(frame, area, size, &fl!("config-title"), colors, theme);
         self.drawn = Drawn::default();
         // The body, a line, and two lines of hint.

@@ -14,8 +14,8 @@ use crate::tui::tabs::PanelId;
 use crate::tui::tasks::{Refused, Unmade};
 
 use super::{
-    Again, Answer, App, Change, Effect, Host, Open, PATTERN_DIALOG_WIDTH, PatternOptions, Purpose,
-    Way, file_name, names_an_entry,
+    Again, Answer, App, Change, Effect, Host, Open, PatternOptions, Purpose, Way, file_name,
+    names_an_entry,
 };
 
 impl App {
@@ -356,7 +356,6 @@ impl App {
         let options = &self.pattern_options;
         let checks = [(fl!("pattern-files-only"), options.files_only)];
         let dialog = Dialog::form(&title, &fl!("pattern-text"), &options.pattern, &checks)
-            .with_width(PATTERN_DIALOG_WIDTH)
             .with_search(0, self.search_opens(Slot::Mark));
         let panel = self.shown(self.active);
         self.dialogs.push_back(Open {

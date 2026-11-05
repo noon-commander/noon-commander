@@ -23,8 +23,6 @@ use super::search::{Input, Kind};
 use super::theme::Theme;
 use crate::i18n::fl;
 
-/// Width of the window, borders included, where the screen has room.
-const WIDTH: u16 = 76;
 /// Most rows the list shows at once; it scrolls.
 const LIST_ROWS: u16 = 10;
 /// Hex digits on either side of the gap where the list shortens a checksum.
@@ -93,7 +91,7 @@ impl SumsWindow {
         input: Input,
     ) -> Self {
         let view = buttons.contains(&Button::View);
-        let mut dialog = Dialog::question(title, "", buttons, 0, Tone::Plain).with_width(WIDTH);
+        let mut dialog = Dialog::question(title, "", buttons, 0, Tone::Plain);
         if rows.len() > 1 && verdict.is_none() {
             let mut picker = Picker::new(input).on_rows();
             picker.set_rows(rows.iter().map(texts).collect());

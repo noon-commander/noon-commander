@@ -10,7 +10,7 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
-use super::dialog::{Colors, Tone};
+use super::dialog::{Colors, MAX_WIDTH, Tone};
 use super::keymap::{Action, Extra, Hints, Keymap, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -19,8 +19,6 @@ use super::theme::Theme;
 use super::which_key;
 use crate::i18n::fl;
 
-/// Widest the window gets, in cells, borders included.
-const WIDTH: u16 = 76;
 /// Widest the column of keys gets; longer lists of keys are cut.
 const MAX_KEYS_WIDTH: usize = 24;
 
@@ -164,7 +162,7 @@ impl KeyHintsWindow {
             .map(|row| format!("{}  {}", row.keys, row.text));
         let body = Body {
             title: &self.title,
-            width: WIDTH,
+            width: MAX_WIDTH,
             lines: &lines,
             full,
             ..Body::default()

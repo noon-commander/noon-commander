@@ -210,7 +210,7 @@ fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
     let dialogs = [
         (
             "select",
-            Dialog::form("Select", &fl!("pattern-text"), "*", &select).with_width(50),
+            Dialog::form("Select", &fl!("pattern-text"), "*", &select),
         ),
         (
             "host",

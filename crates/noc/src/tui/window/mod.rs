@@ -37,6 +37,12 @@ pub(crate) fn box_width(width: u16, area: Rect) -> u16 {
     width.min(room.max(area.width.min(MIN_WIDTH)))
 }
 
+/// Whether a window framed at `outer` has room to be drawn: [`MIN_HEIGHT`] rows, and four cells
+/// across, its two sides and two between them.
+pub(crate) fn fits(outer: Rect) -> bool {
+    outer.height >= MIN_HEIGHT && outer.width >= 4
+}
+
 /// The cells of a line inside the frame of a window that would be `width` cells wide in `area`.
 pub(crate) fn inner_width(width: u16, area: Rect) -> usize {
     usize::from(box_width(width, area).saturating_sub(4))

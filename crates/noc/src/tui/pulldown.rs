@@ -709,15 +709,15 @@ impl PullDown {
         let height = u16::try_from(menu.entries.len() + 2)
             .unwrap_or(u16::MAX)
             .min(area.height);
-        if width < 4 || height < window::MIN_HEIGHT {
-            return;
-        }
         // As in mc, the frame starts a cell left of the title, and stays on screen.
         let x = x
             .saturating_sub(1)
             .max(area.x)
             .min(area.right().saturating_sub(width));
         let outer = Rect::new(x, area.y, width, height);
+        if !window::fits(outer) {
+            return;
+        }
         let mut drawn = self.drawn.borrow_mut();
         drawn.menu = outer;
         frame.render_widget(Clear, outer);

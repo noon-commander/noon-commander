@@ -425,7 +425,7 @@ impl Choices {
         let outer = pop_up(field, area, x, (field.width.saturating_add(2), height));
         self.drawn = Drawn::default();
         self.bar = None;
-        if outer.height < window::MIN_HEIGHT || outer.width < 4 {
+        if !window::fits(outer) {
             return;
         }
         self.drawn.frame = outer;

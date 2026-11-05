@@ -24,8 +24,7 @@ use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
 use super::spinner::{Shine, Spin};
 use super::theme::Theme;
 use super::window::{
-    self, Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
-    right_frame,
+    Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around, right_frame,
 };
 use crate::i18n::fl;
 
@@ -643,7 +642,7 @@ impl Picker {
         };
         self.bar = None;
         self.glyphs = None;
-        if boxed.height < window::MIN_HEIGHT || boxed.width < 4 {
+        if !self.has_room(boxed) {
             return;
         }
         self.draw_inside(frame, boxed, theme, body, row);
@@ -681,10 +680,16 @@ impl Picker {
         };
         self.bar = None;
         self.glyphs = None;
-        if area.height < self.top() + 1 || area.width < 4 {
+        if !self.has_room(area) {
             return;
         }
         self.draw_inside(frame, area, theme, body, row);
+    }
+
+    /// Whether `inner`, the room inside a frame, holds the lines over the rows and a row, four
+    /// cells across.
+    fn has_room(&self, inner: Rect) -> bool {
+        inner.height > self.top() && inner.width >= 4
     }
 
     /// Draws the filter at the top of `inner`, or a line without one, then the lines of

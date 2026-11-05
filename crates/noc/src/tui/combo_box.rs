@@ -314,7 +314,7 @@ impl ComboBox {
             .max(anchor.width);
         let x = anchor.x.min(area.right().saturating_sub(width)).max(area.x);
         let outer = pop_up(anchor, area, x, (width, height));
-        if outer.height < window::MIN_HEIGHT || outer.width < 4 {
+        if !window::fits(outer) {
             return;
         }
         drawn.frame = outer;

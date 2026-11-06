@@ -199,7 +199,8 @@ impl App {
                 panel.set_show_hidden(show);
             }
         }
-        if ui.natural_sort != self.config.ui.natural_sort {
+        let natural_sort = ui.natural_sort != self.config.ui.natural_sort;
+        if natural_sort {
             let natural = ui.natural_sort;
             for panel in self.panels_mut() {
                 panel.set_natural_sort(natural);
@@ -210,6 +211,9 @@ impl App {
         self.copy_choices.atomic = config.transfer.atomic_upload;
         self.parallel_jobs = config.transfer.parallel_jobs.get();
         self.config = config.clone();
+        if natural_sort {
+            self.sort_workspaces();
+        }
         // A program changed: what it is shows on the About page.
         let changed = [
             (Tool::Zoxide, old.zoxide.program != new.zoxide.program),
@@ -239,6 +243,7 @@ impl App {
         for panel in self.panels_mut() {
             panel.sort_again();
         }
+        self.sort_workspaces();
         self.about.report.formats = Some(crate::about::formats_text(&noc_locale::current()));
         self.refresh_help();
     }

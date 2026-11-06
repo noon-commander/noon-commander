@@ -1117,10 +1117,10 @@ in the panel, and, while the keywords take text, to `input` too.
 
 ## Workspaces window (`workspaces`, Normal mode)
 
-t w, or F9 → Workspace → Workspace list…; F9 → Workspace lists the first ten too, which Alt and
-their digits restore there. It falls back to `list`, whose Enter restores the workspace: it
-replaces the tabs of both panels. a adds one; r and F6 rename, and d d and F8 delete, as they
-rename and delete files.
+t w, or F9 → Workspace → Workspace list…, the workspaces in the order of their names; F9 →
+Workspace lists the first ten too, which Alt and their digits restore there. It falls back to
+`list`, whose Enter restores the workspace: it replaces the tabs of both panels. a adds one; r and
+F6 rename, and d d and F8 delete, as they rename and delete files.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

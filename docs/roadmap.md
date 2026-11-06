@@ -122,9 +122,10 @@
       ([ADR 0029](adr/0029-files-and-directories-with-fd.md))
 - [ ] Panelize what the search of a tree found, as mc and Far do, to act on it in a panel
 - [x] Workspaces: the tabs of both panels saved under a name (t W), restored from
-      F9 → Workspace or their window (t w), which also saves, renames, and deletes them;
-      `workspaces.toml`
-      ([ADR 0017](adr/0017-workspaces.md))
+      F9 → Workspace or their window (t w), by name, which also saves, renames, and deletes
+      them; `workspaces.toml`
+      ([ADR 0017](adr/0017-workspaces.md),
+      [ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md))
 - [ ] Favorites in the location menu: directories the user chooses, local or remote, as
       bookmarks in its Favorites group
 - [ ] History of the directories visited

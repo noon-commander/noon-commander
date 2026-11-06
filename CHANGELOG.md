@@ -28,6 +28,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
+  the panels order names, and the digits of F9 → Workspace follow that order.
+
 - The key hints show a key that only starts one sequence as that sequence whole, with what it
   does, as `] t` and `Z Z, F10`, rather than `+1 key`.
 - A window that waits for its rows, such as the location menu or the search of a tree, takes a

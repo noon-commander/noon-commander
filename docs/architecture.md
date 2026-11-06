@@ -747,19 +747,23 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   workspaces, one of the [lists](#lists), with a filter, which matches in the
   [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` saves the tabs
   as a new workspace, starting with an empty name, `r` or F6 renames, and `d d` or F8 deletes
-  after a question. A workspace just saved there gets the cursor. Each row counts the tabs of the
-  left panel, then those of the right. Under the rows, a column for each panel lists where the
-  tabs of the workspace under the cursor are, one to a line, cut at the start where they do not
-  fit, in as many lines as the workspace with the most tabs on a side needs, four at most, the
-  last saying how many more, faint, after the chevron down of the location menu; the heading of
-  the side with the keys is in the color of titles, and the tab that shows on each side is bold.
+  after a question. A workspace just saved or renamed there gets the cursor.
+- The window and F9 → Workspace show the workspaces in the order of their names, as the panels
+  order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order
+  they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row
+  counts the tabs of the left panel, then those of the right. Under the rows, a column for each
+  panel lists where the tabs of the workspace under the cursor are, one to a line, cut at the
+  start where they do not fit, in as many lines as the workspace with the most tabs on a side
+  needs, four at most, the last saying how many more, faint, after the chevron down of the
+  location menu; the heading of the side with the keys is in the color of titles, and the tab
+  that shows on each side is bold.
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
   ║ Filter:                                                = ║
   ╟──────────────────────────────────────────────────────────╢
   ║ noon                                               2 │ 1 ║
-  ║ deploy                                             1 │ 3 ║
+  ║ photos                                             1 │ 3 ║
   ╟────────────────────────────┬─────────────────────────────╢
   ║ Left                       │ Right                       ║
   ║ ~/src/noc                  │ web:/var/www                ║

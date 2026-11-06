@@ -1187,11 +1187,7 @@ fn sort(entries: &mut Vec<DirEntry>, sort: Sort, natural: Option<&Formats>) {
         Time(Option<SystemTime>),
         Size(u64),
     }
-    // Keys that order as the text does: the collator's, or the text in lower case.
-    let key = |text: &str| match natural {
-        Some(formats) => formats.sort_key(text),
-        None => text.to_lowercase().into_bytes(),
-    };
+    let key = |text: &str| name_key(text, natural);
     let mut keyed: Vec<(bool, Value, Vec<u8>, DirEntry)> = std::mem::take(entries)
         .into_iter()
         .map(|entry| {
@@ -1214,6 +1210,15 @@ fn sort(entries: &mut Vec<DirEntry>, sort: Sort, natural: Option<&Formats>) {
         })
     });
     *entries = keyed.into_iter().map(|(.., entry)| entry).collect();
+}
+
+/// The bytes that order `text` as names order: as the language of `natural` orders them, with
+/// the numbers in them by value; without it, by their characters, ignoring case.
+pub(crate) fn name_key(text: &str, natural: Option<&Formats>) -> Vec<u8> {
+    match natural {
+        Some(formats) => formats.sort_key(text),
+        None => text.to_lowercase().into_bytes(),
+    }
 }
 
 /// What follows the last dot of a name, unless the dot starts it.

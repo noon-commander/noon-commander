@@ -215,11 +215,16 @@ impl App {
         self.renamed(from, to.to_owned())
     }
 
+    /// Renames the workspace `from` to `to`; in the window, the cursor goes with it to where
+    /// its new name sorts.
     fn renamed(&mut self, from: String, to: String) -> Vec<Effect> {
         if self.workspace.as_ref() == Some(&from) {
             self.workspace = Some(to.clone());
         } else if self.workspace.as_ref() == Some(&to) {
             self.workspace = None;
+        }
+        if let Some(window) = &mut self.workspaces_window {
+            window.focus(&to);
         }
         vec![Effect::Workspaces(WorkspaceChange::Rename { from, to })]
     }
@@ -261,9 +266,7 @@ impl App {
         match result {
             Ok(workspaces) => {
                 self.workspaces = workspaces;
-                if let Some(window) = &mut self.workspaces_window {
-                    window.set_rows(workspaces::Row::all(&self.workspaces));
-                }
+                self.sort_workspaces();
             }
             Err(reason) => {
                 let reason = reason.sanitized();
@@ -275,6 +278,17 @@ impl App {
                 let again = Again::Workspaces(change);
                 self.show_problem_way(&Problem::new(head, reason), Way::Again(again));
             }
+        }
+    }
+
+    /// Puts the workspaces in the order of their names, as `ui.natural_sort` and the formats
+    /// in use order names, and shows them so in the window.
+    pub(super) fn sort_workspaces(&mut self) {
+        let formats = noc_locale::current();
+        let natural = self.config.ui.natural_sort.then_some(&*formats);
+        workspaces::sort(&mut self.workspaces, natural);
+        if let Some(window) = &mut self.workspaces_window {
+            window.set_rows(workspaces::Row::all(&self.workspaces));
         }
     }
 }

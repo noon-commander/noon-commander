@@ -185,7 +185,7 @@ fn a_workspace_gone_meanwhile_says_so() {
 }
 
 #[test]
-fn f9_lists_the_workspaces_and_restores_one_by_its_digit() {
+fn f9_lists_the_workspaces_by_name_and_restores_one_by_its_digit() {
     let mut app = loaded();
     let mut other = noon();
     other.name = "photos".to_owned();
@@ -194,15 +194,15 @@ fn f9_lists_the_workspaces_and_restores_one_by_its_digit() {
     app.handle(Resolved::Hotkey('w'));
     let text = screen_of(&mut app, 16);
     assert!(
-        text.contains("Save workspace…") && text.contains("1 photos") && text.contains("2 noon"),
-        "{text}"
+        text.contains("Save workspace…") && text.contains("1 noon") && text.contains("2 photos"),
+        "by name, not as saved: {text}"
     );
     let effects = app.handle(Resolved::Hotkey('2'));
     assert!(!effects.is_empty());
-    assert_eq!(app.workspace.as_deref(), Some("noon"));
+    assert_eq!(app.workspace.as_deref(), Some("photos"));
     app.handle(action(Action::PullDownLast));
     assert!(
-        screen_of(&mut app, 16).contains(&format!("{} 2 noon", app.theme.glyphs.choice)),
+        screen_of(&mut app, 16).contains(&format!("{} 2 photos", app.theme.glyphs.choice)),
         "the one restored last"
     );
 }
@@ -295,6 +295,50 @@ fn the_workspaces_window_saves_restores_renames_and_deletes() {
     app.handle(action(Action::Home));
     assert!(!app.handle(action(Action::Confirm)).is_empty());
     assert!(app.workspaces_window.is_none());
+}
+
+/// `noon()` under another name.
+fn named(name: &str) -> Workspace {
+    let mut workspace = noon();
+    workspace.name = name.to_owned();
+    workspace
+}
+
+#[test]
+fn a_renamed_workspace_takes_the_cursor_to_where_its_name_sorts() {
+    let mut app = loaded();
+    holds(&mut app, &[noon(), named("photos")]);
+    app.open_workspaces();
+    app.handle(action(Action::Move));
+    app.handle(action(Action::DeleteToStart));
+    typed(&mut app, "zoo");
+    let effects = app.handle(action(Action::Confirm));
+    assert!(
+        matches!(
+            &effects[..],
+            [Effect::Workspaces(WorkspaceChange::Rename { .. })]
+        ),
+        "{effects:?}"
+    );
+    // The file renames it in place; the window shows it last.
+    holds(&mut app, &[named("zoo"), named("photos")]);
+    app.workspace = None;
+    assert!(!app.handle(action(Action::Confirm)).is_empty());
+    assert_eq!(app.workspace.as_deref(), Some("zoo"));
+}
+
+#[test]
+fn the_order_of_names_in_the_configuration_sorts_the_workspaces_again() {
+    let mut app = loaded();
+    assert!(app.config.ui.natural_sort);
+    holds(&mut app, &[named("ws10"), named("ws2")]);
+    let names = |app: &App| crate::tui::workspaces::names(&app.workspaces);
+    assert_eq!(names(&app), ["ws2", "ws10"], "numbers by value");
+    let old = app.config.clone();
+    let mut new = old.clone();
+    new.ui.natural_sort = false;
+    app.apply_config(old, new);
+    assert_eq!(names(&app), ["ws10", "ws2"], "by their characters");
 }
 
 #[test]

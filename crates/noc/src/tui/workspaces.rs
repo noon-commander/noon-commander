@@ -1,11 +1,11 @@
 //! Workspaces: the tabs of both panels, saved under a name in `workspaces.toml` (ADR 0017),
 //! and their window, t w or F9 → Workspace → Workspace list…, which saves, restores,
-//! renames, and deletes them. Typing filters the window; while the filter is empty, `1` … `9`
-//! and `0` restore the first ten rows.
+//! renames, and deletes them, in the order of their names. Typing filters the window.
 
 use std::path::Path;
 
 use noc_config::{PanelSide, Place, SavedTab, SortBy, Workspace, Workspaces};
+use noc_locale::Formats;
 use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, RemotePath};
 use ratatui::Frame;
@@ -17,7 +17,7 @@ use super::cells::{self, Align, Cut};
 use super::glyphs;
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
-use super::panel::{Destination, Panel, SortKey};
+use super::panel::{Destination, Panel, SortKey, name_key};
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
@@ -456,6 +456,15 @@ pub(crate) fn current_of(tabs: &[SavedTab]) -> usize {
     tabs.iter().position(|tab| tab.current).unwrap_or(0)
 }
 
+/// Puts `workspaces` in the order of their names, as the panels order names, by the language of
+/// `natural` if any: the window and the pull-down menu show them so, and `workspaces.toml` keeps
+/// them in the order they were saved.
+pub(crate) fn sort(workspaces: &mut Workspaces, natural: Option<&Formats>) {
+    workspaces.workspaces.sort_by_cached_key(|workspace| {
+        (name_key(&workspace.name, natural), workspace.name.clone())
+    });
+}
+
 /// The rows of the pull-down menu's Workspace menu: the names of `workspaces`, in order.
 pub(crate) fn names(workspaces: &Workspaces) -> Vec<String> {
     workspaces
@@ -571,6 +580,43 @@ mod tests {
             press(&mut empty, Action::SaveWorkspace),
             WorkspacesEvent::Save,
             "a saves with or without workspaces"
+        );
+    }
+
+    #[test]
+    fn workspaces_are_in_the_order_of_their_names_as_names_in_the_panels() {
+        use noc_config::{Place, SavedTab};
+
+        let tab = SavedTab {
+            place: Place::Local("~".to_owned()),
+            sort: SortBy::Name,
+            descending: false,
+            cursor: None,
+            current: false,
+        };
+        let saved = ["photos", "ws10", "Notes", "ws2", "noon"];
+        let mut workspaces = Workspaces {
+            workspaces: saved
+                .iter()
+                .map(|name| Workspace {
+                    name: (*name).to_owned(),
+                    active: PanelSide::Left,
+                    left: vec![tab.clone()],
+                    right: vec![tab.clone()],
+                })
+                .collect(),
+        };
+        let iso = Formats::iso();
+        sort(&mut workspaces, Some(&iso));
+        assert_eq!(
+            names(&workspaces),
+            ["noon", "Notes", "photos", "ws2", "ws10"]
+        );
+        sort(&mut workspaces, None);
+        assert_eq!(
+            names(&workspaces),
+            ["noon", "Notes", "photos", "ws10", "ws2"],
+            "by their characters, ignoring case"
         );
     }
 

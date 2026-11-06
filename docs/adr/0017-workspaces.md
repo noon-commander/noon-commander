@@ -1,6 +1,7 @@
 # 0017. Workspaces: saved tabs of both panels in `workspaces.toml`
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0070](0070-workspaces-by-name-and-saved-in-place.md)
 - Date: 2026-10-04
 
 ## Context

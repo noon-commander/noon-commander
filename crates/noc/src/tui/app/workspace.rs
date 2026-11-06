@@ -144,10 +144,14 @@ impl App {
         effects
     }
 
-    /// Opens the window of the saved workspaces.
+    /// Opens the window of the saved workspaces, with the cursor on the one restored or saved
+    /// last, as the tab menu opens on the tab that shows.
     pub(super) fn open_workspaces(&mut self) {
         let rows = workspaces::Row::all(&self.workspaces);
-        let window = WorkspacesWindow::new(rows, self.search_opens(Slot::Workspaces));
+        let mut window = WorkspacesWindow::new(rows, self.search_opens(Slot::Workspaces));
+        if let Some(name) = &self.workspace {
+            window.go_to(name);
+        }
         self.workspaces_window = Some(window);
     }
 

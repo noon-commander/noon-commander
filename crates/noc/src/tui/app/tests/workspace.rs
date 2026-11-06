@@ -353,6 +353,46 @@ fn shift_w_saves_the_tabs_in_place_of_the_workspace_under_the_cursor_once_asked(
 }
 
 #[test]
+fn the_window_opens_on_the_workspace_restored_or_saved_last_and_marks_it() {
+    let mut app = loaded();
+    holds(&mut app, &[noon(), named("photos"), named("zoo")]);
+    let dot = |app: &App, name: &str| format!("║ {} {name}", app.theme.glyphs.choice);
+    app.open_workspaces();
+    let text = screen_of(&mut app, 16);
+    assert!(!text.contains(app.theme.glyphs.choice), "none yet: {text}");
+    app.handle(action(Action::Cancel));
+
+    app.workspace = Some("photos".to_owned());
+    app.open_workspaces();
+    let text = screen_of(&mut app, 16);
+    assert!(text.contains(&dot(&app, "photos")), "{text}");
+    assert!(text.contains("║   noon"), "{text}");
+
+    // F6 renames it; the mark goes with it.
+    app.handle(action(Action::Move));
+    app.handle(action(Action::DeleteToStart));
+    typed(&mut app, "a");
+    app.handle(action(Action::Confirm));
+    holds(&mut app, &[noon(), named("a"), named("zoo")]);
+    assert!(screen_of(&mut app, 16).contains(&dot(&app, "a")));
+
+    // F8 deletes it; no mark is left.
+    app.handle(action(Action::Delete));
+    app.handle(action(Action::Confirm));
+    holds(&mut app, &[noon(), named("zoo")]);
+    let text = screen_of(&mut app, 16);
+    assert!(!text.contains(app.theme.glyphs.choice), "{text}");
+
+    // The cursor opens on it.
+    app.workspace = Some("zoo".to_owned());
+    app.handle(action(Action::Cancel));
+    app.open_workspaces();
+    app.workspace = None;
+    assert!(!app.handle(action(Action::Confirm)).is_empty());
+    assert_eq!(app.workspace.as_deref(), Some("zoo"));
+}
+
+#[test]
 fn a_renamed_workspace_takes_the_cursor_to_where_its_name_sorts() {
     let mut app = loaded();
     holds(&mut app, &[noon(), named("photos")]);

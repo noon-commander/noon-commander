@@ -29,6 +29,9 @@ const MAX_ROWS: u16 = 16;
 /// Lines of tabs each column under the rows shows at most; the last says how many more there
 /// are on a side with more.
 const FOOTER_TABS: usize = 4;
+/// Cells in front of each name for the mark of the workspace restored or saved last, and a
+/// blank after it.
+const MARK_WIDTH: usize = 2;
 
 /// What a key did in the window.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +127,13 @@ impl WorkspacesWindow {
     /// Puts the cursor on the workspace `name` once the rows come again with it.
     pub(crate) fn focus(&mut self, name: &str) {
         self.wanted = Some(name.to_owned());
+    }
+
+    /// Puts the cursor on the workspace `name` now, if the filter shows it.
+    pub(crate) fn go_to(&mut self, name: &str) {
+        if let Some(row) = self.shown().iter().position(|row| row.name == name) {
+            self.picker.set_cursor(row);
+        }
     }
 
     /// Takes the workspaces again, after a change; the cursor goes to the workspace it was
@@ -224,9 +234,16 @@ impl WorkspacesWindow {
 
     /// Draws the window centered over `area`, the panels: the filter, then the workspaces,
     /// scrolled to the cursor, each with how many tabs each panel has, the count of the side
-    /// with the keys standing out; under them, a column for each panel with where the tabs of
-    /// the one under the cursor are.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    /// with the keys standing out, and the dot of a radio button in front of `last`, the one
+    /// restored or saved last, as F9 → Workspace marks it; under them, a column for each panel
+    /// with where the tabs of the one under the cursor are.
+    pub(crate) fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        last: Option<&str>,
+    ) {
         let shown = self.picker.shown(&self.rows);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
         let formats = noc_locale::current();
@@ -274,19 +291,31 @@ impl WorkspacesWindow {
         };
         let focused = Colors::plain(theme).focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
-            // The name, a space, the tabs of the left panel, a line, those of the right one.
+            // The mark, the name, a space, the tabs of the left panel, a line, those of the
+            // right one.
             let name_width = row.width.saturating_sub(count_width + 1);
-            let (styles, active) = if row.selected {
+            let (styles, active, mark_style) = if row.selected {
                 let styles = (focused, theme.truncated_cursor);
-                (styles, (focused.add_modifier(Modifier::BOLD), styles.1))
+                let active = (focused.add_modifier(Modifier::BOLD), styles.1);
+                (styles, active, focused)
             } else {
                 let styles = (theme.dialog, theme.truncated_dialog);
-                (styles, (side_style(theme), styles.1))
+                let mark = theme.dialog.patch(theme.dialog_symbol);
+                (styles, (side_style(theme), styles.1), mark)
             };
             let workspace = shown[row.index];
-            let name = cells::sanitize(workspace.name.as_bytes());
+            let mark = if last == Some(workspace.name.as_str()) {
+                format!("{} ", theme.glyphs.choice)
+            } else {
+                String::new()
+            };
             let fit = (Align::Left, Cut::End);
-            let mut line = cells::fitted(&name, name_width, fit, styles, theme.glyphs.marks);
+            let room = MARK_WIDTH.min(name_width);
+            let mark_styles = (mark_style, styles.1);
+            let mut line = cells::fitted(&mark, room, fit, mark_styles, theme.glyphs.marks);
+            let name = cells::sanitize(workspace.name.as_bytes());
+            let name = cells::fitted(&name, name_width - room, fit, styles, theme.glyphs.marks);
+            line.spans.extend(name.spans);
             let count = |count: &str, width, side: PanelSide| {
                 let styles = if side == workspace.active {
                     active
@@ -567,9 +596,18 @@ mod tests {
     }
 
     fn draw_with(window: &mut WorkspacesWindow, height: u16, theme: &Theme) -> String {
+        draw_marked(window, (height, theme), None)
+    }
+
+    /// Draws `window` with `last` as the workspace restored or saved last.
+    fn draw_marked(
+        window: &mut WorkspacesWindow,
+        (height, theme): (u16, &Theme),
+        last: Option<&str>,
+    ) -> String {
         let mut terminal = Terminal::new(TestBackend::new(64, height)).unwrap();
         terminal
-            .draw(|frame| window.render(frame, frame.area(), theme))
+            .draw(|frame| window.render(frame, frame.area(), theme, last))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -722,7 +760,38 @@ mod tests {
     fn draws_names_and_their_tabs_and_where_those_under_the_cursor_are() {
         let mut window = window();
         press(&mut window, Action::End);
-        insta::assert_snapshot!(draw(&mut window, 16));
+        let theme = Theme::terminal();
+        insta::assert_snapshot!(draw_marked(&mut window, (16, &theme), Some("deploy")));
+    }
+
+    #[test]
+    fn the_dot_marks_the_workspace_restored_or_saved_last() {
+        let theme = Theme::mc_classic();
+        let mut window = window();
+        window.go_to("photos");
+        assert_eq!(
+            press(&mut window, Action::Confirm),
+            WorkspacesEvent::Restore("photos".to_owned()),
+            "the cursor went to it"
+        );
+        window.go_to("gone");
+        assert_eq!(
+            press(&mut window, Action::Confirm),
+            WorkspacesEvent::Restore("photos".to_owned()),
+            "not there: it stays"
+        );
+        let mut terminal = Terminal::new(TestBackend::new(64, 16)).unwrap();
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &theme, Some("deploy")))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let line = |y: u16| -> String { (0..64).map(|x| buffer[(x, y)].symbol()).collect() };
+        let dot = format!("║ {} deploy", theme.glyphs.choice);
+        assert!(line(5).contains(&dot), "{}", line(5));
+        assert!(line(4).contains("║   noon"), "the others keep its room");
+        let border = line(5).chars().position(|c| c == '║').unwrap();
+        let x = u16::try_from(border + 2).unwrap();
+        assert_eq!(buffer[(x, 5)].fg, theme.dialog_symbol.fg.unwrap());
     }
 
     #[test]
@@ -803,7 +872,7 @@ mod tests {
         let mut window = window();
         let mut terminal = Terminal::new(TestBackend::new(64, 16)).unwrap();
         terminal
-            .draw(|frame| window.render(frame, frame.area(), &theme))
+            .draw(|frame| window.render(frame, frame.area(), &theme, None))
             .unwrap();
         let buffer = terminal.backend().buffer();
         // deploy, under noon: two tabs on each side; the right one has the keys.

@@ -1,4 +1,4 @@
-# 0070. Workspaces by name, saved in place of one, and columns that name no side
+# 0070. Workspaces by name, saved in place of one, the last marked, and columns that name no side
 
 - Status: Accepted
 - Date: 2026-11-06
@@ -12,7 +12,9 @@ hard to find by eye, and the digits of F9 → Workspace said nothing of the name
 
 Saving the tabs again in place of a workspace took `t W` in a panel, which offers the name of the
 workspace restored or saved last, or typing the name of another one, which asks before replacing
-it. In the window, where the workspace is under the cursor, there was no key for it.
+it. In the window, where the workspace is under the cursor, there was no key for it. Nor did the
+window show which workspace was restored or saved last, which F9 → Workspace marks and `t W`
+offers; it opened on its first row.
 
 Under the rows, the column of each panel was headed Left and Right, the heading of the side with
 the keys in the color of titles. The columns stand where the panels stand, so the headings said
@@ -40,6 +42,12 @@ something, and only for the workspace under the cursor.
   many more if that tab is among those that do not fit; each line of a column keeps its room. In
   each row the count of tabs of the side with the keys is bold, in the color of titles, so every
   workspace says which side has the keys, not only the one under the cursor.
+- **The one restored or saved last.** The window marks it as F9 → Workspace does, with the dot of
+  a radio button (`Glyphs.choice`) in the color of titles, in a room of two cells in front of every
+  name, as the columns under the rows keep for their mark; and it opens with the cursor on it, as
+  the tab menu opens on the tab that shows, so that Enter brings it back and `W` saves over it. It
+  is the one of this run alone: the panels start where they start, not on a workspace, so a mark
+  kept from the last run would name tabs that do not show.
 
 ## Consequences
 

@@ -1,15 +1,15 @@
 ---
 source: crates/noc/src/tui/workspaces.rs
-expression: "draw(&mut window, 16)"
+expression: "draw_marked(&mut window, (16, &theme), Some(\"deploy\"))"
 ---
 "                                                                "
 "  ╔═══════════════════════ Workspaces ═══════════════════════╗  "
 "  ║ Filter:                                            Aa =  ║  "
 "  ╟──────────────────────────────────────────────────────────╢  "
-"  ║ noon                                               1 │ 1 ║  "
-"  ║ deploy                                             2 │ 2 ║  "
-"  ║ photos                                             3 │ 1 ║  "
-"  ║ Notes                                              4 │ 2 ║  "
+"  ║   noon                                             1 │ 1 ║  "
+"  ║ • deploy                                           2 │ 2 ║  "
+"  ║   photos                                           3 │ 1 ║  "
+"  ║   Notes                                            4 │ 2 ║  "
 "  ╟────────────────────────────┬─────────────────────────────╢  "
 "  ║   ~/src/noc                │ ▸ /tmp                      ║  "
 "  ║   ~/Downloads              │   web:/var/www              ║  "

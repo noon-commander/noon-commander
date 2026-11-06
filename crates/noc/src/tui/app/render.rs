@@ -344,8 +344,9 @@ impl App {
         let middle = |window| (window, Grows::FromMiddle);
         let theme = &self.theme;
         if let Some(window) = &mut self.workspaces_window {
+            let last = self.workspace.as_deref();
             stage.show(frame, middle(zoom::Window::Workspaces), |frame| {
-                window.render(frame, panels, theme);
+                window.render(frame, panels, theme, last);
             });
         }
         if let Some(window) = &mut self.history_window {

@@ -749,7 +749,10 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   tabs as a new workspace, starting with an empty name, `W` or F2 saves them in place of the
   workspace under the cursor after a question, No by default, `r` or F6 renames, and `d d` or F8
   deletes after a question. F2, F6, F7, and F8 work while the filter takes text too. A workspace
-  just saved or renamed there gets the cursor.
+  just saved or renamed there gets the cursor. The window opens with the cursor on the workspace
+  restored or saved last, which `•` marks, as in F9 → Workspace, in the color of titles
+  (`dialog_symbol`), in a room of two cells in front of every name; that one is the app's
+  (`App::workspace`), of this run only.
 - The window and F9 → Workspace show the workspaces in the order of their names, as the panels
   order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order
   they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row
@@ -766,8 +769,8 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   ╔═══════════════════════ Workspaces ═══════════════════════╗
   ║ Filter:                                                = ║
   ╟──────────────────────────────────────────────────────────╢
-  ║ noon                                               2 │ 1 ║
-  ║ photos                                             1 │ 3 ║
+  ║ • noon                                             2 │ 1 ║
+  ║   photos                                           1 │ 3 ║
   ╟────────────────────────────┬─────────────────────────────╢
   ║   ~/src/noc                │ ▸ web:/var/www              ║
   ║   ~/Downloads              │                             ║

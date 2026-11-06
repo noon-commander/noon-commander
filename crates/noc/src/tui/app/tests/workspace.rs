@@ -343,6 +343,18 @@ fn shift_w_saves_the_tabs_in_place_of_the_workspace_under_the_cursor_once_asked(
     assert_eq!(app.workspace.as_deref(), Some("photos"), "saved last");
     holds(&mut app, &[workspace, noon()]);
     assert_eq!(app.context(), Context::Workspaces, "still open");
+
+    // Over the one restored or saved last, Yes is the default, as t W does not ask there.
+    app.handle(action(Action::ReplaceWorkspace));
+    let text = screen_of(&mut app, 16);
+    assert!(text.contains("{ Yes } [ No ]"), "{text}");
+    let Effect::Workspaces(WorkspaceChange::Save(workspace)) =
+        one(app.handle(action(Action::Confirm)))
+    else {
+        panic!("expected a workspace to save");
+    };
+    assert_eq!(workspace.name, "photos");
+    holds(&mut app, &[workspace, noon()]);
     app.workspace = None;
     assert!(!app.handle(action(Action::Confirm)).is_empty());
     assert_eq!(

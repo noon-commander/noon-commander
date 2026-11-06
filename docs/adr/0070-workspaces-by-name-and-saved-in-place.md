@@ -31,9 +31,10 @@ something, and only for the workspace under the cursor.
   There is no other order to choose, and no key for one.
 - **Saved in place of the one under the cursor.** In the window, `W` and F2 (`replace_workspace`)
   ask whether to replace the workspace under the cursor with the tabs of both panels, No by
-  default, as replacing one by its name asks; Yes saves them under its name, which becomes the one
-  saved last, and the window stays open on it. `W` as `t W` saves in the panels; F2 as mc's editor
-  saves. vim's `W` moves to the next WORD, which a list has not.
+  default, as replacing one by its name asks; over the one restored or saved last, Yes, as `t W`
+  saves that one again without asking. Yes saves them under its name, which becomes the one saved
+  last, and the window stays open on it. `W` as `t W` saves in the panels; F2 as mc's editor saves.
+  vim's `W` moves to the next WORD, which a list has not.
 - **`a` and F7 add one.** `a` stays, as yazi's `a` adds an entry and `A` adds a directory in the
   panels; vim's `a` appends after the cursor, which a list has not. F7 adds one too, as mc's F7
   makes a directory, so that adding works while the filter takes text, as F2, F6, and F8 do.

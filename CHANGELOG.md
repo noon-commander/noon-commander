@@ -26,8 +26,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the kitty keyboard protocol Ctrl+\\ arrives as Ctrl+4, which works too.
 - `o o` opens the Configuration dialog, as Options → Configuration… does, which shows the key.
 - `W` and F2 in the Workspaces window save the tabs of both panels in place of the workspace
-  under the cursor, after a question, No by default; F7 adds a new workspace, as `a` does. F2 and
-  F7 work while the filter takes text too
+  under the cursor, after a question, No by default, or Yes over the workspace restored or saved
+  last; F7 adds a new workspace, as `a` does. F2 and F7 work while the filter takes text too
   ([ADR 0070](docs/adr/0070-workspaces-by-name-and-saved-in-place.md)).
 
 ### Changed

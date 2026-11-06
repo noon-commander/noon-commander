@@ -747,8 +747,9 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   workspaces, one of the [lists](#lists), with a filter, which matches in the
   [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` or F7 saves the
   tabs as a new workspace, starting with an empty name, `W` or F2 saves them in place of the
-  workspace under the cursor after a question, No by default, `r` or F6 renames, and `d d` or F8
-  deletes after a question. F2, F6, F7, and F8 work while the filter takes text too. A workspace
+  workspace under the cursor after a question, No by default, Yes over the one restored or saved
+  last, `r` or F6 renames, and `d d` or F8 deletes after a question. F2, F6, F7, and F8 work while
+  the filter takes text too. A workspace
   just saved or renamed there gets the cursor. The window opens with the cursor on the workspace
   restored or saved last, which `•` marks, as in F9 → Workspace, in the color of titles
   (`dialog_symbol`), in a room of two cells in front of every name; that one is the app's

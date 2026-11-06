@@ -166,12 +166,15 @@ impl App {
             WorkspacesEvent::Closed => self.workspaces_window = None,
             WorkspacesEvent::Save => self.ask_save_workspace(false),
             WorkspacesEvent::Replace(name) => {
+                // Saving again the one restored or saved last is what t W offers without asking:
+                // Yes is the default there, No over another one.
+                let default = usize::from(self.workspace.as_ref() != Some(&name));
                 let workspace = self.workspace_named(name);
                 let shown = cells::sanitize(workspace.name.as_bytes());
                 let message = fl!("workspaces-overwrite", name = shown);
                 let buttons = vec![Button::Yes, Button::No];
                 let title = fl!("workspaces-replace-title");
-                let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
+                let dialog = Dialog::question(&title, &message, buttons, default, Tone::Warning);
                 self.dialogs.push_back(Open {
                     dialog,
                     purpose: Purpose::Workspace(WorkspaceQuestion::Replace { workspace }),

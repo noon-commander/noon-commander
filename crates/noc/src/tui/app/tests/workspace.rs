@@ -254,7 +254,10 @@ fn the_workspaces_window_saves_restores_renames_and_deletes() {
         "{text}"
     );
     assert!(
-        text.contains("6Rename") && text.contains("8Delete"),
+        text.contains("2Save")
+            && text.contains("6Rename")
+            && text.contains("7New")
+            && text.contains("8Delete"),
         "{text}"
     );
 
@@ -302,6 +305,51 @@ fn named(name: &str) -> Workspace {
     let mut workspace = noon();
     workspace.name = name.to_owned();
     workspace
+}
+
+#[test]
+fn shift_w_saves_the_tabs_in_place_of_the_workspace_under_the_cursor_once_asked() {
+    let mut app = loaded();
+    holds(&mut app, &[named("photos"), noon()]);
+    app.workspace = Some("noon".to_owned());
+    app.open_workspaces();
+    app.handle(action(Action::Down));
+    assert!(
+        app.handle(action(Action::ReplaceWorkspace)).is_empty(),
+        "asks first"
+    );
+    let text = screen_of(&mut app, 16);
+    assert!(
+        text.contains("Replace workspace \"photos\" with the tabs of both panels?"),
+        "{text}"
+    );
+    assert!(text.contains("[ Yes ] { No }"), "No is the default: {text}");
+    assert!(app.handle(action(Action::Confirm)).is_empty(), "No");
+    assert_eq!(app.context(), Context::Workspaces, "still open");
+    assert_eq!(app.workspace.as_deref(), Some("noon"));
+
+    app.handle(action(Action::ReplaceWorkspace));
+    let Effect::Workspaces(WorkspaceChange::Save(workspace)) =
+        one(app.handle(Resolved::Hotkey('y')))
+    else {
+        panic!("expected a workspace to save");
+    };
+    assert_eq!(workspace.name, "photos");
+    assert_eq!(
+        workspace.right[0].place,
+        noc_config::Place::Local("/srv".to_owned()),
+        "the tabs of the panels"
+    );
+    assert_eq!(app.workspace.as_deref(), Some("photos"), "saved last");
+    holds(&mut app, &[workspace, noon()]);
+    assert_eq!(app.context(), Context::Workspaces, "still open");
+    app.workspace = None;
+    assert!(!app.handle(action(Action::Confirm)).is_empty());
+    assert_eq!(
+        app.workspace.as_deref(),
+        Some("photos"),
+        "the cursor stayed"
+    );
 }
 
 #[test]

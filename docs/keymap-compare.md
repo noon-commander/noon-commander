@@ -1119,22 +1119,28 @@ in the panel, and, while the keywords take text, to `input` too.
 
 t w, or F9 → Workspace → Workspace list…, the workspaces in the order of their names; F9 →
 Workspace lists the first ten too, which Alt and their digits restore there. It falls back to
-`list`, whose Enter restores the workspace: it replaces the tabs of both panels. a adds one; r and
-F6 rename, and d d and F8 delete, as they rename and delete files.
+`list`, whose Enter restores the workspace: it replaces the tabs of both panels. a and F7 add one,
+as A and F7 add a directory in the panels; W and F2 save the tabs in place of the one under the
+cursor after a question, as t W saves them in the panels and F2 saves in mc's editor; r and F6
+rename, and d d and F8 delete, as they rename and delete files.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| Save the tabs of both panels as a new workspace | `save_workspace` | ⏳ | a | — | — | — | — |
+| Save the tabs of both panels as a new workspace | `save_workspace` | ⏳ | a<br>F7 | — | — | — | — |
+| Save the tabs of both panels in place of the workspace, once asked | `replace_workspace` | ⏳ | W<br>F2 | — | — | — | — |
 | Rename the workspace | `move` | ⏳ | r<br>F6 | — | — | — | — |
 | Delete the workspace | `delete` | ⏳ | d d<br>F8 | — | — | — | — |
 
 ## Workspaces window (`workspaces`, Insert mode)
 
 As it opens, and after `/`, its filter takes text. It falls back to `list`, then to `input`,
-then to `global`; F6 and F8 still rename and delete the workspace under the cursor.
+then to `global`; its F-keys still act: F7 adds a workspace, and F2, F6, and F8 save in place of,
+rename, and delete the one under the cursor.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
+| Save the tabs of both panels as a new workspace | `save_workspace` | ⏳ | F7 | — | — | — | — |
+| Save the tabs of both panels in place of the workspace, once asked | `replace_workspace` | ⏳ | F2 | — | — | — | — |
 | Rename the workspace | `move` | ⏳ | F6 | — | — | — | — |
 | Delete the workspace | `delete` | ⏳ | F8 | — | — | — | — |
 

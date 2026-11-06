@@ -745,9 +745,11 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   hold, or else as `~`.
 - `t w`, or F9 → Workspace → Workspace list…, opens a window of the saved
   workspaces, one of the [lists](#lists), with a filter, which matches in the
-  [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` saves the tabs
-  as a new workspace, starting with an empty name, `r` or F6 renames, and `d d` or F8 deletes
-  after a question. A workspace just saved or renamed there gets the cursor.
+  [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` or F7 saves the
+  tabs as a new workspace, starting with an empty name, `W` or F2 saves them in place of the
+  workspace under the cursor after a question, No by default, `r` or F6 renames, and `d d` or F8
+  deletes after a question. F2, F6, F7, and F8 work while the filter takes text too. A workspace
+  just saved or renamed there gets the cursor.
 - The window and F9 → Workspace show the workspaces in the order of their names, as the panels
   order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order
   they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row

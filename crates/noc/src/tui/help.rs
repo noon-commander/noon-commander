@@ -1378,6 +1378,7 @@ fn describe_workspaces(context: Context, action: Action) -> Option<String> {
     }
     let text = match action {
         Action::SaveWorkspace => fl!("help-workspaces-save"),
+        Action::ReplaceWorkspace => fl!("help-workspaces-replace"),
         Action::Confirm => fl!("help-workspaces-restore"),
         Action::Move => fl!("help-workspaces-rename"),
         Action::Delete => fl!("help-workspaces-delete"),

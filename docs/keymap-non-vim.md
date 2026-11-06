@@ -258,7 +258,8 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| a | `save_workspace` | noc | a (noc) | Same | Save the tabs of both panels as a new workspace, a for add. vim's a appends after the cursor. |
+| a<br>F7 | `save_workspace` | yazi, mc | a (yazi) | Same | Save the tabs of both panels as a new workspace, as yazi's a adds an entry and A and F7 add a directory in the panels; F7 is mc's. vim's a appends after the cursor. |
+| W<br>F2 | `replace_workspace` | noc, mc | W (noc) | Same | Save the tabs of both panels in place of the workspace under the cursor, after a question, as t W saves them in the panels; F2 saves in mc's editor. vim's W goes to the next WORD. |
 | r<br>F6 | `move` | yazi, mc | r (yazi) | Same | Rename the workspace, as r and F6 rename in the panels. |
 | F8 | `delete` | mc | d d (vim) | Same | Delete the workspace, as F8 deletes files. |
 
@@ -266,7 +267,7 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| F6<br>F8 | `move`<br>`delete` | mc | — | Same | As in Normal mode, while the filter takes text. |
+| F7<br>F2<br>F6<br>F8 | `save_workspace`<br>`replace_workspace`<br>`move`<br>`delete` | mc | — | Same | As in Normal mode, while the filter takes text. |
 
 ## Pull-down menu (`pull_down`, Normal mode)
 

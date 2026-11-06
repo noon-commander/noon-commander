@@ -15,6 +15,10 @@ fkey-copy = Copy
 fkey-move = RenMov
 # Renames a workspace.
 fkey-rename = Rename
+# Saves the tabs of both panels as a new workspace.
+fkey-new = New
+# Saves the tabs of both panels in place of the workspace under the cursor.
+fkey-save = Save
 fkey-mkdir = Mkdir
 fkey-delete = Delete
 fkey-quit = Quit
@@ -289,12 +293,15 @@ workspaces-none = No workspace is saved yet. a here, or t W in a panel, saves th
 # last line of a column that shows only its first tabs, after a chevron down, says how many more
 # the panel has.
 workspaces-more = { $count } more…
-# The dialog of t W, and of a in the window. The & of a prompt marks the letter of its field.
+# The dialog of t W, and of a and F7 in the window. The & of a prompt marks the letter of its
+# field.
 workspaces-save-title = Save workspace
 workspaces-save-prompt = &Save the tabs of both panels as:
 # The name of an existing workspace was typed.
 workspaces-replace-title = Replace workspace
 workspaces-replace = Workspace "{ $name }" exists. Replace it with the tabs of both panels?
+# W and F2 in the window, under the title of the one above.
+workspaces-overwrite = Replace workspace "{ $name }" with the tabs of both panels?
 # F6 in the window.
 workspaces-rename-title = Rename workspace
 workspaces-rename-prompt = &New name for "{ $name }":
@@ -803,6 +810,7 @@ help-tab-list = The tabs of this panel, to choose one
 help-save-workspace = Save the tabs of both panels as a workspace
 help-workspaces-open = The saved workspaces: restore, rename, or delete one
 help-workspaces-save = Save the tabs of both panels as a new workspace
+help-workspaces-replace = Save the tabs of both panels in place of the workspace, once asked
 help-workspaces-restore = Replace the tabs of both panels with the workspace's
 help-workspaces-rename = Rename the workspace
 help-workspaces-delete = Delete the workspace

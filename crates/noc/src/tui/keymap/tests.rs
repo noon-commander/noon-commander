@@ -1052,6 +1052,33 @@ fn marks_by_pattern_are_under_g_and_mcs_own_keys_are_gone() {
 }
 
 #[test]
+fn the_workspaces_window_saves_renames_and_deletes_with_its_f_keys_while_filtering_too() {
+    let list = (Mode::Normal, Context::Workspaces);
+    for (keys, action) in [
+        (&["a"][..], Action::SaveWorkspace),
+        (&["f7"], Action::SaveWorkspace),
+        (&["shift-w"], Action::ReplaceWorkspace),
+        (&["f2"], Action::ReplaceWorkspace),
+        (&["r"], Action::Move),
+        (&["f6"], Action::Move),
+        (&["d", "d"], Action::Delete),
+        (&["f8"], Action::Delete),
+    ] {
+        assert_eq!(typed(list, keys), actions(&[action]), "{keys:?}");
+    }
+    let filter = (Mode::Insert, Context::Workspaces);
+    for (key, action) in [
+        ("f7", Action::SaveWorkspace),
+        ("f2", Action::ReplaceWorkspace),
+        ("f6", Action::Move),
+        ("f8", Action::Delete),
+    ] {
+        assert_eq!(typed(filter, &[key]), actions(&[action]), "{key}");
+    }
+    assert_eq!(typed(filter, &["a", "shift-w"]), inserts("aW"), "text");
+}
+
+#[test]
 fn z_scrolls_sideways_as_in_vim() {
     for (keys, action) in [
         (&["z", "h"], Action::ScrollLeft),

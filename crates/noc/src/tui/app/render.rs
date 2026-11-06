@@ -670,6 +670,8 @@ impl App {
             let action = action.filter(|action| self.supports(*action))?;
             let label = match (context, action) {
                 (Context::Workspaces, Action::Move) => Some(fl!("fkey-rename")),
+                (Context::Workspaces, Action::SaveWorkspace) => Some(fl!("fkey-new")),
+                (Context::Workspaces, Action::ReplaceWorkspace) => Some(fl!("fkey-save")),
                 _ => fkey_label(action),
             }?;
             Some((action, label))

@@ -37,6 +37,8 @@ pub(crate) enum WorkspacesEvent {
     Closed,
     /// Ask for a name to save the tabs of both panels under, as a new workspace.
     Save,
+    /// Ask whether to save the tabs of both panels in place of this workspace.
+    Replace(String),
     /// Replace the tabs of both panels with those of this workspace.
     Restore(String),
     /// Ask for a new name for this workspace.
@@ -155,7 +157,7 @@ impl WorkspacesWindow {
         self.shown().get(self.picker.cursor()).copied()
     }
 
-    /// Whether a workspace is under the cursor, for F6 and F8.
+    /// Whether a workspace is under the cursor, for F2, F6, and F8.
     pub(crate) fn has_chosen(&self) -> bool {
         self.chosen().is_some()
     }
@@ -180,8 +182,9 @@ impl WorkspacesWindow {
         self.picker.input()
     }
 
-    /// Takes a key: the picker's, where Enter restores a workspace, and a, which saves the
-    /// tabs as a new workspace, r and F6, which rename, and d d and F8, which delete.
+    /// Takes a key: the picker's, where Enter restores a workspace; a and F7, which save the
+    /// tabs as a new workspace, and W and F2, in place of the one under the cursor; r and F6,
+    /// which rename it, and d d and F8, which delete it.
     pub(crate) fn handle(&mut self, input: Resolved) -> WorkspacesEvent {
         let chosen = |window: &Self, event: fn(String) -> WorkspacesEvent| {
             window
@@ -195,6 +198,7 @@ impl WorkspacesWindow {
             },
             Pick::Closed => WorkspacesEvent::Closed,
             Pick::Other(Action::SaveWorkspace) => WorkspacesEvent::Save,
+            Pick::Other(Action::ReplaceWorkspace) => chosen(self, WorkspacesEvent::Replace),
             Pick::Other(Action::Move) => chosen(self, WorkspacesEvent::Rename),
             Pick::Other(Action::Delete) => chosen(self, WorkspacesEvent::Delete),
             Pick::Pending | Pick::Filtered | Pick::Other(_) => WorkspacesEvent::Pending,
@@ -571,7 +575,7 @@ mod tests {
     }
 
     #[test]
-    fn enter_f6_and_f8_act_on_their_row() {
+    fn enter_f2_f6_and_f8_act_on_their_row() {
         let mut window = window();
         let restore = |name: &str| WorkspacesEvent::Restore(name.to_owned());
         assert_eq!(press(&mut window, Action::Confirm), restore("noon"));
@@ -582,6 +586,10 @@ mod tests {
             "no digits"
         );
         press(&mut window, Action::Down);
+        assert_eq!(
+            press(&mut window, Action::ReplaceWorkspace),
+            WorkspacesEvent::Replace("deploy".to_owned())
+        );
         assert_eq!(
             press(&mut window, Action::Move),
             WorkspacesEvent::Rename("deploy".to_owned())
@@ -594,6 +602,10 @@ mod tests {
         let mut empty =
             WorkspacesWindow::new(Vec::new(), Input::new(Kind::FILTER, SearchMode::Plain));
         assert_eq!(press(&mut empty, Action::Confirm), WorkspacesEvent::Pending);
+        assert_eq!(
+            press(&mut empty, Action::ReplaceWorkspace),
+            WorkspacesEvent::Pending
+        );
         assert_eq!(press(&mut empty, Action::Delete), WorkspacesEvent::Pending);
         assert_eq!(
             press(&mut empty, Action::SaveWorkspace),

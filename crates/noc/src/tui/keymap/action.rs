@@ -383,6 +383,9 @@ pub(crate) enum Action {
     TabList,
     /// Asks for a name and saves the tabs of both panels as a workspace.
     SaveWorkspace,
+    /// Asks first, then saves the tabs of both panels in place of the workspace under the
+    /// cursor.
+    ReplaceWorkspace,
     /// Opens the window of the saved workspaces.
     Workspaces,
     /// Reads the directory, or the volumes and hosts, again.
@@ -713,6 +716,7 @@ impl Action {
         Self::LastTab,
         Self::TabList,
         Self::SaveWorkspace,
+        Self::ReplaceWorkspace,
         Self::Workspaces,
         Self::Reload,
         Self::Configuration,

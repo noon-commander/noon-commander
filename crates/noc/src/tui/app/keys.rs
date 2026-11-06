@@ -473,12 +473,13 @@ impl App {
     /// Whether the app does something for `action` now; the F-key bar shows only those.
     pub(super) fn supports(&self, action: Action) -> bool {
         if self.context() == Context::Workspaces {
-            // F6 and F8 rename and delete the workspace under the cursor.
+            // F2, F6, and F8 save in place of, rename, and delete the workspace under the
+            // cursor; F7 saves a new one.
             let chosen = self
                 .workspaces_window
                 .as_ref()
                 .is_some_and(WorkspacesWindow::has_chosen);
-            return action == Action::Cancel || chosen;
+            return matches!(action, Action::Cancel | Action::SaveWorkspace) || chosen;
         }
         if action == Action::CloseTab {
             return self.tab_menu_closes();

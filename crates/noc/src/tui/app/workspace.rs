@@ -152,7 +152,7 @@ impl App {
     }
 
     /// Gives a key to the window of the saved workspaces: a restored one closes it; saving,
-    /// renaming, and deleting ask in a dialog over it.
+    /// in place of one too, renaming, and deleting ask in a dialog over it.
     pub(super) fn handle_workspaces(&mut self, input: Resolved) -> Vec<Effect> {
         let Some(window) = &mut self.workspaces_window else {
             return Vec::new();
@@ -161,6 +161,18 @@ impl App {
             WorkspacesEvent::Pending => {}
             WorkspacesEvent::Closed => self.workspaces_window = None,
             WorkspacesEvent::Save => self.ask_save_workspace(false),
+            WorkspacesEvent::Replace(name) => {
+                let workspace = self.workspace_named(name);
+                let shown = cells::sanitize(workspace.name.as_bytes());
+                let message = fl!("workspaces-overwrite", name = shown);
+                let buttons = vec![Button::Yes, Button::No];
+                let title = fl!("workspaces-replace-title");
+                let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
+                self.dialogs.push_back(Open {
+                    dialog,
+                    purpose: Purpose::Workspace(WorkspaceQuestion::Replace { workspace }),
+                });
+            }
             WorkspacesEvent::Restore(name) => {
                 self.workspaces_window = None;
                 return self.restore_workspace(&name);

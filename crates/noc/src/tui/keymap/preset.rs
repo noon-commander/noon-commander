@@ -588,13 +588,16 @@ pub(super) const PRESET: Preset = &[
     ),
     // The zoxide window, on top of the list's; its filter takes keywords.
     (Mode::Normal, Context::Jump, &[]),
-    // The window of the saved workspaces, on top of the list's: a adds one; r and F6 rename,
-    // and d d and F8 delete, as they rename and delete files.
+    // The window of the saved workspaces, on top of the list's: a and F7 add one, as A and F7
+    // add a directory in the panels; W and F2 save the tabs in place of the one under the
+    // cursor, as t W saves them in the panels and F2 saves in mc's editor; r and F6 rename, and
+    // d d and F8 delete, as they rename and delete files.
     (
         Mode::Normal,
         Context::Workspaces,
         &[
-            (Action::SaveWorkspace, &["a"]),
+            (Action::SaveWorkspace, &["a", "f7"]),
+            (Action::ReplaceWorkspace, &["shift-w", "f2"]),
             (Action::Move, &["r", "f6"]),
             (Action::Delete, &["d d", "f8"]),
         ],
@@ -602,7 +605,12 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Insert,
         Context::Workspaces,
-        &[(Action::Move, &["f6"]), (Action::Delete, &["f8"])],
+        &[
+            (Action::SaveWorkspace, &["f7"]),
+            (Action::ReplaceWorkspace, &["f2"]),
+            (Action::Move, &["f6"]),
+            (Action::Delete, &["f8"]),
+        ],
     ),
     // The pull-down menu. Alt and a letter run the command that has it, so h, j, k, and l
     // stay the motions.

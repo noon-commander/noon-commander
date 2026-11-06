@@ -192,8 +192,8 @@ menu-mounts = Mounts
 menu-sftp = SFTP
 # The row that opens the home directory.
 menu-home = Home
-# The last row of a group that shows only its first places: how many more it holds, which
-# Enter shows and the filter finds.
+# The last row of a group that shows only its first places, after a chevron down where the
+# others have their icons: how many more it holds, which Enter shows and the filter finds.
 menu-more = { $count } more…
 # Right of a place whose free space is not known.
 menu-free-unknown = ?
@@ -289,7 +289,8 @@ workspaces-none = No workspace is saved yet. a here, or t W in a panel, saves th
 # columns.
 workspaces-left = Left
 workspaces-right = Right
-# The last line of a column that shows only its first tabs: how many more the panel has.
+# The last line of a column that shows only its first tabs, after a chevron down: how many more
+# the panel has.
 workspaces-more = { $count } more…
 # The dialog of t W, and of a in the window. The & of a prompt marks the letter of its field.
 workspaces-save-title = Save workspace
@@ -975,8 +976,8 @@ which-key-more = { $count ->
         [one] +{ $count } key
        *[other] +{ $count } keys
     }
-# In the last cell, for the keys that do not fit.
-which-key-hidden = … { $count } more
+# In the last cell, after a chevron down, for the keys that do not fit.
+which-key-hidden = { $count } more…
 # On the bottom of the frame.
 which-key-close = Ctrl+k lists, Esc closes, Backspace goes back
 

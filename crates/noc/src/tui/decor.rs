@@ -76,6 +76,12 @@ impl Decor {
         }
     }
 
+    /// The prefix of the row of the location menu that stands for the places a group does not
+    /// show: a chevron down and a space.
+    pub(crate) fn more(self) -> String {
+        format!("{} ", self.glyphs().more)
+    }
+
     /// The cell in front of a local directory's path: its icon, or mc's marker.
     pub(crate) fn directory(self) -> char {
         self.glyphs().kinds.dir

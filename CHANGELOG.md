@@ -88,6 +88,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `g -`, Find file… (`f /`), the location menu (`g l`), the zoxide window (`g z`), the
   workspaces, the tab menu (`t t`), which no longer grows with its locations, and the window
   over the viewer while it reads.
+- What a list says of the rows it does not show, `24 more…`, is faint, apart from the rows: the
+  last row of a group of the location menu, but under the cursor, the last line of a column of
+  tabs in the workspaces, and the last cell of the key hints, which no longer says `… 24 more`.
+  A chevron down goes in front of it, in the column of the icons of the location menu.
 
 ### Removed
 

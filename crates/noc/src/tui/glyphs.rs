@@ -89,6 +89,10 @@ pub(crate) struct Glyphs {
     pub(crate) folds: (char, char),
     /// At the end of a combo box, whose list opens under it.
     pub(crate) combo_box: char,
+    /// In front of what a list says of the rows it does not show, `24 more…`: in the location
+    /// menu, where Enter shows them, in the columns of tabs of the workspaces, and in the last
+    /// cell of the key hints.
+    pub(crate) more: char,
     /// In a check box that is on, and in front of a command of the pull-down menu that is on.
     pub(crate) check: char,
     /// In front of the choice taken among others, as the dot of a radio button: in the list of a
@@ -149,6 +153,8 @@ impl Glyphs {
         folds: ('󰅂', '󰅀'),
         // nf-md-chevron_down, as an open fold.
         combo_box: '󰅀',
+        // nf-md-chevron_double_down: more below.
+        more: '󰄼',
         // nf-md-check.
         check: '󰄬',
         // nf-md-circle_medium.
@@ -221,6 +227,8 @@ impl Glyphs {
         folds: ('▸', '▾'),
         // Far's arrow, as the scroll bar's.
         combo_box: '▼',
+        // As an open fold.
+        more: '▾',
         // As the checks of checksums.
         check: '✓',
         // As Far's radio buttons, `(•)`.
@@ -375,6 +383,13 @@ mod tests {
     }
 
     #[test]
+    fn how_many_more_is_a_chevron_down() {
+        // nf-md-chevron_double_down, the mark below the marks of text cut short.
+        assert_eq!(u32::from(Glyphs::NERD.more), 0xf013c);
+        assert_eq!(Glyphs::PLAIN.more, Glyphs::PLAIN.folds.1, "an open fold");
+    }
+
+    #[test]
     fn the_arrow_of_a_link_is_nerd_fonts_or_ascii() {
         let code = |text: &str| text.chars().map(u32::from).collect::<Vec<_>>();
         // nf-md-arrow_right, in one cell.
@@ -398,6 +413,7 @@ mod tests {
                 3
             );
             assert_eq!(noc_text::width(&glyphs.combo_box.to_string()), 1);
+            assert_eq!(noc_text::width(&glyphs.more.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.check.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.choice.to_string()), 1);
             let spinners = glyphs.spinners;

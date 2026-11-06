@@ -248,7 +248,7 @@ choose a volume or a host, grouped under headings:
  ║ ○ mail                                       ║
  ║ ○ vpn                                        ║
  ║ ○ www                                        ║
- ║ 24 more…                                     ║
+ ║ ▾ 24 more…                                   ║
  ╚══════════════════════════════════════════════╝
 ```
 
@@ -260,8 +260,10 @@ choose a volume or a host, grouped under headings:
   system volume, then the others by mount point; the hosts in config order. Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is
   on and the hosts that are connected, connecting, or waiting for Retry. A last row,
-  `24 more…`, stands for the rest: the cursor and the mouse select it, and Enter on it shows the
-  whole group until the menu closes.
+  `24 more…`, after a chevron down in the column of the icons (`glyphs.more`), faint but under
+  the cursor, as everything that says how many more a list has than it shows, stands for the
+  rest: the cursor and the mouse select it, and Enter on it shows the whole group until the menu
+  closes.
 - The menu opens in Insert mode, as the other [lists](#lists) do, with the filter taking the keys
   and the cursor on the home directory or the volume that holds the panel's directory, whichever
   is nearer, or on its host. Up and Down move, and Enter opens the row in that panel; the keys stay
@@ -749,8 +751,8 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   left panel, then those of the right. Under the rows, a column for each panel lists where the
   tabs of the workspace under the cursor are, one to a line, cut at the start where they do not
   fit, in as many lines as the workspace with the most tabs on a side needs, four at most, the
-  last saying how many more; the heading of the side with the keys is in the color of titles, and
-  the tab that shows on each side is bold.
+  last saying how many more, faint, after the chevron down of the location menu; the heading of
+  the side with the keys is in the color of titles, and the tab that shows on each side is bold.
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
@@ -1974,8 +1976,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   front and wiped when it goes.
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence, or
   every key of a context, with what the help says they do (`Keymap::hints`, drawn by
-  `tui/which_key.rs` in columns across the bottom of the panels). The event loop owns the
-  `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
+  `tui/which_key.rs` in columns across the bottom of the panels; where not all fit, the last cell
+  says how many do not, faint, after the chevron down of the location menu). The event loop owns
+  the `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its
   last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints
   list every key of the panel. The action `key_hints` shows

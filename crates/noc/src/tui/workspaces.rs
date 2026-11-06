@@ -340,17 +340,18 @@ fn column_lines(
     (width, lines): (usize, usize),
     theme: &Theme,
 ) -> Vec<Vec<Span<'static>>> {
-    let fit = |text: &str, cut: Cut, style: Style| {
+    let fit = |text: &str, cut: Cut, styles: (Style, Style)| {
         let fitted = cells::fit_cut(text, width, Align::Left, cut);
-        cells::spans(fitted, (style, theme.truncated_dialog), theme.glyphs.marks)
+        cells::spans(fitted, styles, theme.glyphs.marks)
     };
+    let plain = |style: Style| (style, theme.truncated_dialog);
     let count = tabs.places.len();
     let shown = if count > lines {
         lines.saturating_sub(1)
     } else {
         count
     };
-    let mut column = vec![fit(&heading, Cut::End, style)];
+    let mut column = vec![fit(&heading, Cut::End, plain(style))];
     for (index, place) in tabs.places.iter().take(shown).enumerate() {
         let style = if index == tabs.current {
             theme.dialog.add_modifier(Modifier::BOLD)
@@ -358,14 +359,15 @@ fn column_lines(
             theme.dialog
         };
         // The end of a path says most about it.
-        column.push(fit(place, Cut::Start, style));
+        column.push(fit(place, Cut::Start, plain(style)));
     }
     if shown < count {
         let more: usize = count - shown;
         let more = fl!("workspaces-more", count = more);
-        column.push(fit(&more, Cut::End, theme.dialog));
+        let more = format!("{} {more}", theme.glyphs.more);
+        column.push(fit(&more, Cut::End, theme.dialog_more()));
     }
-    column.resize(lines + 1, fit("", Cut::End, theme.dialog));
+    column.resize(lines + 1, fit("", Cut::End, plain(theme.dialog)));
     column
 }
 
@@ -662,6 +664,23 @@ mod tests {
             !text.contains("web:/var/www"),
             "the fourth does not show: {text}"
         );
+    }
+
+    #[test]
+    fn how_many_more_tabs_is_faint_apart_from_the_tabs() {
+        let theme = Theme::mc_classic();
+        let tabs = row("many", 7, 1).left;
+        let heading = (fl!("workspaces-left"), theme.dialog_title);
+        let column = column_lines(heading, &tabs, (20, FOOTER_TABS), &theme);
+        let text = |line: &[Span<'_>]| -> String {
+            line.iter().map(|span| span.content.as_ref()).collect()
+        };
+        let style = |line: &[Span<'_>]| line[0].style;
+        let last = text(&column[FOOTER_TABS]);
+        let more = format!("{} 4 more…", theme.glyphs.more);
+        assert!(last.starts_with(&more), "{last}");
+        assert_eq!(style(&column[FOOTER_TABS]), theme.dialog_more().0);
+        assert_eq!(style(&column[FOOTER_TABS - 1]), theme.dialog, "a tab");
     }
 
     #[test]

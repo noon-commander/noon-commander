@@ -163,8 +163,10 @@ fn render_cells(frame: &mut Frame<'_>, inner: Rect, grid: Grid, rows: &[Row], th
     if shown < rows.len() {
         let hidden = rows.len() - shown;
         let more = fl!("which-key-hidden", count = hidden);
+        let more = format!("{} {more}", theme.glyphs.more);
         let at = cell_area(inner, grid, shown / grid.rows, shown % grid.rows);
-        let spans = styled(cut(&more, grid.width), theme.dialog_title, theme);
+        let fitted = cut(&more, grid.width);
+        let spans = cells::spans(fitted, theme.dialog_more(), theme.glyphs.marks);
         frame.render_widget(Line::from(spans), at);
     }
 }
@@ -297,6 +299,29 @@ mod tests {
             assert_eq!(cell.fg, theme.truncated_dialog.fg.unwrap());
             assert_eq!(cell.bg, theme.dialog.bg.unwrap());
         }
+    }
+
+    #[test]
+    fn how_many_do_not_fit_is_faint_apart_from_the_rows() {
+        let keymap = Keymap::default();
+        let hints = root(&keymap, Context::Panel);
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(100, 14)).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &hints, &theme))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let fg = |text: &str| {
+            let at = crate::tui::mouse::find(buffer, text);
+            buffer[(at.x, at.y)].fg
+        };
+        let more = format!("{} 21 more…", theme.glyphs.more);
+        assert_eq!(Some(fg(&more)), theme.dialog_more().0.fg);
+        assert_ne!(
+            fg(&more),
+            fg("+18 keys"),
+            "apart from the rows of keys that follow"
+        );
     }
 
     #[test]

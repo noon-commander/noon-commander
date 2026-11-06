@@ -551,10 +551,12 @@ impl Look<'_> {
                     Some(self.theme.dialog_host_status(status)),
                 )
             }
-            Item::More(_, count) => (String::new(), fl!("menu-more", count = count), None),
+            Item::More(_, count) => (self.decor.more(), fl!("menu-more", count = count), None),
         };
         let styles = if selected {
             (self.focused, self.theme.truncated_cursor)
+        } else if let Item::More(..) = item {
+            self.theme.dialog_more()
         } else {
             (self.theme.dialog, self.theme.truncated_dialog)
         };
@@ -984,7 +986,8 @@ mod tests {
         assert_eq!(menu.chosen().map(key), Some(Key::More(Group::Sftp)));
         assert_eq!(menu.chosen_host(), None);
         let text = draw(&mut menu, 20);
-        assert!(text.contains("║ 4 more…"), "{text}");
+        let more = format!("║ {} 4 more…", Glyphs::PLAIN.more);
+        assert!(text.contains(&more), "in the column of the icons: {text}");
         assert_eq!(press(&mut menu, Action::Confirm), MenuEvent::Pending);
         assert_eq!(hosts_shown(&menu).len(), 14, "Enter shows them");
         assert_eq!(
@@ -992,6 +995,33 @@ mod tests {
             Some(Key::Host("h10".to_owned())),
             "the first of them"
         );
+    }
+
+    #[test]
+    fn the_row_of_the_rest_is_faint_but_under_the_cursor() {
+        let mut menu = menu_with(home(), &Recent::default(), many_hosts(14));
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(50, 30)).unwrap();
+        let hosts = |_: &str| HostState::default();
+        let mut style_of = |menu: &mut LocationMenu, text: &str| {
+            terminal
+                .draw(|frame| {
+                    let decor = Decor::new(false);
+                    menu.render(frame, frame.area(), &theme, decor, &hosts, &still());
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let at = crate::tui::mouse::find(buffer, text);
+            buffer[(at.x, at.y)].style()
+        };
+        let more = style_of(&mut menu, "4 more…");
+        let host = style_of(&mut menu, "h09");
+        assert_eq!(more.fg, theme.dialog_more().0.fg, "faint");
+        assert_ne!(more.fg, host.fg, "apart from the places");
+        press(&mut menu, Action::End);
+        let more = style_of(&mut menu, "4 more…");
+        let focused = Colors::plain(&theme).focused_style();
+        assert_eq!((more.fg, more.bg), (focused.fg, focused.bg), "the cursor's");
     }
 
     #[test]

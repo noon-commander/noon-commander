@@ -2,7 +2,7 @@
 
 use noc_config::Borders;
 use noc_vfs::{DirEntry, FileKind};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::BorderType;
 
 use super::glyphs::{Glyphs, Lines};
@@ -108,7 +108,8 @@ pub(crate) struct Theme {
     pub(crate) menu_hotkey: Style,
     /// Drawn over the others: what cannot be used now, as a command of the pull-down menu that
     /// cannot run or a glyph of a field that searches that a click does not switch; and text
-    /// that only helps, as the hint of a setting or what an empty field stands for.
+    /// that only helps, as the hint of a setting, what an empty field stands for, or how many
+    /// more rows a list has than it shows.
     pub(crate) disabled: Style,
     /// The letter on the command under the cursor and on the menu bar, where a color of the
     /// menu's may not show, as mc's `menuhotsel`.
@@ -785,6 +786,15 @@ impl Theme {
             ..Style::new()
         };
         style.patch(color).crossed_out()
+    }
+
+    /// What a list says of the rows it does not show, as `24 more…`, and its mark of text cut
+    /// short: faint over `dialog`, apart from the rows, the mark as bright as theirs.
+    pub(crate) fn dialog_more(&self) -> (Style, Style) {
+        (
+            self.dialog.patch(self.disabled),
+            self.truncated_dialog.remove_modifier(Modifier::DIM),
+        )
     }
 
     /// The style of the unit of a size in `power`s of 1024, 0 for bytes.

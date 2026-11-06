@@ -315,7 +315,7 @@ mod tests {
             let at = crate::tui::mouse::find(buffer, text);
             buffer[(at.x, at.y)].fg
         };
-        let more = format!("{} 21 more…", theme.glyphs.more);
+        let more = format!("{} 19 more…", theme.glyphs.more);
         assert_eq!(Some(fg(&more)), theme.dialog_more().0.fg);
         assert_ne!(
             fg(&more),
@@ -351,7 +351,16 @@ mod tests {
                 group: true
             })
         );
-        assert_eq!(row("F10").map(|row| row.text), Some("Quit".to_owned()));
+        assert_eq!(row("Z Z, F10").map(|row| row.text), Some("Quit".to_owned()));
+        assert_eq!(
+            row("] t"),
+            Some(Row {
+                keys: "] t".to_owned(),
+                text: "The next tab in this panel".to_owned(),
+                group: false
+            }),
+            "not +1 key"
+        );
         assert!(row("Esc").is_none(), "Esc closes the hints");
     }
 

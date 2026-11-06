@@ -1977,7 +1977,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 - **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence, or
   every key of a context, with what the help says they do (`Keymap::hints`, drawn by
   `tui/which_key.rs` in columns across the bottom of the panels; where not all fit, the last cell
-  says how many do not, faint, after the chevron down of the location menu). The event loop owns
+  says how many do not, faint, after the chevron down of the location menu). A key that does
+  nothing alone and starts one sequence shows that sequence whole, as `] t`, with what it does,
+  and shares a row with the keys that do the same, as `Z Z, F10`. The event loop owns
   the `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its
   last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints

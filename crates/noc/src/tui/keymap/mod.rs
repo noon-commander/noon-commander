@@ -286,7 +286,8 @@ impl KeyState {
 /// A key that can be typed next, with what it does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Hint {
-    /// The key as the help writes it; keys that do the same, apart by commas.
+    /// The key as the help writes it, or the one sequence it starts whole, as `] t`, where it
+    /// does nothing alone; keys that do the same, apart by commas.
     pub(crate) keys: String,
     /// What the key does; `None` for a key that only starts longer sequences.
     pub(crate) action: Option<Action>,
@@ -865,9 +866,10 @@ impl Keymap {
 
     /// The keys that can follow `prefix` in `context`'s chain in `mode`, in the order of the
     /// preset, the context's own first. Keys that do the same share a row; a key that starts
-    /// longer sequences has one of its own. `Esc` and `Ctrl+[`, which close the hints, are left
-    /// out, and in Insert mode, so are characters that only a fallback context binds, which are
-    /// text.
+    /// longer sequences has one of its own, but one that does nothing alone and starts only one
+    /// shows that sequence whole, as `] t`, which shares a row with the keys that do the same.
+    /// `Esc` and `Ctrl+[`, which close the hints, are left out, and in Insert mode, so are
+    /// characters that only a fallback context binds, which are text.
     pub(crate) fn hints(&self, place: impl Into<Place>, prefix: &[KeyCombination]) -> Vec<Hint> {
         let place = place.into();
         let Place { mode, context, .. } = place;
@@ -895,12 +897,18 @@ impl Keymap {
             }
             let mut keys = prefix.to_vec();
             keys.push(key);
+            let mut text = describe_key(key);
             let (action, longer) = match self.lookup(place, &keys) {
                 Lookup::Exact(action) => (Some(action), 0),
-                Lookup::Prefix(action) => (action, self.count_under(place, &keys)),
+                Lookup::Prefix(action) => match (action, self.under(place, &keys).as_slice()) {
+                    (None, [(sequence, only)]) => {
+                        text = describe(&sequence[prefix.len()..]);
+                        (Some(*only), 0)
+                    }
+                    (action, under) => (action, under.len()),
+                },
                 Lookup::Unknown => continue,
             };
-            let text = describe_key(key);
             match hints
                 .iter_mut()
                 .find(|hint| hint.more == 0 && longer == 0 && hint.action == action)
@@ -933,23 +941,24 @@ impl Keymap {
             .filter(move |(_, action)| place.allows(*action))
     }
 
-    /// How many sequences longer than `prefix` that start with it do something in `place`.
-    fn count_under(&self, place: Place, prefix: &[KeyCombination]) -> usize {
-        let mut counted: Vec<&Sequence> = Vec::new();
+    /// The sequences longer than `prefix` that start with it and do something in `place`, each
+    /// once, with what it does there.
+    fn under(&self, place: Place, prefix: &[KeyCombination]) -> Vec<(&Sequence, Action)> {
+        let mut under: Vec<(&Sequence, Action)> = Vec::new();
         for (sequence, _) in self.chain_bindings(place) {
-            let does = matches!(
-                self.lookup(place, sequence),
-                Lookup::Exact(_) | Lookup::Prefix(Some(_))
-            );
-            if sequence.len() > prefix.len()
-                && sequence.starts_with(prefix)
-                && does
-                && !counted.contains(&sequence)
+            if sequence.len() <= prefix.len()
+                || !sequence.starts_with(prefix)
+                || under.iter().any(|(seen, _)| *seen == sequence)
             {
-                counted.push(sequence);
+                continue;
+            }
+            if let Lookup::Exact(action) | Lookup::Prefix(Some(action)) =
+                self.lookup(place, sequence)
+            {
+                under.push((sequence, action));
             }
         }
-        counted.len()
+        under
     }
 }
 

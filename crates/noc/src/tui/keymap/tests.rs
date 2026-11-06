@@ -1372,7 +1372,21 @@ fn hints_list_the_keys_that_can_follow_in_the_order_of_the_preset() {
     let every = keymap.hints(PANEL, &[]);
     let hint = |keys: &str| every.iter().find(|hint| hint.keys == keys).cloned();
     assert_eq!(hint("Ctrl+w").map(|hint| hint.more), Some(9));
-    assert_eq!(hint("Z").map(|hint| hint.more), Some(1));
+    assert_eq!(
+        hint("] t"),
+        Some(Hint {
+            keys: "] t".to_owned(),
+            action: Some(Action::NextTab),
+            more: 0
+        }),
+        "a key that starts one sequence alone shows it whole"
+    );
+    assert_eq!(
+        hint("Z Z, F10").map(|hint| hint.action),
+        Some(Some(Action::Quit)),
+        "with the keys that do the same"
+    );
+    assert!(hint("Z").is_none());
     assert!(
         every.iter().all(|hint| !hint.keys.contains("Esc")),
         "Esc closes the hints"
@@ -1381,6 +1395,38 @@ fn hints_list_the_keys_that_can_follow_in_the_order_of_the_preset() {
     let search = keymap.hints((Mode::Insert, Context::QuickSearch), &[]);
     assert!(hint_keys(&search).iter().all(|keys| keys.len() > 1));
     assert!(hint_keys(&search).contains(&"Ctrl+g"));
+}
+
+#[test]
+fn hints_show_the_one_sequence_of_a_key_whole_unless_the_key_does_something() {
+    let keymap = Keymap::of(&[(
+        Mode::Normal,
+        Context::Panel,
+        &[
+            (Action::Home, &["g"]),
+            (Action::End, &["g g"]),
+            (Action::Quit, &["z a b", "f10"]),
+        ],
+    )]);
+    assert_eq!(
+        keymap.hints(PANEL, &[]),
+        [
+            Hint {
+                keys: "g".to_owned(),
+                action: Some(Action::Home),
+                more: 1
+            },
+            Hint {
+                keys: "z a b, F10".to_owned(),
+                action: Some(Action::Quit),
+                more: 0
+            }
+        ]
+    );
+    assert_eq!(
+        hint_keys(&keymap.hints(PANEL, &parse_sequence("z").unwrap())),
+        ["a b"]
+    );
 }
 
 #[test]

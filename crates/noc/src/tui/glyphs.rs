@@ -93,6 +93,9 @@ pub(crate) struct Glyphs {
     /// menu, where Enter shows them, in the columns of tabs of the workspaces, and in the last
     /// cell of the key hints.
     pub(crate) more: char,
+    /// In the columns of tabs of the workspaces, in front of the tab that shows on the side
+    /// that has the keys.
+    pub(crate) active: char,
     /// In a check box that is on, and in front of a command of the pull-down menu that is on.
     pub(crate) check: char,
     /// In front of the choice taken among others, as the dot of a radio button: in the list of a
@@ -155,6 +158,8 @@ impl Glyphs {
         combo_box: '󰅀',
         // nf-md-chevron_double_down: more below.
         more: '󰄼',
+        // nf-md-menu_right, as the triangle of the fonts without icons.
+        active: '󰍟',
         // nf-md-check.
         check: '󰄬',
         // nf-md-circle_medium.
@@ -229,6 +234,8 @@ impl Glyphs {
         combo_box: '▼',
         // As an open fold.
         more: '▾',
+        // As a closed fold.
+        active: '▸',
         // As the checks of checksums.
         check: '✓',
         // As Far's radio buttons, `(•)`.
@@ -390,6 +397,13 @@ mod tests {
     }
 
     #[test]
+    fn the_side_with_the_keys_is_a_triangle_to_the_right() {
+        // nf-md-menu_right.
+        assert_eq!(u32::from(Glyphs::NERD.active), 0xf035f);
+        assert_eq!(Glyphs::PLAIN.active, Glyphs::PLAIN.folds.0, "a closed fold");
+    }
+
+    #[test]
     fn the_arrow_of_a_link_is_nerd_fonts_or_ascii() {
         let code = |text: &str| text.chars().map(u32::from).collect::<Vec<_>>();
         // nf-md-arrow_right, in one cell.
@@ -414,6 +428,7 @@ mod tests {
             );
             assert_eq!(noc_text::width(&glyphs.combo_box.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.more.to_string()), 1);
+            assert_eq!(noc_text::width(&glyphs.active.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.check.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.choice.to_string()), 1);
             let spinners = glyphs.spinners;

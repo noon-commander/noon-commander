@@ -30,6 +30,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.
+- The columns of tabs in the Workspaces window no longer say Left and Right: a triangle marks the
+  tab that shows on the side with the keys, and each row's count of that side's tabs is bold.
 
 - The key hints show a key that only starts one sequence as that sequence whole, with what it
   does, as `] t` and `Z Z, F10`, rather than `+1 key`.

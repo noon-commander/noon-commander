@@ -751,12 +751,14 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
 - The window and F9 → Workspace show the workspaces in the order of their names, as the panels
   order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order
   they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row
-  counts the tabs of the left panel, then those of the right. Under the rows, a column for each
+  counts the tabs of the left panel, then those of the right; the count of the side with the keys
+  is bold, in the color of titles. Under the rows, a column for each
   panel lists where the tabs of the workspace under the cursor are, one to a line, cut at the
   start where they do not fit, in as many lines as the workspace with the most tabs on a side
   needs, four at most, the last saying how many more, faint, after the chevron down of the
-  location menu; the heading of the side with the keys is in the color of titles, and the tab
-  that shows on each side is bold.
+  location menu. The columns name no side: a triangle (`Glyphs.active`), in the color of titles,
+  goes before the tab that shows on the side with the keys, or before how many more if that tab
+  is among them; the tab that shows on each side is bold.
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
@@ -765,9 +767,8 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   ║ noon                                               2 │ 1 ║
   ║ photos                                             1 │ 3 ║
   ╟────────────────────────────┬─────────────────────────────╢
-  ║ Left                       │ Right                       ║
-  ║ ~/src/noc                  │ web:/var/www                ║
-  ║ ~/Downloads                │                             ║
+  ║   ~/src/noc                │ ▸ web:/var/www              ║
+  ║   ~/Downloads              │                             ║
   ║                            │                             ║
   ╚════════════════════════════╧═════════════════════════════╝
   ```

@@ -219,8 +219,9 @@ impl WorkspacesWindow {
     }
 
     /// Draws the window centered over `area`, the panels: the filter, then the workspaces,
-    /// scrolled to the cursor, each with how many tabs each panel has; under them, a column
-    /// for each panel with where the tabs of the one under the cursor are.
+    /// scrolled to the cursor, each with how many tabs each panel has, the count of the side
+    /// with the keys standing out; under them, a column for each panel with where the tabs of
+    /// the one under the cursor are.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let shown = self.picker.shown(&self.rows);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
@@ -271,52 +272,56 @@ impl WorkspacesWindow {
         self.picker.render(frame, area, theme, body, &mut |row| {
             // The name, a space, the tabs of the left panel, a line, those of the right one.
             let name_width = row.width.saturating_sub(count_width + 1);
-            let styles = if row.selected {
-                (focused, theme.truncated_cursor)
+            let (styles, active) = if row.selected {
+                let styles = (focused, theme.truncated_cursor);
+                (styles, (focused.add_modifier(Modifier::BOLD), styles.1))
             } else {
-                (theme.dialog, theme.truncated_dialog)
+                let styles = (theme.dialog, theme.truncated_dialog);
+                (styles, (side_style(theme), styles.1))
             };
-            let name = cells::sanitize(shown[row.index].name.as_bytes());
+            let workspace = shown[row.index];
+            let name = cells::sanitize(workspace.name.as_bytes());
             let fit = (Align::Left, Cut::End);
             let mut line = cells::fitted(&name, name_width, fit, styles, theme.glyphs.marks);
-            let count = |count: &str, width| {
+            let count = |count: &str, width, side: PanelSide| {
+                let styles = if side == workspace.active {
+                    active
+                } else {
+                    styles
+                };
                 cells::fit(count, width, Align::Right, styles, theme.glyphs.marks)
             };
             let (left, right) = &counts[row.index];
             line.spans.push(Span::styled(" ", styles.0));
-            line.spans.extend(count(left, count_widths.0));
+            line.spans
+                .extend(count(left, count_widths.0, PanelSide::Left));
             line.spans.push(Span::styled(separator.clone(), styles.0));
-            line.spans.extend(count(right, count_widths.1));
+            line.spans
+                .extend(count(right, count_widths.1, PanelSide::Right));
             line
         });
     }
 }
 
-/// The lines under the rows for `row`, in `width` cells: a column for each panel, headed by its
-/// side, with `tabs` lines of where its tabs are under the heading; the heading of the side with
-/// the keys, and the tab that shows on each side, stand out. And the cell, from the left, of the
-/// line between the columns, which the picker draws.
+/// What stands out as the side with the keys, outside the row under the cursor: its count of
+/// tabs, and its mark.
+fn side_style(theme: &Theme) -> Style {
+    theme.dialog_title.add_modifier(Modifier::BOLD)
+}
+
+/// The lines under the rows for `row`, in `width` cells: a column for each panel, with `tabs`
+/// lines of where its tabs are; the mark of the side with the keys goes in front of the tab
+/// that shows there, and the tab that shows on each side stands out. And the cell, from the
+/// left, of the line between the columns, which the picker draws.
 fn footer(row: &Row, (width, tabs): (usize, usize), theme: &Theme) -> (Vec<Line<'static>>, u16) {
     // A blank cell on either side of the line, as between the text and the frame.
     let column = width.saturating_sub(1) / 2;
     let widths = (column.saturating_sub(1), width.saturating_sub(column + 2));
-    let heading = |text: String, side: PanelSide| {
-        let style = if side == row.active {
-            theme.dialog_title.add_modifier(Modifier::BOLD)
-        } else {
-            theme.dialog
-        };
-        (text, style)
-    };
-    let left = column_lines(
-        heading(fl!("workspaces-left"), PanelSide::Left),
-        &row.left,
-        (widths.0, tabs),
-        theme,
-    );
+    let active = |side: PanelSide| side == row.active;
+    let left = column_lines(&row.left, active(PanelSide::Left), (widths.0, tabs), theme);
     let right = column_lines(
-        heading(fl!("workspaces-right"), PanelSide::Right),
         &row.right,
+        active(PanelSide::Right),
         (widths.1, tabs),
         theme,
     );
@@ -332,17 +337,29 @@ fn footer(row: &Row, (width, tabs): (usize, usize), theme: &Theme) -> (Vec<Line<
     (lines, u16::try_from(column).unwrap_or(u16::MAX))
 }
 
-/// A column under the rows, `width` cells across: its `heading`, then where the tabs of a side
-/// are, in `lines` lines; the last of them says how many more there are if they do not fit.
+/// A column under the rows, `width` cells across: where the tabs of a side are, in `lines`
+/// lines; the last of them says how many more there are if they do not fit. Each line starts
+/// with the room of the mark of the side with the keys, which goes, on the side that is
+/// `active`, in front of the tab that shows, or of how many more if that tab is among them.
 fn column_lines(
-    (heading, style): (String, Style),
     tabs: &SideTabs,
+    active: bool,
     (width, lines): (usize, usize),
     theme: &Theme,
 ) -> Vec<Vec<Span<'static>>> {
-    let fit = |text: &str, cut: Cut, styles: (Style, Style)| {
-        let fitted = cells::fit_cut(text, width, Align::Left, cut);
-        cells::spans(fitted, styles, theme.glyphs.marks)
+    let mark = format!("{} ", theme.glyphs.active);
+    let room = cells::width(&mark).min(width);
+    let fit = |marked: bool, text: &str, cut: Cut, styles: (Style, Style)| {
+        let (lead, style) = if marked {
+            (mark.as_str(), side_style(theme))
+        } else {
+            ("", theme.dialog)
+        };
+        let lead = cells::fit_cut(lead, room, Align::Left, Cut::End);
+        let mut spans = cells::spans(lead, (style, theme.truncated_dialog), theme.glyphs.marks);
+        let fitted = cells::fit_cut(text, width - room, Align::Left, cut);
+        spans.extend(cells::spans(fitted, styles, theme.glyphs.marks));
+        spans
     };
     let plain = |style: Style| (style, theme.truncated_dialog);
     let count = tabs.places.len();
@@ -351,23 +368,25 @@ fn column_lines(
     } else {
         count
     };
-    let mut column = vec![fit(&heading, Cut::End, plain(style))];
+    let mut column = Vec::with_capacity(lines);
     for (index, place) in tabs.places.iter().take(shown).enumerate() {
-        let style = if index == tabs.current {
+        let current = index == tabs.current;
+        let style = if current {
             theme.dialog.add_modifier(Modifier::BOLD)
         } else {
             theme.dialog
         };
         // The end of a path says most about it.
-        column.push(fit(place, Cut::Start, plain(style)));
+        column.push(fit(active && current, place, Cut::Start, plain(style)));
     }
     if shown < count {
         let more: usize = count - shown;
         let more = fl!("workspaces-more", count = more);
         let more = format!("{} {more}", theme.glyphs.more);
-        column.push(fit(&more, Cut::End, theme.dialog_more()));
+        let hidden = tabs.current >= shown;
+        column.push(fit(active && hidden, &more, Cut::End, theme.dialog_more()));
     }
-    column.resize(lines + 1, fit("", Cut::End, plain(theme.dialog)));
+    column.resize(lines, fit(false, "", Cut::End, plain(theme.dialog)));
     column
 }
 
@@ -712,21 +731,78 @@ mod tests {
         );
     }
 
+    /// The text of a line of a column of tabs.
+    fn text(line: &[Span<'_>]) -> String {
+        line.iter().map(|span| span.content.as_ref()).collect()
+    }
+
+    /// The style of the first span of `line` that is not blank.
+    fn style(line: &[Span<'_>]) -> Style {
+        line.iter()
+            .find(|span| !span.content.trim().is_empty())
+            .map(|span| span.style)
+            .unwrap()
+    }
+
     #[test]
     fn how_many_more_tabs_is_faint_apart_from_the_tabs() {
         let theme = Theme::mc_classic();
         let tabs = row("many", 7, 1).left;
-        let heading = (fl!("workspaces-left"), theme.dialog_title);
-        let column = column_lines(heading, &tabs, (20, FOOTER_TABS), &theme);
-        let text = |line: &[Span<'_>]| -> String {
-            line.iter().map(|span| span.content.as_ref()).collect()
-        };
-        let style = |line: &[Span<'_>]| line[0].style;
-        let last = text(&column[FOOTER_TABS]);
-        let more = format!("{} 4 more…", theme.glyphs.more);
+        let column = column_lines(&tabs, false, (20, FOOTER_TABS), &theme);
+        assert_eq!(column.len(), FOOTER_TABS, "no heading");
+        let last = text(&column[FOOTER_TABS - 1]);
+        let more = format!("  {} 4 more…", theme.glyphs.more);
         assert!(last.starts_with(&more), "{last}");
-        assert_eq!(style(&column[FOOTER_TABS]), theme.dialog_more().0);
-        assert_eq!(style(&column[FOOTER_TABS - 1]), theme.dialog, "a tab");
+        assert_eq!(style(&column[FOOTER_TABS - 1]), theme.dialog_more().0);
+        assert_eq!(style(&column[FOOTER_TABS - 2]), theme.dialog, "a tab");
+    }
+
+    #[test]
+    fn the_mark_goes_before_the_tab_that_shows_on_the_side_with_the_keys() {
+        let theme = Theme::mc_classic();
+        let mark = format!("{} ", theme.glyphs.active);
+        let tabs = row("two", 1, 2).right;
+        let column = column_lines(&tabs, true, (20, 3), &theme);
+        let lines: Vec<String> = column.iter().map(|line| text(line)).collect();
+        assert_eq!(lines[0], format!("{mark}{:<18}", "/tmp"), "the first shows");
+        assert_eq!(lines[1], format!("  {:<18}", "web:/var/www"));
+        assert_eq!(style(&column[0]), side_style(&theme), "the mark stands out");
+        assert_eq!(lines[2].trim(), "");
+        let column = column_lines(&tabs, false, (20, 3), &theme);
+        assert!(text(&column[0]).starts_with("  /tmp"), "the other side");
+        // The last of seven, which shows, is among those that do not fit.
+        let many = row("many", 7, 1).left;
+        let column = column_lines(&many, true, (20, FOOTER_TABS), &theme);
+        let last = text(&column[FOOTER_TABS - 1]);
+        assert!(
+            last.starts_with(&format!("{mark}{}", theme.glyphs.more)),
+            "{last}"
+        );
+        assert!(
+            column[..FOOTER_TABS - 1]
+                .iter()
+                .all(|line| text(line).starts_with("  "))
+        );
+    }
+
+    #[test]
+    fn the_count_of_the_side_with_the_keys_stands_out() {
+        let theme = Theme::mc_classic();
+        let mut window = window();
+        let mut terminal = Terminal::new(TestBackend::new(64, 16)).unwrap();
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &theme))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        // deploy, under noon: two tabs on each side; the right one has the keys.
+        let y = 5;
+        let line: String = (0..64).map(|x| buffer[(x, y)].symbol()).collect();
+        let at = line.find("2 │ 2").unwrap();
+        let x = u16::try_from(line[..at].chars().count()).unwrap();
+        let bold = |x: u16| buffer[(x, y)].modifier.contains(Modifier::BOLD);
+        assert!(!bold(x), "{line}");
+        assert!(bold(x + 4), "{line}");
+        assert_eq!(buffer[(x + 4, y)].fg, side_style(&theme).fg.unwrap());
     }
 
     #[test]

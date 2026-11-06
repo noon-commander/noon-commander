@@ -739,8 +739,9 @@ A workspace is the tabs of both panels, saved under a name
 sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
 
 - `t W`, or F9 → Workspace → Save workspace…, asks for a name, offering
-  that of the workspace restored or saved last, and saves the tabs under it; the name of
-  another workspace asks before replacing it. A location that `workspaces.toml` cannot hold,
+  that of the workspace restored or saved last, and saves the tabs under it; the name of a
+  workspace asks before replacing it, as `W` in the window does: Yes by default over the one
+  restored or saved last, No over another one. A location that `workspaces.toml` cannot hold,
   such as a name that is not UTF-8, is saved as the nearest directory above it that it can
   hold, or else as `~`.
 - `t w`, or F9 → Workspace → Workspace list…, opens a window of the saved

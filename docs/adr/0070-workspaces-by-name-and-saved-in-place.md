@@ -11,10 +11,10 @@ saved: a new one went last, and one saved again kept its place. With more than a
 hard to find by eye, and the digits of F9 → Workspace said nothing of the name they restore.
 
 Saving the tabs again in place of a workspace took `t W` in a panel, which offers the name of the
-workspace restored or saved last, or typing the name of another one, which asks before replacing
-it. In the window, where the workspace is under the cursor, there was no key for it. Nor did the
-window show which workspace was restored or saved last, which F9 → Workspace marks and `t W`
-offers; it opened on its first row.
+workspace restored or saved last and saved over it without asking, or typing the name of another
+one, which asks before replacing it, No by default. In the window, where the workspace is under
+the cursor, there was no key for it. Nor did the window show which workspace was restored or saved
+last, which F9 → Workspace marks and `t W` offers; it opened on its first row.
 
 Under the rows, the column of each panel was headed Left and Right, the heading of the side with
 the keys in the color of titles. The columns stand where the panels stand, so the headings said
@@ -30,11 +30,15 @@ something, and only for the workspace under the cursor.
   change; the file keeps them in the order they were saved, as `noc-config` knows no language.
   There is no other order to choose, and no key for one.
 - **Saved in place of the one under the cursor.** In the window, `W` and F2 (`replace_workspace`)
-  ask whether to replace the workspace under the cursor with the tabs of both panels, No by
-  default, as replacing one by its name asks; over the one restored or saved last, Yes, as `t W`
-  saves that one again without asking. Yes saves them under its name, which becomes the one saved
-  last, and the window stays open on it. `W` as `t W` saves in the panels; F2 as mc's editor saves.
-  vim's `W` moves to the next WORD, which a list has not.
+  ask whether to replace the workspace under the cursor with the tabs of both panels. Yes saves
+  them under its name, which becomes the one saved last, and the window stays open on it. `W` as
+  `t W` saves in the panels; F2 as mc's editor saves. vim's `W` moves to the next WORD, which a
+  list has not.
+- **Every save over a workspace asks, the same way.** `W` and F2 in the window, and `t W` with the
+  name of a workspace, ask before replacing it: Yes by default over the one restored or saved
+  last, which saving again is meant for, and No over another one, so that Enter by habit changes
+  nothing. `t W` asked nothing over the one restored or saved last before; now Enter twice saves
+  it.
 - **`a` and F7 add one.** `a` stays, as yazi's `a` adds an entry and `A` adds a directory in the
   panels; vim's `a` appends after the cursor, which a list has not. F7 adds one too, as mc's F7
   makes a directory, so that adding works while the filter takes text, as F2, F6, and F8 do.

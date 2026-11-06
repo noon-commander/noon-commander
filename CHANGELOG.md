@@ -38,6 +38,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tab that shows on the side with the keys, and each row's count of that side's tabs is bold.
 - The Workspaces window marks the workspace restored or saved last with a dot, as F9 → Workspace
   does, and opens with the cursor on it.
+- `t W` asks before saving over the workspace restored or saved last too, as `W` in the window
+  does, with Yes as the default; over another one, No stays the default.
 
 - The key hints show a key that only starts one sequence as that sequence whole, with what it
   does, as `] t` and `Z Z, F10`, rather than `+1 key`.

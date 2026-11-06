@@ -77,13 +77,20 @@ fn alt_shift_w_saves_the_tabs_of_both_panels_under_a_name() {
     assert!(!workspace.right[0].current, "one tab needs no mark");
     assert_eq!(app.workspace.as_deref(), Some("noon"));
 
-    // Its name comes back, and saving it again asks nothing.
+    // Its name comes back, and saving it again asks, Yes by default.
     holds(&mut app, &[workspace]);
     app.handle(action(Action::SaveWorkspace));
     let text = screen_of(&mut app, 16);
     assert!(
         text.contains("Save workspace") && text.contains("noon"),
         "{text}"
+    );
+    assert!(app.handle(action(Action::Confirm)).is_empty(), "asks first");
+    let text = screen_of(&mut app, 16);
+    assert!(text.contains("Replace it"), "{text}");
+    assert!(
+        text.contains("{ Yes } [ No ]"),
+        "Yes is the default: {text}"
     );
     assert!(matches!(
         one(app.handle(action(Action::Confirm))),

@@ -32,22 +32,22 @@ impl App {
     }
 
     /// Saves the tabs of both panels under `name`, the text of the dialog of t W. A name
-    /// that another workspace has asks first; that of the workspace restored or saved last
-    /// does not, as saving it again is what the dialog offers.
+    /// that a workspace has asks first, as W in the window does.
     fn save_workspace_as(&mut self, name: &str) -> Vec<Effect> {
         let name = name.trim();
         if name.is_empty() {
             return Vec::new();
         }
         let workspace = self.workspace_named(name.to_owned());
-        if self.workspaces.get(name).is_some() && self.workspace.as_deref() != Some(name) {
+        if self.workspaces.get(name).is_some() {
             let message = fl!(
                 "workspaces-replace",
                 name = cells::sanitize(name.as_bytes())
             );
             let buttons = vec![Button::Yes, Button::No];
             let title = fl!("workspaces-replace-title");
-            let dialog = Dialog::question(&title, &message, buttons, 1, Tone::Warning);
+            let default = self.replace_default(name);
+            let dialog = Dialog::question(&title, &message, buttons, default, Tone::Warning);
             self.dialogs.push_back(Open {
                 dialog,
                 purpose: Purpose::Workspace(WorkspaceQuestion::Replace { workspace }),
@@ -55,6 +55,13 @@ impl App {
             return Vec::new();
         }
         self.save_workspace(workspace)
+    }
+
+    /// The button the question before saving over the workspace `name` starts on: Yes over
+    /// the one restored or saved last, which saving again is meant for; No over another one, so
+    /// that Enter by habit changes nothing.
+    fn replace_default(&self, name: &str) -> usize {
+        usize::from(self.workspace.as_deref() != Some(name))
     }
 
     fn save_workspace(&mut self, workspace: Workspace) -> Vec<Effect> {
@@ -166,9 +173,7 @@ impl App {
             WorkspacesEvent::Closed => self.workspaces_window = None,
             WorkspacesEvent::Save => self.ask_save_workspace(false),
             WorkspacesEvent::Replace(name) => {
-                // Saving again the one restored or saved last is what t W offers without asking:
-                // Yes is the default there, No over another one.
-                let default = usize::from(self.workspace.as_ref() != Some(&name));
+                let default = self.replace_default(&name);
                 let workspace = self.workspace_named(name);
                 let shown = cells::sanitize(workspace.name.as_bytes());
                 let message = fl!("workspaces-overwrite", name = shown);

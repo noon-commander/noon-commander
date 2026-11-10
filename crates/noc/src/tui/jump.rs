@@ -200,8 +200,7 @@ impl JumpMenu {
     }
 
     /// Draws the window centered over `area`, the panels: the keywords, then the directories
-    /// with their scores, scrolled to the cursor, and the whole directory under the cursor below
-    /// them.
+    /// with their scores, scrolled to the cursor.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
         let found = self.picker.shown(&self.found);
         let paths: Vec<String> = (found.iter())
@@ -226,7 +225,6 @@ impl JumpMenu {
             message: self.loading.error().map(str::to_owned),
             nothing: Some(fl!("jump-nothing")),
             loading: Some((&self.loading, spin)),
-            full: paths.get(self.picker.cursor()).cloned(),
             ..Body::default()
         };
         let focused = Colors::plain(theme).focused_style();
@@ -263,7 +261,6 @@ mod tests {
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
-    use crate::tui::picker::FULL_ROWS;
     use crate::tui::spinner;
 
     fn scored(score: f64, path: &str) -> Scored {
@@ -497,12 +494,7 @@ mod tests {
             JumpMenu::new(PathBuf::from("/home/me"), None, 1).rows_like(first.rows_listed());
         let text = draw(&mut next, 20);
         let bars = text.lines().filter(|line| line.contains("---")).count();
-        let full = usize::from(FULL_ROWS + 1);
-        assert_eq!(
-            bars,
-            4 + full,
-            "the rows, and the whole row under them: {text}"
-        );
+        assert_eq!(bars, 4, "the rows, and no whole row under them: {text}");
         next.found(1, Ok(found()));
         let rows = draw(&mut next, 20);
         let lines = |text: &str| text.lines().filter(|line| !line.trim().is_empty()).count();
@@ -551,14 +543,6 @@ mod tests {
     #[test]
     fn draws_directories_from_home_with_their_scores() {
         let mut menu = menu();
-        insta::assert_snapshot!(draw(&mut menu, 12));
-    }
-
-    #[test]
-    fn shows_the_whole_directory_under_the_cursor_under_the_rows() {
-        let mut menu = JumpMenu::new(PathBuf::from("/home/me"), None, 1);
-        let long = "/srv/www/clients/acme-corporation-international/deploy/releases/2026-10-15";
-        menu.found(1, Ok(vec![scored(9.0, long), scored(1.0, "/srv")]));
         insta::assert_snapshot!(draw(&mut menu, 12));
     }
 }

@@ -1,6 +1,7 @@
 # 0041. Lists always show the whole row
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0071](0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)
 - Date: 2026-10-19
 - Amends: [ADR 0025](0025-marks-of-text-cut-short.md),
   [ADR 0036](0036-lists-open-in-insert-mode.md)

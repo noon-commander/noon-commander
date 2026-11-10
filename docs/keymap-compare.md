@@ -1015,8 +1015,9 @@ windows, with what Enter takes there. The mc column has the keys of mc's lists, 
 histories and its hotlist; the far column, those of Far's menus; the yazi column, those of its pick
 window, which asks for the program to open files with. None of them has modes: their keys are here,
 not under Insert mode. No key shows the whole row under the cursor, as `K` does a name in a
-panel: every list shows it under its rows
-([ADR 0041](adr/0041-lists-always-show-the-whole-row.md)).
+panel: the lists whose rows hold more than they show have it under their rows
+([ADR 0041](adr/0041-lists-always-show-the-whole-row.md),
+[ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |

@@ -667,14 +667,17 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front
   of the title, at first and while they ask again; the skeleton, as tall as the last list without
   a filter; and why no rows came, in their place.
-- Every list shows the whole row under the cursor in two lines under the rows, while it has rows
-  (`Body.full`; [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): the directory of the
-  zoxide window, the place of the location menu, the title of a tab, a key hint with all its keys.
-  The command history shows the whole command there instead, and the Workspaces window where the
-  tabs of the workspace are, in two columns (`Body.footer`, `Body.footer_column`), whose line
-  joins the line over them and the bottom of the frame (`┬`, `╧`). A skeleton that stands for the
-  rows of the last list takes those lines too, so that the box does not grow when the rows come.
-  `K` is the panels' alone.
+- The location menu and the key hints show the whole row under the cursor in two lines under the
+  rows, while they have rows (`Body.full`;
+  [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): the place with its address or mount
+  point, a key hint with all its keys. The tab menu and the zoxide window, whose rows are paths that
+  nearly always fit, show none
+  ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
+  history shows the whole command there instead, and the Workspaces window where the tabs of the
+  workspace are, in two columns (`Body.footer`, `Body.footer_column`), whose line joins the line
+  over them and the bottom of the frame (`┬`, `╧`). A skeleton that stands for the rows of the last
+  list takes the lines of the whole row too, in a window that has it (`Body.has_full`), so that the
+  box does not grow when the rows come. `K` is the panels' alone.
 
 ### Tabs
 

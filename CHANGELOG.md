@@ -32,6 +32,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The tab menu (`t t`) and the zoxide window (`g z`) no longer repeat the row under the cursor in
+  two lines under the rows, and are three lines shorter
+  ([ADR 0071](docs/adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).
+
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.
 - The columns of tabs in the Workspaces window no longer say Left and Right: a triangle marks the

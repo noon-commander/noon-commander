@@ -140,8 +140,10 @@
 - [x] Text cut short marked with `»` and `«` (Nerd Font chevrons with icons) in an accent, `K`
       for the whole name under the cursor, the z keys to scroll names and cut lines sideways, the
       same marks in the viewer ([ADR 0025](adr/0025-marks-of-text-cut-short.md))
-- [x] Lists always show the whole row under the cursor under their rows; `K` is the panels'
-      alone ([ADR 0041](adr/0041-lists-always-show-the-whole-row.md))
+- [x] Lists show the whole row under the cursor under their rows; `K` is the panels' alone
+      ([ADR 0041](adr/0041-lists-always-show-the-whole-row.md))
+- [x] The tab menu and the zoxide window show no whole row: their paths nearly always fit
+      ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md))
 - [x] `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx`:
       `open` on macOS, `xdg-open` on Linux, local files only
       ([ADR 0026](adr/0026-open-externally.md))

@@ -100,6 +100,9 @@ pub(crate) struct Body<'a> {
     /// The whole text of the row under the cursor, which always shows under the rows while
     /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
+    /// The window shows `full` once its rows come from `loading`: until then the skeleton takes
+    /// its lines too.
+    pub(crate) has_full: bool,
     /// The rows take all the room the window leaves them, rather than as many lines as they
     /// are, as the rows of the search of a tree do.
     pub(crate) fill: bool,
@@ -155,11 +158,12 @@ impl<'a> Body<'a> {
     }
 
     /// Lines the skeleton takes past the rows of the last list, where the whole row under the
-    /// cursor will show under them, so that the box does not grow when they come.
+    /// cursor will show under them in a window that has it, so that the box does not grow when
+    /// they come.
     fn waiting_full(&self) -> u16 {
         let known = (self.loading)
             .is_some_and(|(loading, _)| loading.skeleton().is_some() && loading.rows_known());
-        if known && self.footer.is_empty() {
+        if known && self.has_full && self.footer.is_empty() {
             FULL_ROWS + 1
         } else {
             0

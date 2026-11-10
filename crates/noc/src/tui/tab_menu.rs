@@ -125,9 +125,6 @@ impl TabMenu {
             title: &title,
             width: window::WIDTH,
             lines: &lines,
-            full: shown
-                .get(self.picker.cursor())
-                .map(|title| (*title).clone()),
             ..Body::default()
         };
         let focused = Colors::plain(theme).focused_style();

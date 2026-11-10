@@ -396,6 +396,7 @@ impl LocationMenu {
             message,
             loading: Some((&self.loading, spin)),
             full,
+            has_full: true,
             ..Body::default()
         };
         self.picker.render(frame, area, theme, body, &mut |row| {

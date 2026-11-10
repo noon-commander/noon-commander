@@ -1,48 +1,28 @@
 //! The window over the viewer while it reads a part of a file that takes a while: where the
-//! part starts, a gauge, and buttons that stop the reading or close the viewer.
+//! part starts, a gauge, and Cancel, which stops the reading. A dialog, which this wraps.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::time::Instant;
 
 use noc_viewer::{Progress, Want};
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::text::Line;
 use tokio_util::sync::CancellationToken;
 
-use super::cells::{self, Align};
-use super::keymap::{Action, Resolved};
-use super::label::Label;
-use super::mouse::{Drawn, Pointer};
+use super::dialog::{Button, Dialog, DialogEvent, Text};
+use super::edit::Registers;
+use super::keymap::{Action, Resolved, Typed};
+use super::mouse::Pointer;
 use super::panel::short_size;
-use super::progress::{gauge, ratio, unknown_gauge};
 use super::spinner::{DELAY, Spin, Wait};
 use super::theme::Theme;
-use super::window::{
-    self, Colors, button_line, button_spots, draw_box, draw_separator, frame_around,
-};
+use super::window::Tone;
 use crate::i18n::fl;
 
-/// A button of the window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ReadButton {
-    /// Ends the reading and keeps what it read.
-    Stop,
-    /// Closes the viewer.
-    Close,
-}
-
-const BUTTONS: [ReadButton; 2] = [ReadButton::Stop, ReadButton::Close];
-
-impl ReadButton {
-    /// Its name, with the letter that Alt and it press.
-    fn label(self) -> Label {
-        Label::parse(&match self {
-            Self::Stop => fl!("viewer-read-stop"),
-            Self::Close => fl!("viewer-read-close"),
-        })
-    }
-}
+/// Where its lines of text are among those of its dialog.
+const PLACE: usize = 0;
+const GAUGE: usize = 1;
+const COUNT: usize = 2;
 
 /// A part of the file the viewer reads, and its window, which shows once the reading has
 /// taken as long as a spinner waits.
@@ -56,19 +36,24 @@ pub(crate) struct Reading {
     wait: Wait,
     /// Whether the last frame drew the window, which then takes the keys.
     shown: Cell<bool>,
-    /// Stop was pressed: the window is gone while the reading ends.
+    /// Cancel was pressed: the window is gone while the reading ends.
     stopped: bool,
     /// The part came whole while the window showed: it shows full for as long as a spinner
     /// waits, from its first frame, and takes no keys.
     finished: Option<Wait>,
-    focus: usize,
-    /// Where the last render drew it, for the mouse.
-    drawn: RefCell<Drawn>,
+    /// Where the part starts, the gauge, and how much it read, each on a line, and Cancel: as
+    /// tall whether how much it read is known or not.
+    dialog: Dialog,
 }
 
 impl Reading {
     pub(crate) fn new(want: Want, stop: CancellationToken) -> Self {
-        Self {
+        let title = fl!("viewer-reading");
+        let dialog = Dialog::question(&title, "", vec![Button::Cancel], 0, Tone::Plain)
+            .with_text(Text::Line(String::new()))
+            .with_text(Text::Gauge(None))
+            .with_text(Text::Line(String::new()));
+        let mut reading = Self {
             want,
             stop,
             progress: None,
@@ -76,13 +61,39 @@ impl Reading {
             shown: Cell::new(false),
             stopped: false,
             finished: None,
-            focus: 0,
-            drawn: RefCell::default(),
-        }
+            dialog,
+        };
+        reading.put_texts();
+        reading
     }
 
     pub(crate) fn progress(&mut self, progress: Progress) {
         self.progress = Some(progress);
+        self.put_texts();
+    }
+
+    /// Puts in words where the part starts and how much of it was read, and fills the gauge.
+    fn put_texts(&mut self) {
+        let offset = short_size(self.want.offset);
+        let place = match self.progress.and_then(|progress| progress.size) {
+            Some(size) => fl!("viewer-read-at", offset = offset, size = short_size(size)),
+            None => fl!("viewer-read-at-unknown", offset = offset),
+        };
+        let (gauge, count) = match self.progress {
+            Some(progress) => (
+                Some((progress.read, progress.total)),
+                fl!(
+                    "viewer-read-count",
+                    read = short_size(progress.read),
+                    total = short_size(progress.total)
+                ),
+            ),
+            // The line stays, so that the window does not grow when it is known.
+            None => (None, String::new()),
+        };
+        self.dialog.replace_text(PLACE, Text::Line(place));
+        self.dialog.replace_text(GAUGE, Text::Gauge(gauge));
+        self.dialog.replace_text(COUNT, Text::Line(count));
     }
 
     /// The wait whose spinner the window shows with, while it may still show.
@@ -104,6 +115,7 @@ impl Reading {
         if let Some(progress) = &mut self.progress {
             progress.read = progress.total;
         }
+        self.put_texts();
         self.finished = Some(Wait::default());
         Some(self)
     }
@@ -126,37 +138,23 @@ impl Reading {
         self.stopped = true;
     }
 
-    /// Takes a key: Enter or Space presses the focused button, Esc stops, arrows and Tab move
-    /// the focus, and Alt and a button's letter press it.
-    pub(crate) fn handle(&mut self, input: Resolved) -> Option<ReadButton> {
-        let action = match input {
-            Resolved::Action(action) => action,
-            Resolved::Hotkey(c) => {
-                return BUTTONS.into_iter().find(|button| button.label().has(c));
-            }
-            Resolved::Insert(_) => return None,
-        };
-        let count = BUTTONS.len();
-        match action {
-            Action::Cancel => Some(ReadButton::Stop),
-            Action::Confirm | Action::Toggle => Some(BUTTONS[self.focus]),
-            Action::NextField | Action::Right | Action::Down => {
-                self.focus = (self.focus + 1) % count;
-                None
-            }
-            Action::PrevField | Action::Left | Action::Up => {
-                self.focus = (self.focus + count - 1) % count;
-                None
-            }
-            _ => None,
+    /// Takes a key as its dialog does; whether it stops the reading: Esc, F10, Enter, Space,
+    /// and a click on Cancel do.
+    pub(crate) fn handle(&mut self, input: Resolved) -> bool {
+        let typed = Typed::from(input);
+        match self.dialog.handle_typed(typed, &mut Registers::default()) {
+            DialogEvent::Pressed(_) | DialogEvent::Cancelled => true,
+            DialogEvent::Pending | DialogEvent::Opened(_) => false,
         }
     }
 
-    /// Takes a press of the mouse, where the window was drawn last: a click on a button
-    /// returns Enter, which presses it.
+    /// Takes a press of the mouse, where the window was drawn last: a click on Cancel returns
+    /// Enter, which presses it.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        let drawn = self.drawn.borrow().clone();
-        drawn.button_press(pointer, &mut self.focus)
+        match self.dialog.pointer(pointer) {
+            DialogEvent::Pressed(_) => Some(Action::Confirm),
+            DialogEvent::Pending | DialogEvent::Opened(_) | DialogEvent::Cancelled => None,
+        }
     }
 
     /// Draws the window over `area`, once the reading has taken as long as a spinner waits.
@@ -165,66 +163,8 @@ impl Reading {
             return;
         }
         self.shown.set(true);
-        let colors = Colors::plain(theme);
-        // Borders, where the part starts, the gauge, how much it read, a line, the buttons.
-        let inner = draw_box(
-            frame,
-            area,
-            (window::WIDTH, 7),
-            &fl!("viewer-reading"),
-            colors,
-            theme,
-        );
-        let width = usize::from(inner.width);
-        let mut put = |index: u16, line: Line<'static>| {
-            if index < inner.height {
-                let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
-                frame.render_widget(line, row);
-            }
-        };
-        let text = |text: &str| {
-            Line::from(cells::fit(
-                text,
-                width,
-                Align::Left,
-                colors.body_styles(),
-                theme.glyphs.marks,
-            ))
-        };
-        let offset = short_size(self.want.offset);
-        let place = match self.progress.and_then(|progress| progress.size) {
-            Some(size) => fl!("viewer-read-at", offset = offset, size = short_size(size)),
-            None => fl!("viewer-read-at-unknown", offset = offset),
-        };
-        put(0, text(&place));
-        match self.progress {
-            Some(progress) => {
-                put(1, gauge(ratio(progress.read, progress.total), width, theme));
-                let count = fl!(
-                    "viewer-read-count",
-                    read = short_size(progress.read),
-                    total = short_size(progress.total)
-                );
-                put(2, text(&count));
-            }
-            None => put(1, unknown_gauge(inner.width, spin.shine(&self.wait), theme)),
-        }
-        let labels: Vec<Label> = BUTTONS.iter().map(|button| button.label()).collect();
-        let buttons = button_line(&labels, 0, Some(self.focus), colors);
-        let row = Rect::new(inner.x, inner.y + 4, inner.width, 1);
-        *self.drawn.borrow_mut() = Drawn {
-            frame: frame_around(inner),
-            rows: Vec::new(),
-            buttons: if inner.height > 4 {
-                button_spots(&labels, 0, row)
-            } else {
-                Vec::new()
-            },
-        };
-        put(4, buttons);
-        if inner.height > 4 {
-            draw_separator(frame, inner, inner.y + 3, colors, theme);
-        }
+        let shine = spin.shine(&self.wait);
+        self.dialog.render_shining(frame, area, theme, shine);
     }
 }
 
@@ -291,23 +231,58 @@ mod tests {
         assert!(text.contains("At 32.0M of 100M"), "{text}");
         assert!(text.contains("4.0M of 16.0M"), "{text}");
         assert!(text.contains("25%"), "{text}");
-        assert!(text.contains("Stop") && text.contains("Close"), "{text}");
+        assert!(text.contains("{ Cancel }"), "{text}");
     }
 
     #[test]
-    fn esc_stops_and_the_buttons_take_their_keys() {
+    fn as_tall_before_how_much_it_read_is_known() {
+        let mut reading = Reading::new(WANT, CancellationToken::new());
+        let start = Instant::now();
+        let after = start + DELAY + Duration::from_millis(1);
+        insta::assert_snapshot!(
+            "until_how_much_it_read_is_known",
+            screen(&reading, start, after)
+        );
+        reading.progress(Progress {
+            read: 4 << 20,
+            total: 16 << 20,
+            size: Some(100 << 20),
+        });
+        insta::assert_snapshot!(
+            "once_how_much_it_read_is_known",
+            screen(&reading, start, after)
+        );
+    }
+
+    /// `reading` drawn on a screen of 80 by 9, first at `start`, then at `now`.
+    fn screen(reading: &Reading, start: Instant, now: Instant) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(80, 9)).unwrap();
+        for at in [start, now] {
+            terminal
+                .draw(|frame| {
+                    let spin = Spin::new(at, start, false, Glyphs::PLAIN.spinners);
+                    reading.render(frame, frame.area(), &Theme::terminal(), &spin);
+                })
+                .unwrap();
+        }
+        terminal.backend().to_string()
+    }
+
+    #[test]
+    fn esc_enter_and_space_press_cancel_which_stops() {
         let stop = CancellationToken::new();
         let mut reading = Reading::new(WANT, stop.clone());
-        let press = |reading: &mut Reading, action| reading.handle(Resolved::Action(action));
-        assert_eq!(press(&mut reading, Action::Cancel), Some(ReadButton::Stop));
-        assert_eq!(press(&mut reading, Action::Right), None);
-        assert_eq!(
-            press(&mut reading, Action::Confirm),
-            Some(ReadButton::Close)
-        );
-        assert_eq!(
-            reading.handle(Resolved::Hotkey('s')),
-            Some(ReadButton::Stop)
+        let mut press = |action| reading.handle(Resolved::Action(action));
+        for action in [Action::Cancel, Action::Confirm, Action::Toggle] {
+            assert!(press(action), "{action:?}");
+        }
+        for action in [Action::Right, Action::NextField, Action::Down] {
+            assert!(!press(action), "{action:?}");
+        }
+        assert!(press(Action::Confirm), "Cancel keeps the focus");
+        assert!(
+            !reading.handle(Resolved::Hotkey('s')),
+            "no letters but those of buttons"
         );
         reading.stop();
         assert!(stop.is_cancelled());

@@ -1,6 +1,6 @@
 # 0063. Errors in parts, and the order of buttons
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0073](0073-a-window-with-buttons-is-a-dialog.md)
 - Date: 2026-11-02
 - Amends: [ADR 0039](0039-errors-of-panels-in-dialogs.md),
   [ADR 0059](0059-one-dialog-saves-a-file.md), [ADR 0060](0060-the-question-about-a-taken-name.md)

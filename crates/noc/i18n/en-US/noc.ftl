@@ -1282,9 +1282,6 @@ viewer-read-at = At { $offset } of { $size }
 viewer-read-at-unknown = At { $offset }
 # How much of the part it has read.
 viewer-read-count = { $read } of { $total }
-# Ends the reading and shows what it read.
-viewer-read-stop = &Stop
-viewer-read-close = &Close
 
 ## Editing, F4 (src/tui). Prefix: edit-. The editor of $VISUAL or $EDITOR, or vi.
 

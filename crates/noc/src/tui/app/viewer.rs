@@ -13,7 +13,7 @@ use crate::tui::describe::Reason;
 use crate::tui::dialog::Problem;
 use crate::tui::keymap::{Action, Resolved};
 use crate::tui::panel::{child, location_text};
-use crate::tui::reading::{ReadButton, Reading};
+use crate::tui::reading::Reading;
 use crate::tui::spinner::Wait;
 
 use super::{
@@ -305,13 +305,9 @@ impl App {
             && viewing.window_shown()
             && let Some(reading) = &mut viewing.reading
         {
-            match reading.handle(input) {
-                Some(ReadButton::Stop) => {
-                    reading.stop();
-                    viewing.viewer.stop();
-                }
-                Some(ReadButton::Close) => self.close_viewer(),
-                None => {}
+            if reading.handle(input) {
+                reading.stop();
+                viewing.viewer.stop();
             }
             return Vec::new();
         }

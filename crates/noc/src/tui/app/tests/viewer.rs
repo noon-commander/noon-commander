@@ -341,7 +341,10 @@ fn a_read_that_takes_long_shows_a_window_that_stops_it() {
     };
     assert_eq!(want.offset, 0);
     let text = screen_of(&mut app, 16);
-    assert!(text.contains("Reading") && text.contains("Stop"), "{text}");
+    assert!(
+        text.contains("Reading") && text.contains("{ Cancel }"),
+        "{text}"
+    );
     assert_eq!(app.context(), Context::Dialog);
     assert_eq!(app.place().0, Mode::Normal);
     app.read_progress(
@@ -405,14 +408,18 @@ fn the_window_of_a_read_ends_full_and_then_goes() {
 }
 
 #[test]
-fn close_in_the_window_of_a_read_closes_the_viewer() {
+fn enter_in_the_window_of_a_read_stops_it_and_esc_then_closes_the_viewer() {
     let (mut app, read) = view_big();
-    let Effect::Read(ReadRequest { cancel, .. }) = read else {
+    let Effect::Read(ReadRequest { stop, cancel, .. }) = read else {
         panic!("expected a read");
     };
     screen_of(&mut app, 16);
+    // Tab has no other stop to go to.
     app.handle(action(Action::NextField));
     app.handle(action(Action::Confirm));
+    assert!(stop.is_cancelled() && !cancel.is_cancelled());
+    assert_eq!(app.context(), Context::Viewer);
+    app.handle(action(Action::Cancel));
     assert_eq!(app.context(), Context::Panel);
     assert!(cancel.is_cancelled());
 }

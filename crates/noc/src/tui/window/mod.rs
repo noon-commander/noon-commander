@@ -1,16 +1,19 @@
 //! What windows share: dialogs, lists, and the other windows over the panels. How wide they
-//! are, their colors, frames, buttons, and the skeletons that stand for rows still to come.
+//! are, their colors, frames, buttons, gauges, and the skeletons that stand for rows still to
+//! come.
 
 use ratatui::layout::Rect;
 
 mod buttons;
 mod colors;
 mod frame;
+mod gauge;
 mod skeleton;
 
 pub(crate) use buttons::{button_line, button_spots};
 pub(crate) use colors::{Colors, Tone};
 pub(crate) use frame::{draw_box, draw_frame, draw_separator, frame_around, pop_up, right_frame};
+pub(crate) use gauge::{gauge, ratio, unknown_gauge};
 pub(crate) use skeleton::{
     SKELETON_ROWS, draw_skeleton, draw_title_dots, shine_bar, status_skeleton,
 };

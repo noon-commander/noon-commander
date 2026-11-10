@@ -1533,8 +1533,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   holds, and keeps a window of `viewer.window_mib`, reading a part it dropped again when a move up
   reaches it ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). Until the end is known
   the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends
-  the text. A read longer than 150 ms shows the `Reading` dialog (`tui/reading.rs`): where the
-  part starts, a gauge, Stop (Esc), which keeps what was read, and Close. A file whose size or
+  the text. A read longer than 150 ms shows the `Reading` dialog (`tui/reading.rs`, a `Dialog`
+  that `Reading` wraps): where the part starts, a gauge (`Text::Gauge`), and Cancel alone, which
+  Enter and Esc press too, and which stops the read and keeps what was read
+  ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). A file whose size or
   time changes between parts is read again from the start. Text is UTF-8; invalid bytes and
   what the terminal would act on show as `·` in the theme's faint `hidden`, as mc's `.`
   (`Theme.glyphs.hidden`); tabs go to stops of 8, and
@@ -2230,7 +2232,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   crosses at once from when the dots show, one cell every 40 ms, in their place; the status line of
   the search has a bar of its own, crossed with them. Until a job knows how far it is, its gauge is
   a faint bar of `▒` with no percentage, over which the same shine runs to and fro as fast, turning
-  at its ends (`window::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`). Each
+  at its ends (`window::unknown_gauge` over `window::shine_bar`, which the skeleton of rows draws
+  too; `Shine::bounce`); a dialog's gauge (`Text::Gauge`) gets the shine from its owner
+  (`Dialog::render_shining`). Each
   waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows until
   150 ms later, so quick work does not flicker. Frames come from the time since the app's first
   frame, so spinners move together and tests draw given instants; `App::spin_due` tells the event

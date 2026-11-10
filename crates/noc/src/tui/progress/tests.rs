@@ -1727,15 +1727,6 @@ fn durations_and_speeds_read_short() {
 }
 
 #[test]
-fn the_gauge_fills_by_ratio() {
-    let theme = Theme::terminal();
-    let text = |ratio| gauge(ratio, 15, &theme).to_string();
-    assert_eq!(text(0.0), "░░░░░░░░░░   0%");
-    assert_eq!(text(0.5), "█████░░░░░  50%");
-    assert_eq!(text(1.0), "██████████ 100%");
-}
-
-#[test]
 fn enter_sends_to_the_background_and_esc_aborts() {
     let press = |view: &mut JobView, action| view.handle(Resolved::Action(action));
     let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());

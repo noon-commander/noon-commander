@@ -193,6 +193,10 @@ pub(crate) enum Text {
     /// What the dialog comes to, after ✓ if `good` and ✗ if not, bold, in the color of titles
     /// if good and of errors if not.
     Verdict { text: String, good: bool },
+    /// How far something is, `done` of `total`, as a bar filled for it and its percentage; while
+    /// that is not known, a faint bar that the shine its owner gives crosses
+    /// ([`Dialog::render_shining`]).
+    Gauge(Option<(u64, u64)>),
 }
 
 /// Something that went wrong, as a dialog shows it: what could not be done, what it was done
@@ -523,6 +527,14 @@ impl Dialog {
         self.parts.push(Part::Text(self.texts.len()));
         self.texts.push(text);
         self
+    }
+
+    /// Puts `text` in place of the lines of text `index`, for what changes while the dialog is
+    /// open, such as a gauge.
+    pub(crate) fn replace_text(&mut self, index: usize, text: Text) {
+        if let Some(old) = self.texts.get_mut(index) {
+            *old = text;
+        }
     }
 
     /// The same dialog with `picker` under the rest; whoever opens the dialog draws its rows

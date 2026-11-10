@@ -10,10 +10,11 @@ use crate::tui::cells;
 use crate::tui::glyphs;
 use crate::tui::label::{self, Label};
 use crate::tui::picker::{Body, ShownRow};
-use crate::tui::spinner::Spin;
+use crate::tui::spinner::{Shine, Spin};
 use crate::tui::theme::Theme;
 use crate::tui::window::{
-    Colors, button_line, button_spots, draw_box, draw_separator, draw_title_dots, right_frame,
+    Colors, button_line, button_spots, draw_box, draw_separator, draw_title_dots, gauge, ratio,
+    right_frame, unknown_gauge,
 };
 
 use super::{
@@ -59,7 +60,7 @@ impl Dialog {
 
     /// Draws the dialog centered in `area`, with the terminal cursor in the focused field.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        self.render_with(frame, area, theme, None, None);
+        self.render_with(frame, area, theme, None, (None, None));
     }
 
     /// Draws the dialog as [`render`](Self::render) does, with the dots of what it waits for
@@ -71,13 +72,25 @@ impl Dialog {
         theme: &Theme,
         spin: &Spin,
     ) {
-        self.render_with(frame, area, theme, None, Some(spin));
+        self.render_with(frame, area, theme, None, (Some(spin), None));
+    }
+
+    /// Draws the dialog as [`render`](Self::render) does, with `shine` over its gauges that do
+    /// not know yet how far they are.
+    pub(crate) fn render_shining(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        shine: Option<Shine<'_>>,
+    ) {
+        self.render_with(frame, area, theme, None, (None, shine));
     }
 
     /// Draws the dialog as [`render`](Self::render) does, but under another, which has the
     /// keys: without the terminal cursor and the open list of a combo box.
     pub(crate) fn render_under(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        self.draw_parts(frame, area, theme, None, None);
+        self.draw_parts(frame, area, theme, None, (None, None));
     }
 
     /// Draws the dialog as [`render`](Self::render) does, with the lines of its picker and
@@ -100,7 +113,7 @@ impl Dialog {
             body: Some(body),
             row,
         };
-        self.render_with(frame, area, theme, Some(draw), None);
+        self.render_with(frame, area, theme, Some(draw), (None, None));
         self.picker = Some(picker);
     }
 
@@ -112,9 +125,9 @@ impl Dialog {
         area: Rect,
         theme: &Theme,
         picker: Option<PickerDraw<'_, '_>>,
-        spin: Option<&Spin>,
+        moving: (Option<&Spin>, Option<Shine<'_>>),
     ) {
-        self.draw_parts(frame, area, theme, picker, spin);
+        self.draw_parts(frame, area, theme, picker, moving);
         if let Some(cursor) = self.cursor.get() {
             frame.set_cursor_position(cursor);
         }
@@ -129,7 +142,7 @@ impl Dialog {
         area: Rect,
         theme: &Theme,
         mut picker: Option<PickerDraw<'_, '_>>,
-        spin: Option<&Spin>,
+        (spin, shine): (Option<&Spin>, Option<Shine<'_>>),
     ) {
         let width = self.box_width(area);
         let text_width = usize::from(width.saturating_sub(4));
@@ -174,8 +187,8 @@ impl Dialog {
         let message = (lines.as_slice(), letter);
         let mut index = self.render_message(frame, inner, message, rest, colors, theme);
         let style = (colors, theme);
-        let Some(after) = self.draw_body(frame, (inner, index), style, &mut spots, &mut picker)
-        else {
+        let drawn = (&mut *spots, &mut picker);
+        let Some(after) = self.draw_body(frame, (inner, index), style, drawn, shine) else {
             return;
         };
         index = after;
@@ -211,7 +224,7 @@ impl Dialog {
                 Text::Wrap(text) => {
                     u16::try_from(cells::wrap(text, width).len()).unwrap_or(u16::MAX)
                 }
-                Text::Line(_) | Text::Pair { .. } | Text::Verdict { .. } => 1,
+                Text::Line(_) | Text::Pair { .. } | Text::Verdict { .. } | Text::Gauge(_) => 1,
             },
             Part::Picker => picker,
             Part::ComboBox(_)
@@ -223,13 +236,13 @@ impl Dialog {
         }
     }
 
-    /// The lines of text `index`, `width` cells across.
+    /// The lines of text `index`, `width` cells across; `shine` crosses a gauge not known yet.
     fn text_lines(
         &self,
         index: usize,
         width: usize,
-        colors: Colors,
-        theme: &Theme,
+        (colors, theme): (Colors, &Theme),
+        shine: Option<Shine<'_>>,
     ) -> Vec<Line<'static>> {
         match &self.texts[index] {
             Text::Line(text) => {
@@ -258,20 +271,25 @@ impl Dialog {
                     style.bold(),
                 ))]
             }
+            &Text::Gauge(Some((done, total))) => vec![gauge(ratio(done, total), width, theme)],
+            Text::Gauge(None) => {
+                let width = u16::try_from(width).unwrap_or(u16::MAX);
+                vec![unknown_gauge(width, shine, theme)]
+            }
         }
     }
 
     /// Draws the parts under the message from row `index` of `inner`, the room inside the
     /// frame, top to bottom, a separator as a blank row, the picker as `picker` says; and keeps
-    /// where each that takes the focus is for the mouse in `spots`. Returns the row after them,
-    /// or `None` without room.
+    /// where each that takes the focus is for the mouse in `spots`; `shine` crosses a gauge not
+    /// known yet. Returns the row after them, or `None` without room.
     fn draw_body(
         &self,
         frame: &mut Frame<'_>,
         (inner, mut index): (Rect, u16),
         style: (Colors, &Theme),
-        spots: &mut Vec<(Focus, Rect)>,
-        picker: &mut Option<PickerDraw<'_, '_>>,
+        (spots, picker): (&mut Vec<(Focus, Rect)>, &mut Option<PickerDraw<'_, '_>>),
+        shine: Option<Shine<'_>>,
     ) -> Option<u16> {
         // The boxes line up a blank after the widest label.
         let room = usize::from(inner.width);
@@ -308,7 +326,7 @@ impl Dialog {
                     index += 1;
                 }
                 Part::Text(number) => {
-                    for line in self.text_lines(number, room, style.0, style.1) {
+                    for line in self.text_lines(number, room, style, shine) {
                         if index >= inner.height {
                             return None;
                         }

@@ -121,6 +121,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 
 - `NOC_LOG`: `log.level` and `log.filter` take its place.
+- Stop and Close in the window over the viewer while it reads a part that takes a while: Cancel
+  alone takes their place, the default, which stops the reading and keeps what was read, as Esc
+  did; Esc in the viewer then closes it
+  ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
 
 ### Fixed
 

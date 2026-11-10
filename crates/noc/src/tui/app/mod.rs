@@ -1064,7 +1064,7 @@ pub(crate) struct App {
     clipboard: Option<String>,
     /// Files that the dialog of saving writes, with what goes in them.
     saving: HashMap<Location, Vec<u8>>,
-    /// For the times in questions.
+    /// For the times in questions and in the command history.
     tz: TimeZone,
     /// Running jobs: at most one in front, over the panels and the help and under the
     /// dialogs, and any number in the background.

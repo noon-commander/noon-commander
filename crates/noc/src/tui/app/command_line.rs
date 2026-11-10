@@ -174,7 +174,13 @@ impl App {
             })
             .collect();
         let input = self.search_opens(Slot::CommandHistory);
-        self.history_window = Some(HistoryWindow::new(&self.history, here, labels, input));
+        self.history_window = Some(HistoryWindow::new(
+            &self.history,
+            here,
+            labels,
+            self.home.clone(),
+            input,
+        ));
     }
 
     /// Gives a key to the window of the command history: a command it takes goes on the command

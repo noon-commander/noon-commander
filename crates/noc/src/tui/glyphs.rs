@@ -31,6 +31,15 @@ pub(crate) struct Hosts {
     pub(crate) failed: char,
 }
 
+/// In the command history, in front of where the command under the cursor ran: on a host, on
+/// this machine, and in which directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Ran {
+    pub(crate) host: char,
+    pub(crate) here: char,
+    pub(crate) dir: char,
+}
+
 /// What turns while something waits, in one cell: the frames of the dots, and what stands still
 /// in their place without animations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,6 +83,7 @@ pub(crate) struct Glyphs {
     pub(crate) volume: &'static str,
     pub(crate) network_volume: &'static str,
     pub(crate) hosts: Hosts,
+    pub(crate) ran: Ran,
     pub(crate) spinners: Spinners,
     /// The bars of a skeleton, which stand where rows are still to come.
     pub(crate) skeleton: char,
@@ -133,6 +143,12 @@ impl Glyphs {
             idle: '󰒋',
             connected: '󰒋',
             failed: '󰒑',
+        },
+        // nf-md-server, nf-md-monitor, and the folder of a directory in the panels.
+        ran: Ran {
+            host: '󰒋',
+            here: '󰍹',
+            dir: '',
         },
         spinners: Spinners {
             dots: &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'],
@@ -209,6 +225,13 @@ impl Glyphs {
             idle: '○',
             connected: '●',
             failed: '✗',
+        },
+        // A rack, a house, and an angle quote: none of them is a marker of the panels or of a
+        // host's status.
+        ran: Ran {
+            host: '≡',
+            here: '⌂',
+            dir: '›',
         },
         // Fonts without the smaller squares and braille have these.
         spinners: Spinners {
@@ -431,6 +454,10 @@ mod tests {
             assert_eq!(noc_text::width(&glyphs.active.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.check.to_string()), 1);
             assert_eq!(noc_text::width(&glyphs.choice.to_string()), 1);
+            let ran = glyphs.ran;
+            for glyph in [ran.host, ran.here, ran.dir] {
+                assert_eq!(noc_text::width(&glyph.to_string()), 1, "{glyph:?}");
+            }
             let spinners = glyphs.spinners;
             let still = [spinners.still, glyphs.skeleton];
             for glyph in spinners.dots.iter().chain(&still) {

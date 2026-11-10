@@ -673,11 +673,12 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   point, a key hint with all its keys. The tab menu and the zoxide window, whose rows are paths that
   nearly always fit, show none
   ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
-  history shows the whole command there instead, and the Workspaces window where the tabs of the
-  workspace are, in two columns (`Body.footer`, `Body.footer_column`), whose line joins the line
-  over them and the bottom of the frame (`┬`, `╧`). A skeleton that stands for the rows of the last
-  list takes the lines of the whole row too, in a window that has it (`Body.has_full`), so that the
-  box does not grow when the rows come. `K` is the panels' alone.
+  history shows where the command ran there instead
+  ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)), and the Workspaces
+  window where the tabs of the workspace are, in two columns (`Body.footer`, `Body.footer_column`),
+  whose line joins the line over them and the bottom of the frame (`┬`, `╧`). A skeleton that
+  stands for the rows of the last list takes the lines of the whole row too, in a window that has
+  it (`Body.has_full`), so that the box does not grow when the rows come. `K` is the panels' alone.
 
 ### Tabs
 
@@ -1835,9 +1836,12 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   line; the line of `:` shows them after `!`, which runs them. `q :` in a panel, or on the line in
   Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists): the
   commands of the panel's host, or of all of them after Tab, newest first, filtered as quick search
-  matches, each with its host's label or alias, its directory, and its first line, and the whole
-  command under the cursor below; Enter puts it on the line, with the prompt reversed until the next
-  key if it ran on another host, and F8, or `d d` on the rows, removes it.
+  matches, each by its first line, and below them where the command under the cursor ran: its
+  host's label or alias, or `local`, then its directory, each line after its icon (`Glyphs.ran`),
+  and when it ran on the line over them, in the color of the title (`Body.footer_label`;
+  [ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)); Enter puts it on the
+  line, with the prompt reversed until the next key if it ran on another host, and F8, or `d d` on
+  the rows, removes it.
 - **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR
   0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,

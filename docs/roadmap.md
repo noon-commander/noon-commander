@@ -160,6 +160,9 @@
       `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
 - [x] Command history per host: Up/Down (Ctrl+p/Ctrl+n) for the panel's host, a window
       (`q :`) for one host or all; `shell.history_size`, `history.toml` in the state directory
+- [x] The command history shows the command alone in its rows, and where and when the one under
+      the cursor ran below them
+      ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md))
 - [x] Aliases and functions of the shell's rc files on the command line: `shell.run`,
       `$SHELL -i -c` by default, with `$NAME` expanded where the command runs, and a host's
       own `run` in `hosts.toml`, edited with F4 ([ADR 0054](adr/0054-shell-run.md))

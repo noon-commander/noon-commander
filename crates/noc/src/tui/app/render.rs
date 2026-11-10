@@ -350,8 +350,9 @@ impl App {
             });
         }
         if let Some(window) = &mut self.history_window {
+            let formats = noc_locale::current();
             stage.show(frame, middle(zoom::Window::History), |frame| {
-                window.render(frame, panels, theme);
+                window.render(frame, panels, theme, (&self.tz, &formats));
             });
         }
         if let Some(window) = &mut self.find

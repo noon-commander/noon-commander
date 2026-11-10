@@ -1,20 +1,25 @@
-//! The window of the command history, `q :` in a panel or on the command line (ADR 0019): the
-//! commands of the panel's host, or of all hosts, newest first, each with its host and
-//! directory, and the whole command under the cursor below them. `/` types in its filter; Enter
-//! puts the command on the command line, without running it.
+//! The window of the command history, `q :` in a panel or on the command line (ADR 0019,
+//! ADR 0072): the commands of the panel's host, or of all hosts, newest first, and below them
+//! where the command under the cursor ran: its host and when, then its directory. `/` types in
+//! its filter; Enter puts the command on the command line, without running it.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
+use jiff::tz::TimeZone;
 use noc_config::HistoryEntry;
+use noc_locale::Formats;
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use super::cells::{self, Align, Marks};
+use super::cells::{self, Align, Cut, Marks};
 use super::keymap::{Action, Mode, Resolved};
 use super::mouse::Pointer;
+use super::panel::home_text;
 use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
@@ -23,11 +28,6 @@ use crate::i18n::fl;
 
 /// Rows of commands the window shows at most.
 const MAX_ROWS: u16 = 12;
-/// Lines of the whole command under the cursor, below the rows, at most.
-const PREVIEW_ROWS: usize = 4;
-/// Widest the columns of hosts and directories get, in cells.
-const HOST_WIDTH: usize = 12;
-const DIR_WIDTH: usize = 18;
 
 /// What a key did in the window.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +55,8 @@ pub(crate) struct HistoryWindow {
     here: Option<String>,
     /// The labels of hosts that have one, by alias.
     labels: HashMap<String, String>,
+    /// The home directory, which local directories show as `~`.
+    home: PathBuf,
     /// Shows the commands of every host, not only those of `here`.
     all: bool,
     /// Filters the commands of the hosts shown.
@@ -63,17 +65,20 @@ pub(crate) struct HistoryWindow {
 
 impl HistoryWindow {
     /// A window on `history`, oldest first as `history.toml` keeps it, for a panel on `here`;
-    /// `labels` name hosts, and the filter matches as `input` says, as it was last.
+    /// `labels` name hosts, `home` is the home directory, and the filter matches as `input`
+    /// says, as it was last.
     pub(crate) fn new(
         history: &[HistoryEntry],
         here: Option<String>,
         labels: HashMap<String, String>,
+        home: PathBuf,
         input: Input,
     ) -> Self {
         let mut window = Self {
             entries: history.iter().rev().cloned().collect(),
             here,
             labels,
+            home,
             all: false,
             picker: Picker::new(input),
         };
@@ -192,9 +197,43 @@ impl HistoryWindow {
         )
     }
 
+    /// The lines under the rows for `entry`, in `width` cells: the host it ran on, then its
+    /// directory, which loses its start where it is too long. A local one shows the home
+    /// directory as `~`, and so does a host's.
+    fn footer(&self, entry: &HistoryEntry, width: usize, theme: &Theme) -> Vec<Line<'static>> {
+        let ran = theme.glyphs.ran;
+        let (icon, dir) = match &entry.host {
+            None => (ran.here, home_text(Path::new(&entry.dir), &self.home)),
+            Some(_) if entry.dir.is_empty() => (ran.host, "~".to_owned()),
+            Some(_) => (ran.host, cells::sanitize(entry.dir.as_bytes())),
+        };
+        let name = cells::sanitize(self.host_name(entry.host.as_deref()).as_bytes());
+        let styles = (theme.dialog, theme.truncated_dialog);
+        let marks = theme.glyphs.marks;
+        let line = |icon: char, text: &str, cut: Cut| {
+            let lead = format!("{icon} ");
+            let room = width.saturating_sub(cells::width(&lead));
+            let mut spans = vec![Span::styled(lead, styles.0)];
+            let text = cells::fit_cut(text, room, Align::Left, cut);
+            spans.extend(cells::spans(text, styles, marks));
+            Line::from(spans)
+        };
+        vec![
+            line(icon, &name, Cut::Middle),
+            line(ran.dir, &dir, Cut::Start),
+        ]
+    }
+
     /// Draws the window centered over `area`, the panels: the filter and which hosts it shows,
-    /// the commands, scrolled to the cursor, and the whole command under the cursor.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    /// the commands, scrolled to the cursor, and where the command under the cursor ran, with
+    /// when it ran in `when` on the line over that, in the color of the title.
+    pub(crate) fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        theme: &Theme,
+        when: (&TimeZone, &Formats),
+    ) {
         // From the fields, not `shown`, so that the picker can draw while this borrows them.
         let (all, here) = (self.all, &self.here);
         let scoped = self
@@ -204,13 +243,15 @@ impl HistoryWindow {
         let shown = self.picker.shown(scoped);
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
         let cursor = self.picker.cursor().min(shown.len().saturating_sub(1));
-        let footer = shown.get(cursor).map_or_else(Vec::new, |entry| {
-            let width = inner_width(window::WIDTH, area);
-            preview_rows(&entry.command, width)
-                .into_iter()
-                .map(|text| Line::styled(text, theme.dialog))
-                .collect()
+        let colors = Colors::plain(theme);
+        let chosen = shown.get(cursor);
+        let footer = chosen.map_or_else(Vec::new, |entry| {
+            self.footer(entry, inner_width(window::WIDTH, area), theme)
         });
+        let footer_label = chosen
+            .map(|entry| ran_at(entry.time, when))
+            .filter(|time| !time.is_empty())
+            .map(|time| Line::styled(time, colors.title));
         let scope = if self.all {
             fl!("history-all-hosts")
         } else {
@@ -226,16 +267,6 @@ impl HistoryWindow {
         } else {
             None
         };
-        let hosts: Vec<String> = shown
-            .iter()
-            .map(|entry| cells::sanitize(self.host_name(entry.host.as_deref()).as_bytes()))
-            .collect();
-        let host_width = hosts
-            .iter()
-            .map(|host| cells::width(host))
-            .max()
-            .unwrap_or(0)
-            .min(HOST_WIDTH);
         let title = fl!("history-title");
         let body = Body {
             title: &title,
@@ -245,12 +276,12 @@ impl HistoryWindow {
             note: Some(Line::raw(scope)),
             message,
             footer,
+            footer_label,
             ..Body::default()
         };
-        let focused = Colors::plain(theme).focused_style();
+        let focused = colors.focused_style();
         self.picker.render(frame, area, theme, body, &mut |row| {
             let entry = shown[row.index];
-            let dir_width = DIR_WIDTH.min(row.width / 4);
             let mut lines = entry.command.lines();
             let first = cells::sanitize(lines.next().unwrap_or_default().as_bytes());
             let more = lines.count();
@@ -259,9 +290,8 @@ impl HistoryWindow {
             } else {
                 String::new()
             };
-            let room = row
-                .width
-                .saturating_sub(host_width + dir_width + 4 + cells::width(&more));
+            // A cell on either side of the command.
+            let room = row.width.saturating_sub(2 + cells::width(&more));
             let styles = if row.selected {
                 (focused, theme.truncated_cursor)
             } else if entry.host != *here {
@@ -275,17 +305,6 @@ impl HistoryWindow {
             let marks = theme.glyphs.marks;
             let gap = || Span::styled(" ", styles.0);
             let mut spans = vec![gap()];
-            spans.extend(cells::fit(
-                &hosts[row.index],
-                host_width,
-                Align::Left,
-                styles,
-                marks,
-            ));
-            spans.push(gap());
-            let dir = cells::sanitize(entry.dir.as_bytes());
-            spans.extend(cells::fit(&dir, dir_width, Align::Left, styles, marks));
-            spans.push(gap());
             spans.extend(command_spans(&first, &more, room, styles, marks));
             spans.push(gap());
             Line::from(spans).style(styles.0)
@@ -321,28 +340,14 @@ fn command_spans(
     spans
 }
 
-/// The first [`PREVIEW_ROWS`] rows of `command` in `width` cells: its lines, cut where they
-/// are too long and going on in the next row, their indentation kept.
-fn preview_rows(command: &str, width: usize) -> Vec<String> {
-    let width = width.max(1);
-    let mut rows = Vec::new();
-    for line in command.lines() {
-        let mut rest = cells::sanitize(line.as_bytes());
-        loop {
-            if cells::width(&rest) <= width {
-                rows.push(rest);
-                break;
-            }
-            let (head, tail) = cells::split(&rest, width);
-            rows.push(head);
-            rest = tail;
-        }
-        if rows.len() >= PREVIEW_ROWS {
-            break;
-        }
-    }
-    rows.truncate(PREVIEW_ROWS);
-    rows
+/// When a command ran, `time` seconds after the Unix epoch, in the time zone and formats of
+/// `when`, as every time shows; nothing where it is not known.
+fn ran_at(time: i64, (tz, formats): (&TimeZone, &Formats)) -> String {
+    let time = u64::try_from(time)
+        .ok()
+        .filter(|&seconds| seconds > 0)
+        .and_then(|seconds| SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(seconds)));
+    cells::mtime(time, tz, formats)
 }
 
 #[cfg(test)]
@@ -352,27 +357,43 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+    use crate::tui::glyphs::Glyphs;
 
-    fn entry(command: &str, host: Option<&str>, dir: &str) -> HistoryEntry {
+    /// 2026-11-10 09:05 UTC.
+    const MORNING: i64 = 1_794_301_500;
+
+    fn entry(command: &str, host: Option<&str>, dir: &str, time: i64) -> HistoryEntry {
         HistoryEntry {
             command: command.to_owned(),
             host: host.map(str::to_owned),
             dir: dir.to_owned(),
-            time: 0,
+            time,
         }
     }
 
     /// Oldest first, as `history.toml` keeps them.
     fn history() -> Vec<HistoryEntry> {
+        let minutes = |count: i64| MORNING + count * 60;
         vec![
-            entry("make", None, "/home/me/src/noc"),
-            entry("tail -f log/production.log", Some("web"), "/var/www/app"),
+            entry("make", None, "/home/me/src/noc", MORNING),
+            entry(
+                "tail -f log/production.log",
+                Some("web"),
+                "/var/www/app",
+                minutes(282),
+            ),
             entry(
                 "for f in *.log; do\n  gzip \"$f\"\ndone",
                 Some("web"),
                 "/var/log",
+                minutes(327),
             ),
-            entry("cargo test -p noc-ops", None, "/home/me/src/noc"),
+            entry(
+                "cargo test -p noc-ops",
+                None,
+                "/home/me/src/noc",
+                minutes(365),
+            ),
         ]
     }
 
@@ -382,8 +403,18 @@ mod tests {
             &history(),
             here.map(str::to_owned),
             labels,
+            PathBuf::from("/home/me"),
             Input::new(Kind::FILTER, SearchMode::Fzf),
         )
+    }
+
+    /// The text of the lines under the rows for `entry`, in `width` cells.
+    fn footer(window: &HistoryWindow, entry: &HistoryEntry, width: usize) -> Vec<String> {
+        window
+            .footer(entry, width, &Theme::terminal())
+            .iter()
+            .map(|line| cells::text_of(&line.spans))
+            .collect()
     }
 
     fn press(window: &mut HistoryWindow, action: Action) -> HistoryEvent {
@@ -398,10 +429,12 @@ mod tests {
             .collect()
     }
 
-    fn draw(window: &mut HistoryWindow) -> String {
+    fn draw(window: &mut HistoryWindow, glyphs: &'static Glyphs) -> String {
         let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+        let theme = Theme::terminal().with_glyphs(glyphs);
+        let when = (&TimeZone::UTC, &Formats::iso());
         terminal
-            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
+            .draw(|frame| window.render(frame, frame.area(), &theme, when))
             .unwrap();
         terminal.backend().to_string()
     }
@@ -488,20 +521,81 @@ mod tests {
     }
 
     #[test]
-    fn the_preview_keeps_indentation_and_cuts_long_lines() {
+    fn the_footer_names_the_host_and_shows_the_directory_s_end() {
+        let window = window(None);
         assert_eq!(
-            preview_rows("for f in *; do\n  gzip \"$f\"\ndone", 20),
-            ["for f in *; do", "  gzip \"$f\"", "done"]
+            footer(&window, &entry("ls", Some("db"), "", MORNING), 20),
+            [
+                format!("≡ db{}", " ".repeat(16)),
+                format!("› ~{}", " ".repeat(17))
+            ],
+            "a host's home directory is ~, and its alias names a host without a label"
         );
-        assert_eq!(preview_rows("abcdefgh", 3), ["abc", "def", "gh"]);
-        assert_eq!(preview_rows("1\n2\n3\n4\n5", 3).len(), PREVIEW_ROWS);
+        let deep = entry("ls", None, "/home/me/a/very/deep/tree/of/dirs", MORNING);
+        assert_eq!(
+            footer(&window, &deep, 23),
+            [
+                format!("⌂ local{}", " ".repeat(16)),
+                "› «ry/deep/tree/of/dirs".to_owned()
+            ],
+            "the directory keeps its end"
+        );
     }
 
     #[test]
-    fn draws_hosts_directories_and_the_whole_command_under_the_cursor() {
+    fn when_it_ran_is_on_the_line_over_the_footer_in_the_color_of_the_title() {
+        let theme = Theme::mc_classic().with_glyphs(&Glyphs::PLAIN);
+        let when = (&TimeZone::UTC, &Formats::iso());
+        let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+        let mut window = window(None);
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &theme, when))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let time = "2026-11-10 15:10";
+        let width = u16::try_from(time.len()).unwrap();
+        let (x, y) = (0..buffer.area.height)
+            .flat_map(|y| (0..buffer.area.width - width).map(move |x| (x, y)))
+            .find(|&(x, y)| {
+                let cells = (x..x + width).map(|x| buffer[(x, y)].symbol());
+                cells.collect::<String>() == time
+            })
+            .unwrap();
+        let line = (0..buffer.area.width).map(|x| buffer[(x, y)].symbol());
+        assert!(line.collect::<String>().contains('╟'), "on the line");
+        for x in x..x + width {
+            let cell = &buffer[(x, y)];
+            assert_eq!(cell.fg, theme.dialog_title.fg.unwrap());
+            assert!(!cell.modifier.contains(Modifier::BOLD));
+        }
+    }
+
+    #[test]
+    fn an_unknown_time_leaves_the_line_over_the_footer_bare() {
+        let mut window = HistoryWindow::new(
+            &[entry("ls", None, "/tmp", 0)],
+            None,
+            HashMap::new(),
+            PathBuf::from("/home/me"),
+            Input::new(Kind::FILTER, SearchMode::Fzf),
+        );
+        let drawn = draw(&mut window, &Glyphs::PLAIN);
+        let lines: Vec<&str> = drawn.lines().filter(|line| line.contains('╟')).collect();
+        assert_eq!(lines.len(), 2, "{drawn}");
+        assert!(!lines[1].contains(|c: char| c.is_ascii_digit()), "{drawn}");
+    }
+
+    #[test]
+    fn draws_the_commands_and_where_the_one_under_the_cursor_ran() {
         let mut window = window(Some("web"));
         press(&mut window, Action::NextField);
         press(&mut window, Action::Down);
-        insta::assert_snapshot!(draw(&mut window));
+        insta::assert_snapshot!(draw(&mut window, &Glyphs::PLAIN));
+    }
+
+    #[test]
+    fn draws_this_machine_and_its_home_directory_with_icons() {
+        let mut window = window(None);
+        insta::assert_snapshot!(draw(&mut window, &Glyphs::NERD));
     }
 }

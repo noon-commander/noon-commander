@@ -1,7 +1,8 @@
 # 0041. Lists always show the whole row
 
 - Status: Accepted; amended by
-  [ADR 0071](0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)
+  [ADR 0071](0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md) and
+  [ADR 0072](0072-the-command-history-shows-where-a-command-ran.md)
 - Date: 2026-10-19
 - Amends: [ADR 0025](0025-marks-of-text-cut-short.md),
   [ADR 0036](0036-lists-open-in-insert-mode.md)

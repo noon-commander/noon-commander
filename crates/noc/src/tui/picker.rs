@@ -92,11 +92,14 @@ pub(crate) struct Body<'a> {
     /// Rows that come from a task, and the frame of the spinner: until they come, a skeleton
     /// stands in their place, and dots turn in front of the title while the window waits.
     pub(crate) loading: Option<(&'a Loading, &'a Spin)>,
-    /// Lines under the rows, apart from them, such as the whole command under the cursor.
+    /// Lines under the rows, apart from them, such as where the command under the cursor ran.
     pub(crate) footer: Vec<Line<'static>>,
     /// Where a line parts the footer in two columns, in cells from the left of the room inside
     /// the box; it joins the line over the footer and the bottom of the frame.
     pub(crate) footer_column: Option<u16>,
+    /// On the line over the footer, at its right end, as a title on the frame: such as when the
+    /// command under the cursor ran.
+    pub(crate) footer_label: Option<Line<'static>>,
     /// The whole text of the row under the cursor, which always shows under the rows while
     /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
@@ -714,6 +717,12 @@ impl Picker {
         let top = self.top();
         let full = (body.full.as_deref())
             .filter(|_| skeleton.is_none() && body.footer.is_empty() && !lines.is_empty());
+        let parts = Below {
+            full,
+            footer: body.footer,
+            column: body.footer_column,
+            label: body.footer_label,
+        };
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         if self.filters_rows {
@@ -732,8 +741,7 @@ impl Picker {
             }
             draw_skeleton(frame, area, (theme, theme.dialog), shine);
             if body.fill {
-                let footer = (full, body.footer, body.footer_column);
-                draw_below(frame, inner, below, footer, theme);
+                draw_below(frame, inner, below, parts, theme);
             }
             return;
         }
@@ -744,8 +752,7 @@ impl Picker {
             for (index, text) in room.zip(cells::wrap(&message, width)) {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
-            let footer = (full, body.footer, body.footer_column);
-            draw_below(frame, inner, below, footer, theme);
+            draw_below(frame, inner, below, parts, theme);
             return;
         }
         let cursor = self.cursor.min(rows - 1);
@@ -782,8 +789,7 @@ impl Picker {
             };
             frame.render_widget(text, line(y));
         }
-        let footer = (full, body.footer, body.footer_column);
-        draw_below(frame, inner, below, footer, theme);
+        draw_below(frame, inner, below, parts, theme);
         self.cursor = cursor;
     }
 
@@ -863,29 +869,55 @@ impl Picker {
     }
 }
 
+/// What goes under the rows of a window.
+struct Below<'a> {
+    /// The whole text of the row under the cursor, which shows in place of the rest.
+    full: Option<&'a str>,
+    footer: Vec<Line<'static>>,
+    /// Where a line parts the footer in two columns.
+    column: Option<u16>,
+    /// On the line over the footer, at its right end.
+    label: Option<Line<'static>>,
+}
+
 /// What goes in the last `below` lines of `inner`, if any: the whole text of the row under the
-/// cursor, `full`, if there is one, else the `footer`, in two columns from `column` if it says.
-fn draw_below(
-    frame: &mut Frame<'_>,
-    inner: Rect,
-    below: u16,
-    (full, footer, column): (Option<&str>, Vec<Line<'static>>, Option<u16>),
-    theme: &Theme,
-) {
+/// cursor, if there is one, else the footer, in two columns if it says, and its label.
+fn draw_below(frame: &mut Frame<'_>, inner: Rect, below: u16, parts: Below<'_>, theme: &Theme) {
     if below == 0 {
         return;
     }
-    let footer = match full {
-        Some(full) => cells::whole(
-            full,
-            (usize::from(inner.width), usize::from(FULL_ROWS)),
-            Some('/'),
-            (theme.dialog, theme.truncated_dialog),
-            theme.glyphs.marks,
-        ),
-        None => footer,
+    let (footer, label) = match parts.full {
+        Some(full) => {
+            let lines = cells::whole(
+                full,
+                (usize::from(inner.width), usize::from(FULL_ROWS)),
+                Some('/'),
+                (theme.dialog, theme.truncated_dialog),
+                theme.glyphs.marks,
+            );
+            (lines, None)
+        }
+        None => (parts.footer, parts.label),
     };
-    draw_footer(frame, inner, (below, footer, column), theme);
+    draw_footer(frame, inner, (below, footer, parts.column), theme);
+    if let Some(label) = label {
+        let top = inner.height.saturating_sub(below);
+        draw_label(frame, inner, inner.y + top, label);
+    }
+}
+
+/// `label` on the line across `inner` on its row `y`, as a title on the frame: a blank cell on
+/// either side, the last at the end of the room inside, where the text under it ends.
+fn draw_label(frame: &mut Frame<'_>, inner: Rect, y: u16, label: Line<'static>) {
+    let style = label.style;
+    let mut spans = vec![Span::raw(" ")];
+    spans.extend(label.spans);
+    spans.push(Span::raw(" "));
+    let label = Line::from(spans).style(style);
+    let width = u16::try_from(label.width()).unwrap_or(u16::MAX);
+    let x = inner.right().saturating_sub(width).max(inner.x);
+    let row = Rect::new(x, y, inner.right() - x, 1).intersection(frame.area());
+    frame.render_widget(label, row);
 }
 
 /// The `footer`, in the last `below` lines of `inner` but the first, a line across it that joins

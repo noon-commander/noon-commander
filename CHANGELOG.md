@@ -35,6 +35,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The tab menu (`t t`) and the zoxide window (`g z`) no longer repeat the row under the cursor in
   two lines under the rows, and are three lines shorter
   ([ADR 0071](docs/adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).
+- The rows of the command history (`q :`) show the command alone, across the whole row. Under them
+  two lines say where the command under the cursor ran: its host, or `local`, then its directory,
+  with `~` for the home directory. A server, a monitor, and a folder go in front of them, or `≡`,
+  `⌂`, and `›` without icons. The date and time it ran are on the line over them, at its right
+  end, in the color of the title. The whole command no longer shows under the rows
+  ([ADR 0072](docs/adr/0072-the-command-history-shows-where-a-command-ran.md)).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.

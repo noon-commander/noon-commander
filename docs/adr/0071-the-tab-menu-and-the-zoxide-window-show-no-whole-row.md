@@ -1,6 +1,7 @@
 # 0071. The tab menu and the zoxide window show no whole row
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0072](0072-the-command-history-shows-where-a-command-ran.md)
 - Date: 2026-11-10
 - Amends: [ADR 0041](0041-lists-always-show-the-whole-row.md)
 

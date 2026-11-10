@@ -201,6 +201,17 @@ pub(crate) struct ShownRow {
     pub(crate) width: usize,
 }
 
+/// What a picker has over its rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Over {
+    /// The filter, and a line under it.
+    Filter,
+    /// A line, without a filter.
+    Line,
+    /// Nothing, without a filter: the rows start right under what is over them.
+    Nothing,
+}
+
 /// The filter, the cursor, and the scrolling of a window, whose rows the window holds.
 #[derive(Debug)]
 pub(crate) struct Picker {
@@ -210,8 +221,9 @@ pub(crate) struct Picker {
     shows: Vec<Shows>,
     /// The filter, a text field.
     filter: Field,
-    /// It has a filter; without one it shows every row, and a line in place of the filter.
-    filters_rows: bool,
+    /// What is over the rows: a filter, or without one, which shows every row, a line in its
+    /// place, or nothing.
+    over: Over,
     /// How the filter matches, and whether case counts, as they were last until the keys after
     /// Ctrl+s switch them.
     input: Input,
@@ -251,7 +263,7 @@ impl Picker {
             texts: Vec::new(),
             shows: Vec::new(),
             filter: Field::plain(""),
-            filters_rows: true,
+            over: Over::Filter,
             input,
             plain_keywords: false,
             error: None,
@@ -272,10 +284,19 @@ impl Picker {
     /// whoever holds it finds: it shows every row, and its rows take the keys, in Normal mode.
     pub(crate) fn without_filter() -> Self {
         Self {
-            filters_rows: false,
+            over: Over::Line,
             filtering: false,
             ..Self::new(Input::new(Kind::FILTER, Way::Plain))
         }
+    }
+
+    /// The same picker without a filter, with no line over its rows either, as the list of jobs,
+    /// whose rows start right under the title of its dialog.
+    pub(crate) fn bare(mut self) -> Self {
+        if self.over == Over::Line {
+            self.over = Over::Nothing;
+        }
+        self
     }
 
     /// The same picker, whose filter in the plain mode is keywords that a program picks the
@@ -295,7 +316,7 @@ impl Picker {
 
     /// Whether it has a filter.
     pub(crate) fn has_filter(&self) -> bool {
-        self.filters_rows
+        self.over == Over::Filter
     }
 
     /// Whether the picker picks the rows by the filter itself, rather than a program by the
@@ -437,7 +458,7 @@ impl Picker {
     /// filter, and the keys of text fields edit it, until Esc goes back to the rows; `/` types
     /// in it again. Other keys are the window's.
     pub(crate) fn handle(&mut self, input: Resolved) -> Pick {
-        if !self.filters_rows
+        if !self.has_filter()
             && let Resolved::Action(action) = input
             && (action == Action::QuickSearch || Switch::of(action).is_some())
         {
@@ -664,9 +685,13 @@ impl Picker {
             .saturating_add(body.waiting_full())
     }
 
-    /// Lines over the rows: the filter and the line under it, or the line alone.
+    /// Lines over the rows: the filter and the line under it, or the line alone, or none.
     fn top(&self) -> u16 {
-        if self.filters_rows { 2 } else { 1 }
+        match self.over {
+            Over::Filter => 2,
+            Over::Line => 1,
+            Over::Nothing => 0,
+        }
     }
 
     /// Draws the picker as a part of a dialog, in `area`, as many lines as
@@ -725,10 +750,12 @@ impl Picker {
         };
         let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
-        if self.filters_rows {
-            self.glyphs = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
-        } else {
-            draw_separator(frame, inner, inner.y, Colors::plain(theme), theme);
+        match self.over {
+            Over::Filter => {
+                self.glyphs = self.draw_filter(frame, inner, theme, (body.prompt, body.note));
+            }
+            Over::Line => draw_separator(frame, inner, inner.y, Colors::plain(theme), theme),
+            Over::Nothing => {}
         }
         let room = inner.height.saturating_sub(top + below);
         self.page = usize::from(room).max(1);
@@ -796,7 +823,7 @@ impl Picker {
     /// What shows in place of the rows once none shows: why the filter is no regular
     /// expression, or `nothing`, that nothing matches.
     fn nothing(&self, nothing: Option<String>) -> Option<String> {
-        (self.filters_rows && self.len() == 0).then(|| match &self.error {
+        (self.has_filter() && self.len() == 0).then(|| match &self.error {
             Some(reason) => fl!(
                 "picker-not-regex",
                 reason = cells::sanitize(reason.as_bytes())

@@ -1635,6 +1635,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   of F4 never wait, but count while they run. `f j` lists the jobs, as mc's Background
   jobs: a row for each, with what it does, how far it is (a percentage, `counting`,
   `waiting`, or `aborting`), and the entry at hand, and Show (the default), Abort, and OK.
+  It is a `Dialog` with a picker without a filter or a line over its rows (`Picker::bare`),
+  which `JobsList` wraps: the rows are a stop of the focus, where Enter, Space, and a double
+  click press Show, and Tab, Left, and Right go to the buttons; the wheel scrolls the rows.
   Show brings the selected job to the front, in its window; the selection follows its job
   while jobs above it end, and the next row once it ends itself. Questions from jobs
   behind the panels open over whatever is on screen, in turn with other dialogs, and the top

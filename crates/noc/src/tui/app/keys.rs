@@ -447,14 +447,17 @@ impl App {
         }
     }
 
-    /// Whether a dialog, the search of a tree, or the configuration has the keys, which count
-    /// their moves themselves, past their text fields too, where a count would go to the field.
+    /// Whether a dialog, the search of a tree, the checksums, a job's window, the list of jobs,
+    /// or the configuration has the keys, which count their moves themselves, past their text fields too, where a count would go to the field.
     fn counts_moves(&self) -> bool {
         if self.key_hints.is_some() {
             return false;
         }
         if self.dialog_in_front().is_some()
-            || matches!(self.front(), Front::Find | Front::Results(_) | Front::Job)
+            || matches!(
+                self.front(),
+                Front::Find | Front::Results(_) | Front::Job | Front::JobsList
+            )
         {
             return true;
         }

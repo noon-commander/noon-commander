@@ -35,6 +35,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The window of a job takes a count before an arrow, and Home and End, `g g`, and `G` go to
   its first button and its last, as in every dialog
   ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
+- The list of jobs (`f j`) takes the keys as every dialog with rows does: its rows are a stop of
+  the focus, where the motions move the cursor, with a count, PageUp and PageDown a page, and
+  Enter, Space, and a double click press Show; Tab, Left, and Right go to the buttons, where Up
+  and Down move the focus. The wheel scrolls the rows. Right, Right, Enter aborts the job under
+  the cursor, as Alt+a does.
 - The tab menu (`t t`) and the zoxide window (`g z`) no longer repeat the row under the cursor in
   two lines under the rows, and are three lines shorter
   ([ADR 0071](docs/adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).

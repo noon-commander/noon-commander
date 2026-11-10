@@ -44,14 +44,18 @@ impl App {
         true
     }
 
-    /// Gives a key to the list of jobs, if it is open: Show brings a job to the front, in place
-    /// of the list.
+    /// Gives a key to the list of jobs, if it is open, with its count: Show brings a job to the
+    /// front, in place of the list.
     pub(super) fn handle_jobs_list(&mut self, input: Resolved) -> bool {
         let rows = self.job_rows();
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
         let Some(list) = &mut self.jobs_list else {
             return false;
         };
-        match list.handle(input, &rows) {
+        match list.handle(typed, &rows) {
             JobsEvent::Pending => {}
             JobsEvent::Show(id) => {
                 if let Some(job) = self.jobs.iter_mut().find(|job| job.id == id) {

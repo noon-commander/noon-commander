@@ -147,7 +147,7 @@ impl App {
                 self.open_command_line(action);
             }
             Action::Quit => self.ask_quit(),
-            Action::Jobs => self.jobs_list = Some(JobsList::default()),
+            Action::Jobs => self.jobs_list = Some(JobsList::new()),
             Action::Help => self.help = Some(self.help_screen()),
             Action::SwitchPanel => self.active = self.active.other(),
             Action::FocusLeft | Action::FocusRight => {

@@ -199,8 +199,8 @@ impl App {
     }
 
     /// Gives a press of the mouse to the window or menu in front. The wheel moves its cursor
-    /// as Up and Down do, or scrolls the help; but not in a job's window or the viewer's
-    /// reading, where they move between the buttons. A click does what the window says, often by the key it stands
+    /// as Up and Down do, or scrolls the help, the search of a tree, or the list of jobs; but
+    /// not in a job's window or the viewer's reading, which have no rows. A click does what the window says, often by the key it stands
     /// for.
     fn pointer_window(&mut self, pointer: Pointer) -> Vec<Effect> {
         let front = self.front();
@@ -208,6 +208,14 @@ impl App {
             let combo = self.open_combo_box().is_some();
             return match (front, &mut self.help) {
                 (Front::Job | Front::Reading, _) => Vec::new(),
+                // The wheel scrolls the jobs, wherever the focus is.
+                (Front::JobsList, _) => {
+                    let rows = self.job_rows();
+                    if let Some(list) = &mut self.jobs_list {
+                        list.wheel((keys.0, usize::from(keys.1)), &rows);
+                    }
+                    Vec::new()
+                }
                 // The wheel moves in the open list of a combo box, as in a menu.
                 (Front::Find, _) if combo => self.wheel(keys),
                 // The wheel scrolls the rows of the search, wherever the focus is.

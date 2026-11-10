@@ -372,8 +372,8 @@ impl App {
                 help.render(frame, panels, theme);
             });
         }
-        if let Some(list) = &self.jobs_list {
-            let rows = self.job_rows();
+        let rows = self.jobs_list.as_ref().map(|_| self.job_rows());
+        if let (Some(list), Some(rows)) = (&mut self.jobs_list, rows) {
             stage.show(frame, middle(zoom::Window::JobsList), |frame| {
                 list.render(frame, panels, theme, &rows);
             });

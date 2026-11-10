@@ -87,14 +87,13 @@ impl Clicks {
     }
 }
 
-/// Where a window drew what the mouse can press: its frame, the rows of its list that show,
-/// and its buttons.
+/// Where a window drew what the mouse can press: its frame, and the rows of its list that
+/// show.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Drawn {
     pub(crate) frame: Rect,
     /// By their index in the list.
     pub(crate) rows: Vec<(usize, Rect)>,
-    pub(crate) buttons: Vec<Rect>,
 }
 
 impl Drawn {
@@ -102,11 +101,6 @@ impl Drawn {
     pub(crate) fn row_at(&self, at: Position) -> Option<usize> {
         let row = self.rows.iter().find(|(_, area)| area.contains(at));
         row.map(|(index, _)| *index)
-    }
-
-    /// The button at `at`.
-    pub(crate) fn button_at(&self, at: Position) -> Option<usize> {
-        self.buttons.iter().position(|button| button.contains(at))
     }
 
     /// What `pointer` does in a menu drawn here: a click on a row puts `cursor` on it, a double
@@ -126,16 +120,6 @@ impl Drawn {
             Press::RightClick | Press::WheelUp | Press::WheelDown | Press::Drag => {}
         }
         None
-    }
-
-    /// What `pointer` does to the buttons drawn here: a click gives a button the `focus` and
-    /// presses it, as Enter.
-    pub(crate) fn button_press(&self, pointer: Pointer, focus: &mut usize) -> Option<Action> {
-        if pointer.press != Press::Click {
-            return None;
-        }
-        *focus = self.button_at(pointer.at)?;
-        Some(Action::Confirm)
     }
 }
 
@@ -212,7 +196,6 @@ mod tests {
         let drawn = Drawn {
             frame: Rect::new(10, 5, 20, 6),
             rows: vec![(4, Rect::new(12, 7, 16, 1)), (5, Rect::new(12, 8, 16, 1))],
-            buttons: Vec::new(),
         };
         let mut cursor = 4;
         let press = |press, x, y| Pointer {

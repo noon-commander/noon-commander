@@ -42,10 +42,12 @@ unlike the rows of a picker in a dialog.
   the time, each on a line, then Background, the default, and Abort, which Esc presses; Abort alone
   for a job of F4.
 - **The list of jobs is a picker without a filter in a dialog**, with Show, the default, Abort,
-  and OK, which Esc presses. Its rows are a stop of the focus as in every dialog: there the motions
-  move the cursor, PageUp and PageDown a page, and Tab, Left, and Right go to the buttons; Enter,
-  Space, and a double click on a row press Show; Alt and a letter press a button from anywhere.
-  The cursor stays on its job as jobs come and go, and on the row after it once it ends.
+  and OK, which Esc presses. Its rows start right under the title, with no line over them
+  (`Picker::bare`), as they did. They are a stop of the focus as in every dialog: there the
+  motions move the cursor, PageUp and PageDown a page, and Tab, Left, and Right go to the
+  buttons; Enter, Space, and a double click on a row press Show; Alt and a letter press a button
+  from anywhere. The wheel scrolls the rows wherever the focus is. The cursor stays on its job as
+  jobs come and go, and on the row after it once it ends.
 - **A count before a motion goes to the dialog**, which counts its moves itself, in these windows
   too.
 
@@ -54,6 +56,6 @@ unlike the rows of a picker in a dialog.
 - One way to draw buttons, move between them, and press them, in every window that has them.
 - The window of a read is the same size, with one button. Closing the viewer while it reads takes
   Esc twice.
-- The list of jobs takes a line more, under its title, as the list of the search of a tree does.
-  Abort for the job under the cursor is Tab, Right, Enter, or Alt+a, where it was Right, Enter.
+- The list of jobs looks as it did. Abort for the job under the cursor is Right, Right, Enter, or
+  Alt+a, where it was Right, Enter; Up and Down on a button move the focus, not the cursor.
 - The rule of the way out holds for the window of a read: its only button is its way out.

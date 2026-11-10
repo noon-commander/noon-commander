@@ -517,10 +517,9 @@ fn ctrl_x_j_lists_the_jobs_to_show_or_abort() {
     );
     assert!(text.contains("waiting"), "{text}");
 
-    // Abort takes the waiting one away at once, and stops the running one.
-    app.handle(action(Action::Down));
-    app.handle(action(Action::Right));
-    app.handle(action(Action::Confirm));
+    // Abort takes the waiting one away at once, and stops the running one. Right leaves the
+    // rows for Show, and again for Abort: `2l` goes there, as the dialog counts the moves.
+    keys(&mut app, &["j", "2", "l", "enter"]);
     assert_eq!(app.jobs.len(), 1);
     app.handle(action(Action::Confirm));
     assert!(cancel.is_cancelled());

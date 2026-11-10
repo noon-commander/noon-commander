@@ -144,7 +144,7 @@
       ([ADR 0041](adr/0041-lists-always-show-the-whole-row.md))
 - [x] The tab menu and the zoxide window show no whole row: their paths nearly always fit
       ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md))
-- [ ] Every window with buttons is a dialog: the window of a read of the viewer, with Cancel
+- [x] Every window with buttons is a dialog: the window of a read of the viewer, with Cancel
       alone, the window of a job, the list of jobs
       ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md))
 - [x] `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx`:

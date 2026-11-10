@@ -113,6 +113,8 @@ pub(crate) enum Button {
     Save,
     /// Send the job behind the panels, where it goes on.
     Background,
+    /// Bring the selected job to the front, in its window.
+    Show,
 }
 
 impl Button {
@@ -144,6 +146,7 @@ impl Button {
             Self::AllToClipboard => fl!("dialog-all-to-clipboard"),
             Self::Save => fl!("dialog-save"),
             Self::Background => fl!("job-background"),
+            Self::Show => fl!("jobs-show"),
         }
     }
 }

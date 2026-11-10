@@ -1626,7 +1626,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   for it, `Waiting for web to connect…`, while Connection asks whether to connect again; Retry
   there goes on where the job was once the host is back, and Cancel ends the job.
 - **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
-  behind the panels, which take the keys again, and Esc aborts, as in mc. As many jobs run
+  behind the panels, which take the keys again, and Esc aborts, as in mc. It is a `Dialog`, which
+  `JobView` wraps: five lines of text, the gauge among them (`Text::Gauge`), which follow the job
+  at each frame (`Dialog::replace_text`), and its keys and mouse are a dialog's, a count too
+  ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). As many jobs run
   at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and
   starts when one ends, the oldest first. Abort takes a waiting job away at once. The jobs
   of F4 never wait, but count while they run. `f j` lists the jobs, as mc's Background

@@ -1,24 +1,21 @@
 //! The window of a running job: what it does, where it is, a gauge, and its time and speed.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::text::Line;
 
-use super::cells::{self, Align};
-use super::keymap::{Action, Resolved};
-use super::label::Label;
-use super::mouse::{Drawn, Pointer};
+use super::cells;
+use super::dialog::{Button, Dialog, DialogEvent, Text};
+use super::edit::Registers;
+use super::keymap::{Action, Typed};
+use super::mouse::Pointer;
 use super::panel::short_size;
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
-use super::window::{
-    self, Colors, button_line, button_spots, draw_box, draw_separator, frame_around, gauge, ratio,
-    unknown_gauge,
-};
+use super::window::{Tone, ratio};
 use crate::i18n::fl;
 
 /// Work the speed needs behind it before it means anything.
@@ -938,23 +935,13 @@ impl PartialEq for Size {
     }
 }
 
-/// A button of a job's window.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum JobButton {
-    /// The job goes on behind the panels.
-    Background,
-    Abort,
-}
-
-impl JobButton {
-    /// Its name, with the letter that Alt and it press.
-    fn label(self) -> Label {
-        Label::parse(&match self {
-            Self::Background => fl!("job-background"),
-            Self::Abort => fl!("dialog-abort"),
-        })
-    }
-}
+/// Where the lines of a job's window are among those of its dialog: what it does, the entry at
+/// hand, the gauge, the count, and the time.
+const DOING: usize = 0;
+const CURRENT: usize = 1;
+const GAUGE: usize = 2;
+const COUNT: usize = 3;
+const TIME: usize = 4;
 
 /// How far a job is, for the list of jobs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -967,7 +954,7 @@ pub(crate) struct Summary {
     pub(crate) current: String,
 }
 
-/// The window of a job, with Background, the default, and Abort.
+/// The window of a job, with Background, the default, and Abort: a dialog, which this wraps.
 #[derive(Debug)]
 pub(crate) struct JobView {
     title: String,
@@ -985,16 +972,22 @@ pub(crate) struct JobView {
     /// The speed and the time left change with the second that the time shows, rather than
     /// with every frame.
     held: Cell<Option<Held>>,
-    buttons: Vec<JobButton>,
-    focus: usize,
-    /// Where the last render drew it, for the mouse.
-    drawn: RefCell<Drawn>,
+    /// Its lines, each one row, and its buttons; the lines follow the job as it draws.
+    dialog: Dialog,
     /// For the waiting and the counting, whose gauge the shine crosses.
     wait: Wait,
 }
 
 impl JobView {
     pub(crate) fn new(title: String, doing: String) -> Self {
+        let buttons = vec![Button::Background, Button::Abort];
+        let line = || Text::Line(String::new());
+        let dialog = Dialog::question(&title, "", buttons, 0, Tone::Plain)
+            .with_text(line())
+            .with_text(line())
+            .with_text(Text::Gauge(None))
+            .with_text(line())
+            .with_text(line());
         Self {
             title,
             doing,
@@ -1006,17 +999,14 @@ impl JobView {
             samples: Samples::default(),
             forecast: Forecast::default(),
             held: Cell::default(),
-            buttons: vec![JobButton::Background, JobButton::Abort],
-            focus: 0,
-            drawn: RefCell::default(),
+            dialog,
             wait: Wait::default(),
         }
     }
 
     /// Leaves Abort the only button, for a job that must stay in front.
     pub(crate) fn keep_in_front(&mut self) {
-        self.buttons = vec![JobButton::Abort];
-        self.focus = 0;
+        self.dialog.set_buttons(vec![Button::Abort]);
     }
 
     /// The job waits its turn.
@@ -1270,41 +1260,24 @@ impl JobView {
         matches!(&self.stage, Stage::Working { counts, .. } if counts.bytes_total > 0)
     }
 
-    /// Takes a key: Enter or Space presses the focused button, Esc aborts, as in mc, arrows
-    /// and Tab move the focus, and Alt and a button's letter press it.
-    pub(crate) fn handle(&mut self, input: Resolved) -> Option<JobButton> {
-        let action = match input {
-            Resolved::Action(action) => action,
-            Resolved::Hotkey(c) => {
-                return self
-                    .buttons
-                    .iter()
-                    .copied()
-                    .find(|button| button.label().has(c));
-            }
-            Resolved::Insert(_) => return None,
-        };
-        let count = self.buttons.len();
-        match action {
-            Action::Cancel => Some(JobButton::Abort),
-            Action::Confirm | Action::Toggle => Some(self.buttons[self.focus]),
-            Action::NextField | Action::Right | Action::Down => {
-                self.focus = (self.focus + 1) % count;
-                None
-            }
-            Action::PrevField | Action::Left | Action::Up => {
-                self.focus = (self.focus + count - 1) % count;
-                None
-            }
-            _ => None,
+    /// Takes a key as its dialog does: Enter or Space presses the button with the focus, the
+    /// arrows, Tab, `g g`, and `G` move the focus, and Alt and a button's letter press it; Esc
+    /// is Abort, as in mc. The button pressed, if any.
+    pub(crate) fn handle(&mut self, typed: Typed) -> Option<Button> {
+        match self.dialog.handle_typed(typed, &mut Registers::default()) {
+            DialogEvent::Pressed(button) => Some(button),
+            DialogEvent::Cancelled => Some(Button::Abort),
+            DialogEvent::Pending | DialogEvent::Opened(_) => None,
         }
     }
 
     /// Takes a press of the mouse, where the window was drawn last: a click on a button
     /// returns Enter, which presses it.
     pub(crate) fn pointer(&mut self, pointer: Pointer) -> Option<Action> {
-        let drawn = self.drawn.borrow().clone();
-        drawn.button_press(pointer, &mut self.focus)
+        match self.dialog.pointer(pointer) {
+            DialogEvent::Pressed(_) => Some(Action::Confirm),
+            DialogEvent::Pending | DialogEvent::Opened(_) | DialogEvent::Cancelled => None,
+        }
     }
 
     /// The job waits for `host`, shown as given, whose connection was lost; `None` once it
@@ -1321,35 +1294,30 @@ impl JobView {
     /// Draws the window as it is at `now`; until how far the job is is known, its gauge is a
     /// skeleton, which the shine of `spin` crosses while it is [`shining`](Self::shining).
     pub(crate) fn render(
-        &self,
+        &mut self,
         frame: &mut Frame<'_>,
         area: Rect,
         theme: &Theme,
         (now, spin): (Instant, &Spin),
     ) {
-        let colors = Colors::plain(theme);
-        // Borders, what it does, where, the gauge, the count, the time, a line, the buttons.
-        let inner = draw_box(frame, area, (window::WIDTH, 9), &self.title, colors, theme);
-        let width = usize::from(inner.width);
-        // On a small screen, what fits.
-        let mut put = |index: u16, line: Line<'static>| {
-            if index < inner.height {
-                let row = Rect::new(inner.x, inner.y + index, inner.width, 1);
-                frame.render_widget(line, row);
-            }
-        };
         let look = self.look(now);
-        let (doing, current, percent, count, time) = match &look.stage {
-            Seen::Waiting => (fl!("job-waiting"), "", None, String::new(), String::new()),
-            &Seen::Scanning { items } => (
+        let (doing, current, percent, count, time) = match look.stage {
+            Seen::Waiting => (
+                fl!("job-waiting"),
+                String::new(),
+                None,
+                String::new(),
+                String::new(),
+            ),
+            Seen::Scanning { items } => (
                 fl!("job-scanning"),
-                "",
+                String::new(),
                 None,
                 fl!("job-found", items = items),
                 String::new(),
             ),
-            &Seen::Working {
-                ref current,
+            Seen::Working {
+                current,
                 done,
                 total,
                 percent,
@@ -1367,13 +1335,7 @@ impl JobView {
                     None => fl!("job-count", done = done, total = total),
                 };
                 let time = time_line(second, data.as_ref());
-                (
-                    self.doing.clone(),
-                    current.as_str(),
-                    Some(percent),
-                    count,
-                    time,
-                )
+                (self.doing.clone(), current, Some(percent), count, time)
             }
         };
         let doing = match &look.away {
@@ -1381,46 +1343,19 @@ impl JobView {
             Some(host) => fl!("job-away", host = host.as_str()),
             None => doing,
         };
-        let text = |text: &str| {
-            let styles = colors.body_styles();
-            Line::from(cells::fit(
-                text,
-                width,
-                Align::Left,
-                styles,
-                theme.glyphs.marks,
-            ))
-        };
-        put(0, text(&doing));
-        put(1, text(current));
-        if let Some(percent) = percent {
-            // At most 100.
-            #[allow(clippy::cast_precision_loss)]
-            let ratio = percent as f64 / 100.0;
-            put(2, gauge(ratio, width, theme));
-        } else {
-            // A stop leaves it still: nothing more is to come.
-            let shine = self.shining().and_then(|wait| spin.shine(wait));
-            put(2, unknown_gauge(inner.width, shine, theme));
+        let lines = [
+            (DOING, Text::Line(doing)),
+            (CURRENT, Text::Line(current)),
+            (GAUGE, Text::Gauge(percent.map(|percent| (percent, 100)))),
+            (COUNT, Text::Line(count)),
+            (TIME, Text::Line(time)),
+        ];
+        for (index, text) in lines {
+            self.dialog.replace_text(index, text);
         }
-        put(3, text(&count));
-        put(4, text(&time));
-        let labels: Vec<Label> = self.buttons.iter().map(|button| button.label()).collect();
-        let buttons = button_line(&labels, 0, Some(self.focus), colors);
-        let row = Rect::new(inner.x, inner.y + 6, inner.width, 1);
-        *self.drawn.borrow_mut() = Drawn {
-            frame: frame_around(inner),
-            rows: Vec::new(),
-            buttons: if inner.height > 6 {
-                button_spots(&labels, 0, row)
-            } else {
-                Vec::new()
-            },
-        };
-        put(6, buttons);
-        if inner.height > 6 {
-            draw_separator(frame, inner, inner.y + 5, colors, theme);
-        }
+        // A stop leaves it still: nothing more is to come.
+        let shine = self.shining().and_then(|wait| spin.shine(wait));
+        self.dialog.render_shining(frame, area, theme, shine);
     }
 }
 

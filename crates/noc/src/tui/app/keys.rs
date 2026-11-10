@@ -454,7 +454,7 @@ impl App {
             return false;
         }
         if self.dialog_in_front().is_some()
-            || matches!(self.front(), Front::Find | Front::Results(_))
+            || matches!(self.front(), Front::Find | Front::Results(_) | Front::Job)
         {
             return true;
         }

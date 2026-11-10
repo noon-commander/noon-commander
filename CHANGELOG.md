@@ -32,6 +32,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The window of a job takes a count before an arrow, and Home and End, `g g`, and `G` go to
+  its first button and its last, as in every dialog
+  ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
 - The tab menu (`t t`) and the zoxide window (`g z`) no longer repeat the row under the cursor in
   two lines under the rows, and are three lines shorter
   ([ADR 0071](docs/adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).

@@ -378,7 +378,7 @@ impl App {
                 list.render(frame, panels, theme, &rows);
             });
         }
-        if let Some(job) = self.in_front() {
+        if let Some(job) = self.jobs.iter_mut().find(|job| !job.background) {
             stage.show(frame, middle(zoom::Window::Job(job.id)), |frame| {
                 job.view.render(frame, panels, theme, (spin.at(), spin));
             });

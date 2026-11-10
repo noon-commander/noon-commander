@@ -4,9 +4,10 @@ use ratatui::style::Modifier;
 
 use super::*;
 use crate::tui::glyphs::Glyphs;
+use crate::tui::keymap::{Extra, Resolved};
 use crate::tui::spinner;
 
-fn draw_at(view: &JobView, now: Instant) -> String {
+fn draw_at(view: &mut JobView, now: Instant) -> String {
     let mut terminal = Terminal::new(TestBackend::new(80, 11)).unwrap();
     terminal
         .draw(|frame| {
@@ -19,7 +20,7 @@ fn draw_at(view: &JobView, now: Instant) -> String {
 
 /// The title line of the window drawn at `now` with turning spinners, the gauge line, and
 /// which cells of the gauge are dim.
-fn busy_lines(view: &JobView, now: Instant) -> (String, String, Vec<bool>) {
+fn busy_lines(view: &mut JobView, now: Instant) -> (String, String, Vec<bool>) {
     let mut terminal = Terminal::new(TestBackend::new(80, 11)).unwrap();
     terminal
         .draw(|frame| {
@@ -47,30 +48,30 @@ fn until_how_far_it_is_is_known_the_gauge_is_a_skeleton_that_a_shine_crosses() {
     let start = Instant::now();
     let mut view = JobView::new("Delete".to_owned(), "Deleting".to_owned());
     view.scanning(42, start);
-    let (title, gauge, dim) = busy_lines(&view, start);
+    let (title, gauge, dim) = busy_lines(&mut view, start);
     assert!(title.contains("═ Delete ═"), "{title}");
     assert!(gauge.contains("▒▒▒▒▒▒") && !gauge.contains('%'), "{gauge}");
     assert!(dim.iter().all(|dim| *dim), "{dim:?}");
     // The shine starts with the delay of every spinner, and no dots turn in the title.
-    let (title, _, dim) = busy_lines(&view, start + spinner::DELAY + secs(1) / 2);
+    let (title, _, dim) = busy_lines(&mut view, start + spinner::DELAY + secs(1) / 2);
     assert!(title.contains("═ Delete ═"), "{title}");
     assert_eq!(dim.iter().filter(|dim| !**dim).count(), 9, "{dim:?}");
     // It turns at the end of the bar of 72 cells and runs back: eight cells after the last.
     let back = start + spinner::DELAY + Duration::from_millis(40) * 79;
-    let (_, _, dim) = busy_lines(&view, back);
+    let (_, _, dim) = busy_lines(&mut view, back);
     let lit: Vec<usize> = (0..dim.len()).filter(|x| !dim[*x]).collect();
     assert_eq!(lit, (59..=67).collect::<Vec<_>>());
     // A stop leaves it still.
     view.abort();
-    let (_, _, dim) = busy_lines(&view, start + spinner::DELAY + secs(1) / 2);
+    let (_, _, dim) = busy_lines(&mut view, start + spinner::DELAY + secs(1) / 2);
     assert!(dim.iter().all(|dim| *dim), "{dim:?}");
     // Once it is known, the gauge fills, with its percentage.
     view.working("/srv/a".to_owned(), Counts::default(), start);
-    let (_, gauge, _) = busy_lines(&view, start + secs(1));
+    let (_, gauge, _) = busy_lines(&mut view, start + secs(1));
     assert!(gauge.contains('%'), "{gauge}");
 }
 
-fn draw(view: &JobView) -> String {
+fn draw(view: &mut JobView) -> String {
     draw_at(view, Instant::now())
 }
 
@@ -95,7 +96,7 @@ fn shows_counting_then_progress() {
     let start = Instant::now();
     let mut view = JobView::new("Delete".to_owned(), "Deleting".to_owned());
     view.scanning(42, start);
-    let text = draw_at(&view, start);
+    let text = draw_at(&mut view, start);
     assert!(text.contains("Counting"), "{text}");
     assert!(text.contains("42 found"), "{text}");
     assert!(!text.contains("Time"), "{text}");
@@ -106,7 +107,7 @@ fn shows_counting_then_progress() {
         ..Counts::default()
     };
     view.working("/srv/www/index.html".to_owned(), counts, start);
-    insta::assert_snapshot!(draw_at(&view, start + secs(75)));
+    insta::assert_snapshot!(draw_at(&mut view, start + secs(75)));
 
     // With bytes, the gauge follows them.
     let counts = Counts {
@@ -117,16 +118,16 @@ fn shows_counting_then_progress() {
         bytes_copied: 1536,
     };
     view.working("big".to_owned(), counts, start);
-    let text = draw(&view);
+    let text = draw(&mut view);
     assert!(text.contains("1 of 2, 1.5K of 2.0K"), "{text}");
     assert!(text.contains(" 75%"), "{text}");
 
     view.abort();
-    assert!(draw(&view).contains("Aborting"));
+    assert!(draw(&mut view).contains("Aborting"));
 
     let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
     view.wait();
-    assert!(draw(&view).contains("Waiting for other jobs"));
+    assert!(draw(&mut view).contains("Waiting for other jobs"));
     assert!(view.ratio() < f64::EPSILON);
     assert!(!view.ticking(), "nothing to time yet");
 }
@@ -136,14 +137,14 @@ fn a_copy_shows_its_time_speed_and_time_left() {
     let start = Instant::now();
     let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
     view.working("big".to_owned(), copying(0, 0), start);
-    let text = draw_at(&view, start + Duration::from_millis(400));
+    let text = draw_at(&mut view, start + Duration::from_millis(400));
     assert!(text.contains("Time 0:00   ETA -:--   -"), "{text}");
 
     for second in 1..=10 {
         let counts = copying(2 * second, 2 * second);
         view.working("big".to_owned(), counts, start + secs(second));
     }
-    insta::assert_snapshot!(draw_at(&view, start + secs(10)));
+    insta::assert_snapshot!(draw_at(&mut view, start + secs(10)));
     let summary = view.summary(start + secs(10));
     assert_eq!(summary.left, "ETA 0:40");
 }
@@ -177,7 +178,7 @@ fn time_waiting_for_an_answer_does_not_count() {
     let speed = timing.speed.unwrap();
     assert!((speed - 1024.0 * 1024.0).abs() < 1.0, "1 MiB/s: {speed}");
     assert_eq!(timing.left.map(whole_seconds), Some(90));
-    let text = draw_at(&view, open + secs(5));
+    let text = draw_at(&mut view, open + secs(5));
     assert!(text.contains("Time 0:10   ETA 1:30   1.0M/s"), "{text}");
 }
 
@@ -557,7 +558,7 @@ fn while_no_data_moves_the_speed_falls_and_the_time_left_is_unknown() {
     let timing = view.timing(start + secs(15)).unwrap();
     assert!(timing.speed.unwrap() < f64::EPSILON);
     assert_eq!(timing.left, None);
-    let text = draw_at(&view, start + secs(15));
+    let text = draw_at(&mut view, start + secs(15));
     assert!(text.contains("Time 0:15   ETA -:--   0B/s"), "{text}");
     assert_eq!(view.summary(start + secs(15)).left, "");
 }
@@ -1711,7 +1712,7 @@ fn jobs_without_data_show_only_their_time() {
         ..Counts::default()
     };
     view.working("a".to_owned(), counts, start);
-    let text = draw_at(&view, start + secs(3_725));
+    let text = draw_at(&mut view, start + secs(3_725));
     assert!(text.contains("Time 1:02:05"), "{text}");
     assert!(!text.contains("ETA"), "{text}");
     assert_eq!(view.summary(start + secs(10)).left, "");
@@ -1728,37 +1729,53 @@ fn durations_and_speeds_read_short() {
 
 #[test]
 fn enter_sends_to_the_background_and_esc_aborts() {
-    let press = |view: &mut JobView, action| view.handle(Resolved::Action(action));
+    let typed = |resolved| Typed::from(resolved);
+    let press = |view: &mut JobView, action| view.handle(typed(Resolved::Action(action)));
     let mut view = JobView::new("Copy".to_owned(), "Copying".to_owned());
-    assert!(draw(&view).contains("{ Background } [ Abort ]"));
-    assert_eq!(
-        press(&mut view, Action::Confirm),
-        Some(JobButton::Background)
-    );
-    assert_eq!(press(&mut view, Action::Cancel), Some(JobButton::Abort));
+    assert!(draw(&mut view).contains("{ Background } [ Abort ]"));
+    assert_eq!(press(&mut view, Action::Confirm), Some(Button::Background));
+    assert_eq!(press(&mut view, Action::Cancel), Some(Button::Abort));
     assert_eq!(press(&mut view, Action::Right), None);
-    assert_eq!(press(&mut view, Action::Toggle), Some(JobButton::Abort));
+    assert_eq!(press(&mut view, Action::Toggle), Some(Button::Abort));
     assert_eq!(press(&mut view, Action::PrevField), None);
+    assert_eq!(press(&mut view, Action::Confirm), Some(Button::Background));
+    // As vim's `G` and `g g`, and a count, as `3l` moves three times.
+    assert_eq!(press(&mut view, Action::End), None);
+    assert_eq!(press(&mut view, Action::Confirm), Some(Button::Abort));
+    assert_eq!(press(&mut view, Action::Home), None);
+    assert_eq!(press(&mut view, Action::Confirm), Some(Button::Background));
+    let three = Typed {
+        resolved: Resolved::Action(Action::Right),
+        extra: Extra {
+            count: Some(3),
+            ..Extra::default()
+        },
+    };
+    assert_eq!(view.handle(three), None);
+    assert_eq!(press(&mut view, Action::Confirm), Some(Button::Abort));
+    assert_eq!(view.handle(typed(Resolved::Insert('a'))), None);
     assert_eq!(
-        press(&mut view, Action::Confirm),
-        Some(JobButton::Background)
+        view.handle(typed(Resolved::Hotkey('a'))),
+        Some(Button::Abort)
     );
-    assert_eq!(view.handle(Resolved::Insert('a')), None);
-    assert_eq!(view.handle(Resolved::Hotkey('a')), Some(JobButton::Abort));
     assert_eq!(
-        view.handle(Resolved::Hotkey('B')),
-        Some(JobButton::Background)
+        view.handle(typed(Resolved::Hotkey('b'))),
+        Some(Button::Background)
     );
-    assert_eq!(view.handle(Resolved::Hotkey('x')), None);
+    assert_eq!(view.handle(typed(Resolved::Hotkey('x'))), None);
 
     view.keep_in_front();
-    assert_eq!(view.handle(Resolved::Hotkey('b')), None, "no Background");
-    assert!(!draw(&view).contains("Background"));
+    assert_eq!(
+        view.handle(typed(Resolved::Hotkey('b'))),
+        None,
+        "no Background"
+    );
+    assert!(!draw(&mut view).contains("Background"));
     for action in [Action::Cancel, Action::Confirm, Action::Toggle] {
-        assert_eq!(press(&mut view, action), Some(JobButton::Abort));
+        assert_eq!(press(&mut view, action), Some(Button::Abort));
     }
     assert_eq!(press(&mut view, Action::Right), None);
-    assert_eq!(press(&mut view, Action::Confirm), Some(JobButton::Abort));
+    assert_eq!(press(&mut view, Action::Confirm), Some(Button::Abort));
 }
 
 #[test]

@@ -111,6 +111,8 @@ pub(crate) enum Button {
     AllToClipboard,
     /// Save the checksums to a file.
     Save,
+    /// Send the job behind the panels, where it goes on.
+    Background,
 }
 
 impl Button {
@@ -141,6 +143,7 @@ impl Button {
             Self::ToClipboard => fl!("dialog-to-clipboard"),
             Self::AllToClipboard => fl!("dialog-all-to-clipboard"),
             Self::Save => fl!("dialog-save"),
+            Self::Background => fl!("job-background"),
         }
     }
 }

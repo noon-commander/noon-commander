@@ -163,6 +163,7 @@ fn the_buttons_of_every_question_have_a_letter_each() {
         vec![Button::Connect, Button::Local, Button::Cancel],
         vec![Button::Connect, Button::Cancel],
         vec![Button::Change, Button::Cancel],
+        vec![Button::Background, Button::Abort],
     ];
     for buttons in questions {
         let name = format!("{buttons:?}");

@@ -12,9 +12,8 @@ use crate::tui::cells::{self};
 use crate::tui::describe::Reason;
 use crate::tui::dialog::{Button, Dialog, Problem};
 use crate::tui::jobs::{JobsEvent, Row};
-use crate::tui::keymap::Resolved;
+use crate::tui::keymap::{Resolved, Typed};
 use crate::tui::panel::{child, location_text};
-use crate::tui::progress::JobButton;
 use crate::tui::tasks::{HostHandle, HostLink, JobEvent, Relink};
 use crate::tui::window::Tone;
 
@@ -24,19 +23,23 @@ use super::{
 };
 
 impl App {
-    /// Gives a key to the job in front, if there is one: Abort stops it, Background sends it
-    /// behind the panels.
+    /// Gives a key to the job in front, if there is one, with its count: Abort stops it,
+    /// Background sends it behind the panels.
     pub(super) fn handle_job(&mut self, input: Resolved) -> bool {
+        let typed = Typed {
+            resolved: input,
+            extra: self.extra,
+        };
         let Some(job) = self.jobs.iter_mut().find(|job| !job.background) else {
             return false;
         };
-        match job.view.handle(input) {
-            Some(JobButton::Abort) => {
+        match job.view.handle(typed) {
+            Some(Button::Abort) => {
                 let id = job.id;
                 self.abort_job(id);
             }
-            Some(JobButton::Background) => job.background = true,
-            None => {}
+            Some(Button::Background) => job.background = true,
+            _ => {}
         }
         true
     }

@@ -372,15 +372,17 @@ impl LocationMenu {
             .filter(|_| !self.loading.loaded())
             .map(str::to_owned);
         let note = self.note(theme);
+        let columns = SizeColumns::of(&items);
         let widest = items
             .iter()
-            .map(|item| cells::width(&info(*item, hosts)))
+            .map(|item| cells::width(&info(*item, hosts, columns)))
             .max()
             .unwrap_or(0);
         let look = Look {
             theme,
             decor,
             hosts,
+            columns,
             dots: spin.dots(),
             focused: Colors::plain(theme).focused_style(),
         };
@@ -522,6 +524,7 @@ struct Look<'a> {
     theme: &'a Theme,
     decor: Decor,
     hosts: &'a dyn Fn(&str) -> HostState,
+    columns: SizeColumns,
     /// The frame of the spinner of hosts that connect.
     dots: char,
     /// The row under the cursor.
@@ -575,7 +578,7 @@ impl Look<'_> {
             spans.insert(0, Span::styled(marker, styles.0.patch(style)));
         }
         spans.push(Span::styled(" ", styles.0));
-        let info = info(item, self.hosts);
+        let info = info(item, self.hosts, self.columns);
         spans.extend(cells::fit(&info, info_width, Align::Right, styles, marks));
         Line::from(spans).style(styles.0)
     }
@@ -620,17 +623,60 @@ fn key(item: Item<'_>) -> Key {
     }
 }
 
-/// Right of a row: the free space of the home directory or a volume, or the address of a host.
-fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState) -> String {
-    let free = |space: Option<Space>| {
-        space.map_or_else(
-            || fl!("menu-free-unknown"),
-            |space| super::panel::short_size(space.available),
+/// The free space and the size of the volume of a row, as it shows them; none for a host, the
+/// row of the rest of a group, or a volume whose space is not known.
+fn sizes(item: Item<'_>) -> Option<(String, String)> {
+    let space = match item {
+        Item::Home(_, space) => space,
+        Item::Volume(volume) => volume.space,
+        Item::Host(_) | Item::More(..) => None,
+    };
+    // Pseudo file systems report no size.
+    let space = space.filter(|space| space.total > 0)?;
+    Some((
+        super::panel::short_size(space.available),
+        super::panel::short_size(space.total),
+    ))
+}
+
+/// The cells of the widest free space and of the widest size of the rows, each of which takes
+/// as many, so that the slashes between them line up.
+#[derive(Debug, Clone, Copy, Default)]
+struct SizeColumns {
+    free: usize,
+    total: usize,
+}
+
+impl SizeColumns {
+    fn of(items: &[Item<'_>]) -> Self {
+        items.iter().filter_map(|item| sizes(*item)).fold(
+            Self::default(),
+            |columns, (free, total)| Self {
+                free: columns.free.max(cells::width(&free)),
+                total: columns.total.max(cells::width(&total)),
+            },
         )
+    }
+}
+
+/// Right of a row: the free space and the size of the volume of the home directory or of a
+/// volume, in `columns`, or the address of a host.
+fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState, columns: SizeColumns) -> String {
+    let right = |text: String, width: usize| {
+        let pad = width.saturating_sub(cells::width(&text));
+        format!("{}{text}", " ".repeat(pad))
     };
     match item {
-        Item::Home(_, space) => free(space),
-        Item::Volume(volume) => free(volume.space),
+        Item::Home(..) | Item::Volume(_) => sizes(item).map_or_else(
+            || fl!("menu-free-unknown"),
+            |(free, total)| {
+                fl!(
+                    "menu-space",
+                    free = right(free, columns.free),
+                    total = right(total, columns.total)
+                )
+            },
+        ),
         Item::Host(host) => {
             let address = hosts(&host.alias).address.or_else(|| host.address.clone());
             cells::sanitize(address.unwrap_or_default().as_bytes())
@@ -1153,6 +1199,46 @@ mod tests {
             .unwrap_or_default();
         let column = |line: &str| line.find(" Location ").map(|at| line[..at].chars().count());
         assert_eq!(column(title), column(still), "the title stays in place");
+    }
+
+    #[test]
+    fn volumes_show_their_free_space_and_size_with_the_slashes_in_a_column() {
+        let sized = |path: &str, label: &str, available: u64, total: u64| Volume {
+            space: Some(Space { total, available }),
+            ..volume(path, Some(label), VolumeKind::Local)
+        };
+        let places = Places {
+            volumes: vec![
+                sized("/", "Macintosh HD", 212 << 30, 994 << 30),
+                sized("/Volumes/USB", "USB", 12 << 30, 64 << 30),
+                sized("/Volumes/Big", "Big", 1536 << 30, 20 << 40),
+                Volume {
+                    space: None,
+                    ..volume("/Volumes/share", Some("share"), VolumeKind::Network)
+                },
+                sized("/Volumes/pseudo", "pseudo", 0, 0),
+            ],
+            hosts: vec![host("web", None, Some("deploy@10.0.0.5"))],
+        };
+        let mut menu = menu_with(home(), &Recent::default(), places);
+        let text = draw(&mut menu, 22);
+        let row = |name: &str| {
+            (text.lines())
+                .find(|line| line.contains(&format!(" {name} ")))
+                .unwrap_or_default()
+        };
+        let slash = |line: &str| line.find(" / ").map(|at| line[..at].chars().count());
+        assert!(row("Home").contains("  212G /  994G ║"), "{text}");
+        assert!(row("USB").contains(" 12.0G / 64.0G ║"), "{text}");
+        assert!(row("Big").contains("  1.5T / 20.0T ║"), "{text}");
+        let column = slash(row("Home"));
+        for name in ["Macintosh HD", "USB", "Big"] {
+            assert_eq!(slash(row(name)), column, "{name}: {text}");
+        }
+        for name in ["share", "pseudo"] {
+            assert!(row(name).contains("  ? ║"), "{name}: {text}");
+        }
+        assert!(row("web").contains(" deploy@10.0.0.5 ║"), "{text}");
     }
 
     #[test]

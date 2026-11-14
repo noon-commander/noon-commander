@@ -233,10 +233,10 @@ choose a volume or a host, grouped under headings:
  ║ Filter:                                    ~ ║
  ╟──────────────────────────────────────────────╢
  ║ Favorites                                    ║
- ║ ~ Home                                  212G ║
+ ║ ~ Home                          212G /  994G ║
  ║ Mounts                                       ║
- ║ + Macintosh HD                          212G ║
- ║ + USB                                    12G ║
+ ║ + Macintosh HD                  212G /  994G ║
+ ║ + USB                          12.0G / 64.0G ║
  ║ SFTP                                         ║
  ║ ● Prod                       deploy@10.0.0.5 ║
  ║ ○ db                                         ║
@@ -252,10 +252,12 @@ choose a volume or a host, grouped under headings:
  ╚══════════════════════════════════════════════╝
 ```
 
-- Favorites holds `Home`, which opens the home directory, with the free space of the volume
-  that holds it; the user's favorites will join it. Mounts holds the volumes, with their free
-  space, and SFTP the hosts, with their addresses. Plugins for other backends will be a group
-  of their own. A group without rows is not drawn.
+- Favorites holds `Home`, which opens the home directory, with the free space and the size of
+  the volume that holds it; the user's favorites will join it. Mounts holds the volumes, with
+  their free space and size, and SFTP the hosts, with their addresses. Each of the two numbers
+  takes as many cells as the widest of the rows shown, so the slashes between them line up; a
+  volume that did not tell its space, or tells a size of 0, shows `?`. Plugins for other
+  backends will be a group of their own. A group without rows is not drawn.
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
   system volume, then the others by mount point; the hosts in config order. Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is

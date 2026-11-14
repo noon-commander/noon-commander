@@ -49,6 +49,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `⌂`, and `›` without icons. The date and time it ran are on the line over them, at its right
   end, in the color of the title. The whole command no longer shows under the rows
   ([ADR 0072](docs/adr/0072-the-command-history-shows-where-a-command-ran.md)).
+- The location menu (`g l`) shows the size of the home directory's volume and of each volume
+  after its free space, as `212G / 994G`, with the slashes of the rows in one column.
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.

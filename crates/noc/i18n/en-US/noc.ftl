@@ -199,7 +199,10 @@ menu-home = Home
 # The last row of a group that shows only its first places, after a chevron down where the
 # others have their icons: how many more it holds, which Enter shows and the filter finds.
 menu-more = { $count } more…
-# Right of a place whose free space is not known.
+# Right of the home directory and of a volume: the free space and the size of the file system,
+# such as 212G / 994G. Each comes padded, so that the slashes of the rows line up.
+menu-space = { $free } / { $total }
+# Right of a place whose free space and size are not known.
 menu-free-unknown = ?
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }

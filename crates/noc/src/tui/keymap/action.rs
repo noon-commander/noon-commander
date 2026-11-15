@@ -245,6 +245,41 @@ impl Context {
     }
 }
 
+/// A group of the keys of a context, which the help and the list of the key hints show under
+/// its name. A context with groups lists every key in one; the preset gives them their order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Group {
+    /// The rows of a panel or the lines of the viewer: by rows and pages, into directories.
+    Navigation,
+    /// Switching and swapping the panels, and Ctrl+x.
+    Panels,
+    Tabs,
+    Workspaces,
+    /// The settings, the names that start with a dot, and the sort order.
+    Options,
+    /// Marks and Visual mode.
+    Marks,
+    /// Names that do not fit their column.
+    Names,
+    /// Quick search and the search of a whole tree.
+    Search,
+    CommandLine,
+    /// Where the panel goes: zoxide's directories, a path typed, and the location menu.
+    GoTo,
+    /// The commands of files.
+    Files,
+    /// Lines that do not fit the viewer.
+    Lines,
+    /// The motions of a text field.
+    Motions,
+    /// Changing the mode of a text field.
+    Modes,
+    /// The commands that change the text of a field.
+    Changes,
+    /// The help, the pull-down menu, and quitting.
+    Other,
+}
+
 /// Something a key does. The context gives the meaning: `Up` moves the cursor in a panel and
 /// the focus in a dialog.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

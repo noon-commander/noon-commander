@@ -1980,7 +1980,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
   `rename`, `command_line`, `command_history`, `find`, `user_screen`, `list`, `location_menu`,
   `tab_menu`, `jump`, `workspaces`, `checksums`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
-  `completion`, `viewer`), in the order the help lists them. The app says which mode and context the
+  `completion`, `viewer`), in the order the help lists them. A context with many keys binds them in
+  groups (`Bound::Groups`, `keymap::Group`): the panels in Normal and Visual mode, the text fields
+  in each mode, and the viewer; the help and the list of the key hints show each group under its
+  name, and the keys of the other contexts under the context's
+  ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md)). The app says which mode and context the
   next key goes to (`App::place`): the mode is that of the text field with the keys, Visual mode
   while a panel selects rows, and else Normal mode. Each context falls back along a chain in its
   mode (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`,
@@ -2041,7 +2045,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   under its title in points after a bullet (`•`, `-` without icons). It opens at the top of About
   first, and then where it was when it closed last (`help::Spot`, which the app keeps): the section,
   Keys open or folded, what had the keys, and how far down the text was. The titles of the parts of
-  a section are bold on a line across (`── Panels ──`), and the keys and the names of the facts take
+  a section are bold on a line across (`── Panels ──`), the names of the groups of keys of a
+  context (`keymap::Group`) alone over them, in the color of titles, and the keys and the names of
+  the facts take
   the theme's `keys`, a color apart from the titles, as the keys of the key hints and of their list
   (Ctrl+k) do, and those of the menus of F9 in `menu_keys`. Tab moves between the sections and the
   text; in the sections `j` and `k` choose, `l` or Enter opens Keys or goes to the text, and `h`
@@ -2146,7 +2152,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   nvim's hover window the keys: the keymap resolves it with the count and the register, and the app
   opens `tui/key_hints.rs` in place of the hints it has, over everything, the dialogs too
   (`Context::KeyHints`, which falls back to `list`). It lists every sequence of the hints, whole,
-  after the keys they had typed (`Keymap::sequences`), one row for each command; it opens with its
+  after the keys they had typed (`Keymap::sequences`), one row for each command, under the name of
+  its group or of the context that binds it (`keymap::Heading`), the headings left out while fzf
+  ranks the rows or while one heading has them all; it opens with its
   filter taking the keys, Enter closes it and runs the command where the keys went before, with
   that count and register, and Esc goes to the rows, where Esc again closes it. `Esc` never starts
   a sequence, and never shows hints. The `KeyState` also keeps what the pending command has typed,

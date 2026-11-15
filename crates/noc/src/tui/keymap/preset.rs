@@ -4,13 +4,16 @@
 //! syntax, the keys of a sequence apart; the help lists them in this order, and the pull-down
 //! menu shows an action's first key. The keys of `Global` are the same in every mode.
 //!
+//! A context with many keys has them in groups, which the help and the list of the key hints
+//! show under their names, in this order; the others show their keys under the context's name.
+//!
 //! The keys are those of a terminal that speaks the kitty keyboard protocol, where Ctrl+i
 //! arrives apart from Tab; elsewhere the keymap gives Tab what Ctrl+i does (`Keyboard`).
 
-use super::{Action, Bound, Context, Mode, Preset};
+use super::{Action, Bound, Context, Group, Keys, Mode, Preset};
 
 /// The keys of a field that searches, in Normal and Insert mode alike.
-const SEARCH_INPUT: Bound = &[
+const SEARCH_INPUT: Keys = &[
     (Action::SearchMode, &["ctrl-s ctrl-s", "ctrl-s s"]),
     (Action::SearchPlain, &["ctrl-s p"]),
     (Action::SearchFzf, &["ctrl-s f"]),
@@ -34,7 +37,7 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::Global,
-        &[
+        Bound::Keys(&[
             (Action::KeyHints, &["ctrl-k"]),
             (Action::Register, &["\""]),
             (Action::UserScreen, &["g <"]),
@@ -42,119 +45,173 @@ pub(super) const PRESET: Preset = &[
             // No Ctrl and letter is left in every mode. Without the kitty keyboard protocol,
             // Ctrl+\ arrives as Ctrl+4, the byte both send.
             (Action::ViewLog, &["ctrl-\\", "ctrl-4"]),
-        ],
+        ]),
     ),
     // The panels.
     (
         Mode::Normal,
         Context::Panel,
-        &[
-            // Navigation
-            (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
-            (Action::PageUp, &["ctrl-b", "pageup"]),
-            (Action::PageDown, &["ctrl-f", "pagedown"]),
-            (Action::HalfPageUp, &["ctrl-u"]),
-            (Action::HalfPageDown, &["ctrl-d"]),
-            (Action::Home, &["g g", "home"]),
-            (Action::End, &["shift-g", "end"]),
-            (Action::Enter, &["l", "right", "enter", "ctrl-m"]),
-            (Action::Parent, &["h", "left", "backspace", "ctrl-h"]),
-            (Action::JumpBack, &["ctrl-o"]),
-            (Action::JumpForward, &["ctrl-i"]),
-            (Action::Reload, &["shift-r"]),
-            (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
-            // The pull-down menu
-            (Action::PullDown, &["g m", "f9"]),
-            (Action::PullDownLast, &["g shift-m", "shift-f9"]),
-            // Panels, as vim's windows; Tab too, as in mc, where the terminal tells it from
-            // Ctrl+i.
+        Bound::Groups(&[
             (
-                Action::SwitchPanel,
-                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
+                Group::Navigation,
+                &[
+                    (Action::Up, &["k", "up", "ctrl-p"]),
+                    (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
+                    (Action::PageUp, &["ctrl-b", "pageup"]),
+                    (Action::PageDown, &["ctrl-f", "pagedown"]),
+                    (Action::HalfPageUp, &["ctrl-u"]),
+                    (Action::HalfPageDown, &["ctrl-d"]),
+                    (Action::Home, &["g g", "home"]),
+                    (Action::End, &["shift-g", "end"]),
+                    (Action::Enter, &["l", "right", "enter", "ctrl-m"]),
+                    (Action::Parent, &["h", "left", "backspace", "ctrl-h"]),
+                    (Action::JumpBack, &["ctrl-o"]),
+                    (Action::JumpForward, &["ctrl-i"]),
+                    (Action::Reload, &["shift-r"]),
+                    (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
+                ],
             ),
-            (Action::FocusLeft, &["ctrl-w h"]),
-            (Action::FocusRight, &["ctrl-w l"]),
-            (Action::SwapPanels, &["ctrl-w x", "ctrl-w r"]),
-            (Action::OtherPanelOpen, &["ctrl-w f"]),
-            (Action::OtherPanelSync, &["ctrl-w v"]),
-            // Before a command, as a register goes before it: that command in the other panel,
-            // the keys staying here (ADR 0051). x as crossing over; vim's Ctrl+x subtracts from
-            // a number, which a listing has not.
-            (Action::OtherPanel, &["ctrl-x"]),
-            // Tabs & Workspaces; t t lists the tabs, as vim's :tabs.
-            (Action::NewTab, &["t n", "g n"]),
-            (Action::CloseTab, &["t c", "g c"]),
-            (Action::NextTab, &["g t", "] t"]),
-            (Action::PrevTab, &["g shift-t", "[ t"]),
-            // As ranger's and the browsers': the tab of the digit, Alt+0 the last.
-            (Action::GoToTab, GO_TO_TAB),
-            (Action::LastTab, &["alt-0"]),
-            (Action::TabList, &["t t"]),
-            (Action::Workspaces, &["t w"]),
-            (Action::SaveWorkspace, &["t shift-w"]),
-            // Items. o is for options, of the panels and, doubled, all of them, as y y and t t
-            // take the whole.
-            (Action::Configuration, &["o o"]),
-            (Action::ToggleHidden, &["o h"]),
-            (Action::SortByName, &["o n"]),
-            (Action::SortByExtension, &["o e"]),
-            (Action::SortByTime, &["o m"]),
-            (Action::SortBySize, &["o s"]),
-            // Marks
-            (Action::VisualMode, &["v"]),
-            (Action::VisualLineMode, &["shift-v"]),
-            (Action::Reselect, &["g v"]),
-            (Action::Mark, &["space", "shift-down"]),
-            (Action::MarkUp, &["shift-up"]),
+            // As vim's windows; Tab too, as in mc, where the terminal tells it from Ctrl+i.
+            (
+                Group::Panels,
+                &[
+                    (
+                        Action::SwitchPanel,
+                        &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
+                    ),
+                    (Action::FocusLeft, &["ctrl-w h"]),
+                    (Action::FocusRight, &["ctrl-w l"]),
+                    (Action::SwapPanels, &["ctrl-w x", "ctrl-w r"]),
+                    (Action::OtherPanelOpen, &["ctrl-w f"]),
+                    (Action::OtherPanelSync, &["ctrl-w v"]),
+                    // Before a command, as a register goes before it: that command in the other
+                    // panel, the keys staying here (ADR 0051). x as crossing over; vim's Ctrl+x
+                    // subtracts from a number, which a listing has not.
+                    (Action::OtherPanel, &["ctrl-x"]),
+                ],
+            ),
+            // t t lists the tabs, as vim's :tabs.
+            (
+                Group::Tabs,
+                &[
+                    (Action::NewTab, &["t n", "g n"]),
+                    (Action::CloseTab, &["t c", "g c"]),
+                    (Action::NextTab, &["g t", "] t"]),
+                    (Action::PrevTab, &["g shift-t", "[ t"]),
+                    // As ranger's and the browsers': the tab of the digit, Alt+0 the last.
+                    (Action::GoToTab, GO_TO_TAB),
+                    (Action::LastTab, &["alt-0"]),
+                    (Action::TabList, &["t t"]),
+                ],
+            ),
+            (
+                Group::Workspaces,
+                &[
+                    (Action::Workspaces, &["t w"]),
+                    (Action::SaveWorkspace, &["t shift-w"]),
+                ],
+            ),
+            // o is for options, of the panels and, doubled, all of them, as y y and t t take
+            // the whole.
+            (
+                Group::Options,
+                &[
+                    (Action::Configuration, &["o o"]),
+                    (Action::ToggleHidden, &["o h"]),
+                    (Action::SortByName, &["o n"]),
+                    (Action::SortByExtension, &["o e"]),
+                    (Action::SortByTime, &["o m"]),
+                    (Action::SortBySize, &["o s"]),
+                ],
+            ),
+            (
+                Group::Marks,
+                &[
+                    (Action::VisualMode, &["v"]),
+                    (Action::VisualLineMode, &["shift-v"]),
+                    (Action::Reselect, &["g v"]),
+                    (Action::Mark, &["space", "shift-down"]),
+                    (Action::MarkUp, &["shift-up"]),
+                    // mc's `+`, `-`, and `*`, under `g`, leaving vim's keys to vim.
+                    (Action::Select, &["g +"]),
+                    (Action::Unselect, &["g -"]),
+                    (Action::InvertMarks, &["g *"]),
+                ],
+            ),
             // Names that do not fit: scrolled as vim scrolls lines that do not wrap, and shown
             // whole under the panels, as vim's `K` shows what is under the cursor.
-            (Action::ScrollLeft, &["z h", "z left"]),
-            (Action::ScrollRight, &["z l", "z right"]),
-            (Action::ScrollHalfLeft, &["z shift-h"]),
-            (Action::ScrollHalfRight, &["z shift-l"]),
-            (Action::ScrollStart, &["z s"]),
-            (Action::ScrollEnd, &["z e"]),
-            (Action::ShowFull, &["shift-k"]),
-            // mc's `+`, `-`, and `*`, under `g`, leaving vim's keys to vim.
-            (Action::Select, &["g +"]),
-            (Action::Unselect, &["g -"]),
-            (Action::InvertMarks, &["g *"]),
-            // Search
-            (Action::QuickSearch, &["/"]),
-            (Action::QuickSearchBack, &["?"]),
-            (Action::NextMatch, &["n", "shift-f7"]),
-            (Action::PrevMatch, &["shift-n"]),
-            // In the group of f, the files: f / for text, as / searches, and f f for names, as
-            // telescope's <leader>ff finds files.
-            (Action::FindFile, &["f /"]),
-            (Action::FindNames, &["f f"]),
-            // Tools. i starts Insert mode where there is text to type: on the command line, as
-            // typing in mc's panels goes into its command line.
-            (Action::Shell, &["i", "!"]),
-            (Action::Command, &[":"]),
-            (Action::CommandHistory, &["q :"]),
+            (
+                Group::Names,
+                &[
+                    (Action::ScrollLeft, &["z h", "z left"]),
+                    (Action::ScrollRight, &["z l", "z right"]),
+                    (Action::ScrollHalfLeft, &["z shift-h"]),
+                    (Action::ScrollHalfRight, &["z shift-l"]),
+                    (Action::ScrollStart, &["z s"]),
+                    (Action::ScrollEnd, &["z e"]),
+                    (Action::ShowFull, &["shift-k"]),
+                ],
+            ),
+            (
+                Group::Search,
+                &[
+                    (Action::QuickSearch, &["/"]),
+                    (Action::QuickSearchBack, &["?"]),
+                    (Action::NextMatch, &["n", "shift-f7"]),
+                    (Action::PrevMatch, &["shift-n"]),
+                    // In the group of f, the files: f / for text, as / searches, and f f for
+                    // names, as telescope's <leader>ff finds files.
+                    (Action::FindFile, &["f /"]),
+                    (Action::FindNames, &["f f"]),
+                ],
+            ),
+            // i starts Insert mode where there is text to type: on the command line, as typing
+            // in mc's panels goes into its command line.
+            (
+                Group::CommandLine,
+                &[
+                    (Action::Shell, &["i", "!"]),
+                    (Action::Command, &[":"]),
+                    (Action::CommandHistory, &["q :"]),
+                ],
+            ),
             // Where the panel goes: zoxide's directories, a path typed, and the location menu's
             // volumes and hosts.
-            (Action::Jump, &["g z"]),
-            (Action::GoToDir, &["g d"]),
-            (Action::LocationMenu, &["g l"]),
-            (Action::View, &["g f", "f3"]),
-            (Action::Edit, &["e", "f4"]),
-            (Action::SystemOpen, &["g x"]),
-            (Action::Copy, &["shift-y", "y y", "f5"]),
-            // As vim's `y y p` puts a copy of the line under it.
-            (Action::Duplicate, &["y p", "shift-f5"]),
-            (Action::Move, &["x", "f6"]),
-            (Action::Rename, &["r", "shift-f6"]),
-            (Action::Mkdir, &["shift-a", "f7"]),
-            (Action::Delete, &["d shift-d", "f8"]),
-            (Action::Checksum, &["f #"]),
-            (Action::Jobs, &["f j"]),
-            // Other
-            (Action::Help, &["g ?", "f1"]),
-            (Action::Quit, &["shift-z shift-z", "f10"]),
-        ],
+            (
+                Group::GoTo,
+                &[
+                    (Action::Jump, &["g z"]),
+                    (Action::GoToDir, &["g d"]),
+                    (Action::LocationMenu, &["g l"]),
+                ],
+            ),
+            (
+                Group::Files,
+                &[
+                    (Action::View, &["g f", "f3"]),
+                    (Action::Edit, &["e", "f4"]),
+                    (Action::SystemOpen, &["g x"]),
+                    (Action::Copy, &["shift-y", "y y", "f5"]),
+                    // As vim's `y y p` puts a copy of the line under it.
+                    (Action::Duplicate, &["y p", "shift-f5"]),
+                    (Action::Move, &["x", "f6"]),
+                    (Action::Rename, &["r", "shift-f6"]),
+                    (Action::Mkdir, &["shift-a", "f7"]),
+                    (Action::Delete, &["d shift-d", "f8"]),
+                    (Action::Checksum, &["f #"]),
+                    (Action::Jobs, &["f j"]),
+                ],
+            ),
+            (
+                Group::Other,
+                &[
+                    (Action::PullDown, &["g m", "f9"]),
+                    (Action::PullDownLast, &["g shift-m", "shift-f9"]),
+                    (Action::Help, &["g ?", "f1"]),
+                    (Action::Quit, &["shift-z shift-z", "f10"]),
+                ],
+            ),
+        ]),
     ),
     // Rows selected in a panel, from where Visual mode started to the cursor. The commands of
     // files act on them, as on marked entries; Space marks them. The other F-keys end Visual
@@ -163,46 +220,73 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Visual,
         Context::Panel,
-        &[
-            (Action::Up, &["k", "up", "ctrl-p"]),
-            (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
-            (Action::PageUp, &["ctrl-b", "pageup"]),
-            (Action::PageDown, &["ctrl-f", "pagedown"]),
-            (Action::HalfPageUp, &["ctrl-u"]),
-            (Action::HalfPageDown, &["ctrl-d"]),
-            (Action::Home, &["g g", "home"]),
-            (Action::End, &["shift-g", "end"]),
-            (Action::OtherEnd, &["o"]),
-            (Action::Mark, &["space"]),
-            (Action::Copy, &["y", "f5"]),
-            (Action::Move, &["x", "f6"]),
-            // As vim's `D` and `X`, which delete the lines selected.
-            (Action::Delete, &["d", "shift-d", "shift-x", "f8"]),
-            (Action::Checksum, &["f #"]),
-            (Action::SystemOpen, &["g x"]),
-            (Action::NormalMode, &["esc", "ctrl-[", "ctrl-c"]),
-            // The key that started Visual mode ends it; the other switches its kind, as vim's.
-            (Action::VisualMode, &["v"]),
-            (Action::VisualLineMode, &["shift-v"]),
-            (Action::Help, &["f1"]),
-            (Action::View, &["f3"]),
-            (Action::Edit, &["f4"]),
-            (Action::Duplicate, &["shift-f5"]),
-            (Action::Rename, &["shift-f6"]),
-            (Action::Mkdir, &["f7"]),
-            (Action::NextMatch, &["shift-f7"]),
-            (Action::PullDown, &["f9"]),
-            (Action::PullDownLast, &["shift-f9"]),
-            (Action::Quit, &["f10"]),
+        Bound::Groups(&[
             (
-                Action::SwitchPanel,
-                &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
+                Group::Navigation,
+                &[
+                    (Action::Up, &["k", "up", "ctrl-p"]),
+                    (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
+                    (Action::PageUp, &["ctrl-b", "pageup"]),
+                    (Action::PageDown, &["ctrl-f", "pagedown"]),
+                    (Action::HalfPageUp, &["ctrl-u"]),
+                    (Action::HalfPageDown, &["ctrl-d"]),
+                    (Action::Home, &["g g", "home"]),
+                    (Action::End, &["shift-g", "end"]),
+                    (Action::OtherEnd, &["o"]),
+                ],
             ),
-            (Action::FocusLeft, &["ctrl-w h"]),
-            (Action::FocusRight, &["ctrl-w l"]),
-            (Action::GoToTab, GO_TO_TAB),
-            (Action::LastTab, &["alt-0"]),
-        ],
+            (
+                Group::Panels,
+                &[
+                    (
+                        Action::SwitchPanel,
+                        &["ctrl-w w", "ctrl-w ctrl-w", "ctrl-w p", "tab"],
+                    ),
+                    (Action::FocusLeft, &["ctrl-w h"]),
+                    (Action::FocusRight, &["ctrl-w l"]),
+                ],
+            ),
+            (
+                Group::Tabs,
+                &[(Action::GoToTab, GO_TO_TAB), (Action::LastTab, &["alt-0"])],
+            ),
+            // The key that started Visual mode ends it; the other switches its kind, as vim's.
+            (
+                Group::Marks,
+                &[
+                    (Action::Mark, &["space"]),
+                    (Action::NormalMode, &["esc", "ctrl-[", "ctrl-c"]),
+                    (Action::VisualMode, &["v"]),
+                    (Action::VisualLineMode, &["shift-v"]),
+                ],
+            ),
+            (Group::Search, &[(Action::NextMatch, &["shift-f7"])]),
+            (
+                Group::Files,
+                &[
+                    (Action::Copy, &["y", "f5"]),
+                    (Action::Move, &["x", "f6"]),
+                    // As vim's `D` and `X`, which delete the lines selected.
+                    (Action::Delete, &["d", "shift-d", "shift-x", "f8"]),
+                    (Action::Checksum, &["f #"]),
+                    (Action::SystemOpen, &["g x"]),
+                    (Action::View, &["f3"]),
+                    (Action::Edit, &["f4"]),
+                    (Action::Duplicate, &["shift-f5"]),
+                    (Action::Rename, &["shift-f6"]),
+                    (Action::Mkdir, &["f7"]),
+                ],
+            ),
+            (
+                Group::Other,
+                &[
+                    (Action::PullDown, &["f9"]),
+                    (Action::PullDownLast, &["shift-f9"]),
+                    (Action::Help, &["f1"]),
+                    (Action::Quit, &["f10"]),
+                ],
+            ),
+        ]),
     ),
     // What the text fields share in Insert mode: quick search, the field of an entry renamed in
     // its row, the text fields of dialogs, the command line, and the filters of the lists fall
@@ -210,112 +294,149 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Insert,
         Context::Input,
-        &[
-            (Action::Left, &["left"]),
-            (Action::Right, &["right"]),
-            (Action::TextStart, &["home"]),
-            (Action::TextEnd, &["end"]),
-            (Action::WordBackward, &["shift-left", "ctrl-left"]),
-            (Action::WordForward, &["shift-right", "ctrl-right"]),
-            (Action::Backspace, &["backspace", "ctrl-h"]),
-            (Action::DeleteChar, &["delete"]),
-            (Action::DeleteWord, &["ctrl-w"]),
-            (Action::DeleteToStart, &["ctrl-u"]),
-            (Action::PasteRegister, &["ctrl-r"]),
-            (Action::InsertLiteral, &["ctrl-v"]),
-            (Action::NormalMode, &["esc", "ctrl-["]),
-        ],
+        Bound::Groups(&[
+            (
+                Group::Motions,
+                &[
+                    (Action::Left, &["left"]),
+                    (Action::Right, &["right"]),
+                    (Action::TextStart, &["home"]),
+                    (Action::TextEnd, &["end"]),
+                    (Action::WordBackward, &["shift-left", "ctrl-left"]),
+                    (Action::WordForward, &["shift-right", "ctrl-right"]),
+                ],
+            ),
+            (
+                Group::Changes,
+                &[
+                    (Action::Backspace, &["backspace", "ctrl-h"]),
+                    (Action::DeleteChar, &["delete"]),
+                    (Action::DeleteWord, &["ctrl-w"]),
+                    (Action::DeleteToStart, &["ctrl-u"]),
+                    (Action::PasteRegister, &["ctrl-r"]),
+                    (Action::InsertLiteral, &["ctrl-v"]),
+                ],
+            ),
+            (Group::Modes, &[(Action::NormalMode, &["esc", "ctrl-["])]),
+        ]),
     ),
     // What the text fields share in Normal mode: vim's motions, and its commands that change
     // the text. A count goes before them, and a register after `"`, which `global` binds.
     (
         Mode::Normal,
         Context::Input,
-        &[
-            // Motions
-            (Action::Left, &["h", "left"]),
-            (Action::Right, &["l", "right"]),
-            (Action::CharBackward, &["backspace", "ctrl-h"]),
-            (Action::CharForward, &["space"]),
-            (Action::TextStart, &["0", "home"]),
-            (Action::FirstNonBlank, &["^"]),
-            (Action::TextEnd, &["$", "end"]),
-            (Action::PrevLine, &["-"]),
-            (Action::NextLine, &["+"]),
-            (Action::ThisLine, &["_"]),
-            (Action::WordForward, &["w", "shift-right"]),
-            (Action::WordBackward, &["b", "shift-left"]),
-            (Action::WordEnd, &["e"]),
-            (Action::BigWordForward, &["shift-w", "ctrl-right"]),
-            (Action::BigWordBackward, &["shift-b", "ctrl-left"]),
-            (Action::BigWordEnd, &["shift-e"]),
-            (Action::FindChar, &["f"]),
-            (Action::FindCharBack, &["shift-f"]),
-            (Action::TillChar, &["t"]),
-            (Action::TillCharBack, &["shift-t"]),
-            (Action::RepeatFind, &[";"]),
-            (Action::RepeatFindBack, &[","]),
-            // Modes
-            (Action::InsertMode, &["i", "insert"]),
-            (Action::Append, &["a"]),
-            (Action::InsertAtStart, &["shift-i"]),
-            (Action::AppendAtEnd, &["shift-a"]),
-            (Action::VisualMode, &["v"]),
-            // Changes
-            (Action::DeleteChar, &["x", "delete"]),
-            (Action::Backspace, &["shift-x"]),
-            (Action::Substitute, &["s"]),
-            (Action::SubstituteLine, &["shift-s"]),
-            (Action::ChangeToEnd, &["shift-c"]),
-            (Action::DeleteToEnd, &["shift-d"]),
-            (Action::ReplaceChar, &["r"]),
-            (Action::ToggleCase, &["~"]),
-            (Action::DeleteOperator, &["d"]),
-            (Action::ChangeOperator, &["c"]),
-            (Action::YankOperator, &["y"]),
-            (Action::PutAfter, &["p"]),
-            (Action::PutBefore, &["shift-p"]),
-            (Action::Undo, &["u"]),
-            (Action::Redo, &["ctrl-r"]),
-        ],
+        Bound::Groups(&[
+            (
+                Group::Motions,
+                &[
+                    (Action::Left, &["h", "left"]),
+                    (Action::Right, &["l", "right"]),
+                    (Action::CharBackward, &["backspace", "ctrl-h"]),
+                    (Action::CharForward, &["space"]),
+                    (Action::TextStart, &["0", "home"]),
+                    (Action::FirstNonBlank, &["^"]),
+                    (Action::TextEnd, &["$", "end"]),
+                    (Action::PrevLine, &["-"]),
+                    (Action::NextLine, &["+"]),
+                    (Action::ThisLine, &["_"]),
+                    (Action::WordForward, &["w", "shift-right"]),
+                    (Action::WordBackward, &["b", "shift-left"]),
+                    (Action::WordEnd, &["e"]),
+                    (Action::BigWordForward, &["shift-w", "ctrl-right"]),
+                    (Action::BigWordBackward, &["shift-b", "ctrl-left"]),
+                    (Action::BigWordEnd, &["shift-e"]),
+                    (Action::FindChar, &["f"]),
+                    (Action::FindCharBack, &["shift-f"]),
+                    (Action::TillChar, &["t"]),
+                    (Action::TillCharBack, &["shift-t"]),
+                    (Action::RepeatFind, &[";"]),
+                    (Action::RepeatFindBack, &[","]),
+                ],
+            ),
+            (
+                Group::Modes,
+                &[
+                    (Action::InsertMode, &["i", "insert"]),
+                    (Action::Append, &["a"]),
+                    (Action::InsertAtStart, &["shift-i"]),
+                    (Action::AppendAtEnd, &["shift-a"]),
+                    (Action::VisualMode, &["v"]),
+                ],
+            ),
+            (
+                Group::Changes,
+                &[
+                    (Action::DeleteChar, &["x", "delete"]),
+                    (Action::Backspace, &["shift-x"]),
+                    (Action::Substitute, &["s"]),
+                    (Action::SubstituteLine, &["shift-s"]),
+                    (Action::ChangeToEnd, &["shift-c"]),
+                    (Action::DeleteToEnd, &["shift-d"]),
+                    (Action::ReplaceChar, &["r"]),
+                    (Action::ToggleCase, &["~"]),
+                    (Action::DeleteOperator, &["d"]),
+                    (Action::ChangeOperator, &["c"]),
+                    (Action::YankOperator, &["y"]),
+                    (Action::PutAfter, &["p"]),
+                    (Action::PutBefore, &["shift-p"]),
+                    (Action::Undo, &["u"]),
+                    (Action::Redo, &["ctrl-r"]),
+                ],
+            ),
+        ]),
     ),
     // Text selected in a field, from where Visual mode started to the cursor.
     (
         Mode::Visual,
         Context::Input,
-        &[
-            (Action::Left, &["h", "left"]),
-            (Action::Right, &["l", "right"]),
-            (Action::CharBackward, &["backspace", "ctrl-h"]),
-            (Action::CharForward, &["space"]),
-            (Action::TextStart, &["0", "home"]),
-            (Action::FirstNonBlank, &["^"]),
-            (Action::TextEnd, &["$", "end"]),
-            (Action::PrevLine, &["-"]),
-            (Action::NextLine, &["+"]),
-            (Action::ThisLine, &["_"]),
-            (Action::WordForward, &["w"]),
-            (Action::WordBackward, &["b"]),
-            (Action::WordEnd, &["e"]),
-            (Action::BigWordForward, &["shift-w"]),
-            (Action::BigWordBackward, &["shift-b"]),
-            (Action::BigWordEnd, &["shift-e"]),
-            (Action::FindChar, &["f"]),
-            (Action::FindCharBack, &["shift-f"]),
-            (Action::TillChar, &["t"]),
-            (Action::TillCharBack, &["shift-t"]),
-            (Action::RepeatFind, &[";"]),
-            (Action::RepeatFindBack, &[","]),
-            (Action::OtherEnd, &["o"]),
-            (Action::DeleteOperator, &["d", "x", "delete"]),
-            (Action::ChangeOperator, &["c", "s"]),
-            (Action::YankOperator, &["y"]),
-            (Action::ToggleCase, &["~"]),
-            (Action::NormalMode, &["esc", "ctrl-["]),
-            // As vim's, `v` ends Visual mode keeping the column for `j` and `k`, where Esc
-            // does not.
-            (Action::VisualMode, &["v"]),
-        ],
+        Bound::Groups(&[
+            (
+                Group::Motions,
+                &[
+                    (Action::Left, &["h", "left"]),
+                    (Action::Right, &["l", "right"]),
+                    (Action::CharBackward, &["backspace", "ctrl-h"]),
+                    (Action::CharForward, &["space"]),
+                    (Action::TextStart, &["0", "home"]),
+                    (Action::FirstNonBlank, &["^"]),
+                    (Action::TextEnd, &["$", "end"]),
+                    (Action::PrevLine, &["-"]),
+                    (Action::NextLine, &["+"]),
+                    (Action::ThisLine, &["_"]),
+                    (Action::WordForward, &["w"]),
+                    (Action::WordBackward, &["b"]),
+                    (Action::WordEnd, &["e"]),
+                    (Action::BigWordForward, &["shift-w"]),
+                    (Action::BigWordBackward, &["shift-b"]),
+                    (Action::BigWordEnd, &["shift-e"]),
+                    (Action::FindChar, &["f"]),
+                    (Action::FindCharBack, &["shift-f"]),
+                    (Action::TillChar, &["t"]),
+                    (Action::TillCharBack, &["shift-t"]),
+                    (Action::RepeatFind, &[";"]),
+                    (Action::RepeatFindBack, &[","]),
+                    (Action::OtherEnd, &["o"]),
+                ],
+            ),
+            (
+                Group::Changes,
+                &[
+                    (Action::DeleteOperator, &["d", "x", "delete"]),
+                    (Action::ChangeOperator, &["c", "s"]),
+                    (Action::YankOperator, &["y"]),
+                    (Action::ToggleCase, &["~"]),
+                ],
+            ),
+            // As vim's, `v` ends Visual mode keeping the column for `j` and `k`, where Esc does
+            // not.
+            (
+                Group::Modes,
+                &[
+                    (Action::NormalMode, &["esc", "ctrl-["]),
+                    (Action::VisualMode, &["v"]),
+                ],
+            ),
+        ]),
     ),
     // Quick search in the active panel, as vim's search is typed: Enter (Ctrl+j) ends it on the
     // match, and Esc and Ctrl+c go back to where it started. Ctrl+g and Ctrl+t go to the next and the
@@ -327,7 +448,7 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Insert,
         Context::QuickSearch,
-        &[
+        Bound::Keys(&[
             (Action::Cancel, &["enter", "ctrl-m", "ctrl-j"]),
             (Action::Abort, &["esc", "ctrl-[", "ctrl-c"]),
             (Action::QuickSearch, &["ctrl-g"]),
@@ -351,41 +472,41 @@ pub(super) const PRESET: Preset = &[
             (Action::PullDown, &["f9"]),
             (Action::PullDownLast, &["shift-f9"]),
             (Action::Quit, &["f10"]),
-        ],
+        ]),
     ),
     // The name field of an entry renamed in its row. Enter renames in every mode; Esc leaves
     // Insert mode, then leaves the name as it was.
     (
         Mode::Insert,
         Context::Rename,
-        &[
+        Bound::Keys(&[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::NormalOnce, &["ctrl-o"]),
             (Action::Cancel, &["ctrl-c"]),
-        ],
+        ]),
     ),
     (
         Mode::Normal,
         Context::Rename,
-        &[
+        Bound::Keys(&[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c"]),
-        ],
+        ]),
     ),
     (
         Mode::Visual,
         Context::Rename,
-        &[
+        Bound::Keys(&[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["ctrl-c"]),
-        ],
+        ]),
     ),
     // Dialogs whose focus is on a button or a list, and the text fields of dialogs in Normal
     // mode, after the keys of the field.
     (
         Mode::Normal,
         Context::Dialog,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["k", "up", "ctrl-p"]),
             (Action::Down, &["j", "down", "ctrl-n"]),
             (Action::Left, &["h", "left"]),
@@ -399,7 +520,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Toggle, &["space"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
-        ],
+        ]),
     ),
     // The help of F1, on top of the dialog's, which has j, k, Ctrl+b, Ctrl+f, g g, G, and q:
     // Ctrl+y and Ctrl+e scroll it by a line, and Ctrl+u and Ctrl+d by half a page, as in the
@@ -408,21 +529,21 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::Help,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["ctrl-y"]),
             (Action::Down, &["ctrl-e"]),
             (Action::WindowUp, &["b"]),
             (Action::WindowDown, &["space", "f"]),
             (Action::HalfPageUp, &["ctrl-u", "u"]),
             (Action::HalfPageDown, &["ctrl-d", "d"]),
-        ],
+        ]),
     ),
     // The text fields of dialogs: the field's keys, then the dialog's. In Insert mode, Up,
     // Down, Tab, and Shift+Tab still move between the fields and the buttons.
     (
         Mode::Insert,
         Context::DialogInput,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
             (Action::NextField, &["tab", "ctrl-i"]),
@@ -430,22 +551,22 @@ pub(super) const PRESET: Preset = &[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::NormalOnce, &["ctrl-o"]),
             (Action::Cancel, &["ctrl-c", "f10"]),
-        ],
+        ]),
     ),
     (
         Mode::Visual,
         Context::DialogInput,
-        &[
+        Bound::Keys(&[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["ctrl-c", "f10"]),
-        ],
+        ]),
     ),
     // Path fields: Tab completes, as on vim's command line; Shift+Tab and Down still leave the
     // field.
     (
         Mode::Insert,
         Context::PathInput,
-        &[(Action::Complete, &["tab", "ctrl-i"])],
+        Bound::Keys(&[(Action::Complete, &["tab", "ctrl-i"])]),
     ),
     // A field that searches, while it has the focus: quick search, the filter of a list while
     // it takes the keys, and such a field of a dialog, as the text of the search of a tree; its
@@ -453,8 +574,16 @@ pub(super) const PRESET: Preset = &[
     // says what (ADR 0046): Ctrl+s again or `s` the next way to match, round, or a way by its
     // letter, of those the field has; `c` the next of smart case, case ignored, and case, or one
     // by its letter. vim binds no Ctrl+s.
-    (Mode::Normal, Context::SearchInput, SEARCH_INPUT),
-    (Mode::Insert, Context::SearchInput, SEARCH_INPUT),
+    (
+        Mode::Normal,
+        Context::SearchInput,
+        Bound::Keys(SEARCH_INPUT),
+    ),
+    (
+        Mode::Insert,
+        Context::SearchInput,
+        Bound::Keys(SEARCH_INPUT),
+    ),
     // The list of completions under a path field or over the command line, as vim's `wildmenu`:
     // Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab, Ctrl+p, and Up the one
     // before, round through what was typed; Left and Right complete in the directory above and
@@ -465,7 +594,7 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Insert,
         Context::Completion,
-        &[
+        Bound::Keys(&[
             (Action::Down, &["tab", "ctrl-i", "ctrl-n", "down"]),
             (Action::Up, &["backtab", "ctrl-p", "up"]),
             (Action::PageDown, &["pagedown"]),
@@ -474,14 +603,14 @@ pub(super) const PRESET: Preset = &[
             (Action::Right, &["right"]),
             (Action::AcceptCompletion, &["ctrl-y"]),
             (Action::CancelCompletion, &["ctrl-e"]),
-        ],
+        ]),
     ),
     // The open list of a combo box, as a menu: the keys of the lists move its cursor, Enter or
     // Space takes the row, and Esc closes it with the choice it had (ADR 0057).
     (
         Mode::Normal,
         Context::ComboBox,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["k", "up", "ctrl-p"]),
             (Action::Down, &["j", "down", "ctrl-n"]),
             (Action::PageUp, &["ctrl-b", "pageup"]),
@@ -490,7 +619,7 @@ pub(super) const PRESET: Preset = &[
             (Action::End, &["shift-g", "end"]),
             (Action::Confirm, &["enter", "ctrl-m", "space"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
-        ],
+        ]),
     ),
     // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less. e and
     // F4 edit the file, g x opens it, and R reads it again, as in the panels; ] f and [ f go to
@@ -498,38 +627,58 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::Viewer,
-        &[
-            (Action::Up, &["k", "ctrl-y", "up", "ctrl-p"]),
+        Bound::Groups(&[
             (
-                Action::Down,
-                &["j", "ctrl-e", "down", "ctrl-n", "enter", "ctrl-m"],
+                Group::Navigation,
+                &[
+                    (Action::Up, &["k", "ctrl-y", "up", "ctrl-p"]),
+                    (
+                        Action::Down,
+                        &["j", "ctrl-e", "down", "ctrl-n", "enter", "ctrl-m"],
+                    ),
+                    (Action::PageUp, &["ctrl-b", "pageup"]),
+                    (Action::PageDown, &["ctrl-f", "pagedown"]),
+                    (Action::WindowUp, &["b"]),
+                    (Action::WindowDown, &["space", "f"]),
+                    (Action::HalfPageUp, &["ctrl-u", "u"]),
+                    (Action::HalfPageDown, &["ctrl-d", "d"]),
+                    (Action::Home, &["g g", "home"]),
+                    (Action::End, &["shift-g", "end"]),
+                ],
             ),
-            (Action::PageUp, &["ctrl-b", "pageup"]),
-            (Action::PageDown, &["ctrl-f", "pagedown"]),
-            (Action::WindowUp, &["b"]),
-            (Action::WindowDown, &["space", "f"]),
-            (Action::HalfPageUp, &["ctrl-u", "u"]),
-            (Action::HalfPageDown, &["ctrl-d", "d"]),
-            (Action::Home, &["g g", "home"]),
-            (Action::End, &["shift-g", "end"]),
-            (Action::Left, &["h", "left"]),
-            (Action::Right, &["l", "right"]),
-            (Action::ScrollLeft, &["z h", "z left"]),
-            (Action::ScrollRight, &["z l", "z right"]),
-            (Action::ScrollHalfLeft, &["z shift-h"]),
-            (Action::ScrollHalfRight, &["z shift-l"]),
-            (Action::ScrollStart, &["z s"]),
-            (Action::ScrollEnd, &["z e"]),
-            (Action::ToggleWrap, &["f2"]),
-            (Action::Edit, &["e", "f4"]),
-            (Action::SystemOpen, &["g x"]),
-            (Action::Reload, &["shift-r"]),
-            (Action::NextFile, &["] f"]),
-            (Action::PrevFile, &["[ f"]),
-            (Action::Follow, &["shift-f"]),
-            (Action::Help, &["g ?", "f1"]),
-            (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
-        ],
+            (
+                Group::Lines,
+                &[
+                    (Action::Left, &["h", "left"]),
+                    (Action::Right, &["l", "right"]),
+                    (Action::ScrollLeft, &["z h", "z left"]),
+                    (Action::ScrollRight, &["z l", "z right"]),
+                    (Action::ScrollHalfLeft, &["z shift-h"]),
+                    (Action::ScrollHalfRight, &["z shift-l"]),
+                    (Action::ScrollStart, &["z s"]),
+                    (Action::ScrollEnd, &["z e"]),
+                    (Action::ToggleWrap, &["f2"]),
+                ],
+            ),
+            (
+                Group::Files,
+                &[
+                    (Action::Edit, &["e", "f4"]),
+                    (Action::SystemOpen, &["g x"]),
+                    (Action::Reload, &["shift-r"]),
+                    (Action::NextFile, &["] f"]),
+                    (Action::PrevFile, &["[ f"]),
+                    (Action::Follow, &["shift-f"]),
+                ],
+            ),
+            (
+                Group::Other,
+                &[
+                    (Action::Help, &["g ?", "f1"]),
+                    (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
+                ],
+            ),
+        ]),
     ),
     // What the windows that list items to choose from share: the location menu, the tab menu,
     // the zoxide window, the workspaces, the command history, and the list of the key hints
@@ -540,7 +689,7 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::List,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["k", "up", "ctrl-p"]),
             (Action::Down, &["j", "down", "ctrl-n", "ctrl-j"]),
             (Action::PageUp, &["ctrl-b", "pageup"]),
@@ -552,12 +701,12 @@ pub(super) const PRESET: Preset = &[
             (Action::QuickSearch, &["/"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
-        ],
+        ]),
     ),
     (
         Mode::Insert,
         Context::List,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["up", "ctrl-p"]),
             (Action::Down, &["down", "ctrl-n"]),
             (Action::PageUp, &["pageup"]),
@@ -565,7 +714,7 @@ pub(super) const PRESET: Preset = &[
             (Action::Confirm, &["enter", "ctrl-m", "ctrl-y"]),
             (Action::NormalMode, &["esc", "ctrl-["]),
             (Action::Cancel, &["ctrl-c", "f10"]),
-        ],
+        ]),
     ),
     // The location menu, on top of the list's. F3 views the ssh_config of the host under the
     // cursor at its Host line, and F4 and F8 edit and disconnect the host; g f and e view and
@@ -573,35 +722,35 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::LocationMenu,
-        &[
+        Bound::Keys(&[
             (Action::View, &["g f", "f3"]),
             (Action::EditHost, &["e", "f4"]),
             (Action::Disconnect, &["d d", "f8"]),
             (Action::Reload, &["shift-r"]),
-        ],
+        ]),
     ),
     (
         Mode::Insert,
         Context::LocationMenu,
-        &[
+        Bound::Keys(&[
             (Action::View, &["f3"]),
             (Action::EditHost, &["f4"]),
             (Action::Disconnect, &["f8"]),
-        ],
+        ]),
     ),
     // The tab menu of a panel, on top of the list's: d d and F8 close the tab under the cursor.
     (
         Mode::Normal,
         Context::TabMenu,
-        &[(Action::CloseTab, &["d d", "f8"])],
+        Bound::Keys(&[(Action::CloseTab, &["d d", "f8"])]),
     ),
     (
         Mode::Insert,
         Context::TabMenu,
-        &[(Action::CloseTab, &["f8"])],
+        Bound::Keys(&[(Action::CloseTab, &["f8"])]),
     ),
     // The zoxide window, on top of the list's; its filter takes keywords.
-    (Mode::Normal, Context::Jump, &[]),
+    (Mode::Normal, Context::Jump, Bound::Keys(&[])),
     // The window of the saved workspaces, on top of the list's: a and F7 add one, as A and F7
     // add a directory in the panels; W and F2 save the tabs in place of the one under the
     // cursor, as t W saves them in the panels and F2 saves in mc's editor; r and F6 rename, and
@@ -609,29 +758,29 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::Workspaces,
-        &[
+        Bound::Keys(&[
             (Action::SaveWorkspace, &["a", "f7"]),
             (Action::ReplaceWorkspace, &["shift-w", "f2"]),
             (Action::Move, &["r", "f6"]),
             (Action::Delete, &["d d", "f8"]),
-        ],
+        ]),
     ),
     (
         Mode::Insert,
         Context::Workspaces,
-        &[
+        Bound::Keys(&[
             (Action::SaveWorkspace, &["f7"]),
             (Action::ReplaceWorkspace, &["f2"]),
             (Action::Move, &["f6"]),
             (Action::Delete, &["f8"]),
-        ],
+        ]),
     ),
     // The pull-down menu. Alt and a letter run the command that has it, so h, j, k, and l
     // stay the motions.
     (
         Mode::Normal,
         Context::PullDown,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["k", "up", "ctrl-p"]),
             (Action::Down, &["j", "down", "ctrl-n"]),
             (Action::Left, &["h", "left", "backtab"]),
@@ -643,7 +792,7 @@ pub(super) const PRESET: Preset = &[
                 Action::Cancel,
                 &["esc", "ctrl-[", "ctrl-c", "q", "f9", "f10"],
             ),
-        ],
+        ]),
     ),
     // The command line of `i`, `!`, and `:`, as vim's command line: Esc closes it, but leaves
     // Insert mode after Ctrl+f, as in vim's window of the command line; Ctrl+c closes it. Ctrl+j
@@ -655,7 +804,7 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Insert,
         Context::CommandLine,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["up"]),
             (Action::Down, &["down"]),
             (Action::TextStart, &["ctrl-b"]),
@@ -669,49 +818,49 @@ pub(super) const PRESET: Preset = &[
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-["]),
             (Action::Abort, &["ctrl-c", "f10"]),
-        ],
+        ]),
     ),
     // The command line in Normal mode: j and k go through its lines, then the history, and
     // q : opens the window of the history.
     (
         Mode::Normal,
         Context::CommandLine,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["k", "up"]),
             (Action::Down, &["j", "down"]),
             (Action::CommandHistory, &["q :"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "f10"]),
-        ],
+        ]),
     ),
     // In Visual mode, j and k go through its lines only.
     (
         Mode::Visual,
         Context::CommandLine,
-        &[
+        Bound::Keys(&[
             (Action::Up, &["k", "up"]),
             (Action::Down, &["j", "down"]),
             (Action::Confirm, &["enter", "ctrl-m"]),
             (Action::Cancel, &["ctrl-c", "f10"]),
-        ],
+        ]),
     ),
     // The window of the command history, on top of the list's: Tab switches between the
     // panel's host and all hosts, and d d and F8 remove a command.
     (
         Mode::Normal,
         Context::CommandHistory,
-        &[
+        Bound::Keys(&[
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::Delete, &["d d", "f8"]),
-        ],
+        ]),
     ),
     (
         Mode::Insert,
         Context::CommandHistory,
-        &[
+        Bound::Keys(&[
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::Delete, &["f8"]),
-        ],
+        ]),
     ),
     // The dialog of the search of a whole tree, on top of the dialogs': F3 and F4 view and edit
     // the file of the row at the line, as in the results of mc's Find File, wherever the focus
@@ -721,22 +870,22 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::Find,
-        &[
+        Bound::Keys(&[
             (Action::View, &["g f", "f3"]),
             (Action::Edit, &["e", "f4"]),
             (Action::HalfPageUp, &["ctrl-u"]),
             (Action::HalfPageDown, &["ctrl-d"]),
-        ],
+        ]),
     ),
     (
         Mode::Normal,
         Context::FindInput,
-        &[(Action::View, &["f3"]), (Action::Edit, &["f4"])],
+        Bound::Keys(&[(Action::View, &["f3"]), (Action::Edit, &["f4"])]),
     ),
     (
         Mode::Insert,
         Context::FindInput,
-        &[(Action::View, &["f3"]), (Action::Edit, &["f4"])],
+        Bound::Keys(&[(Action::View, &["f3"]), (Action::Edit, &["f4"])]),
     ),
     // The window of the checksums of several files, on top of the dialogs': `/` types in its
     // filter, as in the lists, and F3 views the checksums, as F3 views a file. Ctrl+u and
@@ -745,30 +894,30 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Normal,
         Context::Checksums,
-        &[
+        Bound::Keys(&[
             (Action::QuickSearch, &["/"]),
             (Action::View, &["f3"]),
             (Action::HalfPageUp, &["ctrl-u"]),
             (Action::HalfPageDown, &["ctrl-d"]),
-        ],
+        ]),
     ),
     (
         Mode::Insert,
         Context::Checksums,
-        &[
+        Bound::Keys(&[
             (Action::View, &["f3"]),
             (Action::NextField, &["tab", "ctrl-i"]),
             (Action::PrevField, &["backtab"]),
-        ],
+        ]),
     ),
     // The terminal's own screen, with the output of commands. Enter and q go back, as from the
     // prompt under the output that vim's g < shows.
     (
         Mode::Normal,
         Context::UserScreen,
-        &[(
+        Bound::Keys(&[(
             Action::Cancel,
             &["g <", "enter", "ctrl-m", "q", "esc", "ctrl-[", "ctrl-c"],
-        )],
+        )]),
     ),
 ];

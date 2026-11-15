@@ -32,7 +32,9 @@ contexts it falls back to in that mode, as its section says. In each table:
 - Action: noc's action, as [keymap/action.rs](../crates/noc/src/tui/keymap/action.rs) names it,
   in snake case; "—" where the section's context binds no action for it in its mode. noc's
   actions come first, in the order of the keymap, then what mc, Far, yazi, or ranger does there
-  and noc does not.
+  and noc does not. A context with many keys has them in groups, such as Navigation or Files in
+  the panels, which the help and the list of the key hints show under their names; the keymap
+  keeps the actions of a group together, so the rows of a group come together here too.
 - noc, mc, far, yazi, ranger: the keys. "—" — not bound, or not documented in the source.
 
 Keys are typed in one of vim's modes. Normal mode takes them as commands: the panels, the lists,
@@ -191,8 +193,6 @@ section says: the commands of files act on the rows it selects, which become the
 | Forward again through the jump list, as vim's Ctrl+i (mc, yazi, ranger: the next directory in the history) | `jump_forward` | ⏳ | Ctrl+i | Alt+u | — | L | L |
 | Read the directory again | `reload` | ✅ | R | Ctrl+r | Ctrl+r | — | R |
 | Stop loading or connecting | `cancel` | ✅ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | — | Ctrl+c |
-| The pull-down menu | `pull_down` | ✅ | g m<br>F9 | F9 | F9 | — | — |
-| The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | g M<br>Shift+F9 | Shift+F9 | Shift+F10 | — | — |
 | The other panel | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | Tab<br>Ctrl+i | Tab | — | — |
 | The left panel, wherever the panels were swapped | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
 | The right panel, wherever the panels were swapped | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
@@ -220,6 +220,9 @@ section says: the commands of files act on the rows it selects, which become the
 | Select again the rows selected last | `reselect` | ⏳ | g v | — | — | — | — |
 | Mark or unmark, then the next row | `mark` | ⏳ | Space<br>Shift+Down | Insert<br>Ctrl+t<br>Shift+Down | Insert<br>Shift+Down | Space | Space |
 | Mark or unmark, then the row above | `mark_up` | ⏳ | Shift+Up | Shift+Up | Shift+Up | — | — |
+| Mark the names that match a pattern | `select` | ⏳ | g + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
+| Unmark the names that match a pattern | `unselect` | ⏳ | g - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
+| Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | g \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | The names a column left, as vim's zh; with a count, that many | `scroll_left` | ⏳ | z h<br>z Left | — | Alt+Left | — | — |
 | The names a column right, as vim's zl, until the end of the longest name on screen is at the right edge; with a count, that many | `scroll_right` | ⏳ | z l<br>z Right | — | Alt+Right | — | — |
 | The names half their column left, as vim's zH | `scroll_half_left` | ⏳ | z H | — | — | — | — |
@@ -227,9 +230,6 @@ section says: the commands of files act on the rows it selects, which become the
 | The names from their start, as vim's zs | `scroll_start` | ⏳ | z s | — | Alt+Home | — | — |
 | The end of the name under the cursor at the right edge, as vim's ze | `scroll_end` | ⏳ | z e | — | Alt+End | — | — |
 | Show the whole name under the cursor in a frame below the panels, until asked again or Esc (mc and Far: the mini status line, cut too) | `show_full` | ⏳ | K | — | — | — | — |
-| Mark the names that match a pattern | `select` | ⏳ | g + | +<br>Numpad+<br>Alt++ | Numpad+ | — | — |
-| Unmark the names that match a pattern | `unselect` | ⏳ | g - | -<br>\\<br>Numpad-<br>Alt+- | Numpad- | — | — |
-| Invert the marks on files; directories stay as they are | `invert_marks` | ⏳ | g \* | \*<br>Numpad\*<br>Alt+\* | Numpad* | — | — |
 | Start quick search | `quick_search` | ✅ | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
 | Start quick search up the rows, as vim's ?; n then goes up too, and N down | `quick_search_back` | ⏳ | ? | — | — | ? | — |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |
@@ -253,6 +253,8 @@ section says: the commands of files act on the rows it selects, which become the
 | Delete the marked entries, or the one under the cursor | `delete` | ✅ | d D<br>F8 | F8 | F8 | D | F8<br>d D |
 | Checksums of the marked files, or the one under the cursor | `checksum` | ✅ | f # | — | — | — | — |
 | The running jobs: bring one to the front, or abort it | `jobs` | ✅ | f j | Ctrl+x j | — | w | w |
+| The pull-down menu | `pull_down` | ✅ | g m<br>F9 | F9 | F9 | — | — |
+| The pull-down menu, on the command that ran from it last | `pull_down_last` | ✅ | g M<br>Shift+F9 | Shift+F9 | Shift+F10 | — | — |
 | Help | `help` | ✅ | g ?<br>F1 | F1 | F1 | \~<br>F1 | ?<br>F1 |
 | Quit | `quit` | ✅ | Z Z<br>F10 | F10 | F10 | q | Q<br>F10 |
 | F1…F10 on terminals without function keys | — | 🚫 | — | Esc, then 1…9, 0 | — | — | — |
@@ -446,30 +448,30 @@ marks, so their columns here have only the keys that leave it.
 | First row; after a count, the row of that number | `home` | ⏳ | g g<br>Home | — | — | — | — |
 | Last row; after a count, the row of that number | `end` | ⏳ | G<br>End | — | — | — | — |
 | The other end of the selection | `other_end` | ⏳ | o | — | — | — | — |
-| Mark the rows selected, beside the marks already there, and leave Visual mode | `mark` | ⏳ | Space | — | — | — | — |
-| Copy the rows selected | `copy` | ⏳ | y<br>F5 | — | — | — | — |
-| Move or rename the rows selected | `move` | ⏳ | x<br>F6 | — | — | — | — |
-| Delete the rows selected | `delete` | ⏳ | d<br>D<br>X<br>F8 | — | — | — | — |
-| Checksums of the files selected | `checksum` | ⏳ | f # | — | — | — | — |
-| Open the rows selected with the programs of the desktop | `system_open` | ⏳ | g x | — | — | — | — |
-| Leave Visual mode (yazi: or else unmark everything, or leave the search or the filter) | `normal_mode` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | Esc<br>Ctrl+[ | Esc |
-| Leave Visual mode started with v; in Visual mode by lines, switch to it, as vim's | `visual_mode` | ⏳ | v | — | — | — | — |
-| Leave Visual mode by lines; in Visual mode started with v, switch to it, as vim's | `visual_line_mode` | ⏳ | V | — | — | — | V |
-| Leave Visual mode, and show the help | `help` | ⏳ | F1 | — | — | — | — |
-| Leave Visual mode, and view the file under the cursor | `view` | ⏳ | F3 | — | — | — | — |
-| Leave Visual mode, and edit the file under the cursor | `edit` | ⏳ | F4 | — | — | — | — |
-| Leave Visual mode, and copy the entry under the cursor beside it | `duplicate` | ⏳ | Shift+F5 | — | — | — | — |
-| Leave Visual mode, and rename the entry under the cursor in its row | `rename` | ⏳ | Shift+F6 | — | — | — | — |
-| Leave Visual mode, and make a directory | `mkdir` | ⏳ | F7 | — | — | — | — |
-| Leave Visual mode, and go to the next name that matches the last quick search | `next_match` | ⏳ | Shift+F7 | — | — | — | — |
-| Leave Visual mode, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
-| Leave Visual mode, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
-| Leave Visual mode, and quit | `quit` | ⏳ | F10 | — | — | — | — |
 | The other panel; this one keeps its Visual mode | `switch_panel` | ⏳ | Ctrl+w w<br>Ctrl+w Ctrl+w<br>Ctrl+w p<br>Tab | — | — | — | — |
 | The left panel, wherever the panels were swapped; this one keeps its Visual mode | `focus_left` | ⏳ | Ctrl+w h | — | — | — | — |
 | The right panel, wherever the panels were swapped; this one keeps its Visual mode | `focus_right` | ⏳ | Ctrl+w l | — | — | — | — |
 | The tab of that number in this panel; this tab keeps its Visual mode | `go_to_tab` | ⏳ | Alt+1 … Alt+9 | — | — | — | — |
 | The last tab in this panel; this tab keeps its Visual mode | `last_tab` | ⏳ | Alt+0 | — | — | — | — |
+| Mark the rows selected, beside the marks already there, and leave Visual mode | `mark` | ⏳ | Space | — | — | — | — |
+| Leave Visual mode (yazi: or else unmark everything, or leave the search or the filter) | `normal_mode` | ⏳ | Esc<br>Ctrl+[<br>Ctrl+c | — | — | Esc<br>Ctrl+[ | Esc |
+| Leave Visual mode started with v; in Visual mode by lines, switch to it, as vim's | `visual_mode` | ⏳ | v | — | — | — | — |
+| Leave Visual mode by lines; in Visual mode started with v, switch to it, as vim's | `visual_line_mode` | ⏳ | V | — | — | — | V |
+| Leave Visual mode, and go to the next name that matches the last quick search | `next_match` | ⏳ | Shift+F7 | — | — | — | — |
+| Copy the rows selected | `copy` | ⏳ | y<br>F5 | — | — | — | — |
+| Move or rename the rows selected | `move` | ⏳ | x<br>F6 | — | — | — | — |
+| Delete the rows selected | `delete` | ⏳ | d<br>D<br>X<br>F8 | — | — | — | — |
+| Checksums of the files selected | `checksum` | ⏳ | f # | — | — | — | — |
+| Open the rows selected with the programs of the desktop | `system_open` | ⏳ | g x | — | — | — | — |
+| Leave Visual mode, and view the file under the cursor | `view` | ⏳ | F3 | — | — | — | — |
+| Leave Visual mode, and edit the file under the cursor | `edit` | ⏳ | F4 | — | — | — | — |
+| Leave Visual mode, and copy the entry under the cursor beside it | `duplicate` | ⏳ | Shift+F5 | — | — | — | — |
+| Leave Visual mode, and rename the entry under the cursor in its row | `rename` | ⏳ | Shift+F6 | — | — | — | — |
+| Leave Visual mode, and make a directory | `mkdir` | ⏳ | F7 | — | — | — | — |
+| Leave Visual mode, and open the pull-down menu | `pull_down` | ⏳ | F9 | — | — | — | — |
+| Leave Visual mode, and open the pull-down menu on the command that ran from it last | `pull_down_last` | ⏳ | Shift+F9 | — | — | — | — |
+| Leave Visual mode, and show the help | `help` | ⏳ | F1 | — | — | — | — |
+| Leave Visual mode, and quit | `quit` | ⏳ | F10 | — | — | — | — |
 
 ## Editing text (`input`, Insert mode)
 
@@ -1365,7 +1367,10 @@ the dialogs too. It binds no keys of its own: it falls back to `list`, whose Ent
 runs the command under the cursor where the keys went before, with the count and the register typed
 before Ctrl+k, and whose Esc closes it; commands that take a character after them, as `f` does,
 show but do not run. It opens with its filter taking text, in Insert mode, as `/` has it again,
-which falls back to `list`, then to `input`, then to `global`; Esc there goes to the rows. mc, Far,
+which falls back to `list`, then to `input`, then to `global`; Esc there goes to the rows. The rows
+show under the names of their groups, as Navigation and Files in the panels, and those of a context
+without groups under its name, as Everywhere, in the order of the keymap; the headings go while the
+filter ranks the rows best first, as fzf does, and when every row shown is under one. mc, Far,
 yazi, and ranger have no such list.
 
 ## Output of commands (`user_screen`, Normal mode)

@@ -16,6 +16,9 @@
 //! waits for its next key without a deadline; `Esc` closes them, and `Backspace` takes back the
 //! last key of the sequence, or with none closes them. The key of the hints typed again while
 //! they show gives them the keys, as a list of whole sequences ([`Keymap::sequences`]).
+//!
+//! A context with many keys has them in groups ([`Group`]), in the order of the preset, which
+//! the help and that list show under their names.
 
 mod action;
 mod preset;
@@ -26,7 +29,7 @@ use std::time::{Duration, Instant};
 use crokey::KeyCombination;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) use action::{Action, Context, Mode, Place};
+pub(crate) use action::{Action, Context, Group, Mode, Place};
 
 use crate::tui::glyphs;
 
@@ -92,8 +95,35 @@ impl From<Resolved> for Typed {
 
 type Sequence = Vec<KeyCombination>;
 
-/// The bindings of a context in a built-in preset: each action with its key sequences.
-type Bound = &'static [(Action, &'static [&'static str])];
+/// Actions with their key sequences, in a built-in preset.
+type Keys = &'static [(Action, &'static [&'static str])];
+
+/// The bindings of a context in a built-in preset.
+#[derive(Debug, Clone, Copy)]
+enum Bound {
+    /// Its keys, which the help and the key hints list under the name of the context.
+    Keys(Keys),
+    /// Its keys in groups, each listed under its own name, in this order.
+    Groups(&'static [(Group, Keys)]),
+}
+
+impl Bound {
+    /// The keys, each part with its group.
+    fn parts(self) -> Vec<(Option<Group>, Keys)> {
+        match self {
+            Self::Keys(keys) => vec![(None, keys)],
+            Self::Groups(groups) => groups
+                .iter()
+                .map(|(group, keys)| (Some(*group), *keys))
+                .collect(),
+        }
+    }
+
+    /// Every action with its key sequences, in order.
+    fn keys(self) -> impl Iterator<Item = &'static (Action, &'static [&'static str])> {
+        self.parts().into_iter().flat_map(|(_, keys)| keys)
+    }
+}
 
 /// A built-in preset: each mode and context with its bindings.
 type Preset = &'static [(Mode, Context, Bound)];
@@ -115,9 +145,13 @@ pub(crate) struct Keymap {
     bindings: HashMap<(Mode, Context), Bindings>,
 }
 
-/// The bindings of one context in one mode, in the order they were added.
+/// The bindings of one context in one mode, in the order they were added, and the group of each
+/// action that has one.
 #[derive(Debug, Clone, Default)]
-struct Bindings(Vec<(Sequence, Action)>);
+struct Bindings {
+    keys: Vec<(Sequence, Action)>,
+    groups: Vec<(Action, Group)>,
+}
 
 /// What one context knows about a key sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,12 +167,12 @@ enum Lookup {
 impl Bindings {
     fn lookup(&self, keys: &[KeyCombination]) -> Lookup {
         let exact = self
-            .0
+            .keys
             .iter()
             .find(|(sequence, _)| sequence == keys)
             .map(|(_, action)| *action);
         let longer = self
-            .0
+            .keys
             .iter()
             .any(|(sequence, _)| sequence.len() > keys.len() && sequence.starts_with(keys));
         match (exact, longer) {
@@ -146,6 +180,13 @@ impl Bindings {
             (Some(action), false) => Lookup::Exact(action),
             (None, false) => Lookup::Unknown,
         }
+    }
+
+    fn group(&self, action: Action) -> Option<Group> {
+        self.groups
+            .iter()
+            .find(|(grouped, _)| *grouped == action)
+            .map(|(_, group)| *group)
     }
 }
 
@@ -295,6 +336,22 @@ pub(crate) struct Hint {
     pub(crate) more: usize,
 }
 
+/// What the list of the key hints shows a command under: the group of keys it is in, or the
+/// context that binds it, which has no groups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Heading {
+    Group(Group),
+    Context(Context),
+}
+
+/// A command for the list of the key hints: every key sequence of it, whole, apart by commas.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Listed {
+    pub(crate) keys: String,
+    pub(crate) action: Action,
+    pub(crate) heading: Heading,
+}
+
 /// The hints to show: the keys typed so far, and the keys that can follow them in `context`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Hints {
@@ -319,7 +376,7 @@ impl Keymap {
         let mut keymap = Self::of(preset::PRESET);
         if keyboard == Keyboard::Legacy {
             for bindings in keymap.bindings.values_mut() {
-                bindings.0 = tab_as_ctrl_i(std::mem::take(&mut bindings.0));
+                bindings.keys = tab_as_ctrl_i(std::mem::take(&mut bindings.keys));
             }
         }
         keymap
@@ -328,8 +385,8 @@ impl Keymap {
     fn of(preset: Preset) -> Self {
         let mut bindings = HashMap::new();
         for (mode, context, bound) in preset {
-            let bound = bound
-                .iter()
+            let keys = bound
+                .keys()
                 .flat_map(|(action, keys)| {
                     keys.iter().map(|keys| {
                         let sequence = parse_sequence(keys)
@@ -338,7 +395,13 @@ impl Keymap {
                     })
                 })
                 .collect();
-            bindings.insert((*mode, *context), Bindings(bound));
+            let groups = bound
+                .parts()
+                .into_iter()
+                .filter_map(|(group, keys)| Some((group?, keys)))
+                .flat_map(|(group, keys)| keys.iter().map(move |(action, _)| (*action, group)))
+                .collect();
+            bindings.insert((*mode, *context), Bindings { keys, groups });
         }
         Self { bindings }
     }
@@ -692,7 +755,7 @@ impl Keymap {
         let own = self
             .bindings(mode, context)
             .into_iter()
-            .flat_map(|bindings| &bindings.0);
+            .flat_map(|bindings| &bindings.keys);
         for (sequence, action) in own {
             let does = match self.lookup(Place::from((mode, context)), sequence) {
                 Lookup::Exact(bound) | Lookup::Prefix(Some(bound)) => bound == *action,
@@ -714,6 +777,12 @@ impl Keymap {
             *keys = shorten_runs(keys);
         }
         rows
+    }
+
+    /// The group that `context` lists `action` under in `mode`; `None` in a context without
+    /// groups, or for an action it does not bind itself.
+    pub(crate) fn group(&self, mode: Mode, context: Context, action: Action) -> Option<Group> {
+        self.bindings(mode, context)?.group(action)
     }
 
     /// The first key sequence along `context`'s chain that does `action` there in Normal mode,
@@ -814,17 +883,18 @@ impl Keymap {
     /// Every sequence longer than `prefix` that starts with it and does something in
     /// `context`'s chain in `mode`, whole, for the key hints with the keys: one row for each
     /// action, in the order of the preset, the context's own first, with its sequences apart by
-    /// commas. The hints leave out the same keys as [`hints`](Self::hints).
+    /// commas, and what it is listed under. The hints leave out the same keys as
+    /// [`hints`](Self::hints).
     pub(crate) fn sequences(
         &self,
         place: impl Into<Place>,
         prefix: &[KeyCombination],
-    ) -> Vec<Hint> {
+    ) -> Vec<Listed> {
         let place = place.into();
         let Place { mode, context, .. } = place;
         let mut seen: Vec<&Sequence> = Vec::new();
-        let mut rows: Vec<Hint> = Vec::new();
-        for (sequence, action) in self.chain_bindings(place) {
+        let mut rows: Vec<Listed> = Vec::new();
+        for (binder, (sequence, action)) in self.chain_bound(place) {
             if sequence.len() <= prefix.len()
                 || !sequence.starts_with(prefix)
                 || seen.contains(&sequence)
@@ -846,15 +916,17 @@ impl Keymap {
                 continue;
             }
             let keys = describe(sequence);
-            match rows.iter_mut().find(|row| row.action == Some(*action)) {
+            match rows.iter_mut().find(|row| row.action == *action) {
                 Some(row) => {
                     row.keys.push_str(", ");
                     row.keys.push_str(&keys);
                 }
-                None => rows.push(Hint {
+                None => rows.push(Listed {
                     keys,
-                    action: Some(*action),
-                    more: 0,
+                    action: *action,
+                    heading: self
+                        .group(mode, binder, *action)
+                        .map_or(Heading::Context(binder), Heading::Group),
                 }),
             }
         }
@@ -934,11 +1006,16 @@ impl Keymap {
     /// Ctrl+s for a way the field has not still does its nothing, rather than type, but no
     /// hints show it.
     fn chain_bindings(&self, place: Place) -> impl Iterator<Item = &(Sequence, Action)> {
+        self.chain_bound(place).map(|(_, binding)| binding)
+    }
+
+    /// The same, each with the context that binds it.
+    fn chain_bound(&self, place: Place) -> impl Iterator<Item = (Context, &(Sequence, Action))> {
         place
             .chain()
-            .filter_map(move |context| self.bindings(place.mode, context))
-            .flat_map(|bindings| &bindings.0)
-            .filter(move |(_, action)| place.allows(*action))
+            .filter_map(move |context| Some((context, self.bindings(place.mode, context)?)))
+            .flat_map(|(context, bindings)| bindings.keys.iter().map(move |bound| (context, bound)))
+            .filter(move |(_, (_, action))| place.allows(*action))
     }
 
     /// The sequences longer than `prefix` that start with it and do something in `place`, each

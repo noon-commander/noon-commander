@@ -1,7 +1,8 @@
 //! The key hints with the keys, after Ctrl+k while they show, as `K K` in nvim gives its hover
 //! window the keys: every key sequence of what is under them, whole, with what it does, in a
-//! list that `/` filters. Enter closes it and runs the command under the cursor where the keys
-//! went before; Esc closes it.
+//! list that `/` filters, under the names of their groups of keys, or of the contexts that bind
+//! them. Enter closes it and runs the command under the cursor where the keys went before; Esc
+//! closes it.
 
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
@@ -10,6 +11,7 @@ use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
+use super::help;
 use super::keymap::{Action, Extra, Hints, Keymap, Mode, Resolved, Typed};
 use super::mouse::Pointer;
 use super::picker::{Body, MenuLine, Pick, Picker};
@@ -31,12 +33,13 @@ pub(crate) enum KeyHintsEvent {
     Run(Typed),
 }
 
-/// A command of the list: its key sequences, and what it does.
+/// A command of the list: its key sequences, what it does, and the heading it shows under.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Row {
     keys: String,
     text: String,
     action: Action,
+    heading: String,
 }
 
 impl Row {
@@ -66,13 +69,13 @@ impl KeyHintsWindow {
         let rows: Vec<Row> = keymap
             .sequences(place, &hints.prefix)
             .into_iter()
-            .filter_map(|hint| {
-                let action = hint.action?;
-                let text = which_key::describe(place, action)?;
+            .filter_map(|listed| {
+                let text = which_key::describe(place, listed.action)?;
                 Some(Row {
-                    keys: hint.keys,
+                    keys: listed.keys,
                     text,
-                    action,
+                    action: listed.action,
+                    heading: help::heading_title(listed.heading),
                 })
             })
             .collect();
@@ -146,11 +149,31 @@ impl KeyHintsWindow {
         self.picker.pointer(pointer)
     }
 
-    /// Draws the window centered over `area`: the filter, then the commands, scrolled to the
-    /// cursor, those that take a character dimmed.
+    /// The lines: the rows the filter shows, with its heading above the first of each run of
+    /// rows under one, while they have more than one; without headings while the rows are
+    /// `ranked`, best first, out of their groups.
+    fn lines(rows: &[&Row], ranked: bool) -> Vec<MenuLine> {
+        let headed = !ranked
+            && rows
+                .windows(2)
+                .any(|pair| pair[0].heading != pair[1].heading);
+        let mut lines = Vec::with_capacity(rows.len());
+        let mut heading = None;
+        for (index, row) in rows.iter().enumerate() {
+            if headed && heading != Some(&row.heading) {
+                heading = Some(&row.heading);
+                lines.push(MenuLine::Heading(row.heading.clone()));
+            }
+            lines.push(MenuLine::Row(index));
+        }
+        lines
+    }
+
+    /// Draws the window centered over `area`: the filter, then the commands under their
+    /// headings, scrolled to the cursor, those that take a character dimmed.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let shown = self.picker.shown(&self.rows);
-        let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
+        let lines = Self::lines(&shown, self.picker.ranked());
         let keys_width = shown
             .iter()
             .map(|row| cells::width(&row.keys))
@@ -207,6 +230,9 @@ impl KeyHintsWindow {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use noc_config::SearchMode;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -216,16 +242,37 @@ mod tests {
 
     /// The window over every key of `place`, as Ctrl+k twice opens it.
     fn window(place: (Mode, Context), extra: Extra) -> KeyHintsWindow {
+        window_after(place, &[], SearchMode::Fzf, extra)
+    }
+
+    /// The window over the keys that can follow `typed` in `place`, its filter matching as
+    /// `mode` says.
+    fn window_after(
+        place: (Mode, Context),
+        typed: &[KeyEvent],
+        mode: SearchMode,
+        extra: Extra,
+    ) -> KeyHintsWindow {
         let keymap = Keymap::default();
         let mut state = KeyState::default();
+        for key in typed {
+            keymap.feed(&mut state, place, *key, Instant::now());
+        }
         keymap.show_hints(&mut state, place);
         let hints = keymap.hints_of(&state, place).unwrap();
-        KeyHintsWindow::new(
-            &keymap,
-            &hints,
-            extra,
-            Input::new(Kind::FILTER, SearchMode::Fzf),
-        )
+        KeyHintsWindow::new(&keymap, &hints, extra, Input::new(Kind::FILTER, mode))
+    }
+
+    /// The headings the window shows over its rows.
+    fn headings(window: &KeyHintsWindow) -> Vec<String> {
+        let shown = window.picker.shown(&window.rows);
+        KeyHintsWindow::lines(&shown, window.picker.ranked())
+            .into_iter()
+            .filter_map(|line| match line {
+                MenuLine::Heading(heading) => Some(heading),
+                MenuLine::Row(_) => None,
+            })
+            .collect()
     }
 
     fn press(window: &mut KeyHintsWindow, action: Action) -> KeyHintsEvent {
@@ -249,7 +296,11 @@ mod tests {
     }
 
     fn draw(window: &mut KeyHintsWindow) -> String {
-        let mut terminal = Terminal::new(TestBackend::new(80, 16)).unwrap();
+        draw_in(window, 16)
+    }
+
+    fn draw_in(window: &mut KeyHintsWindow, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(80, height)).unwrap();
         terminal
             .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
             .unwrap();
@@ -323,6 +374,64 @@ mod tests {
         assert_ne!(rows[0], keys, "the row under the cursor");
         assert!(rows[1..].iter().all(|fg| *fg == keys), "{colors:?}");
         assert_eq!(Some(*full), theme.dialog.fg, "{}", terminal.backend());
+    }
+
+    #[test]
+    fn rows_show_under_their_groups_then_their_contexts() {
+        let panel = window((Mode::Normal, Context::Panel), Extra::default());
+        assert_eq!(
+            headings(&panel),
+            [
+                "Navigation",
+                "Two panels",
+                "Tabs",
+                "Workspaces",
+                "Options and sorting",
+                "Marks and selection",
+                "Long names",
+                "Search",
+                "Command line",
+                "Go to",
+                "Files",
+                "Other",
+                "Everywhere",
+            ]
+        );
+        // A text field lists its own keys under its name, then those it falls back to.
+        let insert = window((Mode::Insert, Context::DialogInput), Extra::default());
+        assert_eq!(
+            headings(&insert),
+            ["Text fields of dialogs", "Motions", "Changes", "Everywhere"]
+        );
+        let normal = window((Mode::Normal, Context::DialogInput), Extra::default());
+        assert_eq!(
+            headings(&normal),
+            ["Motions", "Modes", "Changes", "Dialogs", "Everywhere"]
+        );
+    }
+
+    #[test]
+    fn headings_go_while_the_rows_are_ranked_or_under_one() {
+        let place = (Mode::Normal, Context::Panel);
+        let mut ranked = window(place, Extra::default());
+        filter(&mut ranked, "tab");
+        assert!(keys(&ranked).len() > 1);
+        assert_eq!(headings(&ranked), Vec::<String>::new(), "best first");
+        // A plain filter keeps the order, and the headings over the rows it shows: Tab, which
+        // is Ctrl+i without the kitty keyboard protocol, the tabs, and saving them.
+        let mut plain = window_after(place, &[], SearchMode::Plain, Extra::default());
+        filter(&mut plain, "tab");
+        assert_eq!(headings(&plain), ["Navigation", "Tabs", "Workspaces"]);
+        let ctrl_w = KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL);
+        let panels = window_after(place, &[ctrl_w], SearchMode::Fzf, Extra::default());
+        assert_eq!(keys(&panels).len(), 6);
+        assert_eq!(headings(&panels), Vec::<String>::new(), "one group");
+    }
+
+    #[test]
+    fn draws_the_headings_over_their_rows() {
+        let mut window = window((Mode::Normal, Context::Viewer), Extra::default());
+        insta::assert_snapshot!(draw_in(&mut window, 36));
     }
 
     #[test]

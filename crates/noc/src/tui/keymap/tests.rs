@@ -523,7 +523,11 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     let alt_f1 = KeyEvent::new(KeyCode::F(1), KeyModifiers::ALT);
     let f1 = Some(KeyEvent::new(KeyCode::F(1), KeyModifiers::NONE));
     assert_eq!(keymap.alt_as_esc(&state, PANEL, alt_f1), f1);
-    let bound = Keymap::of(&[(Mode::Normal, Context::Panel, &[(Action::Help, &["alt-f1"])])]);
+    let bound = Keymap::of(&[(
+        Mode::Normal,
+        Context::Panel,
+        Bound::Keys(&[(Action::Help, &["alt-f1"])]),
+    )]);
     assert_eq!(bound.alt_as_esc(&state, PANEL, alt_f1), None, "bound");
     // Any key: an Esc and a quick Enter, Backspace, or arrow arrive with Alt too.
     for code in [
@@ -558,7 +562,7 @@ fn alt_and_a_key_stand_for_esc_and_the_key_in_insert_mode_and_the_panels() {
     let keymap = Keymap::of(&[(
         Mode::Normal,
         Context::Panel,
-        &[(Action::Home, &["g alt-j"])],
+        Bound::Keys(&[(Action::Home, &["g alt-j"])]),
     )]);
     let mut pending = KeyState::default();
     feed(&keymap, &mut pending, PANEL, &["g"]);
@@ -1200,7 +1204,7 @@ fn a_key_that_cannot_go_on_with_a_sequence_gives_it_up_in_normal_and_visual_mode
     let keymap = Keymap::of(&[(
         Mode::Normal,
         Context::Panel,
-        &[(Action::Home, &["g"]), (Action::End, &["g g"])],
+        Bound::Keys(&[(Action::Home, &["g"]), (Action::End, &["g g"])]),
     )]);
     assert_eq!(
         feed(&keymap, &mut KeyState::default(), PANEL, &["g", "j"]),
@@ -1210,7 +1214,7 @@ fn a_key_that_cannot_go_on_with_a_sequence_gives_it_up_in_normal_and_visual_mode
     let keymap = Keymap::of(&[(
         Mode::Insert,
         Context::Input,
-        &[(Action::DeleteWord, &["ctrl-x ctrl-w"])],
+        Bound::Keys(&[(Action::DeleteWord, &["ctrl-x ctrl-w"])]),
     )]);
     let mut state = KeyState::default();
     assert_eq!(
@@ -1224,7 +1228,7 @@ fn a_bound_prefix_that_times_out_under_the_hints_closes_them() {
     let keymap = Keymap::of(&[(
         Mode::Normal,
         Context::Panel,
-        &[(Action::Home, &["g"]), (Action::End, &["g g"])],
+        Bound::Keys(&[(Action::Home, &["g"]), (Action::End, &["g g"])]),
     )]);
     let mut state = KeyState::default();
     let start = Instant::now();
@@ -1319,7 +1323,7 @@ fn y_p_copies_the_entry_under_the_cursor_beside_it_as_vims_y_y_p() {
 fn the_preset_binds_each_key_once_and_every_action() {
     for (mode, context, bound) in preset::PRESET {
         let mut seen: Vec<Sequence> = Vec::new();
-        for (_, keys) in *bound {
+        for (_, keys) in bound.keys() {
             for keys in *keys {
                 let sequence = parse_sequence(keys).unwrap_or_else(|| panic!("`{keys}`"));
                 assert!(
@@ -1342,7 +1346,7 @@ fn the_preset_binds_each_key_once_and_every_action() {
     }
     let bound: Vec<Action> = preset::PRESET
         .iter()
-        .flat_map(|(_, _, bound)| bound.iter().map(|(action, _)| *action))
+        .flat_map(|(_, _, bound)| bound.keys().map(|(action, _)| *action))
         .collect();
     for action in Action::ALL {
         assert!(bound.contains(action), "{action:?} is not bound");
@@ -1364,7 +1368,7 @@ fn the_preset_has_each_mode_and_context_once_and_global_keys_in_normal_mode() {
         // In Insert mode a character is text unless the context itself binds it, so a context
         // that others fall back to would bind it in vain.
         if *mode == Mode::Insert && matches!(context, Context::Input | Context::List) {
-            for (action, keys) in *bound {
+            for (action, keys) in bound.keys() {
                 for keys in *keys {
                     let first = parse_sequence(keys).unwrap()[0];
                     assert!(!is_character(first), "{action:?}: `{keys}` would be text");
@@ -1372,6 +1376,88 @@ fn the_preset_has_each_mode_and_context_once_and_global_keys_in_normal_mode() {
             }
         }
     }
+}
+
+#[test]
+fn a_context_has_each_action_once_and_each_group_once() {
+    for (mode, context, bound) in preset::PRESET {
+        let mut actions: Vec<Action> = Vec::new();
+        for (action, _) in bound.keys() {
+            assert!(
+                !actions.contains(action),
+                "{mode:?} {context:?}: {action:?} twice"
+            );
+            actions.push(*action);
+        }
+        let mut groups: Vec<Group> = Vec::new();
+        for (group, keys) in bound.parts() {
+            let Some(group) = group else { continue };
+            assert!(
+                !groups.contains(&group),
+                "{mode:?} {context:?}: {group:?} twice"
+            );
+            assert!(!keys.is_empty(), "{mode:?} {context:?}: {group:?} is empty");
+            groups.push(group);
+        }
+    }
+}
+
+#[test]
+fn the_groups_of_a_context_list_its_actions_in_order() {
+    let keymap = Keymap::default();
+    assert_eq!(
+        keymap.group(Mode::Normal, Context::Panel, Action::Down),
+        Some(Group::Navigation)
+    );
+    assert_eq!(
+        keymap.group(Mode::Normal, Context::Panel, Action::InvertMarks),
+        Some(Group::Marks)
+    );
+    assert_eq!(
+        keymap.group(Mode::Visual, Context::Panel, Action::Copy),
+        Some(Group::Files)
+    );
+    assert_eq!(
+        keymap.group(Mode::Normal, Context::Viewer, Action::Follow),
+        Some(Group::Files)
+    );
+    assert_eq!(
+        keymap.group(Mode::Normal, Context::Dialog, Action::Up),
+        None
+    );
+    assert_eq!(
+        keymap.group(Mode::Normal, Context::Panel, Action::Confirm),
+        None,
+        "not bound there"
+    );
+    // The help lists the actions of a group together, the groups in the order of the preset.
+    let groups: Vec<Group> = keymap
+        .help(Mode::Normal, Context::Panel)
+        .into_iter()
+        .filter_map(|(action, _)| keymap.group(Mode::Normal, Context::Panel, action))
+        .fold(Vec::new(), |mut groups, group| {
+            if groups.last() != Some(&group) {
+                groups.push(group);
+            }
+            groups
+        });
+    assert_eq!(
+        groups,
+        [
+            Group::Navigation,
+            Group::Panels,
+            Group::Tabs,
+            Group::Workspaces,
+            Group::Options,
+            Group::Marks,
+            Group::Names,
+            Group::Search,
+            Group::CommandLine,
+            Group::GoTo,
+            Group::Files,
+            Group::Other,
+        ]
+    );
 }
 
 #[test]
@@ -1512,11 +1598,11 @@ fn hints_show_the_one_sequence_of_a_key_whole_unless_the_key_does_something() {
     let keymap = Keymap::of(&[(
         Mode::Normal,
         Context::Panel,
-        &[
+        Bound::Keys(&[
             (Action::Home, &["g"]),
             (Action::End, &["g g"]),
             (Action::Quit, &["z a b", "f10"]),
-        ],
+        ]),
     )]);
     assert_eq!(
         keymap.hints(PANEL, &[]),
@@ -1673,9 +1759,12 @@ fn ctrl_k_while_the_hints_show_gives_them_the_keys_with_the_count() {
 #[test]
 fn sequences_list_every_command_whole_after_the_keys_typed() {
     let keymap = Keymap::default();
+    let listed_keys =
+        |rows: &[Listed]| -> Vec<String> { rows.iter().map(|row| row.keys.clone()).collect() };
     let ctrl_w = parse_sequence("ctrl-w").unwrap();
+    let panels = keymap.sequences(PANEL, &ctrl_w);
     assert_eq!(
-        hint_keys(&keymap.sequences(PANEL, &ctrl_w)),
+        listed_keys(&panels),
         [
             "Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p",
             "Ctrl+w h",
@@ -1685,24 +1774,44 @@ fn sequences_list_every_command_whole_after_the_keys_typed() {
             "Ctrl+w v",
         ]
     );
+    assert!(
+        panels
+            .iter()
+            .all(|row| row.heading == Heading::Group(Group::Panels))
+    );
     let every = keymap.sequences(PANEL, &[]);
-    let row = |action| every.iter().find(|row| row.action == Some(action));
+    let row = |action| every.iter().find(|row| row.action == action);
     assert_eq!(
         row(Action::Home).map(|row| row.keys.as_str()),
         Some("g g, Home")
     );
-    assert!(
-        every
-            .iter()
-            .all(|row| row.more == 0 && row.action.is_some())
+    assert_eq!(
+        row(Action::KeyHints).map(|row| row.heading),
+        Some(Heading::Context(Context::Global)),
+        "the global keys too, under their context"
     );
-    assert!(row(Action::KeyHints).is_some(), "the global keys too");
     assert!(
         every.iter().all(|row| !row.keys.starts_with("Esc")),
         "Esc closes the list"
     );
+    // The rows of a heading come together.
+    let mut headings: Vec<Heading> = Vec::new();
+    for row in &every {
+        if headings.last() != Some(&row.heading) {
+            assert!(!headings.contains(&row.heading), "{:?} apart", row.heading);
+            headings.push(row.heading);
+        }
+    }
+    assert_eq!(headings.first(), Some(&Heading::Group(Group::Navigation)));
+    assert_eq!(headings.last(), Some(&Heading::Context(Context::Global)));
     let search = keymap.sequences((Mode::Insert, Context::QuickSearch), &[]);
-    assert!(hint_keys(&search).iter().all(|keys| keys.len() > 1));
+    assert!(listed_keys(&search).iter().all(|keys| keys.len() > 1));
+    assert!(
+        search
+            .iter()
+            .any(|row| row.heading == Heading::Group(Group::Motions)),
+        "the keys of the text field, in their groups"
+    );
 }
 
 #[test]
@@ -1734,10 +1843,10 @@ fn alt_and_a_shifted_symbol_match_as_the_kitty_protocol_reports_alternate_keys()
     let keymap = Keymap::of(&[(
         Mode::Normal,
         Context::Panel,
-        &[
+        Bound::Keys(&[
             (Action::KeyHints, &["alt-/"]),
             (Action::SaveWorkspace, &["alt-shift-w"]),
-        ],
+        ]),
     )]);
     let mut state = KeyState::default();
     let now = Instant::now();

@@ -303,6 +303,9 @@
       ([ADR 0084](adr/0084-cards-show-a-place-and-where-it-comes-from.md))
 - [x] The hosts of the location menu by name after those used last, as the panels order names
       ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md))
+- [x] The keys of the panels, the text fields, and the viewer in groups, which the list of the
+      key hints (Ctrl+k twice) and the help show under their names
+      ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 
 use super::cells::{self, Align};
 use super::glyphs::{self, categories};
-use super::keymap::{Action, Context, Keymap, Mode, Resolved};
+use super::keymap::{Action, Context, Group as KeyGroup, Heading, Keymap, Mode, Resolved};
 use super::label::Label;
 use super::mouse::{Pointer, Press, Scroll};
 use super::panel::home_text;
@@ -34,6 +34,8 @@ const GROUP_INDENT: &str = "  ";
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Entry {
     Heading(String),
+    /// The name of a group of keys, over them.
+    Subheading(String),
     Keys {
         keys: String,
         text: String,
@@ -178,20 +180,28 @@ impl Part {
     }
 
     /// Its text: the keys `keymap` binds in each of its sections, under the section's heading
-    /// when it has more than one.
+    /// when it has more than one, and those of a context with groups under their names.
     fn entries(self, keymap: &Keymap) -> Vec<Entry> {
         let sections = self.sections();
         let headed = sections.len() > 1;
         let mut entries = Vec::new();
         for (mode, context, title) in sections {
-            let rows: Vec<Entry> = keymap
-                .help(mode, context)
-                .into_iter()
-                .filter_map(|(action, keys)| {
-                    let text = describe_in((mode, context), action)?;
-                    Some(Entry::Keys { keys, text })
-                })
-                .collect();
+            let mut rows: Vec<Entry> = Vec::new();
+            let mut last = None;
+            for (action, keys) in keymap.help(mode, context) {
+                let Some(text) = describe_in((mode, context), action) else {
+                    continue;
+                };
+                let group = keymap.group(mode, context, action);
+                if let Some(group) = group.filter(|group| last != Some(*group)) {
+                    if !rows.is_empty() {
+                        rows.push(Entry::Blank);
+                    }
+                    rows.push(Entry::Subheading(group_title(group)));
+                    last = Some(group);
+                }
+                rows.push(Entry::Keys { keys, text });
+            }
             if rows.is_empty() {
                 continue;
             }
@@ -816,6 +826,13 @@ impl Help {
             .iter()
             .flat_map(|entry| match entry {
                 Entry::Heading(heading) => vec![heading_line(heading, width, theme)],
+                Entry::Subheading(title) => vec![Line::from(cells::fit(
+                    title,
+                    width,
+                    Align::Left,
+                    (theme.dialog_title, theme.truncated_dialog),
+                    marks,
+                ))],
                 Entry::Keys { keys, text } => {
                     let room = width.saturating_sub(keys_width + 1);
                     let text = cells::fit(text, room, Align::Left, body, marks);
@@ -942,6 +959,68 @@ fn key_lines(keys: &str, width: usize) -> Vec<String> {
         }
     }
     lines
+}
+
+/// The name of a group of keys, over them in the help and in the list of the key hints.
+fn group_title(group: KeyGroup) -> String {
+    match group {
+        KeyGroup::Navigation => fl!("help-keys-navigation"),
+        KeyGroup::Panels => fl!("help-keys-panels"),
+        KeyGroup::Tabs => fl!("help-keys-tabs"),
+        KeyGroup::Workspaces => fl!("help-keys-workspaces"),
+        KeyGroup::Options => fl!("help-keys-options"),
+        KeyGroup::Marks => fl!("help-keys-marks"),
+        KeyGroup::Names => fl!("help-keys-names"),
+        KeyGroup::Search => fl!("help-keys-search"),
+        KeyGroup::CommandLine => fl!("help-keys-command-line"),
+        KeyGroup::GoTo => fl!("help-keys-go-to"),
+        KeyGroup::Files => fl!("help-keys-files"),
+        KeyGroup::Lines => fl!("help-keys-lines"),
+        KeyGroup::Motions => fl!("help-keys-motions"),
+        KeyGroup::Modes => fl!("help-keys-modes"),
+        KeyGroup::Changes => fl!("help-keys-changes"),
+        KeyGroup::Other => fl!("help-keys-other"),
+    }
+}
+
+/// The name of `context`, over the keys it binds without groups in the list of the key hints.
+fn context_title(context: Context) -> String {
+    match context {
+        Context::Global => fl!("help-everywhere"),
+        Context::Panel => fl!("help-panels"),
+        Context::List => fl!("help-lists"),
+        Context::LocationMenu => fl!("help-menu"),
+        Context::TabMenu => fl!("help-tab-menu"),
+        Context::Jump => fl!("help-context-jump"),
+        Context::Workspaces => fl!("help-workspaces"),
+        Context::PullDown => fl!("help-pulldown"),
+        Context::Input => fl!("help-context-input"),
+        Context::SearchInput => fl!("help-context-search"),
+        Context::QuickSearch => fl!("help-quick-search"),
+        Context::Rename => fl!("help-renaming-insert"),
+        Context::Dialog => fl!("help-context-dialog"),
+        Context::Help => fl!("help-this-help"),
+        Context::DialogInput => fl!("help-text-fields"),
+        Context::PathInput => fl!("help-path-fields"),
+        Context::Completion | Context::CommandCompletion => fl!("help-completion"),
+        Context::ComboBox => fl!("help-combo-box"),
+        Context::Viewer => fl!("help-viewer"),
+        Context::CommandLine => fl!("help-command-line"),
+        Context::CommandHistory => fl!("help-history"),
+        Context::Find => fl!("help-find"),
+        Context::FindInput => fl!("help-find-fields"),
+        Context::Checksums => fl!("help-checksums"),
+        Context::KeyHints => fl!("help-context-key-hints"),
+        Context::UserScreen => fl!("help-context-user-screen"),
+    }
+}
+
+/// What the list of the key hints shows over the commands listed under `heading`.
+pub(crate) fn heading_title(heading: Heading) -> String {
+    match heading {
+        Heading::Group(group) => group_title(group),
+        Heading::Context(context) => context_title(context),
+    }
 }
 
 /// What `action` does in `context` in `mode`: as [`describe`] says, but for the commands of
@@ -1677,6 +1756,73 @@ mod tests {
     }
 
     #[test]
+    fn the_keys_of_a_context_with_groups_show_under_their_names() {
+        let help = help();
+        let subheadings = |title: &str| -> Vec<&str> {
+            let group = help
+                .groups
+                .iter()
+                .find(|group| group.title.text == title)
+                .unwrap();
+            group
+                .entries
+                .iter()
+                .filter_map(|entry| match entry {
+                    Entry::Subheading(title) => Some(title.as_str()),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(
+            subheadings("Panels"),
+            [
+                // Normal mode
+                "Navigation",
+                "Two panels",
+                "Tabs",
+                "Workspaces",
+                "Options and sorting",
+                "Marks and selection",
+                "Long names",
+                "Search",
+                "Command line",
+                "Go to",
+                "Files",
+                "Other",
+                // Visual mode
+                "Navigation",
+                "Two panels",
+                "Tabs",
+                "Marks and selection",
+                "Search",
+                "Files",
+                "Other",
+            ]
+        );
+        assert_eq!(
+            subheadings("Viewer"),
+            ["Navigation", "Long lines", "Files", "Other"]
+        );
+        assert_eq!(subheadings("Menus and dialogs"), Vec::<&str>::new());
+        // Each comes after a heading or a blank line, right before its keys.
+        for group in &help.groups {
+            for (index, entry) in group.entries.iter().enumerate() {
+                if let Entry::Subheading(title) = entry {
+                    let before = index.checked_sub(1).map(|before| &group.entries[before]);
+                    assert!(
+                        matches!(before, None | Some(Entry::Heading(_) | Entry::Blank)),
+                        "{title}"
+                    );
+                    assert!(
+                        matches!(group.entries[index + 1], Entry::Keys { .. }),
+                        "{title}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn every_section_has_a_letter_of_its_own() {
         let (texts, _) = help().sidebar_texts(&Theme::terminal());
         let letters: Vec<char> = texts.iter().filter_map(Label::letter).collect();
@@ -1836,7 +1982,7 @@ mod tests {
         assert_ne!(draw(&mut help, 100, 20), top);
         help.handle(action(Action::End));
         let bottom = draw(&mut help, 100, 20);
-        assert!(bottom.contains("The right panel"), "{bottom}");
+        assert!(bottom.contains("Make a directory"), "{bottom}");
         assert!(
             !bottom.contains("EOF") && bottom.contains(" End "),
             "no line after the text, and the frame says it ends: {bottom}"

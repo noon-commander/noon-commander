@@ -131,6 +131,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The key hints show a key that only starts one sequence as that sequence whole, with what it
   does, as `] t` and `Z Z, F10`, rather than `+1 key`.
+- The list of the key hints (Ctrl+k twice) shows its rows under headings: the keys of the panels,
+  the text fields, and the viewer in groups, such as Navigation, Two panels, Tabs, Marks and
+  selection, Search, Files, Motions, and Changes, and the keys of the other parts under their
+  names, such as Everywhere. The headings go while the filter ranks the rows best first. The help
+  of F1 shows the same groups over the keys of the panels, the text fields, and the viewer. The
+  pull-down menu (`g m`, F9) is in Other, and `g +`, `g -`, and `g *` in Marks and selection, so
+  they come later in the help and in the key hints of which-key
+  ([ADR 0086](docs/adr/0086-groups-of-keys-live-in-the-preset.md)).
 - A window that waits for its rows, such as the location menu or the search of a tree, takes a
   fifth of the processor it took: a frame that only a spinner asks for puts back what the panels
   drew rather than draw them again, a shine at rest draws at the pace of the dots, and the times

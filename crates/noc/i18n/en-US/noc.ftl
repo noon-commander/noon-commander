@@ -710,6 +710,32 @@ help-about-log-none = none: { $reason }
 help-about-unknown = unknown
 # A program that is not there.
 help-about-missing = not found
+# The groups of the keys of a part of the app, over their keys in the help and in the list of
+# the key hints (Ctrl+k twice), in the order of the keymap.
+help-keys-navigation = Navigation
+help-keys-panels = Two panels
+help-keys-tabs = Tabs
+help-keys-workspaces = Workspaces
+help-keys-options = Options and sorting
+help-keys-marks = Marks and selection
+help-keys-names = Long names
+help-keys-search = Search
+help-keys-command-line = Command line
+help-keys-go-to = Go to
+help-keys-files = Files
+help-keys-lines = Long lines
+help-keys-motions = Motions
+help-keys-modes = Modes
+help-keys-changes = Changes
+help-keys-other = Other
+# Over the keys of a part of the app without groups, in the list of the key hints, where the
+# headings of the help below do not say it.
+help-context-input = Editing text
+help-context-search = Fields that search
+help-context-dialog = Dialogs
+help-context-jump = zoxide window
+help-context-key-hints = Key hints list
+help-context-user-screen = Output of commands
 help-everywhere = Everywhere
 help-panels = Panels
 help-panels-visual = Panels in Visual mode

@@ -33,7 +33,7 @@ shell stayed in Noon Commander's group, and Ctrl+z suspended both.
 - **`shell.run` says what runs a command**: a list of words, the program and its arguments,
   after which the command comes as one more argument, as typed. Its default is
   `["$SHELL", "-i", "-c"]`. It is a list, as `ssh.args` is, so that no word needs splitting;
-  the Configuration dialog shows it as words, under Command line → Run with, and a change counts
+  the Configuration dialog shows it as words, under Command line → Shell, and a change counts
   from the next command.
 - **`$NAME` and `${NAME}` in the words take the value of a variable where the command runs**,
   and `$$` is a `$`. A name is a letter or `_`, then letters, digits, and `_`; a `$` before

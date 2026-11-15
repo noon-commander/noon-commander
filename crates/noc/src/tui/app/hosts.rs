@@ -61,6 +61,8 @@ impl App {
         }
         let title = fl!("host-edit-title", host = cells::sanitize(name.as_bytes()));
         let dialog = Dialog::fields(&title, &fields, &checks, buttons)
+            .with_placeholder(HOST_START_DIR, &fl!("host-start-dir-placeholder"))
+            .with_placeholder(HOST_OTHER_DIR, &fl!("host-other-dir-placeholder"))
             .with_placeholder(HOST_RUN, &run_text(&self.config.shell.run));
         self.dialogs.push_back(Open {
             dialog,

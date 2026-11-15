@@ -196,6 +196,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   listed them in the order of the ssh config. Names compare as in the panels, with the numbers in
   them by value while `ui.natural_sort` is on
   ([ADR 0085](docs/adr/0085-the-location-menu-lists-hosts-by-name.md)).
+- The fields of the host settings (F4 on a host) have short labels: Remote directory, Other panel
+  directory, and Shell, whose explanations show faint in the empty fields. Run with in Options →
+  Configuration… under Command line is Shell too.
 
 ### Removed
 

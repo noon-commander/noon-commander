@@ -198,6 +198,7 @@ fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
     let host_fields = [
         (fl!("host-start-dir"), String::new()),
         (fl!("host-other-dir"), String::new()),
+        (fl!("host-run"), String::new()),
     ];
     let host_buttons = vec![Button::Ok, Button::UseCurrent, Button::Cancel];
     let algorithms = [

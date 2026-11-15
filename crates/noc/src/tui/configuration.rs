@@ -2071,7 +2071,7 @@ mod tests {
             (3, 2, "-F other_config", "Invalid extra ssh arguments"),
             (3, 0, "", "The ssh program cannot be empty"),
             (5, 1, " ", "The zoxide program cannot be empty"),
-            (6, 0, "", "Run with needs a program"),
+            (6, 0, "", "Shell needs a program"),
             (6, 0, "$SHELL ${HOME -c", "has no closing }"),
             (6, 0, "\"${1}\"", "\"${1}\" names no variable"),
             (6, 2, "-1", "is not a number of commands"),

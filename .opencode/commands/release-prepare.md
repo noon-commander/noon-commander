@@ -1,5 +1,6 @@
 ---
 description: Prepare a release X.Y.Z: review and condense the changelog, set the version
+agent: build
 ---
 
 # Prepare release $1

@@ -565,10 +565,7 @@ impl Contents {
             .filter(|(item, shows)| *shows == Shows::Filtered && item.group() == group)
             .filter_map(|(item, _)| match item {
                 Item::Volume(volume) => Some(volume_name(volume)),
-                Item::Host(host) => {
-                    let name = host.label.as_deref().unwrap_or(&host.alias);
-                    Some(cells::sanitize(name.as_bytes()))
-                }
+                Item::Host(host) => Some(cells::sanitize(host.alias.as_bytes())),
                 Item::Home(..) | Item::More(..) => None,
             })
             .collect()
@@ -717,10 +714,9 @@ impl Look<'_> {
             ),
             Item::Host(host) => {
                 let status = (self.hosts)(&host.alias).status;
-                let name = host.label.as_deref().unwrap_or(&host.alias);
                 (
                     self.decor.host(status, self.dots),
-                    cells::sanitize(name.as_bytes()),
+                    cells::sanitize(host.alias.as_bytes()),
                     Some(self.theme.dialog_host_status(status)),
                 )
             }
@@ -801,8 +797,6 @@ impl Look<'_> {
                 self.theme.glyphs.marks,
             )
         };
-        let both =
-            |first: &str, second: &str| fl!("menu-card-both", first = first, second = second);
         // The icon in `style`, as many blanks for the line under it, and the cells after them.
         let lead = |icon: String, style: Style| {
             let room = width.saturating_sub(cells::width(&icon));
@@ -811,12 +805,7 @@ impl Look<'_> {
         };
         match item {
             Item::Home(path, volume) => {
-                let label = volume.map(|volume| match &volume.fs_type {
-                    Some(fs_type) => {
-                        both(&volume_name(volume), &cells::sanitize(fs_type.as_bytes()))
-                    }
-                    None => volume_name(volume),
-                });
+                let label = volume.map(volume_label);
                 let path = cells::sanitize(path.as_os_str().as_bytes());
                 let (icon, indent, room) = lead(self.decor.home().to_owned(), dialog);
                 let lines = vec![
@@ -826,15 +815,7 @@ impl Look<'_> {
                 (lines, label)
             }
             Item::Volume(volume) => {
-                let kind = match volume.kind {
-                    VolumeKind::System => fl!("menu-card-system"),
-                    VolumeKind::Local => fl!("menu-card-local"),
-                    VolumeKind::Network => fl!("menu-card-network"),
-                };
-                let label = match &volume.fs_type {
-                    Some(fs_type) => both(&cells::sanitize(fs_type.as_bytes()), &kind),
-                    None => kind,
-                };
+                let label = volume_label(volume);
                 let mount_point = cells::sanitize(volume.mount_point.as_os_str().as_bytes());
                 let mounted = match &volume.source {
                     Some(source) => fl!(
@@ -855,14 +836,14 @@ impl Look<'_> {
             Item::Host(host) => {
                 let state = (self.hosts)(&host.alias);
                 let file = home_text(&host.file, home);
-                let label = fl!("menu-card-defined", file = file, line = host.line);
+                let defined = fl!("menu-card-defined", file = file, line = host.line);
                 let status = dialog.patch(self.theme.dialog_host_status(state.status));
                 let (icon, indent, room) = lead(self.decor.host(state.status, self.dots), status);
                 let lines = vec![
-                    after(icon, self.reach_line(host, &state, room)),
+                    after(icon, self.reach_line(&state, &defined, room)),
                     self.status_line(&state, indent, width),
                 ];
-                (lines, Some(label))
+                (lines, Some(fl!("menu-card-sftp")))
             }
             Item::More(..) => {
                 let (icon, indent, room) = lead(self.decor.more(), dialog);
@@ -876,14 +857,14 @@ impl Look<'_> {
         }
     }
 
-    /// The line of `host`, in `width` cells: its alias, and against the right end how to reach
-    /// it, its address and the host ssh jumps through, from this run's `ssh -G` as `state` has
-    /// them, else that it failed, in the colors of errors, why going to the log alone; else a
-    /// skeleton, as `ssh -G` runs for every host the cursor rests on: no text that would show
-    /// for the moment before it starts.
-    fn reach_line(&self, host: &KnownHost, state: &HostState, width: usize) -> Line<'static> {
+    /// The line of a host, in `width` cells: how to reach it, its address and the host ssh
+    /// jumps through, from this run's `ssh -G` as `state` has them, else that it failed, in the
+    /// colors of errors, why going to the log alone; else a skeleton, as `ssh -G` runs for every
+    /// host the cursor rests on: no text that would show for the moment before it starts. Against
+    /// the right end where it is `defined`, which loses its start where it is too long.
+    fn reach_line(&self, state: &HostState, defined: &str, width: usize) -> Line<'static> {
         let dialog = self.theme.dialog;
-        let end = if let Some(address) = &state.address {
+        let start = if let Some(address) = &state.address {
             let address = cells::sanitize(address.as_bytes());
             let text = match &state.jump {
                 Some(jump) => fl!("menu-card-via", address = address, jump = jump.as_str()),
@@ -896,27 +877,29 @@ impl Look<'_> {
         } else {
             None
         };
-        let alias = cells::sanitize(host.alias.as_bytes());
-        let wanted = end
+        let wanted = start
             .as_ref()
             .map_or(ADDRESS_SKELETON, |(text, _)| cells::width(text));
-        let (start_width, end_width) = ends(width, cells::width(&alias), wanted);
+        let (start_width, end_width) = ends(width, wanted, cells::width(defined));
         let marks = self.theme.glyphs.marks;
         let truncated = self.theme.truncated_dialog;
-        let start = cells::fit_cut(&alias, start_width, Align::Left, Cut::End);
-        let mut spans = cells::spans(start, (dialog, truncated), marks);
+        let mut spans = if let Some((text, style)) = start {
+            let start = cells::fit_cut(&text, start_width, Align::Left, Cut::Middle);
+            cells::spans(start, (style, truncated), marks)
+        } else {
+            let skeleton = ADDRESS_SKELETON.min(start_width);
+            let cells = u16::try_from(skeleton).unwrap_or(u16::MAX);
+            let shine = self.address_shine;
+            let mut spans = window::cell_skeleton(cells, dialog, self.theme, shine);
+            spans.push(Span::styled(" ".repeat(start_width - skeleton), dialog));
+            spans
+        };
         spans.push(Span::styled(
             " ".repeat(width - start_width - end_width),
             dialog,
         ));
-        if let Some((text, style)) = end {
-            let end = cells::fit_cut(&text, end_width, Align::Right, Cut::Middle);
-            spans.extend(cells::spans(end, (style, truncated), marks));
-        } else {
-            let end_width = u16::try_from(end_width).unwrap_or(u16::MAX);
-            let shine = self.address_shine;
-            spans.extend(window::cell_skeleton(end_width, dialog, self.theme, shine));
-        }
+        let end = cells::fit_cut(defined, end_width, Align::Right, Cut::Start);
+        spans.extend(cells::spans(end, (dialog, truncated), marks));
         Line::from(spans)
     }
 
@@ -1026,6 +1009,24 @@ impl Look<'_> {
     }
 }
 
+/// What a volume is, on the line over its card, and over the card of the home directory on it:
+/// the type of its file system and its kind, or its kind alone where the type is not known.
+fn volume_label(volume: &Volume) -> String {
+    let kind = match volume.kind {
+        VolumeKind::System => fl!("menu-card-system"),
+        VolumeKind::Local => fl!("menu-card-local"),
+        VolumeKind::Network => fl!("menu-card-network"),
+    };
+    match &volume.fs_type {
+        Some(fs_type) => fl!(
+            "menu-card-both",
+            first = cells::sanitize(fs_type.as_bytes()),
+            second = kind
+        ),
+        None => kind,
+    }
+}
+
 /// How many cells of a line of `width` its start and its end take, for an end of `wanted`
 /// cells after a start of `lead`: the end what the start leaves after a blank, but at least half
 /// the line, so that a long start does not crowd it out; the start the rest but the blank.
@@ -1073,15 +1074,11 @@ fn texts(item: Item<'_>, addresses: &HashMap<String, String>) -> Vec<String> {
             volume_name(volume),
             volume.mount_point.to_string_lossy().into_owned(),
         ],
-        Item::Host(host) => [
-            Some(&host.alias),
-            host.label.as_ref(),
-            addresses.get(&host.alias),
-        ]
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect(),
+        Item::Host(host) => [Some(&host.alias), addresses.get(&host.alias)]
+            .into_iter()
+            .flatten()
+            .cloned()
+            .collect(),
         Item::More(..) => Vec::new(),
     }
 }
@@ -1265,10 +1262,9 @@ mod tests {
         }
     }
 
-    fn host(alias: &str, label: Option<&str>) -> KnownHost {
+    fn host(alias: &str) -> KnownHost {
         KnownHost {
             alias: alias.to_owned(),
-            label: label.map(str::to_owned),
             file: PathBuf::from("/Users/me/.ssh/config"),
             line: 1,
         }
@@ -1284,11 +1280,7 @@ mod tests {
                     ..volume("/Volumes/share", Some("share"), VolumeKind::Network)
                 },
             ],
-            hosts: vec![
-                host("web", Some("Prod")),
-                host("db", None),
-                host("proxy", None),
-            ],
+            hosts: vec![host("web"), host("db"), host("proxy")],
             ..Places::default()
         }
     }
@@ -1298,7 +1290,7 @@ mod tests {
         Places {
             volumes: vec![volume("/", None, VolumeKind::System)],
             hosts: (1..=count)
-                .map(|index| host(&format!("h{index:02}"), None))
+                .map(|index| host(&format!("h{index:02}")))
                 .collect(),
             ..Places::default()
         }
@@ -1441,14 +1433,10 @@ mod tests {
     }
 
     #[test]
-    fn typing_filters_by_name_alias_mount_point_and_address() {
+    fn typing_filters_by_name_mount_point_and_address() {
         let mut menu = menu_at(home());
         typed(&mut menu, "pro");
-        assert_eq!(
-            keys(&menu),
-            [Key::Host("web".to_owned()), Key::Host("proxy".to_owned())],
-            "labelled Prod, and proxy"
-        );
+        assert_eq!(keys(&menu), [Key::Host("proxy".to_owned())]);
         typed(&mut menu, "x");
         assert_eq!(menu.chosen().map(key), Some(Key::Host("proxy".to_owned())));
         // A digit is text once the filter has some.
@@ -1710,13 +1698,13 @@ mod tests {
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
-        // The hosts follow web, labeled Prod, below their heading; their icons are in column 4.
+        // The hosts follow web below their heading; their icons are in column 4.
         let web = (0..buffer.area.height)
             .find(|&y| {
                 let row: String = (0..buffer.area.width)
                     .map(|x| buffer[(x, y)].symbol())
                     .collect();
-                row.contains("Prod")
+                row.contains(" web ")
             })
             .unwrap();
         let colors = |y: u16| (buffer[(4, y)].fg, buffer[(4, y)].bg);
@@ -1800,7 +1788,7 @@ mod tests {
                 },
                 sized("/Volumes/pseudo", "pseudo", 0, 0),
             ],
-            hosts: vec![host("web", None)],
+            hosts: vec![host("web")],
             ..Places::default()
         };
         let mut menu = menu_with(home(), &Recent::default(), places);
@@ -2050,10 +2038,9 @@ mod tests {
             ..HostState::default()
         };
         let ([_, reach, how], buffer) = card_in(&mut menu, &connected, &theme, Decor::new(true));
-        assert!(reach.starts_with("║ 󰒋 web "), "{reach}");
-        assert!(reach.ends_with(" deploy@10.0.0.5 ║"), "{reach}");
+        assert!(reach.starts_with("║ 󰒋 deploy@10.0.0.5 "), "{reach}");
         assert!(how.starts_with("║   Connected "), "{how}");
-        let at = crate::tui::mouse::find(&buffer, "󰒋 web");
+        let at = crate::tui::mouse::find(&buffer, "󰒋 deploy");
         assert_eq!(
             buffer[(at.x, at.y)].fg,
             Color::Green,
@@ -2119,8 +2106,8 @@ mod tests {
         press(&mut menu, Action::Home);
         let [label, path, space] = card(&mut menu, &idle);
         assert!(
-            label.ends_with(" Macintosh HD · apfs ─╢"),
-            "the volume of home: {label}"
+            label.ends_with(" apfs · system ─╢"),
+            "as the card of its volume: {label}"
         );
         assert!(path.starts_with("║ ~ /Users/me "), "{path}");
         assert!(space.starts_with("║   212G free of 994G (21%) "), "{space}");
@@ -2147,7 +2134,7 @@ mod tests {
     }
 
     #[test]
-    fn the_card_of_a_host_says_where_it_is_defined_how_to_reach_it_and_how_it_is() {
+    fn the_card_of_a_host_says_how_to_reach_it_where_it_is_defined_and_how_it_is() {
         let mut defined = places();
         defined.hosts[0].line = 12;
         defined.hosts[1].file = PathBuf::from("/etc/ssh/ssh_config");
@@ -2173,20 +2160,27 @@ mod tests {
             },
         };
         let [label, reach, how] = card(&mut menu, &state);
-        assert!(label.ends_with(" ~/.ssh/config:12 ─╢"), "{label}");
-        assert!(reach.starts_with("║ ● web "), "{reach}");
+        assert!(label.ends_with(" sftp ─╢"), "its kind: {label}");
         assert!(
-            reach.ends_with(" deploy@10.0.0.5 via bastion ║"),
+            reach.starts_with("║ ● deploy@10.0.0.5 via bastion "),
+            "{reach}"
+        );
+        assert!(
+            reach.ends_with(" ~/.ssh/config:12 ║"),
             "at the right end: {reach}"
+        );
+        assert!(
+            !reach.contains("web"),
+            "no alias, which the row shows: {reach}"
         );
         assert_eq!(how.trim_end_matches(['║', ' ']), "║   Connected");
 
         press(&mut menu, Action::Down);
         let [label, reach, how] = card(&mut menu, &state);
-        assert!(label.ends_with(" /etc/ssh/ssh_config:40 ─╢"), "{label}");
-        assert!(reach.starts_with("║ ✗ db "), "{reach}");
-        let skeleton = format!(" {} ║", "-".repeat(ADDRESS_SKELETON));
-        assert!(reach.ends_with(&skeleton), "{reach}");
+        assert!(label.ends_with(" sftp ─╢"), "{label}");
+        let skeleton = format!("║ ✗ {} ", "-".repeat(ADDRESS_SKELETON));
+        assert!(reach.starts_with(&skeleton), "{reach}");
+        assert!(reach.ends_with(" /etc/ssh/ssh_config:40 ║"), "{reach}");
         assert!(
             how.starts_with("║   Permission denied (publickey). "),
             "{how}"
@@ -2194,8 +2188,8 @@ mod tests {
 
         press(&mut menu, Action::Down);
         let [_, reach, how] = card(&mut menu, &state);
-        assert!(reach.starts_with("║ ○ proxy "), "{reach}");
-        assert!(reach.ends_with(" root@proxy.example.org ║"), "{reach}");
+        assert!(reach.starts_with("║ ○ root@proxy.example.org "), "{reach}");
+        assert!(reach.ends_with(" ~/.ssh/config:1 ║"), "{reach}");
         let panel = "where the host opens on the side of the panel, the other panel's on the other";
         assert!(how.starts_with("║ › /srv/app "), "{panel}: {how}");
         assert!(how.ends_with(" › ~/logs ║"), "{panel}: {how}");
@@ -2218,9 +2212,9 @@ mod tests {
     }
 
     #[test]
-    fn the_address_of_a_host_takes_what_its_alias_leaves_but_at_least_half() {
+    fn the_end_of_a_line_takes_what_its_start_leaves_but_at_least_half() {
         assert_eq!(ends(40, 3, 15), (24, 15), "as long as it is");
-        assert_eq!(ends(40, 30, 35), (19, 20), "half against a long alias");
+        assert_eq!(ends(40, 30, 35), (19, 20), "half against a long start");
         assert_eq!(ends(40, 3, 50), (3, 36), "the rest after a short one");
         assert_eq!(ends(40, 3, 0), (40, 0), "nothing at the end");
     }
@@ -2268,8 +2262,8 @@ mod tests {
             ..HostState::default()
         };
         let [_, reach, _] = card(&mut menu, &fresh);
-        let fresh = " deploy@10.0.0.9 via gate ║";
-        assert!(reach.ends_with(fresh), "this run's: {reach}");
+        let fresh = "║ ○ deploy@10.0.0.9 via gate ";
+        assert!(reach.starts_with(fresh), "this run's: {reach}");
         assert!(
             menu.address_wait(&|_| true).is_none(),
             "no skeleton to shine over once ssh -G told it"
@@ -2278,8 +2272,7 @@ mod tests {
         press(&mut menu, Action::Down);
         let [_, reach, _] = card(&mut menu, &idle);
         let skeleton = "from the start, before ssh -G runs: no text in between";
-        assert!(reach.starts_with("║ ○ db     "), "{skeleton}: {reach}");
-        assert!(reach.ends_with("------ ║"), "{skeleton}: {reach}");
+        assert!(reach.starts_with("║ ○ ------"), "{skeleton}: {reach}");
         assert!(menu.address_wait(&|_| false).is_some());
         let failed = |_: &str| HostState {
             unresolved: true,
@@ -2287,7 +2280,7 @@ mod tests {
         };
         let [_, reach, _] = card(&mut menu, &failed);
         assert!(
-            reach.ends_with(" ssh -G failed ║"),
+            reach.starts_with("║ ○ ssh -G failed "),
             "why is in the log: {reach}"
         );
     }
@@ -2389,7 +2382,7 @@ mod tests {
         assert!(menu.wait().is_some());
         let text = draw(&mut menu, 16);
         assert!(text.contains("═ … Location ═"), "{text}");
-        assert!(text.contains("Prod"), "the rows stay: {text}");
+        assert!(text.contains("● web"), "the rows stay: {text}");
 
         menu.listed(1, Ok(places()));
         assert!(menu.wait().is_some(), "an older listing changes nothing");
@@ -2402,7 +2395,7 @@ mod tests {
         assert!(menu.wait().is_none());
         let text = draw(&mut menu, 16);
         assert!(text.contains("Not listed again: no"), "{text}");
-        assert!(text.contains("Prod"), "the rows stay: {text}");
+        assert!(text.contains("● web"), "the rows stay: {text}");
 
         menu.reload(4);
         assert!(!draw(&mut menu, 16).contains("Not listed again"));

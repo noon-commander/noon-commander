@@ -161,8 +161,9 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   (`Done::VolumeAnswered`) replace their volumes in both; a newer listing stops waiting for those
   of the one before it, and waits for the answers still to come itself
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
-- Hosts come in config order, named by their `label` from `hosts.toml` if set; their address
-  comes from this run's `ssh -G` alone. `[discovery] hide` leaves out hosts by pattern.
+- Hosts come in config order, named by their alias, as everywhere
+  ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)); their address comes from this run's
+  `ssh -G` alone. `[discovery] hide` leaves out hosts by pattern.
 - Opening a host connects in the background and opens, shown as an absolute path, the last
   directory shown on it in this session if `remember_dir` is set and the directory is still
   there, else the configured `start_dir`, else the remote home directory. If the host has an
@@ -209,10 +210,10 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   parents that are not there either; Go to opens Go to directory with the path; Cancel stays. The
   default is Up where the panel has nothing to show, its directory gone or never shown, and Retry
   otherwise. A panel has one such dialog at a time, the last failure's.
-- F4 in the location menu edits the settings of a host in a dialog (label, remote directory,
-  other panel directory, remember the last directory); Use Current fills in the directory a
-  panel shows on the host. They are saved to `hosts.toml` in the background, and the menu reads
-  the hosts again.
+- F4 in the location menu edits the settings of a host in a dialog (remote directory, other
+  panel directory, the words that run commands, remember the last directory); Use Current fills
+  in the directory a panel shows on the host. They are saved to `hosts.toml` in the background,
+  and the menu reads the hosts again.
 - In the location menu, the icon in front of each host shows its state, in a color of its own:
   a server, gray when not connected and green when connected; a spinner while connecting; a
   server with a cross, red, when the last attempt failed, the connection was lost, or a dialog
@@ -281,27 +282,30 @@ choose a volume or a host, grouped under headings:
   responding (`LateAnswer::Failed`, `Places::failed`)
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
 - Under the rows, a card of the place under the cursor, two lines under a line that names, at its
-  right end in the color of the title, its kind or where it is defined
+  right end in the color of the title, its kind
   ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)):
 
   ```text
-  ╟───────────────── apfs · local ─╢   ╟──────────────────── ~/.ssh/config:12 ─╢
-  ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ○ web      deploy@10.0.0.5 via bastion ║
-  ║   12.0G free of 64.0G (18%)    ║   ║ › /srv/app                    › ~/logs ║
+  ╟───────────────── apfs · local ─╢   ╟────────────────────────────────────────── sftp ─╢
+  ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ○ deploy@10.0.0.5 via bastion  ~/.ssh/config:12 ║
+  ║   12.0G free of 64.0G (18%)    ║   ║ › /srv/app                             › ~/logs ║
   ```
 
   The first line starts with the icon of the row, a host's in the color of its status; the second
   stands under its text, or starts with a folder (`glyphs.ran.dir`, as in the history) where it
   says where opening a host goes. The home directory shows its path and the space of its volume,
-  with the volume and the type of its file system over them; a volume what it mounts and where
+  with the type of the file system of the volume and its kind over them, as the card of the
+  volume; a volume what it mounts and where
   (`Volume::source`, without the password of a URL), then its free space, its size, and the share
   free, a skeleton while they are to come, `Not responding` in the colors of warnings, or
-  `Size unknown`, faint. A host shows the file and line of its `Host` line over the card; its
-  alias, and at the right end its address and `ProxyJump`, from this run's `ssh -G`, which runs
-  once the cursor rests on the host, else a skeleton until `ssh -G` tells them, or
-  `ssh -G failed` in the colors of errors (`theme.dialog_error_text`, not crossed out), why going
-  to the log ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md));
-  the end takes what the alias leaves, but at least half the line (`menu::ends`). Then
+  `Size unknown`, faint. A host shows `sftp` over the card; then not its alias, which the row
+  shows, but its address and `ProxyJump`, from this run's `ssh -G`, which runs once the cursor
+  rests on the host, else a skeleton until `ssh -G` tells them, or `ssh -G failed` in the colors
+  of errors (`theme.dialog_error_text`, not crossed out), why going to the log
+  ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); against the
+  right end the file and line of its `Host` line, which takes what the address leaves, but at
+  least half the line (`menu::ends`), and loses its start where it is too long
+  ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). Then
   `Connected`, `Connecting…`, why its last attempt failed in the colors of errors (`App::failed`
   keeps it until a new attempt), or, not connected, where opening it goes, after folders: the
   remote directory, `~` for its home, on the side of the panel of the menu, and the local
@@ -322,7 +326,7 @@ choose a volume or a host, grouped under headings:
   with the active panel, as after Ctrl+w f and Ctrl+w v. After Esc, `j` and `k` move too, and
   `g g` and `G` go to the first and the last row.
 - The filter, which `/` types in again, finds the places by name, path or mount point,
-  alias, label, and the address `ssh -G` told in this run (`LocationMenu::set_addresses`), and
+  alias, and the address `ssh -G` told in this run (`LocationMenu::set_addresses`), and
   finds every one, hidden ones too; the rows of more go away while
   the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
   default, best first, without the headings of the groups; or a row's text must hold the filter,
@@ -1361,6 +1365,8 @@ Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 
 Host settings live in `hosts.toml` next to `config.toml`, one table per host with a required
 `type` that decides its other keys ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)).
+A host has no other name than its alias: `label` is an error, as every key the schema does not
+know ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)).
 F4 on a host in the location menu rewrites only its table through `toml_edit`, keeping comments
 and the other tables, and replaces the file atomically. Its field of `run` shows `shell.run`,
 faint, while it is empty (`Dialog::with_placeholder`), since that is what counts then; a
@@ -1370,7 +1376,6 @@ shared `Context`, so the TUI and the host tasks see a change at once.
 ```toml
 ["prod-web"]                     # an ssh_config alias; decorates it, never duplicates it
 type = "sftp"
-label = "Prod"
 start_dir = "/var/www"           # opened on connect instead of the remote home
 other_dir = "~/projects/site"    # the other panel opens it with the host; / or ~/ for now
 remember_dir = true              # reopen the last directory of this session
@@ -1802,7 +1807,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
 - **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the
   terminal's window or tab with OSC 0 between frames: the active panel's directory
-  (`~/src — noc`, `host:path` with the host's label), after `[root]` while Noon Commander runs as
+  (`~/src — noc`, `host:path` with the host's alias), after `[root]` while Noon Commander runs as
   root or the active panel is on a host as root, sanitized like every name. Before the first
   title it saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from
   there (`CSI 23 t`) on quitting and before handing the terminal to another program, which gets the
@@ -1886,7 +1891,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `#` where the user is root. It takes a third of the width at most: the middle of the directory goes
   first, then the user, then the directory. `:` opens it for commands of Noon Commander, of which
   `!command` is the only one so far. In a panel on a connected host the prompt has the user that
-  `ssh -G` gave and the host's label or alias, `deploy@web:/var/www $`. The
+  `ssh -G` gave and the host's alias, `deploy@web:/var/www $`. The
   line opens in Insert mode, as vim's command line, where every character is text. Ctrl+j, or Enter
   after an odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap,
   and the line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and
@@ -1956,7 +1961,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists): the
   commands of the panel's host, or of all of them after Tab, newest first, filtered as quick search
   matches, each by its first line, and below them where the command under the cursor ran: its
-  host's label or alias, or `local`, then its directory, each line after its icon (`Glyphs.ran`),
+  host's alias, or `local`, then its directory, each line after its icon (`Glyphs.ran`),
   and when it ran on the line over them, in the color of the title (`Body.footer_label`;
   [ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)); Enter puts it on the
   line, with the prompt reversed until the next key if it ran on another host, and F8, or `d d` on

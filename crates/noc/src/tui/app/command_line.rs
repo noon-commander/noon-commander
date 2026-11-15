@@ -164,20 +164,10 @@ impl App {
             Location::Remote { host, .. } => Some(host.clone()),
             Location::Local(_) => None,
         };
-        let labels = self
-            .history
-            .iter()
-            .filter_map(|entry| entry.host.as_deref())
-            .filter_map(|host| {
-                let label = self.host_settings.get(host).and_then(HostConfig::label)?;
-                Some((host.to_owned(), label.to_owned()))
-            })
-            .collect();
         let input = self.search_opens(Slot::CommandHistory);
         self.history_window = Some(HistoryWindow::new(
             &self.history,
             here,
-            labels,
             self.home.clone(),
             input,
         ));
@@ -325,9 +315,9 @@ impl App {
     }
 
     /// The prompt of a shell command in the active panel, as a shell's: `user@host:dir`, with
-    /// `~` for the home directory and the host's label if it has one, and `$`, or `#` where the
-    /// user is root. In a third of `width` at most: the middle of the directory cut first, then
-    /// the user left out, then the directory.
+    /// `~` for the home directory and the host's alias, and `$`, or `#` where the user is root.
+    /// In a third of `width` at most: the middle of the directory cut first, then the user left
+    /// out, then the directory.
     pub(super) fn shell_prompt(&self, width: u16) -> Vec<Span<'static>> {
         let room = usize::from(width / 3).max(1);
         let dir = match self.panel(self.active).location() {
@@ -386,8 +376,7 @@ impl App {
     }
 
     /// Who is where in the active panel: the user, if known, and the machine's name or the
-    /// host's label or alias, terminal-safe; `None` in a local panel while the machine has no
-    /// name.
+    /// host's alias, terminal-safe; `None` in a local panel while the machine has no name.
     fn active_who(&self) -> Option<(Option<String>, String)> {
         match self.panel(self.active).location() {
             Location::Local(_) => {
@@ -396,7 +385,7 @@ impl App {
             }
             Location::Remote { host, .. } => Some((
                 self.ssh_g.users.get(host).cloned(),
-                cells::sanitize(self.host_label(host).as_bytes()),
+                cells::sanitize(host.as_bytes()),
             )),
         }
     }
@@ -461,23 +450,11 @@ impl App {
         })
     }
 
-    /// The directory of the active panel, with `~` for the home directory, or `host:path` with
-    /// the host's label if it has one.
+    /// The directory of the active panel, with `~` for the home directory, or `host:path`.
     fn active_place(&self) -> String {
         match self.panel(self.active).location() {
             Location::Local(path) => home_text(path, &self.home),
-            Location::Remote { host, path } => location_text(&Location::Remote {
-                host: self.host_label(host).to_owned(),
-                path: path.clone(),
-            }),
+            location @ Location::Remote { .. } => location_text(location),
         }
-    }
-
-    /// The label of `host` from `hosts.toml`, or else its alias.
-    fn host_label<'a>(&'a self, host: &'a str) -> &'a str {
-        self.host_settings
-            .get(host)
-            .and_then(HostConfig::label)
-            .unwrap_or(host)
     }
 }

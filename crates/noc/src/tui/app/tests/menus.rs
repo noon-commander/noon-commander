@@ -583,11 +583,7 @@ fn the_menu_shows_failures_and_fresh_addresses() {
         Some("web")
     );
     let text = screen_of(&mut app, 16);
-    // The card's, under the row's.
-    let card = (text.lines())
-        .rfind(|line| line.contains("✗ web "))
-        .unwrap_or_default();
-    assert!(card.contains(" deploy@10.0.0.9 ║"), "in its card: {text}");
+    assert!(text.contains("✗ deploy@10.0.0.9 "), "in its card: {text}");
     assert!(text.contains("Connection refused"), "{text}");
 
     // A new attempt clears the failure.

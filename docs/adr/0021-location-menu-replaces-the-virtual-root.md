@@ -4,7 +4,8 @@
   [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md),
   [ADR 0051](0051-ctrl-x-sends-a-command-to-the-other-panel.md),
   [ADR 0074](0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md),
-  [ADR 0075](0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)
+  [ADR 0075](0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),
+  [ADR 0082](0082-hosts-are-named-by-their-alias.md)
 - Date: 2026-10-12
 
 ## Context

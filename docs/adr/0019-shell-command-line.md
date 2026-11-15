@@ -1,8 +1,9 @@
 # 0019. Shell command line
 
 - Status: Superseded in part by [ADR 0022](0022-vim-modes.md); amended by
-  [ADR 0054](0054-shell-run.md) and
-  [ADR 0072](0072-the-command-history-shows-where-a-command-ran.md)
+  [ADR 0054](0054-shell-run.md),
+  [ADR 0072](0072-the-command-history-shows-where-a-command-ran.md), and
+  [ADR 0082](0082-hosts-are-named-by-their-alias.md)
 - Date: 2026-10-05
 
 The command line, how commands run, and the history still hold. Its keys are vim's now: Esc

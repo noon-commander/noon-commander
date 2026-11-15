@@ -1,6 +1,6 @@
 # 0081. Words for sizes not known, and cards with two ends
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0082](0082-hosts-are-named-by-their-alias.md)
 - Date: 2026-11-15
 - Amends: [ADR 0074](0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md),
   [ADR 0075](0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),

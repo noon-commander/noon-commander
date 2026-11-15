@@ -39,9 +39,6 @@ pub(super) async fn run(context: &Context) -> Result<ExitCode> {
     for (host, address) in hosts.iter().zip(&addresses) {
         let mut line = format!("{:<alias_width$}", host.alias);
         let _ = write!(line, "  {address:<address_width$}");
-        if let Some(label) = context.label(&host.alias) {
-            let _ = write!(line, "  {label}");
-        }
         if !host.other_names.is_empty() {
             let _ = write!(line, "  (also {})", host.other_names.join(", "));
         }

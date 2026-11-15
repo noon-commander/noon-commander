@@ -47,7 +47,6 @@ impl App {
             });
         let text = |value: &Option<String>| value.clone().unwrap_or_default();
         let fields = [
-            (fl!("host-label"), text(&sftp.label)),
             (fl!("host-start-dir"), text(&sftp.start_dir)),
             (fl!("host-other-dir"), text(&sftp.other_dir)),
             (

@@ -436,7 +436,7 @@ fn debug_hosts_lists_ssh_config_hosts() {
     std::fs::write(sandbox.path("conf.d/work"), "Host nas\n").unwrap();
     std::fs::write(
         sandbox.path("config/noc/hosts.toml"),
-        "[nas]\ntype = \"sftp\"\nlabel = \"Storage\"\n",
+        "[nas]\ntype = \"sftp\"\nstart_dir = \"/volume1\"\n",
     )
     .unwrap();
 
@@ -450,9 +450,19 @@ fn debug_hosts_lists_ssh_config_hosts() {
         lines,
         [
             "prod-web tester@prod-web.example:2222 (also prod-web.example.com)",
-            "nas tester@nas.example:2222 Storage"
+            "nas tester@nas.example:2222"
         ]
     );
+
+    // Hosts are named by their alias alone.
+    std::fs::write(
+        sandbox.path("config/noc/hosts.toml"),
+        "[nas]\ntype = \"sftp\"\nlabel = \"Storage\"\n",
+    )
+    .unwrap();
+    let output = sandbox.run(&["debug", "hosts"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stderr(&output).contains("label"), "{}", stderr(&output));
 }
 
 #[test]

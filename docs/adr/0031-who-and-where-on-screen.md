@@ -1,6 +1,6 @@
 # 0031. Who and where on screen
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0082](0082-hosts-are-named-by-their-alias.md)
 - Date: 2026-10-16
 - Amends: [ADR 0021](0021-location-menu-replaces-the-virtual-root.md)
 

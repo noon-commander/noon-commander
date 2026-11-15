@@ -210,14 +210,16 @@ menu-space-unknown = size unknown
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }
 # The card of the place under the cursor, under the rows: on the line over it, at its right end,
-# what kind it is or where it is defined; then two lines, what it is and how it is.
-# Two parts of the line over the card: the volume and the type of its file system, or the type
-# and the kind of a volume.
+# what kind of place it is, or of volume the home directory is on; then two lines, what it is and
+# how it is.
+# Two parts of the line over the card: the type of the file system of a volume, and its kind.
 menu-card-both = { $first } · { $second }
 # The kinds of volumes, after the type of the file system on the line over the card.
 menu-card-system = system
 menu-card-local = local
 menu-card-network = network
+# The kind of a host, on the line over its card.
+menu-card-sftp = sftp
 # What a volume mounts and where, as the mount command says it: /dev/disk4s1 on /Volumes/USB.
 menu-card-mounted = { $source } on { $mount_point }
 # The free space and the size of a volume, and the share free.
@@ -227,19 +229,20 @@ menu-card-space = { $free } free of { $total } ({ $percent }%)
 menu-card-not-responding = Not responding
 # In place of the space of a volume that tells none, faint.
 menu-card-size-unknown = Size unknown
-# On the line over the card of a host: the file of its Host line in the ssh config, and the line.
+# At the right end of the first line of the card of a host: the file of its Host line in the ssh
+# config, and the line.
 menu-card-defined = { $file }:{ $line }
-# At the right end of the line of a host, after its alias: its address, and the host ssh jumps
+# At the start of the first line of the card of a host: its address, and the host ssh jumps
 # through to reach it.
 menu-card-via = { $address } via { $jump }
 # In place of the address of a host, in the colors of errors, when ssh -G failed for it; why goes
 # to the log.
 menu-card-not-resolved = ssh -G failed
-# How a host is, under its alias: connected, or connecting. One that is not connected shows where
-# opening it goes instead, as directories.
+# How a host is, under its address: connected, or connecting. One that is not connected shows
+# where opening it goes instead, as directories.
 menu-card-connected = Connected
 menu-card-connecting = Connecting…
-# Under the alias of a host whose last attempt failed, where ssh told no reason.
+# Under the address of a host whose last attempt failed, where ssh told no reason.
 menu-card-failed = Could not connect
 # Between the names of the places a row of the rest stands for, over two lines.
 menu-card-separator = {", "}
@@ -1044,7 +1047,6 @@ which-key-close = Ctrl+k lists, Esc closes, Backspace goes back
 # Title: the host alias.
 host-edit-title = Host { $host }
 # Field labels.
-host-label = &Label (shown instead of the alias):
 host-start-dir = &Remote directory (opened on connect; empty: home):
 host-other-dir = Other panel &directory (local, / or ~/…; empty: unchanged):
 host-remember-dir = Re&member the last directory in this session

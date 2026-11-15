@@ -136,7 +136,6 @@ fn bang_runs_a_command_on_the_host_of_the_panel() {
         .unwrap()
     };
     let site = SftpHost {
-        label: Some("Site".to_owned()),
         run: Some(words(&["$SHELL", "-c"])),
         ..SftpHost::default()
     };
@@ -149,7 +148,7 @@ fn bang_runs_a_command_on_the_host_of_the_panel() {
     app.handle(action(Action::Shell));
     type_text(&mut app, "ls");
     let text = screen_of(&mut app, 10);
-    assert!(text.contains("Site:/var/www $ ls"), "{text}");
+    assert!(text.contains("web:/var/www $ ls"), "{text}");
     app.handle(action(Action::Confirm));
     let Some(Run {
         place: Place::Remote { dir, .. },
@@ -394,12 +393,12 @@ fn f4_on_a_host_saves_its_settings() {
     assert!(screen_of(&mut app, 14).contains("4Edit"));
     edit_web(&mut app);
     assert!(screen_of(&mut app, 20).contains("Host web"));
-    typed(&mut app, "Prod");
+    typed(&mut app, "/srv");
     let Effect::SaveHost { name, host } = one(app.handle(action(Action::Confirm))) else {
         panic!("expected the settings to be saved");
     };
     let prod = HostConfig::Sftp(SftpHost {
-        label: Some("Prod".to_owned()),
+        start_dir: Some("/srv".to_owned()),
         ..SftpHost::default()
     });
     assert_eq!((name.as_str(), host.as_ref()), ("web", Some(&prod)));
@@ -438,7 +437,6 @@ fn f4_on_a_host_rejects_another_kind_of_other_dir() {
     let mut app = at_slash();
     edit_web(&mut app);
     app.handle(action(Action::Down));
-    app.handle(action(Action::Down));
     typed(&mut app, "web:/srv");
     assert!(app.handle(action(Action::Confirm)).is_empty());
     assert_eq!(app.dialogs.len(), 2, "the reason shows over the dialog");
@@ -460,7 +458,7 @@ fn f4_on_a_host_shows_shell_run_until_it_gets_a_run_of_its_own() {
     edit_web(&mut app);
     let text = screen_of(&mut app, 24);
     assert!(text.contains("$SHELL -i -c"), "the placeholder: {text}");
-    for _ in 0..3 {
+    for _ in 0..2 {
         app.handle(action(Action::Down));
     }
     typed(&mut app, "${SHELL -c");
@@ -486,8 +484,8 @@ fn use_current_fills_in_the_directory_open_on_the_host() {
     };
     connect_web(&mut app, Side::Right, connection, "/var/www");
     edit_web(&mut app);
-    // Past the four fields and the check box, then OK, to Use Current.
-    for _ in 0..6 {
+    // Past the three fields and the check box, then OK, to Use Current.
+    for _ in 0..5 {
         app.handle(action(Action::NextField));
     }
     assert!(app.handle(action(Action::Confirm)).is_empty());

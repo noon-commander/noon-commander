@@ -196,7 +196,6 @@ fn every_element_of_the_apps_dialogs_has_a_letter_of_its_own() {
     }
     let select = [(fl!("pattern-files-only"), false)];
     let host_fields = [
-        (fl!("host-label"), String::new()),
         (fl!("host-start-dir"), String::new()),
         (fl!("host-other-dir"), String::new()),
     ];

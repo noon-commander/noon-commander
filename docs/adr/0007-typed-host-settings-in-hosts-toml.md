@@ -1,6 +1,7 @@
 # 0007. Typed host settings in hosts.toml, written by the TUI
 
-- Status: Accepted; amended by [ADR 0079](0079-ssh-g-results-are-not-cached.md)
+- Status: Accepted; amended by [ADR 0079](0079-ssh-g-results-are-not-cached.md),
+  [ADR 0082](0082-hosts-are-named-by-their-alias.md)
 - Date: 2026-10-02
 
 ## Context

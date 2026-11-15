@@ -434,10 +434,9 @@ const SHOWCMD_WIDTH: usize = 10;
 /// then the directory.
 const PROMPT_DIR_WIDTH: usize = 8;
 /// The fields of the dialog of F4 on a host.
-const HOST_LABEL: usize = 0;
-const HOST_START_DIR: usize = 1;
-const HOST_OTHER_DIR: usize = 2;
-const HOST_RUN: usize = 3;
+const HOST_START_DIR: usize = 0;
+const HOST_OTHER_DIR: usize = 1;
+const HOST_RUN: usize = 2;
 
 /// A dialog on screen or waiting for its turn, and what it is for.
 #[derive(Debug)]

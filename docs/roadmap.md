@@ -293,6 +293,9 @@
       in the log, one word for how a host is, the directories it opens after folders on the sides
       of their panels; errors no longer crossed out; the row of the rest named over two lines
       ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md))
+- [x] Hosts are named by their alias alone: no `label` in `hosts.toml`; the card of a host shows
+      `sftp` over its address and where it is defined, the home directory's the kind of its
+      volume ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

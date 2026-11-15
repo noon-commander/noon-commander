@@ -3,7 +3,6 @@
 //! where the command under the cursor ran: its host and when, then its directory. `/` types in
 //! its filter; Enter puts the command on the command line, without running it.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -53,8 +52,6 @@ pub(crate) struct HistoryWindow {
     entries: Vec<HistoryEntry>,
     /// The host of the active panel; none for a local one.
     here: Option<String>,
-    /// The labels of hosts that have one, by alias.
-    labels: HashMap<String, String>,
     /// The home directory, which local directories show as `~`.
     home: PathBuf,
     /// Shows the commands of every host, not only those of `here`.
@@ -65,19 +62,16 @@ pub(crate) struct HistoryWindow {
 
 impl HistoryWindow {
     /// A window on `history`, oldest first as `history.toml` keeps it, for a panel on `here`;
-    /// `labels` name hosts, `home` is the home directory, and the filter matches as `input`
-    /// says, as it was last.
+    /// `home` is the home directory, and the filter matches as `input` says, as it was last.
     pub(crate) fn new(
         history: &[HistoryEntry],
         here: Option<String>,
-        labels: HashMap<String, String>,
         home: PathBuf,
         input: Input,
     ) -> Self {
         let mut window = Self {
             entries: history.iter().rev().cloned().collect(),
             here,
-            labels,
             home,
             all: false,
             picker: Picker::new(input),
@@ -184,17 +178,9 @@ impl HistoryWindow {
         self.picker.pointer(pointer)
     }
 
-    /// The name of `host` in the window: its label, else its alias; `local` for this machine.
-    fn host_name(&self, host: Option<&str>) -> String {
-        host.map_or_else(
-            || fl!("history-local"),
-            |host| {
-                self.labels
-                    .get(host)
-                    .map_or(host, String::as_str)
-                    .to_owned()
-            },
-        )
+    /// The name of `host` in the window: its alias; `local` for this machine.
+    fn host_name(host: Option<&str>) -> String {
+        host.map_or_else(|| fl!("history-local"), str::to_owned)
     }
 
     /// The lines under the rows for `entry`, in `width` cells: the host it ran on, then its
@@ -207,7 +193,7 @@ impl HistoryWindow {
             Some(_) if entry.dir.is_empty() => (ran.host, "~".to_owned()),
             Some(_) => (ran.host, cells::sanitize(entry.dir.as_bytes())),
         };
-        let name = cells::sanitize(self.host_name(entry.host.as_deref()).as_bytes());
+        let name = cells::sanitize(Self::host_name(entry.host.as_deref()).as_bytes());
         let styles = (theme.dialog, theme.truncated_dialog);
         let marks = theme.glyphs.marks;
         let line = |icon: char, text: &str, cut: Cut| {
@@ -257,7 +243,7 @@ impl HistoryWindow {
         } else {
             fl!(
                 "history-this-host",
-                host = self.host_name(self.here.as_deref())
+                host = Self::host_name(self.here.as_deref())
             )
         };
         let message = if self.entries.is_empty() {
@@ -398,11 +384,9 @@ mod tests {
     }
 
     fn window(here: Option<&str>) -> HistoryWindow {
-        let labels = HashMap::from([("web".to_owned(), "Site".to_owned())]);
         HistoryWindow::new(
             &history(),
             here.map(str::to_owned),
-            labels,
             PathBuf::from("/home/me"),
             Input::new(Kind::FILTER, SearchMode::Fzf),
         )
@@ -575,7 +559,6 @@ mod tests {
         let mut window = HistoryWindow::new(
             &[entry("ls", None, "/tmp", 0)],
             None,
-            HashMap::new(),
             PathBuf::from("/home/me"),
             Input::new(Kind::FILTER, SearchMode::Fzf),
         );

@@ -100,14 +100,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Under its rows the location menu shows a card of the place under the cursor in place of the
   whole row. For a volume: the type of its file system and its kind, what it mounts and where, as
   `/dev/disk4s1 on /Volumes/USB`, and its free space, size, and the share free; for the home
-  directory its path and the space of its volume; for a host: the file and line of its `Host` line,
-  its alias, and at the right end its address and `ProxyJump`; then how it is, `Connected` or
-  `Connecting…`, why its last attempt failed, in the colors of errors, or, not connected, the
-  directories opening it goes to, after folders, each on the side of its panel; for the row of
-  the rest, the names it stands for, over two lines. Its first line starts with the icon of the
-  row, a host's in the color of its status. The menu keeps its height
+  directory the same of its volume, its path, and the space of its volume; for a host: `sftp`, its
+  address and `ProxyJump`, and at the right end the file and line of its `Host` line; then how it
+  is, `Connected` or `Connecting…`, why its last attempt failed, in the colors of errors, or, not
+  connected, the directories opening it goes to, after folders, each on the side of its panel; for
+  the row of the rest, the names it stands for, over two lines. Its first line starts with the
+  icon of the row, a host's in the color of its status. The menu keeps its height
   ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),
-  [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
+  [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md),
+  [ADR 0082](docs/adr/0082-hosts-are-named-by-their-alias.md)).
 - Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
   run, and its card shows the address and the `ProxyJump` it gives, a faint bar with a shine
   until then, or `ssh -G failed`, in the colors of errors, why going to the log. R in the menu
@@ -192,6 +193,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- The labels of hosts: `label` in `hosts.toml` and its field in the dialog of F4. A host is named
+  by its alias everywhere: in the location menu, the prompt of the command line, the title of the
+  terminal, the command history, and `noc debug hosts`. A `label` left in `hosts.toml` is an
+  error; delete the line ([ADR 0082](docs/adr/0082-hosts-are-named-by-their-alias.md)).
 - The cache of `ssh -G` results, `~/.cache/noc/resolve.json`, which nothing reads any more and
   which may be deleted: an address shows as `ssh -G` says it in this run. The rows of hosts in the
   location menu no longer show addresses, which their cards do, and the filter finds a host by its

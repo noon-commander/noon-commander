@@ -136,11 +136,6 @@ impl Context {
         Ok(())
     }
 
-    /// The label of a host from `hosts.toml`.
-    pub(crate) fn label(&self, alias: &str) -> Option<String> {
-        self.hosts().get(alias)?.label().map(str::to_owned)
-    }
-
     pub(crate) fn discovery_options(&self) -> DiscoveryOptions {
         DiscoveryOptions::new(
             self.paths.home.clone(),

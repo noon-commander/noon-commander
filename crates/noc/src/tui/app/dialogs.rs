@@ -18,8 +18,8 @@ use crate::tui::panel::{self, location_text};
 use crate::tui::transfer::{self};
 
 use super::{
-    Again, App, Change, Completes, Effect, HOST_LABEL, HOST_OTHER_DIR, HOST_RUN, HOST_START_DIR,
-    Handover, Host, Open, Purpose, Way, choices_for,
+    Again, App, Change, Completes, Effect, HOST_OTHER_DIR, HOST_RUN, HOST_START_DIR, Handover,
+    Host, Open, Purpose, Way, choices_for,
 };
 
 impl App {
@@ -526,7 +526,6 @@ fn save_host(name: String, old: Option<&HostConfig>, dialog: &Dialog) -> Vec<Eff
         (!text.is_empty()).then(|| text.to_owned())
     };
     let host = HostConfig::Sftp(SftpHost {
-        label: text(HOST_LABEL),
         start_dir: text(HOST_START_DIR),
         other_dir: text(HOST_OTHER_DIR),
         remember_dir: dialog.checked(0),

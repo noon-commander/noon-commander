@@ -302,7 +302,6 @@ fn places() -> Places {
         hosts: ["web", "db"]
             .map(|alias| KnownHost {
                 alias: alias.to_owned(),
-                label: None,
                 file: PathBuf::from("/home/me/.ssh/config"),
                 line: 1,
             })

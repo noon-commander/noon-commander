@@ -35,9 +35,6 @@ pub enum HostConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SftpHost {
-    /// Name shown for the host instead of its alias.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
     /// Remote directory opened on connect, instead of the remote home directory.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub start_dir: Option<String>,
@@ -58,12 +55,6 @@ impl HostConfig {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Sftp(_) => "sftp",
-        }
-    }
-
-    pub fn label(&self) -> Option<&str> {
-        match self {
-            Self::Sftp(host) => host.label.as_deref(),
         }
     }
 
@@ -190,7 +181,6 @@ fn fill(table: &mut dyn TableLike, host: &HostConfig) {
     match host {
         HostConfig::Sftp(sftp) => {
             let text = |value: &Option<String>| value.as_deref().map(Value::from);
-            set(table, "label", text(&sftp.label));
             set(table, "start_dir", text(&sftp.start_dir));
             set(table, "other_dir", text(&sftp.other_dir));
             set(
@@ -287,14 +277,13 @@ mod tests {
     #[test]
     fn parses_typed_tables() {
         let hosts = parse(
-            "[\"prod-web\"]\ntype = \"sftp\"\nlabel = \"Prod\"\nstart_dir = \"/var/www\"\n\
+            "[\"prod-web\"]\ntype = \"sftp\"\nstart_dir = \"/var/www\"\n\
              other_dir = \"~/site\"\nremember_dir = true\nrun = [\"$SHELL\", \"-c\"]\n\n\
              [\"web.example.com\"]\ntype = \"sftp\"\n",
         );
         assert_eq!(
             hosts.get("prod-web"),
             Some(&sftp(SftpHost {
-                label: Some("Prod".to_owned()),
                 start_dir: Some("/var/www".to_owned()),
                 other_dir: Some("~/site".to_owned()),
                 remember_dir: true,
@@ -318,7 +307,7 @@ mod tests {
             .collect();
         let hosts = parse(&uncommented.join("\n"));
         let host = hosts.get("prod-web").unwrap();
-        assert_eq!(host.label(), Some("Prod"));
+        assert_eq!(host.start_dir(), Some("/var/www"));
         assert_eq!(host.other_dir(), Some("~/projects/site"));
         assert!(host.remember_dir());
         assert_eq!(host.run(), Some(&run(&["$SHELL", "-c"])));
@@ -330,6 +319,8 @@ mod tests {
             "[web]\nlabel = \"Web\"",
             "[web]\ntype = \"ftp\"",
             "[web]\ntype = \"sftp\"\nlable = \"Web\"",
+            // Hosts are named by their alias alone.
+            "[web]\ntype = \"sftp\"\nlabel = \"Web\"",
             "[web]\ntype = \"sftp\"\nargs = [\"-v\"]",
             "[web]\ntype = \"sftp\"\nremember_dir = \"yes\"",
             "[web]\ntype = \"sftp\"\nrun = []",
@@ -380,11 +371,10 @@ mod tests {
     #[test]
     fn saving_keeps_comments_and_other_tables() {
         let text = "# My hosts\n\n\
-                    [db]\ntype = \"sftp\" # the database\nlabel = \"DB\"\n\n\
+                    [db]\ntype = \"sftp\" # the database\nstart_dir = \"/var/db\"\n\n\
                     # The web server.\n\
-                    [\"web.example.com\"]\ntype = \"sftp\"\nlabel = \"Web\" # shown\nstart_dir = '/srv'\n";
+                    [\"web.example.com\"]\ntype = \"sftp\"\nother_dir = \"~/web\" # here\nstart_dir = '/srv'\n";
         let host = sftp(SftpHost {
-            label: Some("Site".to_owned()),
             start_dir: Some("/srv".to_owned()),
             other_dir: Some("~/site".to_owned()),
             remember_dir: true,
@@ -393,10 +383,10 @@ mod tests {
         assert_eq!(
             saved(text, "web.example.com", Some(&host)),
             "# My hosts\n\n\
-             [db]\ntype = \"sftp\" # the database\nlabel = \"DB\"\n\n\
+             [db]\ntype = \"sftp\" # the database\nstart_dir = \"/var/db\"\n\n\
              # The web server.\n\
-             [\"web.example.com\"]\ntype = \"sftp\"\nlabel = \"Site\" # shown\nstart_dir = '/srv'\n\
-             other_dir = \"~/site\"\nremember_dir = true\n"
+             [\"web.example.com\"]\ntype = \"sftp\"\nother_dir = \"~/site\" # here\nstart_dir = '/srv'\n\
+             remember_dir = true\n"
         );
     }
 
@@ -424,33 +414,33 @@ mod tests {
     #[test]
     fn saving_adds_a_quoted_table_and_reads_back() {
         let host = sftp(SftpHost {
-            label: Some("Web".to_owned()),
+            start_dir: Some("/srv".to_owned()),
             ..SftpHost::default()
         });
         let text = saved("# Hosts\n", "10.0.0.5", Some(&host));
         assert_eq!(
             text,
-            "# Hosts\n\n[\"10.0.0.5\"]\ntype = \"sftp\"\nlabel = \"Web\"\n"
+            "# Hosts\n\n[\"10.0.0.5\"]\ntype = \"sftp\"\nstart_dir = \"/srv\"\n"
         );
         assert_eq!(parse(&text).get("10.0.0.5"), Some(&host));
     }
 
     #[test]
     fn defaults_leave_the_file() {
-        let text = "[db]\ntype = \"sftp\"\n\n[web]\ntype = \"sftp\"\nlabel = \"Web\"\nremember_dir = true\n";
+        let text = "[db]\ntype = \"sftp\"\n\n[web]\ntype = \"sftp\"\nstart_dir = \"/srv\"\nremember_dir = true\n";
         let default = sftp(SftpHost::default());
         assert_eq!(
             saved(text, "web", Some(&default)),
             "[db]\ntype = \"sftp\"\n"
         );
         assert_eq!(saved(text, "web", None), "[db]\ntype = \"sftp\"\n");
-        let label_only = sftp(SftpHost {
-            label: Some("Web".to_owned()),
+        let start_only = sftp(SftpHost {
+            start_dir: Some("/srv".to_owned()),
             ..SftpHost::default()
         });
         assert_eq!(
-            saved(text, "web", Some(&label_only)),
-            "[db]\ntype = \"sftp\"\n\n[web]\ntype = \"sftp\"\nlabel = \"Web\"\n"
+            saved(text, "web", Some(&start_only)),
+            "[db]\ntype = \"sftp\"\n\n[web]\ntype = \"sftp\"\nstart_dir = \"/srv\"\n"
         );
     }
 
@@ -489,7 +479,7 @@ mod tests {
         let link = tmp.path().join("hosts.toml");
         std::os::unix::fs::symlink(&real, &link).unwrap();
         let host = sftp(SftpHost {
-            label: Some("Web".to_owned()),
+            start_dir: Some("/srv".to_owned()),
             ..SftpHost::default()
         });
         save_host(&link, "web", Some(&host)).unwrap();

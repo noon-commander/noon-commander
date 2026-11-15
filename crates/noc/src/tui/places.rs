@@ -41,8 +41,6 @@ pub(crate) struct Places {
 pub(crate) struct KnownHost {
     /// The alias from `ssh_config`.
     pub(crate) alias: String,
-    /// The host's label from `hosts.toml`.
-    pub(crate) label: Option<String>,
     /// The file of its `Host` line, and the line, from 1.
     pub(crate) file: PathBuf,
     pub(crate) line: usize,
@@ -61,7 +59,6 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<KnownHost> {
         .visible(&context.config().discovery.hide)
         .map(|host| KnownHost {
             alias: host.alias.clone(),
-            label: context.label(&host.alias),
             file: host.file.clone(),
             line: host.line,
         })
@@ -138,12 +135,12 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use noc_config::{Config, HostConfig, Hosts, Paths, SftpHost};
+    use noc_config::{Config, Hosts, Paths};
 
     use super::*;
 
     #[test]
-    fn reads_visible_hosts_with_labels() {
+    fn reads_visible_hosts_where_they_are_defined() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let ssh_dir = dir.path().join("ssh");
@@ -153,30 +150,20 @@ mod tests {
         let mut config = Config::default();
         config.ssh.config_file = Some(ssh_config.clone());
         config.discovery.hide = vec!["github.*".to_owned()];
-        let mut hosts = Hosts::default();
-        hosts.hosts.insert(
-            "web".to_owned(),
-            HostConfig::Sftp(SftpHost {
-                label: Some("Prod".to_owned()),
-                ..SftpHost::default()
-            }),
-        );
         let paths = Paths::resolve(&home, 501, &|_| None);
         let config_file = dir.path().join("config.toml");
-        let context = Context::new(paths, config, config_file, hosts);
+        let context = Context::new(paths, config, config_file, Hosts::default());
 
         assert_eq!(
             read_hosts(&context),
             [
                 KnownHost {
                     alias: "web".to_owned(),
-                    label: Some("Prod".to_owned()),
                     file: ssh_config.clone(),
                     line: 1,
                 },
                 KnownHost {
                     alias: "db".to_owned(),
-                    label: None,
                     file: ssh_config,
                     line: 2,
                 },

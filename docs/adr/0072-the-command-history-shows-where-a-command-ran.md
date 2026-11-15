@@ -1,6 +1,6 @@
 # 0072. The command history shows where a command ran
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0082](0082-hosts-are-named-by-their-alias.md)
 - Date: 2026-11-10
 - Amends: [ADR 0019](0019-shell-command-line.md),
   [ADR 0041](0041-lists-always-show-the-whole-row.md),

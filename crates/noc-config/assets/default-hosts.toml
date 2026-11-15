@@ -9,7 +9,6 @@
 #
 # ["prod-web"]
 # type = "sftp"
-# label = "Prod"                    # name shown in the host list
 # start_dir = "/var/www"            # remote directory opened on connect instead of home
 # other_dir = "~/projects/site"     # local directory the other panel opens with the host
 # remember_dir = true               # reopen the last directory in this session

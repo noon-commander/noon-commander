@@ -101,9 +101,10 @@ impl Part {
     }
 }
 
-/// Reads the part of the file at `path` that `want` asks for. `report` hears how far it is
-/// after each chunk, and stops the reading when it breaks: the part is then what was read, cut
-/// as a new part is. Its lines are made on a thread for blocking work.
+/// Reads the part of the file at `path` that `want` asks for, and asks the file system for no
+/// byte more. `report` hears how far it is after each chunk, and stops the reading when it
+/// breaks: the part is then what was read, cut as a new part is. Its lines are made on a
+/// thread for blocking work.
 ///
 /// Cancel-safe: dropping the future closes the file; lines being made are thrown away.
 pub async fn read_part<V: Vfs>(
@@ -112,7 +113,22 @@ pub async fn read_part<V: Vfs>(
     want: Want,
     mut report: impl FnMut(Progress) -> ControlFlow<()>,
 ) -> Result<Part, VfsError> {
-    let metadata = vfs.metadata(path).await?;
+    let start = start_of(want);
+    let before = usize::try_from(want.offset - start).unwrap_or(usize::MAX);
+    let bytes_of = |length: u64| {
+        usize::try_from(length)
+            .unwrap_or(usize::MAX)
+            .saturating_add(before)
+    };
+    let (limit, most) = (bytes_of(want.length), bytes_of(want.most.max(want.length)));
+    // No more than the bytes asked for: a host sends whatever its reader has in flight.
+    let open = |from: usize, to: usize| {
+        let offset = start.saturating_add(u64::try_from(from).unwrap_or(u64::MAX));
+        let length = u64::try_from(to - from).unwrap_or(u64::MAX);
+        vfs.open_file_range(path, offset, length)
+    };
+    // Both at once: on a host each takes a round trip.
+    let (metadata, mut reader) = tokio::try_join!(vfs.metadata(path), open(0, limit))?;
     let stamp = Stamp {
         size: metadata.size,
         modified: metadata.modified,
@@ -124,24 +140,22 @@ pub async fn read_part<V: Vfs>(
     let total = size.map_or(want.length, |size| {
         want.length.min(size.saturating_sub(want.offset))
     });
-    let start = start_of(want);
-    let before = usize::try_from(want.offset - start).unwrap_or(usize::MAX);
-    let bytes_of = |length: u64| {
-        usize::try_from(length)
-            .unwrap_or(usize::MAX)
-            .saturating_add(before)
-    };
-    let (limit, most) = (bytes_of(want.length), bytes_of(want.most.max(want.length)));
-    let mut reader = vfs.open_file_at(path, start).await?;
     let mut bytes = Vec::new();
     let (mut eof, mut stopped) = (false, false);
     // Whether a line feed came that the part can end after; without one, a new part reads on.
     let mut feed = !want.new;
+    let mut on = false;
     let wanted = |read: usize, feed: bool| read < if feed { limit } else { most };
     while wanted(bytes.len(), feed) {
         let Some(chunk) = reader.read().await? else {
-            eof = true;
-            break;
+            if on || bytes.len() < limit {
+                eof = true;
+                break;
+            }
+            // Its reader gave all it was opened for: another goes on with the line.
+            on = true;
+            reader = open(limit, most).await?;
+            continue;
         };
         let known = bytes.len().max(before);
         bytes.extend_from_slice(&chunk);
@@ -234,9 +248,79 @@ fn whole_lines(bytes: &[u8], want: Want, end: bool) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use noc_vfs::LocalFs;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use noc_vfs::{DirEntry, LocalFs, LocalReader, LocalWriter, Metadata, Space};
 
     use super::*;
+
+    /// The local file system, which notes the bytes its readers were opened for: from where,
+    /// and how many.
+    #[derive(Default)]
+    struct Asked(Mutex<Vec<(u64, u64)>>);
+
+    impl Vfs for Asked {
+        type Path = PathBuf;
+        type Reader = LocalReader;
+        type Writer = LocalWriter;
+
+        async fn list_dir(&self, path: &PathBuf) -> Result<Vec<DirEntry>, VfsError> {
+            LocalFs.list_dir(path).await
+        }
+        async fn metadata(&self, path: &PathBuf) -> Result<Metadata, VfsError> {
+            LocalFs.metadata(path).await
+        }
+        async fn symlink_metadata(&self, path: &PathBuf) -> Result<Metadata, VfsError> {
+            LocalFs.symlink_metadata(path).await
+        }
+        async fn space(&self, path: &PathBuf) -> Result<Option<Space>, VfsError> {
+            LocalFs.space(path).await
+        }
+        async fn canonicalize(&self, path: &PathBuf) -> Result<PathBuf, VfsError> {
+            LocalFs.canonicalize(path).await
+        }
+        async fn create_dir(&self, path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.create_dir(path).await
+        }
+        async fn remove_file(&self, path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.remove_file(path).await
+        }
+        async fn remove_dir(&self, path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.remove_dir(path).await
+        }
+        async fn rename(&self, from: &PathBuf, to: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.rename(from, to).await
+        }
+        async fn read_link(&self, path: &PathBuf) -> Result<Vec<u8>, VfsError> {
+            LocalFs.read_link(path).await
+        }
+        async fn create_symlink(&self, target: &[u8], path: &PathBuf) -> Result<(), VfsError> {
+            LocalFs.create_symlink(target, path).await
+        }
+        async fn set_permissions(&self, path: &PathBuf, mode: u32) -> Result<(), VfsError> {
+            LocalFs.set_permissions(path, mode).await
+        }
+        async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
+            LocalFs.set_modified(path, time).await
+        }
+        async fn open_file_range(
+            &self,
+            path: &PathBuf,
+            offset: u64,
+            length: u64,
+        ) -> Result<LocalReader, VfsError> {
+            self.0.lock().unwrap().push((offset, length));
+            LocalFs.open_file_range(path, offset, length).await
+        }
+        async fn create_file(
+            &self,
+            path: &PathBuf,
+            replace: bool,
+        ) -> Result<LocalWriter, VfsError> {
+            LocalFs.create_file(path, replace).await
+        }
+    }
 
     fn new(offset: u64, length: u64) -> Want {
         Want {
@@ -344,6 +428,40 @@ mod tests {
         // The line feed before a part that starts after one is not its own.
         let part = read(&path, most(100, jump(9, 1))).await;
         assert_eq!((part.offset, part.lines), (9, lines(&["ij"])));
+    }
+
+    #[tokio::test]
+    async fn the_file_system_is_asked_for_no_more_than_the_part() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("f");
+        std::fs::write(&path, b"one\ntwo\nabcdefghijklmnop\nend\n").unwrap();
+        let asked = async |want| {
+            let vfs = Asked::default();
+            read_part(&vfs, &path, want, |_| ControlFlow::Continue(()))
+                .await
+                .unwrap();
+            vfs.0.into_inner().unwrap()
+        };
+        assert_eq!(asked(new(0, 6)).await, [(0, 6)]);
+        assert_eq!(
+            asked(jump(4, 6)).await,
+            [(3, 7)],
+            "and the byte before a part that starts after a line feed"
+        );
+        let grows = Want {
+            most: 12,
+            ..new(8, 4)
+        };
+        assert_eq!(
+            asked(grows).await,
+            [(8, 4), (12, 8)],
+            "on with a line that has no end in the part, as far as it may go"
+        );
+        let grows = Want {
+            most: 12,
+            ..new(0, 6)
+        };
+        assert_eq!(asked(grows).await, [(0, 6)], "a line feed came");
     }
 
     #[tokio::test]

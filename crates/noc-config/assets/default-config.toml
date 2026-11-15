@@ -155,10 +155,13 @@ max_results = 10000
 max_per_file = 100
 
 [viewer]
-# The viewer (F3) reads a file in parts of this many mebibytes: the first before it shows the
-# file, the next each time scrolling reaches the end of what it read; at least 1. A smaller part
-# shows sooner.
+# The viewer (F3) reads a local file in parts of this many mebibytes: the first before it shows
+# the file, the next each time scrolling reaches the end of what it read; at least 1. A smaller
+# part shows sooner.
 part_mib = 1
+# A file on a host it reads in parts of this many kibibytes; at least 1. Every part read is sent
+# over the connection, so a smaller part shows sooner on a slow one.
+host_part_kib = 256
 # It holds this many mebibytes of parts at once; the ones farthest away go, and are read again
 # when scrolling comes back to them. At least two parts; less counts as two.
 window_mib = 128

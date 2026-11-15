@@ -76,6 +76,7 @@ enum Key {
     MaxResults,
     MaxPerFile,
     ViewerPart,
+    ViewerHostPart,
     ViewerWindow,
     LogLevel,
     LogFilter,
@@ -207,6 +208,7 @@ impl Setting {
             | Key::MaxResults
             | Key::MaxPerFile
             | Key::ViewerPart
+            | Key::ViewerHostPart
             | Key::ViewerWindow
             | Key::LogKeep => self.apply_number(config)?,
             Key::MenuBar => {
@@ -329,6 +331,11 @@ impl Setting {
             Key::ViewerPart => {
                 config.viewer.part_mib =
                     number(text, |text| fl!("config-viewer-part-invalid", text = text))?;
+            }
+            Key::ViewerHostPart => {
+                config.viewer.host_part_kib = number(text, |text| {
+                    fl!("config-viewer-host-part-invalid", text = text)
+                })?;
             }
             Key::ViewerWindow => {
                 config.viewer.window_mib = number(text, |text| {
@@ -1681,6 +1688,14 @@ fn viewer(config: &Config) -> Category {
                 text(&viewer.part_mib.to_string()),
             ),
             Setting::new(
+                Key::ViewerHostPart,
+                (
+                    fl!("config-viewer-host-part"),
+                    fl!("config-viewer-host-part-hint"),
+                ),
+                text(&viewer.host_part_kib.to_string()),
+            ),
+            Setting::new(
                 Key::ViewerWindow,
                 (
                     fl!("config-viewer-window"),
@@ -1982,6 +1997,9 @@ mod tests {
         typed(&mut dialog, "/opt/rg");
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "fdfind");
+        category(&mut dialog, 8);
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "64");
         category(&mut dialog, 9);
         dialog.handle(action(Action::Right));
         dialog.handle(action(Action::Down));
@@ -2015,6 +2033,7 @@ mod tests {
         expected.shell.run = Run::try_from(run.to_vec()).unwrap();
         expected.search.program = PathBuf::from("/opt/rg");
         expected.search.fd = PathBuf::from("fdfind");
+        expected.viewer.host_part_kib = NonZeroUsize::new(64).unwrap();
         expected.log.level = LogLevel::Debug;
         expected.log.filter = "info,noc_ssh=trace".to_owned();
         expected.log.keep_days = 3;
@@ -2027,7 +2046,7 @@ mod tests {
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 17] = [
+        let cases: [(usize, usize, &str, &str); 19] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 1, "not a tag", "is not auto, iso, or a language tag"),
             (0, 9, "0", "is not a step of the wheel"),
@@ -2043,6 +2062,8 @@ mod tests {
             (7, 0, "", "The ripgrep program cannot be empty"),
             (7, 1, " ", "The fd program cannot be empty"),
             (7, 2, "0", "is not a number of results"),
+            (8, 1, "0", "is not a number of KiB"),
+            (8, 1, "many", "is not a number of KiB"),
             (9, 1, "noc_ssh=loud", "is not a filter of the log"),
             (9, 2, "-1", "is not a number of days"),
         ];

@@ -101,9 +101,12 @@ impl LogLevel {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct ViewerConfig {
-    /// Mebibytes of a part: how much it reads at once, before showing anything and again each
-    /// time scrolling reaches the edge of what it holds. Default: `1`.
+    /// Mebibytes of a part of a local file: how much it reads at once, before showing anything
+    /// and again each time scrolling reaches the edge of what it holds. Default: `1`.
     pub part_mib: NonZeroUsize,
+    /// Kibibytes of a part of a file on a host, where every part read is sent over the
+    /// connection, so a smaller part shows sooner on a slow one. Default: `256`.
+    pub host_part_kib: NonZeroUsize,
     /// Mebibytes of the parts it holds at once; the ones farthest away go, to be read again
     /// when scrolling comes back. At least two parts; less counts as two. Default: `128`.
     pub window_mib: NonZeroUsize,
@@ -113,6 +116,7 @@ impl Default for ViewerConfig {
     fn default() -> Self {
         Self {
             part_mib: NonZeroUsize::MIN,
+            host_part_kib: NonZeroUsize::new(256).unwrap_or(NonZeroUsize::MIN),
             window_mib: NonZeroUsize::new(128).unwrap_or(NonZeroUsize::MIN),
         }
     }
@@ -672,6 +676,7 @@ mod tests {
 
         [viewer]
         part_mib = 4
+        host_part_kib = 512
         window_mib = 64
 
         [log]
@@ -742,6 +747,7 @@ mod tests {
             },
             viewer: ViewerConfig {
                 part_mib: NonZeroUsize::new(4).unwrap(),
+                host_part_kib: NonZeroUsize::new(512).unwrap(),
                 window_mib: NonZeroUsize::new(64).unwrap(),
             },
             log: LogConfig {
@@ -792,6 +798,7 @@ mod tests {
         assert_eq!(config.search.max_results.get(), 10_000);
         assert_eq!(config.search.max_per_file.get(), 100);
         assert_eq!(config.viewer.part_mib.get(), 1);
+        assert_eq!(config.viewer.host_part_kib.get(), 256);
         assert_eq!(config.viewer.window_mib.get(), 128);
         assert_eq!(config.log.level, LogLevel::Info);
         assert_eq!(config.log.filter, "");
@@ -837,6 +844,7 @@ mod tests {
             "[search]\nmax_results = 0",
             "[search]\nmax_per_file = 0",
             "[viewer]\npart_mib = 0",
+            "[viewer]\nhost_part_kib = 0",
             "[viewer]\nwindow_mib = 0",
         ] {
             let error = toml::from_str::<Config>(text).unwrap_err();
@@ -1054,6 +1062,7 @@ mod tests {
         assert!(table["search"].get("program").is_some());
         assert!(table["search"].get("fd").is_some());
         assert!(table["viewer"].get("part_mib").is_some());
+        assert!(table["viewer"].get("host_part_kib").is_some());
         assert!(table["viewer"].get("window_mib").is_some());
         assert!(table["log"].get("level").is_some());
         assert!(table["log"].get("filter").is_some());

@@ -292,9 +292,10 @@
       byte: the part there alone is read, on a host too; the title says where the screen is in
       bytes until the parts read in order reach it; the log opens the same way
       ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md))
-- [x] The viewer shows a file once 1 MiB of it is read (`viewer.part_mib`, 16 before); a line
-      that goes on past a part stays whole up to 16 MiB; a local file of at most 16 MiB is read
-      whole behind the screen, so that its lines are counted
+- [x] The viewer shows a file once 1 MiB of it is read (`viewer.part_mib`, 16 before), on a host
+      256 KiB (`viewer.host_part_kib`), and asks a host for no byte past a part; a line that
+      goes on past a part stays whole up to 16 MiB; a local file of at most 16 MiB is read whole
+      behind the screen, so that its lines are counted
       ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md))
 - [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
       Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the

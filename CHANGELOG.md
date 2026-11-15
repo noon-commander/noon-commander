@@ -9,6 +9,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A setting of the viewer, `viewer.host_part_kib`, 256 by default, in Options → Configuration…
+  under Viewer: how much of a file on a host F3 reads at once. A smaller part shows sooner on a
+  slow connection.
 - Go to directory (`g d`) leaves a host for a local directory with `:`: `:` alone goes back to
   the last local directory of the panel, `:path` starts there, and `:/…` and `:~/…` are local,
   with Tab completing them. A name that starts with a colon is `./:name`
@@ -45,6 +48,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the number of its lines ([ADR 0078](docs/adr/0078-the-viewer-reads-small-parts.md)).
 - A file that grows while the viewer shows it, as a log that is being written, goes on past
   what was its end, where a new part had it read again from its start.
+- The viewer reads a file on a host in parts of 256 KiB, so that it shows once that much has
+  arrived, where it waited for 16 MiB. A part takes one round trip less, and the host is asked
+  for no byte past it, where it sent up to 2 MiB more for nothing
+  ([ADR 0078](docs/adr/0078-the-viewer-reads-small-parts.md)).
 - The window of a job takes a count before an arrow, and Home and End, `g g`, and `G` go to
   its first button and its last, as in every dialog
   ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).

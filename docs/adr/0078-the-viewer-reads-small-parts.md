@@ -12,7 +12,8 @@ The viewer read a file in parts of 16 MiB
 showed, it read 16 MiB and made a line for the screen of every line in them, where a screen
 takes a few thousand bytes; and so again each time scrolling reached the end of what it held.
 Reading is not what takes the time: making the lines is. mc shows a file at once because it
-reads the 4,096 bytes around the screen and nothing else; it maps no file into memory.
+reads the 4,096 bytes around the screen and nothing else; it maps no file into memory. On a host
+reading does take the time: all 16 MiB had to arrive before anything showed.
 
 A part could not simply be made smaller. Its size also said how long a line may be before it is
 cut, how much of a file is read at once on the way to a line, and whether the scroll bar may go
@@ -46,6 +47,15 @@ showed.
   of change with the same size, still has the file read again from its start
   ([ADR 0038](0038-viewer-reads-a-window-of-the-file.md)). With parts of 1 MiB a log that is
   being written would otherwise be read again at every part, and never to its end.
+- **A file on a host has parts of a size of its own**, `viewer.host_part_kib`, 256 by default,
+  in the Configuration dialog under Viewer: there every part read is sent over the connection,
+  and a slow one shows a small part sooner. Nothing is read ahead on a host.
+- **A part asks the file system for its bytes and no more** (`Vfs::open_file_range`). The reader
+  of a file on a host keeps 64 reads of 32 KiB in flight; with no end to them it asked for up to
+  2 MiB past a part, which the server sent for nothing, eight times a part of 256 KiB. A line
+  that goes on past its part is read on by another reader.
+- **The size of a file and the bytes of a part are asked for at once**, where the part waited
+  for the size: one round trip less for each part on a host.
 
 ## Consequences
 
@@ -58,3 +68,7 @@ showed.
 - A file written over with more than it had, between two parts, shows old parts beside new
   ones until it is viewed again.
 - A `config.toml` that sets `part_mib` keeps its value.
+- A file on a host shows after 256 KiB arrive, with two round trips: one for its size and for
+  opening it, at once, and one for its bytes.
+- A file system implements `Vfs::open_file_range`; `open_file_at` and `open_file` read through
+  it, to the end of the file.

@@ -1332,6 +1332,11 @@ fd = "fd"                        # fd for f f, files and dirs, likewise; fd or f
 max_results = 10000              # it stops after finding so many lines, or files and dirs
 max_per_file = 100               # and takes no more lines of one file
 
+[viewer]
+part_mib = 1                     # F3 reads a local file in parts of so many MiB
+host_part_kib = 256              # and a file on a host in parts of so many KiB
+window_mib = 128                 # MiB of parts it holds; the farthest go, and are read again
+
 [log]
 level = "info"                   # "off", "error", "warn", "info", "debug", "trace"
 filter = ""                      # directives in place of level, such as "info,noc_ssh=trace"
@@ -1577,8 +1582,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far
   the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when
   the text does not fit, and its own F-key bar. It reads the file in parts of `viewer.part_mib`,
-  1 MiB by default, so that the first screen waits for little, locally or through the host's
-  shared session, in the background (closing the viewer stops that), each ending after its last
+  1 MiB by default, so that the first screen waits for little, or, through the host's shared
+  session, of `viewer.host_part_kib`, 256 KiB, as every part read there is sent; in the
+  background (closing the viewer stops that), asking for the size of the file and for the bytes
+  of the part, no more, at once (`Vfs::open_file_range`), each ending after its last
   line feed, or going on to the first for up to 16 MiB where a line is longer than the part
   (`Want::most`), the next when a move down shows the end of what it holds, and keeps a window of
   `viewer.window_mib`, reading a part it dropped again when a move up reaches it

@@ -1,3 +1,5 @@
+use std::num::NonZeroUsize;
+
 use super::*;
 use crate::tui::help::Files;
 
@@ -546,6 +548,28 @@ fn a_file_on_a_host_is_read_only_as_far_as_the_screen_needs() {
     };
     let first = ViewerPart::new(want, b"one\ntwo\n", (false, false), stamp);
     assert!(app.read(id, Ok(first)).is_empty(), "nothing ahead of it");
+}
+
+#[test]
+fn a_part_of_a_file_on_a_host_has_a_size_of_its_own() {
+    let first = |read: Effect| {
+        let Effect::Read(ReadRequest { want, .. }) = read else {
+            panic!("expected a read");
+        };
+        (want.offset, want.length)
+    };
+    let (mut app, _connection) = on_a_host();
+    app.handle(action(Action::Down));
+    let read = one(app.handle(action(Action::View)));
+    assert_eq!(first(read), (0, 256 << 10));
+    // The setting takes effect at the next F3.
+    app.handle(action(Action::Cancel));
+    app.config.viewer.host_part_kib = NonZeroUsize::new(64).unwrap();
+    let read = one(app.handle(action(Action::View)));
+    assert_eq!(first(read), (0, 64 << 10));
+
+    let (_app, read) = view_big();
+    assert_eq!(first(read), (0, 1 << 20), "a local file's");
 }
 
 #[test]

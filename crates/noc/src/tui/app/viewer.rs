@@ -177,19 +177,24 @@ impl App {
 
     /// How much of the file at `location`, or of text the app holds, the viewer reads at once,
     /// and holds: `viewer.part_mib` and `viewer.window_mib`; and how much it reads ahead of the
-    /// screen, nothing on a host, where every part read is sent.
+    /// screen. On a host, where every part read is sent, a part is `viewer.host_part_kib`, and
+    /// it reads nothing ahead.
     fn viewer_sizes(&self, location: Option<&Location>) -> ViewerSizes {
-        let mebibytes = |count: std::num::NonZeroUsize| {
+        let bytes = |count: std::num::NonZeroUsize, unit: u64| {
             u64::try_from(count.get())
                 .unwrap_or(u64::MAX)
-                .saturating_mul(1 << 20)
+                .saturating_mul(unit)
         };
+        let (kibibyte, mebibyte) = (1 << 10, 1 << 20);
         let viewer = &self.config.viewer;
-        let far = matches!(location, Some(Location::Remote { .. }));
+        let (part, ahead) = match location {
+            Some(Location::Remote { .. }) => (bytes(viewer.host_part_kib, kibibyte), 0),
+            _ => (bytes(viewer.part_mib, mebibyte), READ_AHEAD),
+        };
         ViewerSizes {
-            part: mebibytes(viewer.part_mib),
-            window: mebibytes(viewer.window_mib),
-            ahead: if far { 0 } else { READ_AHEAD },
+            part,
+            window: bytes(viewer.window_mib, mebibyte),
+            ahead,
         }
     }
 

@@ -1,6 +1,6 @@
 //! State and drawing of the whole screen.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -1036,8 +1036,9 @@ pub(crate) struct App {
     color_depth: ColorDepth,
     /// When the first frame was drawn, which spinners of one cell turn from.
     epoch: Wait,
-    /// Hosts whose last attempt failed or whose connection was lost.
-    failed: HashSet<String>,
+    /// Hosts whose last attempt failed or whose connection was lost, with why, terminal-safe
+    /// and on one line.
+    failed: HashMap<String, String>,
     /// Addresses from `ssh -G` in this session.
     addresses: HashMap<String, String>,
     /// The users `ssh -G` gave for hosts in this session, terminal-safe.
@@ -1272,7 +1273,7 @@ impl App {
             theme: theme_of(ui, ColorDepth::TrueColor),
             color_depth: ColorDepth::TrueColor,
             epoch: Wait::default(),
-            failed: HashSet::new(),
+            failed: HashMap::new(),
             addresses: HashMap::new(),
             users: HashMap::new(),
             machine: Machine::default(),

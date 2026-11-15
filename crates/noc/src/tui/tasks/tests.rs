@@ -204,6 +204,7 @@ async fn slow_volumes_hold_back_every_answer_as_if_none_came_in_time() {
         mount_point: PathBuf::from(path),
         label: None,
         fs_type: None,
+        source: None,
         kind: noc_vfs::VolumeKind::Local,
         space: Some(space),
     };

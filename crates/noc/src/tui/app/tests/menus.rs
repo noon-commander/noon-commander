@@ -425,6 +425,7 @@ fn hosts_and_volumes_used_last_come_first_and_go_to_recent_toml() {
         mount_point: PathBuf::from(path),
         label: None,
         fs_type: None,
+        source: None,
         kind: noc_vfs::VolumeKind::Local,
         space: None,
     };
@@ -461,6 +462,7 @@ fn a_volume_that_answers_late_changes_the_menu_and_the_volumes_of_the_panels() {
         mount_point: PathBuf::from(path),
         label: None,
         fs_type: None,
+        source: None,
         kind: noc_vfs::VolumeKind::Network,
         space,
     };
@@ -530,6 +532,8 @@ fn the_menu_shows_failures_and_fresh_addresses() {
         HostState {
             status: HostStatus::Failed,
             address: Some("deploy@10.0.0.9".to_owned()),
+            reason: Some("Connection refused".to_owned()),
+            ..HostState::default()
         }
     );
     menu_on(&mut app, Side::Left);

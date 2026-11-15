@@ -316,12 +316,32 @@ impl App {
             Some(Host::Connecting { .. }) => HostStatus::Connecting,
             Some(Host::Connected { .. }) => HostStatus::Connected,
             Some(Host::Stalled { .. }) => HostStatus::Stalled,
-            None if self.failed.contains(host) => HostStatus::Failed,
+            None if self.failed.contains_key(host) => HostStatus::Failed,
             None => HostStatus::Idle,
         };
+        let tabs = [Side::Left, Side::Right]
+            .into_iter()
+            .flat_map(|side| self.tabs(side).iter())
+            .filter(|tab| {
+                matches!(tab.panel.location(), Location::Remote { host: on, .. } if on == host)
+            })
+            .count();
+        let settings = self.host_settings.get(host);
+        let remembered = (settings.is_some_and(HostConfig::remember_dir))
+            .then(|| self.last_dirs.get(host))
+            .flatten()
+            .map(|dir| cells::sanitize(dir.as_bytes()));
+        let started = settings
+            .and_then(HostConfig::start_dir)
+            .map(|dir| cells::sanitize(dir.as_bytes()));
         HostState {
             status,
             address: self.addresses.get(host).cloned(),
+            reason: self.failed.get(host).cloned(),
+            tabs,
+            opens: remembered.or(started),
+            other: (settings.and_then(HostConfig::other_dir))
+                .map(|dir| cells::sanitize(dir.as_bytes())),
         }
     }
 
@@ -565,8 +585,9 @@ impl App {
         let Some(state) = self.hosts.remove(host) else {
             return Vec::new();
         };
-        if reason.is_some() {
-            self.failed.insert(host.to_owned());
+        if let Some(reason) = reason {
+            let reason = reason.split_whitespace().collect::<Vec<_>>().join(" ");
+            (self.failed).insert(host.to_owned(), cells::sanitize(reason.as_bytes()));
         }
         // Jobs wait for a host that was lost, and end with one that was asked to stop.
         let mut effects = Vec::new();

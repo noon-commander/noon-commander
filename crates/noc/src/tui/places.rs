@@ -44,6 +44,11 @@ pub(crate) struct KnownHost {
     pub(crate) label: Option<String>,
     /// `user@hostname[:port]` from an earlier `ssh -G`, if cached.
     pub(crate) address: Option<String>,
+    /// The `ProxyJump` of an earlier `ssh -G`, if cached and not direct.
+    pub(crate) jump: Option<String>,
+    /// The file of its `Host` line, and the line, from 1.
+    pub(crate) file: PathBuf,
+    pub(crate) line: usize,
 }
 
 /// The hosts that `discovery.hide` does not hide, in config order, with the addresses cached by
@@ -58,12 +63,16 @@ pub(crate) fn read_hosts(context: &Context) -> Vec<KnownHost> {
     let cache = context.load_cache(&discovery);
     discovery
         .visible(&context.config().discovery.hide)
-        .map(|host| KnownHost {
-            alias: host.alias.clone(),
-            label: context.label(&host.alias),
-            address: cache
-                .get(&Target::new(host.alias.as_str()))
-                .map(CachedHost::address),
+        .map(|host| {
+            let cached = cache.get(&Target::new(host.alias.as_str()));
+            KnownHost {
+                alias: host.alias.clone(),
+                label: context.label(&host.alias),
+                address: cached.map(CachedHost::address),
+                jump: cached.and_then(|cached| cached.proxy_jump.clone()),
+                file: host.file.clone(),
+                line: host.line,
+            }
         })
         .collect()
 }
@@ -162,7 +171,7 @@ mod tests {
         let cache_home = dir.path().join("cache");
         let env = move |name: &str| (name == "XDG_CACHE_HOME").then(|| OsString::from(&cache_home));
         let mut config = Config::default();
-        config.ssh.config_file = Some(ssh_config);
+        config.ssh.config_file = Some(ssh_config.clone());
         config.discovery.hide = vec!["github.*".to_owned()];
         let mut hosts = Hosts::default();
         hosts.hosts.insert(
@@ -180,7 +189,7 @@ mod tests {
             user: "admin".to_owned(),
             hostname: "10.0.0.5".to_owned(),
             port: 2222,
-            proxy_jump: None,
+            proxy_jump: Some("bastion".to_owned()),
         };
         remember(&context, "db", db).unwrap();
 
@@ -191,11 +200,17 @@ mod tests {
                     alias: "web".to_owned(),
                     label: Some("Prod".to_owned()),
                     address: None,
+                    jump: None,
+                    file: ssh_config.clone(),
+                    line: 1,
                 },
                 KnownHost {
                     alias: "db".to_owned(),
                     label: None,
                     address: Some("admin@10.0.0.5:2222".to_owned()),
+                    jump: Some("bastion".to_owned()),
+                    file: ssh_config,
+                    line: 2,
                 },
             ]
         );
@@ -207,6 +222,7 @@ mod tests {
             mount_point: PathBuf::from("/mnt/usb"),
             label: Some("My\x1bDisk".to_owned()),
             fs_type: None,
+            source: None,
             kind: VolumeKind::Local,
             space: None,
         };
@@ -221,6 +237,7 @@ mod tests {
             mount_point: PathBuf::from(path),
             label: None,
             fs_type: None,
+            source: None,
             kind: VolumeKind::Local,
             space: None,
         };

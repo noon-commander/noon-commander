@@ -103,8 +103,8 @@ pub(crate) struct Body<'a> {
     /// The whole text of the row under the cursor, which always shows under the rows while
     /// there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
-    /// The window shows `full` once its rows come from `loading`: until then the skeleton takes
-    /// its lines too.
+    /// The window shows `full`, or a footer of as many lines, once its rows come from
+    /// `loading`: until then the skeleton takes those lines too.
     pub(crate) has_full: bool,
     /// The rows take all the room the window leaves them, rather than as many lines as they
     /// are, as the rows of the search of a tree do.

@@ -16,9 +16,28 @@ pub struct Volume {
     pub label: Option<String>,
     /// Such as `apfs`, `ext4`, or `smbfs`; `None` when unknown.
     pub fs_type: Option<String>,
+    /// What is mounted, as `mount` says it: a device, such as `/dev/disk4s1`, or the server
+    /// and share of a network file system, such as `//me@nas/share`, without any password a URL
+    /// of it holds; `None` when unknown.
+    pub source: Option<String>,
     pub kind: VolumeKind,
     /// `None` when the file system did not answer in time or could not tell.
     pub space: Option<Space>,
+}
+
+/// `source` without the password that the user part of a URL in it may hold, as
+/// `//me:secret@nas/share` or `afp://me:secret@nas/share`, so that it never shows.
+fn without_password(source: &str) -> String {
+    let start = source.find("//").map_or(0, |at| at + 2);
+    let rest = &source[start..];
+    let authority = &rest[..rest.find('/').unwrap_or(rest.len())];
+    let Some(at) = authority.rfind('@') else {
+        return source.to_owned();
+    };
+    let Some(colon) = authority[..at].find(':') else {
+        return source.to_owned();
+    };
+    format!("{}{}", &source[..start + colon], &source[start + at..])
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,6 +157,7 @@ fn finish(volumes: &mut Vec<Volume>) {
             mount_point: PathBuf::from("/"),
             label: None,
             fs_type: None,
+            source: None,
             kind: VolumeKind::System,
             space: None,
         });
@@ -272,6 +292,7 @@ struct Candidate {
     mount_point: PathBuf,
     label: Option<String>,
     fs_type: Option<String>,
+    source: Option<String>,
     kind: VolumeKind,
 }
 
@@ -286,6 +307,7 @@ fn candidates() -> Vec<Candidate> {
         mount_point: PathBuf::from("/"),
         label: None,
         fs_type: None,
+        source: None,
         kind: VolumeKind::System,
     }]
 }
@@ -312,6 +334,7 @@ async fn statvfs_volumes(candidates: Vec<Candidate>, first: Duration) -> Volumes
                 mount_point: candidate.mount_point.clone(),
                 label: candidate.label.clone(),
                 fs_type: candidate.fs_type.clone(),
+                source: candidate.source.clone(),
                 kind: candidate.kind,
                 space,
             })
@@ -360,7 +383,7 @@ mod linux {
     use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
     use std::path::{Path, PathBuf};
 
-    use super::{Candidate, VolumeKind};
+    use super::{Candidate, VolumeKind, without_password};
 
     const NETWORK_FS: &[&str] = &[
         "9p",
@@ -473,6 +496,7 @@ mod linux {
                     mount_point: mount.mount_point,
                     label,
                     fs_type: Some(mount.fs_type),
+                    source: Some(without_password(&mount.source.to_string_lossy())),
                     kind,
                 }
             })
@@ -620,7 +644,7 @@ mod macos {
 
     use futures_util::future::join_all;
 
-    use super::{Probes, Space, Volume, VolumeKind, Volumes, ask, gather};
+    use super::{Probes, Space, Volume, VolumeKind, Volumes, ask, gather, without_password};
 
     const MNT_LOCAL: u32 = 0x0000_1000;
     /// Set on mounts that are not meant to be browsed, such as Time Machine local snapshots.
@@ -689,6 +713,8 @@ mod macos {
     #[derive(Debug, Clone)]
     pub(super) struct Stat {
         mount_on: PathBuf,
+        /// What is mounted there, without a password.
+        mount_from: String,
         fs_type: String,
         flags: u32,
         pub(super) space: Space,
@@ -697,8 +723,11 @@ mod macos {
     pub(super) fn stat(path: &Path) -> io::Result<Stat> {
         let stat = rustix::fs::statfs(path)?;
         let block = u64::from(stat.f_bsize);
+        let mount_from = c_bytes(&stat.f_mntfromname);
+        let mount_from = String::from_utf8_lossy(&mount_from);
         Ok(Stat {
             mount_on: PathBuf::from(OsString::from_vec(c_bytes(&stat.f_mntonname))),
+            mount_from: without_password(&mount_from),
             fs_type: String::from_utf8_lossy(&c_bytes(&stat.f_fstypename)).into_owned(),
             flags: stat.f_flags,
             space: Space {
@@ -750,6 +779,7 @@ mod macos {
                 mount_point: path,
                 label,
                 fs_type: None,
+                source: None,
                 space: None,
             }),
             Some(Err(error)) => {
@@ -758,6 +788,7 @@ mod macos {
                     mount_point: path,
                     label,
                     fs_type: None,
+                    source: None,
                     kind: VolumeKind::System,
                     space: None,
                 })
@@ -776,6 +807,7 @@ mod macos {
                     mount_point: path,
                     label,
                     fs_type: Some(stat.fs_type),
+                    source: Some(stat.mount_from),
                     space: Some(stat.space),
                 })
             }
@@ -808,6 +840,7 @@ mod tests {
             mount_point: PathBuf::from(mount_point),
             label: None,
             fs_type: None,
+            source: None,
             kind,
             space: None,
         }
@@ -933,22 +966,61 @@ mod tests {
             mount("/proc", "proc", "proc"),
             mount("/mnt/nas", "nfs", "nas:/x"),
             mount("/media/usb", "vfat", "/dev/null"),
+            mount(
+                "/mnt/dav",
+                "davfs",
+                "https://me:secret@dav.example.org/files",
+            ),
         ];
-        let candidate = |path: &str, label: Option<&str>, fs_type: &str, kind| Candidate {
-            mount_point: PathBuf::from(path),
-            label: label.map(str::to_owned),
-            fs_type: Some(fs_type.to_owned()),
-            kind,
-        };
+        let candidate =
+            |(path, source): (&str, &str), label: Option<&str>, fs_type: &str, kind| Candidate {
+                mount_point: PathBuf::from(path),
+                label: label.map(str::to_owned),
+                fs_type: Some(fs_type.to_owned()),
+                source: Some(source.to_owned()),
+                kind,
+            };
         assert_eq!(
             to_candidates(mounts, &labels),
             [
-                candidate("/", None, "ext4", VolumeKind::System),
-                candidate("/mnt/nas", None, "nfs", VolumeKind::Network),
-                candidate("/media/usb", Some("USB"), "vfat", VolumeKind::Local),
+                candidate(
+                    ("/", "/dev/noc-test-missing"),
+                    None,
+                    "ext4",
+                    VolumeKind::System
+                ),
+                candidate(("/mnt/nas", "nas:/x"), None, "nfs", VolumeKind::Network),
+                candidate(
+                    ("/media/usb", "/dev/null"),
+                    Some("USB"),
+                    "vfat",
+                    VolumeKind::Local
+                ),
+                candidate(
+                    ("/mnt/dav", "https://me@dav.example.org/files"),
+                    None,
+                    "davfs",
+                    VolumeKind::Network
+                ),
             ]
         );
         Ok(())
+    }
+
+    #[test]
+    fn sources_lose_the_passwords_of_their_urls() {
+        for (source, shown) in [
+            ("//me:secret@nas/share", "//me@nas/share"),
+            ("afp://me:se:cr@et@nas/share", "afp://me@nas/share"),
+            ("//me@nas/share", "//me@nas/share"),
+            ("//nas/share", "//nas/share"),
+            ("me@host:/srv", "me@host:/srv"),
+            ("nas:/export", "nas:/export"),
+            ("/dev/disk4s1", "/dev/disk4s1"),
+            ("//nas/share:with@at", "//nas/share:with@at"),
+        ] {
+            assert_eq!(without_password(source), shown, "{source}");
+        }
     }
 
     #[test]
@@ -991,6 +1063,7 @@ mod tests {
                 mount_point: dir.path().to_path_buf(),
                 label: Some("Root".to_owned()),
                 fs_type: None,
+                source: None,
                 kind: VolumeKind::System,
             }],
             Duration::from_secs(5),
@@ -1153,6 +1226,8 @@ mod tests {
             assert_eq!(root.kind, VolumeKind::System);
             assert!(root.space.is_some());
             assert!(root.label.is_some(), "/Volumes should link to /");
+            let source = root.source.as_deref().unwrap_or_default();
+            assert!(source.starts_with("/dev/"), "{source}");
             assert_eq!(
                 volumes
                     .iter()
@@ -1180,6 +1255,7 @@ mod tests {
                     mount_point: PathBuf::from("/Volumes/NAS"),
                     label: Some("NAS".to_owned()),
                     fs_type: None,
+                    source: None,
                     kind: VolumeKind::Network,
                     space: None,
                 })

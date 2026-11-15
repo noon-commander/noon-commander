@@ -301,6 +301,9 @@ fn places() -> Places {
                 alias: alias.to_owned(),
                 label: None,
                 address: None,
+                jump: None,
+                file: PathBuf::from("/home/me/.ssh/config"),
+                line: 1,
             })
             .to_vec(),
         ..Places::default()
@@ -584,6 +587,7 @@ fn open_menu(app: &mut App, side: Side) {
         mount_point: PathBuf::from(path),
         label: None,
         fs_type: None,
+        source: None,
         kind,
         space: None,
     };

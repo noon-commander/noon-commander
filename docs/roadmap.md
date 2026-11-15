@@ -276,6 +276,10 @@
       answered are a skeleton until its answer comes, and `- / -` after 5 s; a volume is never
       asked again while it has not answered; `--slow-volumes` in debug builds
       ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md))
+- [x] The location menu shows a card of the place under the cursor in place of its whole row:
+      what a volume mounts and how much of it is free, where a host is defined, how to reach it,
+      and how it is: connected with its tabs, why it failed, or where it opens
+      ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

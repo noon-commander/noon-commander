@@ -212,7 +212,7 @@ fn a_cancelled_request_is_forgotten() {
 fn waiting_lines(panel: &mut Panel, status: HostStatus) -> ([String; 2], [Style; 2]) {
     let hosts = |_: &str| HostState {
         status,
-        address: None,
+        ..HostState::default()
     };
     let terminal = render_with(panel, (40, 6), true, &hosts, Decor::new(false));
     let buffer = terminal.backend().buffer();

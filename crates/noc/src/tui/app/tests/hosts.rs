@@ -222,6 +222,41 @@ fn remember_dir_resumes_the_last_directory_of_the_session() {
     }
 }
 
+#[test]
+fn a_host_tells_where_it_opens_how_many_tabs_are_on_it_and_why_it_failed() {
+    let mut app = at_slash();
+    let host = SftpHost {
+        start_dir: Some("/srv/app".to_owned()),
+        other_dir: Some("~/logs".to_owned()),
+        ..SftpHost::default()
+    };
+    with_host(&mut app, "db", host);
+    let state = app.host_state("db");
+    let dirs = (state.opens.as_deref(), state.other.as_deref());
+    assert_eq!(dirs, (Some("/srv/app"), Some("~/logs")));
+    assert_eq!(app.host_state("web").opens, None, "the remote home");
+
+    let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
+        panic!("expected a connection");
+    };
+    let reason = "ssh: connect to host web port 22:\nConnection refused";
+    app.closed("web", connection, Some(reason));
+    let state = app.host_state("web");
+    assert_eq!(state.status, HostStatus::Stalled);
+    let one_line = "ssh: connect to host web port 22: Connection refused";
+    assert_eq!(state.reason.as_deref(), Some(one_line), "on one line");
+    app.connect("web");
+    assert_eq!(
+        app.host_state("web").reason,
+        None,
+        "a new attempt forgets it"
+    );
+
+    let (app, _) = on_a_host();
+    let state = app.host_state("web");
+    assert_eq!((state.status, state.tabs), (HostStatus::Connected, 1));
+}
+
 /// Opens the dialog of F4 on `web` from the location menu of the left panel.
 fn edit_web(app: &mut App) {
     if app.menu.is_none() {

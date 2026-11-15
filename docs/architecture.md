@@ -275,6 +275,25 @@ choose a volume or a host, grouped under headings:
   browse, takes its row away; one that fails after it hung, as a soft network mount gives up,
   leaves it with `- / -` (`to_late_volume`)
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
+- Under the rows, a card of the place under the cursor, two lines under a line that names, at its
+  right end in the color of the title, its kind or where it is defined
+  ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)):
+
+  ```text
+  ╟──────────────── apfs · local ─╢   ╟──────────── ~/.ssh/config:12 ─╢
+  ║ /dev/disk4s1 on /Volumes/USB  ║   ║ web · deploy@10.0.0.5 via jump ║
+  ║ 12.0G free of 64.0G (18%)     ║   ║ ● Connected · 2 tabs           ║
+  ```
+
+  The home directory shows its path and the space of its volume, with the volume and the type of
+  its file system over them; a volume what it mounts and where (`Volume::source`, without the
+  password of a URL), then its free space, its size, and the share free, a skeleton while they are
+  to come, `Did not answer in 5 s`, or `Tells no free space`; a host the file and line of its
+  `Host` line, its alias, address, and `ProxyJump` from the cache, then after its marker
+  `Connected` with the tabs on it, `Connecting`, why its last attempt failed in the colors of errors
+  (`App::failed` keeps it until a new attempt), or where opening it goes, `Opens /srv/app · other
+  panel ~/logs` or `Opens the remote home`; the row of the rest the names of the places it stands
+  for. Every card has two lines, so the box keeps its height.
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
   system volume, then the others by mount point; the hosts in config order. Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is
@@ -686,14 +705,15 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front
   of the title, at first and while they ask again; the skeleton, as tall as the last list without
   a filter; and why no rows came, in their place.
-- The location menu and the key hints show the whole row under the cursor in two lines under the
-  rows, while they have rows (`Body.full`;
-  [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): the place with its address or mount
-  point, a key hint with all its keys. The tab menu and the zoxide window, whose rows are paths that
-  nearly always fit, show none
-  ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
+- The key hints show the whole row under the cursor in two lines under the rows, while they have
+  rows (`Body.full`; [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): a key hint with all
+  its keys. The tab menu and the zoxide window, whose rows are paths that nearly always fit, show
+  none ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
   history shows where the command ran there instead
-  ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)), and the Workspaces
+  ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)), the location menu a
+  card of the place under the cursor
+  ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)), and the
+  Workspaces
   window where the tabs of the workspace are, in two columns (`Body.footer`, `Body.footer_column`),
   whose line joins the line over them and the bottom of the frame (`┬`, `╧`). A skeleton that
   stands for the rows of the last list takes the lines of the whole row too, in a window that has

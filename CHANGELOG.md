@@ -58,6 +58,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that tells no size, in place of `?`. A volume that hangs is never asked again until it answers,
   however often the menu opens or `R` lists the volumes again
   ([ADR 0074](docs/adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
+- Under its rows the location menu shows a card of the place under the cursor in place of the
+  whole row. For a volume: the type of its file system and its kind, what it mounts and where, as
+  `/dev/disk4s1 on /Volumes/USB`, and its free space, size, and the share free; for the home
+  directory its path and the space of its volume; for a host: the file and line of its `Host` line,
+  its alias, address, and `ProxyJump`, and how it is: connected with the tabs on it, why its last
+  attempt failed, in the colors of errors, or where opening it goes; for the row of the rest, the
+  names it stands for. The menu keeps its height
+  ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.

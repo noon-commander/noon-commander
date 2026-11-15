@@ -207,6 +207,45 @@ menu-space = { $free } / { $total }
 menu-space-unknown = -
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }
+# The card of the place under the cursor, under the rows: on the line over it, at its right end,
+# what kind it is or where it is defined; then two lines, what it is and how it is.
+# Two parts of a line of the card: the volume and the type of its file system, a host and its
+# address.
+menu-card-both = { $first } · { $second }
+# The kinds of volumes, after the type of the file system on the line over the card.
+menu-card-system = system
+menu-card-local = local
+menu-card-network = network
+# What a volume mounts and where, as the mount command says it: /dev/disk4s1 on /Volumes/USB.
+menu-card-mounted = { $source } on { $mount_point }
+# The free space and the size of a volume, and the share free.
+menu-card-space = { $free } free of { $total } ({ $percent }%)
+# In place of the space of a volume that has not answered in so many seconds.
+menu-card-no-answer = Did not answer in { $seconds } s
+# In place of the space of a volume that tells none.
+menu-card-no-space = Tells no free space
+# On the line over the card of a host: the file of its Host line in the ssh config, and the line.
+menu-card-defined = { $file }:{ $line }
+# The address of a host, and the host ssh jumps through to reach it.
+menu-card-via = { $address } via { $jump }
+# In place of the address of a host that no ssh -G has told yet.
+menu-card-no-address = address not known yet
+# How a host is, after its marker: connected, with the tabs of both panels on it.
+menu-card-connected = Connected · { $tabs ->
+        [0] no tabs
+        [one] { $tabs } tab
+       *[other] { $tabs } tabs
+    }
+menu-card-connecting = Connecting
+# After the marker of a host whose last attempt failed, where ssh told no reason.
+menu-card-failed = Could not connect
+# Where opening a host that is not connected goes: a remote directory, or its home.
+menu-card-opens = Opens { $dir }
+menu-card-opens-home = Opens the remote home
+# Where the other panel goes as the host opens, after where the host opens.
+menu-card-other = { $opens } · other panel { $dir }
+# Between the names of the places a row of the rest stands for.
+menu-card-separator = {", "}
 
 ## The zoxide window of g z (src/tui/jump): the directories zoxide ranks highest for the
 ## keywords typed, as `z` picks them in a shell. Prefix: jump-.

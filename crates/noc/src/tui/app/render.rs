@@ -154,11 +154,14 @@ impl App {
         let [(left_bar, left), (right_bar, right)] = self.panel_areas(panels);
         self.sync_connected();
         let active = self.active;
+        // Every host whose state is not the default, which the others get.
         let states: HashMap<String, HostState> = self
             .hosts
             .keys()
-            .chain(&self.failed)
+            .chain(self.failed.keys())
             .chain(self.addresses.keys())
+            .chain(self.host_settings.hosts.keys())
+            .chain(self.last_dirs.keys())
             .map(|host| (host.clone(), self.host_state(host)))
             .collect();
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();

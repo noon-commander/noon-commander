@@ -7,24 +7,25 @@
 //! place until then.
 
 use std::collections::HashSet;
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use noc_config::{Recent, SearchMode};
 use noc_scroll::scrollbar::Bar;
-use noc_vfs::{Location, Volume};
+use noc_vfs::{Location, Volume, VolumeKind};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
 use super::app::Side;
-use super::cells::{self, Align};
+use super::cells::{self, Align, Cut};
 use super::decor::Decor;
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
-use super::panel::HostState;
+use super::panel::{HostState, HostStatus, home_text};
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
 use super::places::{KnownHost, Places, volume_name, volume_of};
 use super::search::{Input, Kind};
@@ -424,11 +425,10 @@ impl LocationMenu {
         let note = self.note(theme);
         let now = spin.at();
         let waiting = &self.contents.places.waiting;
-        let waits = |mount_point: &Path| {
-            (waiting.get(mount_point))
-                .is_some_and(|since| now.saturating_duration_since(*since) < NO_ANSWER)
+        let asked = |mount_point: &Path| {
+            (waiting.get(mount_point)).map(|since| now.saturating_duration_since(*since))
         };
-        let sizes: Vec<Option<Sizes>> = items.iter().map(|item| sizes(*item, &waits)).collect();
+        let sizes: Vec<Option<Sizes>> = items.iter().map(|item| sizes(*item, &asked)).collect();
         let columns = SizeColumns::of(sizes.iter().flatten());
         let infos: Vec<Info> = (items.iter().zip(&sizes))
             .map(|(item, sizes)| info(*item, sizes.as_ref(), hosts, columns))
@@ -442,9 +442,22 @@ impl LocationMenu {
             shine: spin.shine(&self.sizes),
             focused: Colors::plain(theme).focused_style(),
         };
-        let full = items.get(self.picker.cursor()).map(|item| {
-            let texts = texts(*item).join("  ");
-            cells::sanitize(texts.as_bytes())
+        // No card while the skeleton stands for the rows: it takes the lines of the card too.
+        let cursor = self.picker.cursor().min(items.len().saturating_sub(1));
+        let chosen = (items.get(cursor).copied()).filter(|_| self.loading.skeleton().is_none());
+        let (footer, footer_label) = chosen.map_or((Vec::new(), None), |item| {
+            let hidden = match item {
+                Item::More(group, _) => self.contents.hidden(group),
+                Item::Home(..) | Item::Volume(_) | Item::Host(_) => Vec::new(),
+            };
+            let room = (
+                window::inner_width(window::WIDTH, area),
+                &*self.contents.home,
+            );
+            let sizes = sizes.get(cursor).and_then(Option::as_ref);
+            let (lines, label) = look.card(item, sizes, &hidden, room);
+            let label = label.map(|label| Line::styled(label, Colors::plain(theme).title));
+            (lines, label)
         });
         let body = Body {
             title: &title,
@@ -453,7 +466,8 @@ impl LocationMenu {
             note,
             message,
             loading: Some((&self.loading, spin)),
-            full,
+            footer,
+            footer_label,
             has_full: true,
             ..Body::default()
         };
@@ -479,6 +493,21 @@ impl LocationMenu {
 }
 
 impl Contents {
+    /// The names of the places of `group` that its row of the rest stands for, in their order.
+    fn hidden(&self, group: Group) -> Vec<String> {
+        (self.rows().into_iter())
+            .filter(|(item, shows)| *shows == Shows::Filtered && item.group() == group)
+            .filter_map(|(item, _)| match item {
+                Item::Volume(volume) => Some(volume_name(volume)),
+                Item::Host(host) => {
+                    let name = host.label.as_deref().unwrap_or(&host.alias);
+                    Some(cells::sanitize(name.as_bytes()))
+                }
+                Item::Home(..) | Item::More(..) => None,
+            })
+            .collect()
+    }
+
     /// The row of the home directory or the volume that holds the panel's directory, whichever
     /// is nearer, or of its host.
     fn current_row(&self, items: &[Item<'_>]) -> usize {
@@ -655,6 +684,156 @@ impl Look<'_> {
         }
         Line::from(spans).style(styles.0)
     }
+
+    /// The card of `item` under the rows, in `width` cells: its two lines, what it is and how
+    /// it is, and what goes on the line over them. `sizes` are those of the volume of a volume
+    /// or of the home directory, `hidden` the names of the places a row of the rest stands for;
+    /// `home` shortens the path of the ssh config.
+    fn card(
+        &self,
+        item: Item<'_>,
+        sizes: Option<&Sizes>,
+        hidden: &[String],
+        (width, home): (usize, &Path),
+    ) -> (Vec<Line<'static>>, Option<String>) {
+        let text = |text: &str, cut: Cut| {
+            let styles = (self.theme.dialog, self.theme.truncated_dialog);
+            cells::fitted(
+                text,
+                width,
+                (Align::Left, cut),
+                styles,
+                self.theme.glyphs.marks,
+            )
+        };
+        let both =
+            |first: &str, second: &str| fl!("menu-card-both", first = first, second = second);
+        match item {
+            Item::Home(path, volume) => {
+                let label = volume.map(|volume| match &volume.fs_type {
+                    Some(fs_type) => {
+                        both(&volume_name(volume), &cells::sanitize(fs_type.as_bytes()))
+                    }
+                    None => volume_name(volume),
+                });
+                let path = cells::sanitize(path.as_os_str().as_bytes());
+                (
+                    vec![text(&path, Cut::Start), self.sizes_line(sizes, width)],
+                    label,
+                )
+            }
+            Item::Volume(volume) => {
+                let kind = match volume.kind {
+                    VolumeKind::System => fl!("menu-card-system"),
+                    VolumeKind::Local => fl!("menu-card-local"),
+                    VolumeKind::Network => fl!("menu-card-network"),
+                };
+                let label = match &volume.fs_type {
+                    Some(fs_type) => both(&cells::sanitize(fs_type.as_bytes()), &kind),
+                    None => kind,
+                };
+                let mount_point = cells::sanitize(volume.mount_point.as_os_str().as_bytes());
+                let mounted = match &volume.source {
+                    Some(source) => fl!(
+                        "menu-card-mounted",
+                        source = cells::sanitize(source.as_bytes()),
+                        mount_point = mount_point
+                    ),
+                    None => mount_point,
+                };
+                let lines = vec![text(&mounted, Cut::Middle), self.sizes_line(sizes, width)];
+                (lines, Some(label))
+            }
+            Item::Host(host) => {
+                let state = (self.hosts)(&host.alias);
+                let file = home_text(&host.file, home);
+                let label = fl!("menu-card-defined", file = file, line = host.line);
+                let address = (state.address.as_ref()).or(host.address.as_ref());
+                let address = match (address, &host.jump) {
+                    (Some(address), Some(jump)) => fl!(
+                        "menu-card-via",
+                        address = cells::sanitize(address.as_bytes()),
+                        jump = cells::sanitize(jump.as_bytes())
+                    ),
+                    (Some(address), None) => cells::sanitize(address.as_bytes()),
+                    (None, _) => fl!("menu-card-no-address"),
+                };
+                let first = both(&cells::sanitize(host.alias.as_bytes()), &address);
+                let lines = vec![text(&first, Cut::End), self.status_line(&state, width)];
+                (lines, Some(label))
+            }
+            Item::More(..) => {
+                let names = hidden.join(&fl!("menu-card-separator"));
+                (vec![text(&names, Cut::End), Line::default()], None)
+            }
+        }
+    }
+
+    /// How the space of a volume is, in `width` cells: its free space and its size, a skeleton
+    /// while they are still to come, or why they are not known.
+    fn sizes_line(&self, sizes: Option<&Sizes>, width: usize) -> Line<'static> {
+        let text = match sizes {
+            Some(Sizes::Known {
+                free,
+                total,
+                percent,
+            }) => {
+                let (free, total, percent) = (free.clone(), total.clone(), *percent);
+                fl!(
+                    "menu-card-space",
+                    free = free,
+                    total = total,
+                    percent = percent
+                )
+            }
+            Some(Sizes::Waiting) => {
+                let width = u16::try_from(width).unwrap_or(u16::MAX);
+                return window::status_skeleton(width, self.theme.dialog, self.theme, self.shine);
+            }
+            Some(Sizes::GivenUp) => fl!("menu-card-no-answer", seconds = NO_ANSWER.as_secs()),
+            Some(Sizes::Unknown) | None => fl!("menu-card-no-space"),
+        };
+        let styles = (self.theme.dialog, self.theme.truncated_dialog);
+        let fit = (Align::Left, Cut::End);
+        cells::fitted(&text, width, fit, styles, self.theme.glyphs.marks)
+    }
+
+    /// How a host is, in `width` cells, after its marker in the color of its status: connected,
+    /// with the tabs on it; connecting; why its last attempt failed, in the colors of errors; or
+    /// where opening it goes.
+    fn status_line(&self, state: &HostState, width: usize) -> Line<'static> {
+        let dialog = self.theme.dialog;
+        let (text, style) = match state.status {
+            HostStatus::Connected => (fl!("menu-card-connected", tabs = state.tabs), dialog),
+            HostStatus::Connecting => (fl!("menu-card-connecting"), dialog),
+            HostStatus::Failed | HostStatus::Stalled => {
+                let reason = state.reason.clone();
+                (
+                    reason.unwrap_or_else(|| fl!("menu-card-failed")),
+                    self.theme.invalid(dialog),
+                )
+            }
+            HostStatus::Idle => {
+                let opens = match &state.opens {
+                    Some(dir) => fl!("menu-card-opens", dir = dir.as_str()),
+                    None => fl!("menu-card-opens-home"),
+                };
+                let text = match &state.other {
+                    Some(dir) => fl!("menu-card-other", opens = opens, dir = dir.as_str()),
+                    None => opens,
+                };
+                (text, dialog)
+            }
+        };
+        let marker = self.decor.host(state.status, self.dots);
+        let room = width.saturating_sub(cells::width(&marker));
+        let status = dialog.patch(self.theme.dialog_host_status(state.status));
+        let mut spans = vec![Span::styled(marker, status)];
+        let fitted = cells::fit_cut(&text, room, Align::Left, Cut::End);
+        let styles = (style, self.theme.truncated_dialog);
+        spans.extend(cells::spans(fitted, styles, self.theme.glyphs.marks));
+        Line::from(spans)
+    }
 }
 
 /// What the filter finds a row by.
@@ -699,17 +878,24 @@ fn key(item: Item<'_>) -> Key {
 /// The free space and the size of the volume of a row, as far as they are known.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Sizes {
-    /// As the row shows them.
-    Known(String, String),
+    /// As the row shows them, and the share free, in percent.
+    Known {
+        free: String,
+        total: String,
+        percent: u64,
+    },
     /// Still to come from a volume that did not answer in time.
     Waiting,
-    /// The volume told none, or did not answer in [`NO_ANSWER`].
+    /// Given up for: the volume did not answer in [`NO_ANSWER`].
+    GivenUp,
+    /// The volume told none.
     Unknown,
 }
 
 /// The sizes of the volume of a row, a volume or the home directory; none for a host or the row
-/// of the rest of a group. A volume whose mount point `waits` has them still to come.
-fn sizes(item: Item<'_>, waits: &dyn Fn(&Path) -> bool) -> Option<Sizes> {
+/// of the rest of a group. A volume whose mount point was `asked` so long ago, and has not
+/// answered, has them still to come, or given up for.
+fn sizes(item: Item<'_>, asked: &dyn Fn(&Path) -> Option<Duration>) -> Option<Sizes> {
     let volume = match item {
         Item::Home(_, volume) => volume,
         Item::Volume(volume) => Some(volume),
@@ -717,13 +903,19 @@ fn sizes(item: Item<'_>, waits: &dyn Fn(&Path) -> bool) -> Option<Sizes> {
     };
     // Pseudo file systems report no size.
     let space = (volume.and_then(|volume| volume.space)).filter(|space| space.total > 0);
-    Some(match (space, volume) {
-        (Some(space), _) => Sizes::Known(
-            super::panel::short_size(space.available),
-            super::panel::short_size(space.total),
-        ),
-        (None, Some(volume)) if waits(&volume.mount_point) => Sizes::Waiting,
-        (None, _) => Sizes::Unknown,
+    let ago = volume.and_then(|volume| asked(&volume.mount_point));
+    Some(match (space, ago) {
+        (Some(space), _) => {
+            let free = u128::from(space.available.min(space.total)) * 100;
+            Sizes::Known {
+                free: super::panel::short_size(space.available),
+                total: super::panel::short_size(space.total),
+                percent: u64::try_from(free / u128::from(space.total)).unwrap_or(100),
+            }
+        }
+        (None, Some(ago)) if ago < NO_ANSWER => Sizes::Waiting,
+        (None, Some(_)) => Sizes::GivenUp,
+        (None, None) => Sizes::Unknown,
     })
 }
 
@@ -742,13 +934,13 @@ impl SizeColumns {
         let (mut known, mut waiting, mut unknown) = (false, false, false);
         for sizes in sizes {
             match sizes {
-                Sizes::Known(free, total) => {
+                Sizes::Known { free, total, .. } => {
                     known = true;
                     columns.free = columns.free.max(cells::width(free));
                     columns.total = columns.total.max(cells::width(total));
                 }
                 Sizes::Waiting => waiting = true,
-                Sizes::Unknown => unknown = true,
+                Sizes::GivenUp | Sizes::Unknown => unknown = true,
             }
         }
         if waiting && !known {
@@ -812,9 +1004,9 @@ fn info(
     columns: SizeColumns,
 ) -> Info {
     let text = match (item, sizes) {
-        (_, Some(Sizes::Known(free, total))) => columns.text(free, total),
+        (_, Some(Sizes::Known { free, total, .. })) => columns.text(free, total),
         (_, Some(Sizes::Waiting)) => return Info::Waiting(columns.width()),
-        (_, Some(Sizes::Unknown)) => {
+        (_, Some(Sizes::GivenUp | Sizes::Unknown)) => {
             let mark = fl!("menu-space-unknown");
             columns.text(&mark, &mark)
         }
@@ -846,6 +1038,7 @@ mod tests {
             mount_point: PathBuf::from(path),
             label: label.map(str::to_owned),
             fs_type: Some("apfs".to_owned()),
+            source: None,
             kind,
             space: Some(Space {
                 total: 994 << 30,
@@ -859,6 +1052,9 @@ mod tests {
             alias: alias.to_owned(),
             label: label.map(str::to_owned),
             address: address.map(str::to_owned),
+            jump: None,
+            file: PathBuf::from("/Users/me/.ssh/config"),
+            line: 1,
         }
     }
 
@@ -955,7 +1151,8 @@ mod tests {
             } else {
                 HostStatus::Idle
             },
-            address: None,
+            tabs: 2,
+            ..HostState::default()
         };
         // Drawn again once what it waits for shows, with a still spinner.
         let start = Instant::now();
@@ -1256,7 +1453,7 @@ mod tests {
                 "proxy" => HostStatus::Failed,
                 _ => HostStatus::Idle,
             },
-            address: None,
+            ..HostState::default()
         };
         terminal
             .draw(|frame| {
@@ -1492,6 +1689,209 @@ mod tests {
             .find(|line| line.contains(" Home "))
             .unwrap_or_default();
         assert!(home.contains(" ----------- ║"), "{text}");
+    }
+
+    /// The line over the card and its two lines, drawn 60 cells wide with `hosts`, trimmed.
+    fn card(menu: &mut LocationMenu, hosts: &dyn Fn(&str) -> HostState) -> [String; 3] {
+        let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
+        terminal
+            .draw(|frame| {
+                let (theme, decor) = (Theme::terminal(), Decor::new(false));
+                menu.render(frame, frame.area(), &theme, decor, hosts, &still());
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let lines: Vec<String> = (0..buffer.area.height)
+            .map(|y| {
+                let line: String = (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect();
+                line.trim().to_owned()
+            })
+            .collect();
+        let bottom = (lines.iter().rposition(|line| line.starts_with('╚'))).unwrap_or(3);
+        [3, 2, 1].map(|above| lines[bottom - above].clone())
+    }
+
+    fn idle(_: &str) -> HostState {
+        HostState::default()
+    }
+
+    #[test]
+    fn the_card_of_a_volume_says_what_it_mounts_and_how_much_is_free() {
+        let usb = Volume {
+            source: Some("/dev/disk4s1".to_owned()),
+            space: Some(Space {
+                total: 64 << 30,
+                available: 12 << 30,
+            }),
+            ..volume("/Volumes/USB", Some("USB"), VolumeKind::Local)
+        };
+        let share = Volume {
+            fs_type: Some("smbfs".to_owned()),
+            source: Some("//me@nas/share".to_owned()),
+            space: None,
+            ..volume("/Volumes/share", Some("share"), VolumeKind::Network)
+        };
+        let system = volume("/", Some("Macintosh HD"), VolumeKind::System);
+        let places = Places {
+            volumes: vec![system, usb, share],
+            ..Places::default()
+        };
+        let at = Location::Local(PathBuf::from("/Volumes/USB/photos"));
+        let mut menu = menu_with(at, &Recent::default(), places);
+        let [label, mounted, space] = card(&mut menu, &idle);
+        assert!(label.ends_with(" apfs · local ─╢"), "{label}");
+        assert!(
+            mounted.starts_with("║ /dev/disk4s1 on /Volumes/USB "),
+            "{mounted}"
+        );
+        assert!(space.starts_with("║ 12.0G free of 64.0G (18%) "), "{space}");
+
+        press(&mut menu, Action::Down);
+        let [label, mounted, space] = card(&mut menu, &idle);
+        assert!(label.ends_with(" smbfs · network ─╢"), "{label}");
+        assert!(
+            mounted.starts_with("║ //me@nas/share on /Volumes/share "),
+            "{mounted}"
+        );
+        assert!(space.starts_with("║ Tells no free space "), "{space}");
+
+        press(&mut menu, Action::Home);
+        let [label, path, space] = card(&mut menu, &idle);
+        assert!(
+            label.ends_with(" Macintosh HD · apfs ─╢"),
+            "the volume of home: {label}"
+        );
+        assert!(path.starts_with("║ /Users/me "), "{path}");
+        assert!(space.starts_with("║ 212G free of 994G (21%) "), "{space}");
+    }
+
+    #[test]
+    fn the_card_of_a_volume_still_to_answer_waits_then_gives_up() {
+        let mut places = waiting(Duration::ZERO);
+        places.volumes[1].fs_type = None;
+        let mut menu = menu_with(home(), &Recent::default(), places);
+        press(&mut menu, Action::End);
+        let [label, mounted, space] = card(&mut menu, &idle);
+        assert!(
+            label.ends_with(" network ─╢"),
+            "its type is still to come: {label}"
+        );
+        assert!(mounted.starts_with("║ /Volumes/NAS "), "{mounted}");
+        assert!(space.starts_with("║ ------"), "a skeleton: {space}");
+
+        let mut menu = menu_with(home(), &Recent::default(), waiting(NO_ANSWER));
+        press(&mut menu, Action::End);
+        let [_, _, space] = card(&mut menu, &idle);
+        assert!(space.starts_with("║ Did not answer in 5 s "), "{space}");
+    }
+
+    #[test]
+    fn the_card_of_a_host_says_where_it_is_defined_how_to_reach_it_and_how_it_is() {
+        let mut places = places();
+        places.hosts[0].jump = Some("bastion".to_owned());
+        places.hosts[0].line = 12;
+        places.hosts[1].file = PathBuf::from("/etc/ssh/ssh_config");
+        places.hosts[1].line = 40;
+        let mut menu = menu_with(remote("web"), &Recent::default(), places);
+        let state = |alias: &str| match alias {
+            "web" => HostState {
+                status: HostStatus::Connected,
+                tabs: 1,
+                ..HostState::default()
+            },
+            "db" => HostState {
+                status: HostStatus::Failed,
+                reason: Some("Permission denied (publickey).".to_owned()),
+                ..HostState::default()
+            },
+            _ => HostState {
+                opens: Some("/srv/app".to_owned()),
+                other: Some("~/logs".to_owned()),
+                ..HostState::default()
+            },
+        };
+        let [label, reach, how] = card(&mut menu, &state);
+        assert!(label.ends_with(" ~/.ssh/config:12 ─╢"), "{label}");
+        assert!(
+            reach.starts_with("║ web · deploy@10.0.0.5 via bastion "),
+            "{reach}"
+        );
+        assert!(how.starts_with("║ ● Connected · 1 tab "), "{how}");
+
+        press(&mut menu, Action::Down);
+        let [label, reach, how] = card(&mut menu, &state);
+        assert!(label.ends_with(" /etc/ssh/ssh_config:40 ─╢"), "{label}");
+        assert!(
+            reach.starts_with("║ db · address not known yet "),
+            "{reach}"
+        );
+        assert!(
+            how.starts_with("║ ✗ Permission denied (publickey). "),
+            "{how}"
+        );
+
+        press(&mut menu, Action::Down);
+        let [_, reach, how] = card(&mut menu, &state);
+        assert!(
+            reach.starts_with("║ proxy · root@proxy.example.org "),
+            "{reach}"
+        );
+        assert!(
+            how.starts_with("║ ○ Opens /srv/app · other panel ~/logs "),
+            "{how}"
+        );
+        let [_, _, how] = card(&mut menu, &idle);
+        assert!(how.starts_with("║ ○ Opens the remote home "), "{how}");
+    }
+
+    #[test]
+    fn the_reason_a_host_failed_is_in_the_colors_of_errors() {
+        let mut menu = menu_with(remote("db"), &Recent::default(), places());
+        let failed = |_: &str| HostState {
+            status: HostStatus::Failed,
+            reason: Some("Connection refused".to_owned()),
+            ..HostState::default()
+        };
+        let theme = Theme::mc_classic();
+        let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
+        terminal
+            .draw(|frame| {
+                let decor = Decor::new(false);
+                menu.render(frame, frame.area(), &theme, decor, &failed, &still());
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let at = crate::tui::mouse::find(buffer, "Connection refused");
+        let fg = buffer[(at.x, at.y)].fg;
+        assert_eq!(Some(fg), theme.invalid(theme.dialog).fg);
+        assert_ne!(Some(fg), theme.dialog.fg, "apart from the dialog's");
+    }
+
+    #[test]
+    fn the_card_of_the_row_of_the_rest_names_what_it_stands_for() {
+        let mut menu = menu_with(home(), &Recent::default(), many_hosts(14));
+        press(&mut menu, Action::End);
+        let [label, names, empty] = card(&mut menu, &idle);
+        assert!(label.ends_with("──╢") && !label.contains(':'), "{label}");
+        assert!(names.starts_with("║ h11, h12, h13, h14 "), "{names}");
+        assert_eq!(empty.trim_matches(['║', ' ']), "");
+    }
+
+    #[test]
+    fn the_box_keeps_its_height_whatever_the_card_is_of() {
+        let mut menu = menu_with(home(), &Recent::default(), many_hosts(14));
+        let height = |menu: &mut LocationMenu| {
+            (draw(menu, 40).lines())
+                .filter(|line| line.contains('║') || line.contains('╟'))
+                .count()
+        };
+        let first = height(&mut menu);
+        for action in [Action::Down, Action::Down, Action::End] {
+            press(&mut menu, action);
+            assert_eq!(height(&mut menu), first, "after {action:?}");
+        }
     }
 
     #[test]

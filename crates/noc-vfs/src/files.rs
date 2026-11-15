@@ -1,6 +1,7 @@
 //! Reading and writing files as streams of chunks.
 
 use std::fmt;
+use std::ops::Range;
 
 use futures_util::StreamExt as _;
 use futures_util::future::BoxFuture;
@@ -43,25 +44,30 @@ pub(crate) type Fetch = Box<dyn Fn(u64, u32) -> BoxFuture<'static, Fetched> + Se
 
 /// Keeps several reads of a file in flight, for links where waiting for each answer in turn
 /// would leave the line idle, and hands out what they read in order. A read that gives less
-/// than it asked for is asked again for the rest, as `sftp(1)` does.
+/// than it asked for is asked again for the rest, as `sftp(1)` does. No read reaches past the
+/// end of the range: what a server is asked for it sends, wanted or not.
 pub(crate) struct ReadPipeline {
     fetch: Fetch,
     /// Reads in flight, by offset: each gives its offset, its length, and what came back.
     pending: FuturesOrdered<BoxFuture<'static, (u64, u32, Fetched)>>,
     /// Where the next new read starts.
     next: u64,
+    /// Where the last read ends.
+    end: u64,
     chunk: u32,
     depth: usize,
     ended: bool,
 }
 
 impl ReadPipeline {
-    /// Reads of `chunk` bytes from `start` on, `depth` at a time.
-    pub(crate) fn new(fetch: Fetch, start: u64, chunk: u32, depth: usize) -> Self {
+    /// Reads of `chunk` bytes of `range`, `depth` at a time; a range to `u64::MAX` has no end
+    /// but the file's.
+    pub(crate) fn new(fetch: Fetch, range: Range<u64>, chunk: u32, depth: usize) -> Self {
         Self {
             fetch,
             pending: FuturesOrdered::new(),
-            next: start,
+            next: range.start,
+            end: range.end,
             chunk: chunk.max(1),
             depth: depth.max(1),
             ended: false,
@@ -77,10 +83,12 @@ impl ReadPipeline {
         if self.ended {
             return Ok(None);
         }
-        while self.pending.len() < self.depth {
-            let request = self.request(self.next, self.chunk);
+        while self.pending.len() < self.depth && self.next < self.end {
+            let left = self.end - self.next;
+            let length = u32::try_from(left).map_or(self.chunk, |left| left.min(self.chunk));
+            let request = self.request(self.next, length);
             self.pending.push_back(request);
-            self.next += u64::from(self.chunk);
+            self.next = self.next.saturating_add(u64::from(length));
         }
         let Some((offset, length, fetched)) = self.pending.next().await else {
             return Ok(None);
@@ -111,15 +119,16 @@ mod tests {
     use super::*;
     use crate::fixture;
 
-    /// Reads in flight now, and the most at once.
-    type Flight = Arc<Mutex<(usize, usize)>>;
+    /// Reads in flight now, the most at once, and where the furthest read asked for ends.
+    type Flight = Arc<Mutex<(usize, usize, u64)>>;
 
     /// A file of `size` bytes whose reads at offsets divisible by 3 give half of what they
-    /// ask for, and that fails from `fail_at` on. It counts the reads in flight at once.
+    /// ask for, and that fails from `fail_at` on. It counts the reads in flight at once, and
+    /// notes how far they reach.
     fn fake(size: usize, fail_at: Option<u64>) -> (Vec<u8>, Fetch, Flight) {
         let data = fixture::pattern(size);
         let source = data.clone();
-        let flight = Arc::new(Mutex::new((0, 0)));
+        let flight = Arc::new(Mutex::new((0, 0, 0)));
         let counter = Arc::clone(&flight);
         let fetch: Fetch = Box::new(move |offset, length| {
             let source = source.clone();
@@ -128,6 +137,7 @@ mod tests {
                 let mut flight = counter.lock().unwrap();
                 flight.0 += 1;
                 flight.1 = flight.1.max(flight.0);
+                flight.2 = flight.2.max(offset + u64::from(length));
             }
             Box::pin(async move {
                 tokio::task::yield_now().await;
@@ -162,7 +172,7 @@ mod tests {
     async fn reads_in_order_and_asks_again_for_short_reads() {
         for size in [0, 1, 63, 64, 1000, 10_007] {
             let (data, fetch, flight) = fake(size, None);
-            let mut pipeline = ReadPipeline::new(fetch, 0, 64, 4);
+            let mut pipeline = ReadPipeline::new(fetch, 0..u64::MAX, 64, 4);
             assert_eq!(read_all(&mut pipeline).await.unwrap(), data, "{size}");
             assert!(pipeline.read().await.unwrap().is_none(), "ended");
             assert!(flight.lock().unwrap().1 <= 4, "at most four at once");
@@ -172,7 +182,7 @@ mod tests {
     #[tokio::test]
     async fn keeps_several_reads_in_flight() {
         let (_, fetch, flight) = fake(10_000, None);
-        let mut pipeline = ReadPipeline::new(fetch, 0, 64, 8);
+        let mut pipeline = ReadPipeline::new(fetch, 0..u64::MAX, 64, 8);
         read_all(&mut pipeline).await.unwrap();
         assert_eq!(flight.lock().unwrap().1, 8);
     }
@@ -180,9 +190,65 @@ mod tests {
     #[tokio::test]
     async fn stops_at_an_error() {
         let (_, fetch, _) = fake(1000, Some(320));
-        let mut pipeline = ReadPipeline::new(fetch, 0, 64, 4);
+        let mut pipeline = ReadPipeline::new(fetch, 0..u64::MAX, 64, 4);
         let err = read_all(&mut pipeline).await.unwrap_err();
         assert!(matches!(err, VfsError::PermissionDenied(..)), "{err:?}");
         assert!(pipeline.read().await.unwrap().is_none(), "nothing after it");
+    }
+
+    #[tokio::test]
+    async fn reads_a_range_and_asks_for_nothing_past_it() {
+        // Ends on and off the chunks, one within a single chunk, and the end of the file.
+        for (start, end) in [
+            (0, 1),
+            (0, 64),
+            (0, 640),
+            (5, 70),
+            (130, 150),
+            (333, 9_999),
+            (9_000, 10_007),
+        ] {
+            let (data, fetch, flight) = fake(10_007, None);
+            let mut pipeline = ReadPipeline::new(fetch, start as u64..end as u64, 64, 4);
+            assert_eq!(
+                read_all(&mut pipeline).await.unwrap(),
+                data[start..end],
+                "{start}..{end}"
+            );
+            assert!(pipeline.read().await.unwrap().is_none(), "ended");
+            let flight = flight.lock().unwrap();
+            assert!(flight.1 <= 4, "at most four at once");
+            assert_eq!(flight.2, end as u64, "{start}..{end}: not past it");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_range_past_the_end_of_the_file_stops_there() {
+        for (start, end) in [(900, 5000), (0, u64::MAX - 1), (1000, 5000), (4000, 5000)] {
+            let (data, fetch, flight) = fake(1000, None);
+            let mut pipeline = ReadPipeline::new(fetch, start as u64..end, 64, 4);
+            let rest = data.get(start..).unwrap_or_default();
+            assert_eq!(read_all(&mut pipeline).await.unwrap(), rest, "{start}");
+            assert!(pipeline.read().await.unwrap().is_none(), "ended");
+            assert!(flight.lock().unwrap().2 <= end, "{start}..{end}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_range_at_the_last_offset_does_not_overflow() {
+        let (_, fetch, flight) = fake(1000, None);
+        let mut pipeline = ReadPipeline::new(fetch, u64::MAX - 10..u64::MAX, 64, 4);
+        assert_eq!(read_all(&mut pipeline).await.unwrap(), b"");
+        assert_eq!(flight.lock().unwrap().2, u64::MAX);
+    }
+
+    #[tokio::test]
+    async fn an_empty_range_asks_for_nothing() {
+        for start in [0, 500, 5000] {
+            let (_, fetch, flight) = fake(1000, None);
+            let mut pipeline = ReadPipeline::new(fetch, start..start, 64, 4);
+            assert!(pipeline.read().await.unwrap().is_none(), "{start}");
+            assert_eq!(*flight.lock().unwrap(), (0, 0, 0), "{start}: no read");
+        }
     }
 }

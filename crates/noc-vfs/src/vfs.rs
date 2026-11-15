@@ -169,6 +169,18 @@ pub trait Vfs: Send + Sync {
         &self,
         path: &Self::Path,
         offset: u64,
+    ) -> impl Future<Output = Result<Self::Reader, VfsError>> + Send {
+        self.open_file_range(path, offset, u64::MAX)
+    }
+
+    /// Opens the file at `path` for reading `length` bytes from byte `offset` on, following
+    /// symlinks: the reader ends after them, or at the end of the file if that comes first, and
+    /// asks for nothing past them. An offset at or past the end reads nothing.
+    fn open_file_range(
+        &self,
+        path: &Self::Path,
+        offset: u64,
+        length: u64,
     ) -> impl Future<Output = Result<Self::Reader, VfsError>> + Send;
 
     /// Creates the file at `path` for writing: a new one, or with `replace` an existing one

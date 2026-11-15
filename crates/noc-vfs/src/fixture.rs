@@ -236,6 +236,21 @@ async fn read_from<V: Vfs>(vfs: &V, path: &V::Path, offset: u64) -> Result<Vec<u
     Ok(all)
 }
 
+/// Everything a reader of `length` bytes from `offset` on reads.
+pub(crate) async fn read_range<V: Vfs>(
+    vfs: &V,
+    path: &V::Path,
+    offset: u64,
+    length: u64,
+) -> Result<Vec<u8>, VfsError> {
+    let mut reader = vfs.open_file_range(path, offset, length).await?;
+    let mut all = Vec::new();
+    while let Some(chunk) = reader.read().await? {
+        all.extend(chunk);
+    }
+    Ok(all)
+}
+
 /// Writes and reads files through `vfs` in `root`, an empty local directory that `path` names
 /// entries of for `vfs`, and checks them on disk.
 pub(crate) async fn check_files<V: Vfs>(vfs: &V, root: &Path, path: impl Fn(&str) -> V::Path) {

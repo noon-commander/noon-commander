@@ -27,11 +27,17 @@ pub struct LocalFs;
 pub struct LocalReader {
     file: tokio::fs::File,
     path: PathBuf,
+    /// Bytes of its range still to give.
+    left: u64,
 }
 
 impl FileReader for LocalReader {
     async fn read(&mut self) -> Result<Option<Vec<u8>>, VfsError> {
-        let mut buffer = vec![0; CHUNK];
+        let want = usize::try_from(self.left).map_or(CHUNK, |left| left.min(CHUNK));
+        if want == 0 {
+            return Ok(None);
+        }
+        let mut buffer = vec![0; want];
         let read = self
             .file
             .read(&mut buffer)
@@ -41,6 +47,7 @@ impl FileReader for LocalReader {
             return Ok(None);
         }
         buffer.truncate(read);
+        self.left -= read as u64;
         Ok(Some(buffer))
     }
 }
@@ -170,7 +177,12 @@ impl Vfs for LocalFs {
             .map_err(|err| VfsError::local(err, path))
     }
 
-    async fn open_file_at(&self, path: &PathBuf, offset: u64) -> Result<LocalReader, VfsError> {
+    async fn open_file_range(
+        &self,
+        path: &PathBuf,
+        offset: u64,
+        length: u64,
+    ) -> Result<LocalReader, VfsError> {
         let mut file = tokio::fs::File::open(path)
             .await
             .map_err(|err| VfsError::local(err, path))?;
@@ -182,6 +194,7 @@ impl Vfs for LocalFs {
         Ok(LocalReader {
             file,
             path: path.clone(),
+            left: length,
         })
     }
 
@@ -389,6 +402,65 @@ mod tests {
     async fn writes_and_reads_files() {
         let dir = tempfile::tempdir().unwrap();
         fixture::check_files(&LocalFs, dir.path(), |name| dir.path().join(name)).await;
+    }
+
+    #[tokio::test]
+    async fn reads_a_range_of_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file");
+        let size = 3 * CHUNK + 17;
+        let data = fixture::pattern(size);
+        fs::write(&file, &data).unwrap();
+        // Within a chunk, over several, and to the end of the file.
+        for (offset, length) in [
+            (0, 1),
+            (0, CHUNK),
+            (5, CHUNK + 1),
+            (CHUNK - 1, 2 * CHUNK + 2),
+            (size - 9, 9),
+            (0, size),
+        ] {
+            let read = fixture::read_range(&LocalFs, &file, offset as u64, length as u64);
+            assert!(
+                read.await.unwrap() == data[offset..offset + length],
+                "{length} from {offset}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_range_past_the_end_reads_what_there_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file");
+        let size = CHUNK + 17;
+        let data = fixture::pattern(size);
+        fs::write(&file, &data).unwrap();
+        for (offset, length) in [
+            (0, size as u64 + 1),
+            (size - 9, 100),
+            (5, u64::MAX),
+            (size, 100),
+            (size + 5, 100),
+        ] {
+            let rest = data.get(offset..).unwrap_or_default();
+            let read = fixture::read_range(&LocalFs, &file, offset as u64, length);
+            assert!(read.await.unwrap() == rest, "{length} from {offset}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_range_of_no_bytes_reads_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file");
+        fs::write(&file, "hello").unwrap();
+        for offset in [0, 2, 5, 9] {
+            let mut reader = LocalFs.open_file_range(&file, offset, 0).await.unwrap();
+            assert!(reader.read().await.unwrap().is_none(), "from {offset}");
+        }
+        // The file is opened all the same.
+        let missing = dir.path().join("missing");
+        let err = LocalFs.open_file_range(&missing, 0, 0).await.unwrap_err();
+        assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
     }
 
     #[tokio::test]

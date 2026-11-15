@@ -1138,9 +1138,14 @@ impl Vfs for OtherDevice {
     async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
         LocalFs.set_modified(path, time).await
     }
-    async fn open_file_at(&self, path: &PathBuf, offset: u64) -> Result<Self::Reader, VfsError> {
+    async fn open_file_range(
+        &self,
+        path: &PathBuf,
+        offset: u64,
+        length: u64,
+    ) -> Result<Self::Reader, VfsError> {
         Ok(Remote {
-            reader: LocalFs.open_file_at(path, offset).await?,
+            reader: LocalFs.open_file_range(path, offset, length).await?,
             read: false,
             stall: self.stall.clone(),
         })
@@ -1248,8 +1253,13 @@ impl Vfs for Lost {
     async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
         LocalFs.set_modified(path, time).await
     }
-    async fn open_file_at(&self, path: &PathBuf, offset: u64) -> Result<Self::Reader, VfsError> {
-        LocalFs.open_file_at(path, offset).await
+    async fn open_file_range(
+        &self,
+        path: &PathBuf,
+        offset: u64,
+        length: u64,
+    ) -> Result<Self::Reader, VfsError> {
+        LocalFs.open_file_range(path, offset, length).await
     }
     async fn create_file(&self, path: &PathBuf, replace: bool) -> Result<Self::Writer, VfsError> {
         let writer = LocalFs.create_file(path, replace).await?;

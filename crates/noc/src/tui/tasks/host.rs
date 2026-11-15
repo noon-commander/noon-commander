@@ -197,8 +197,13 @@ impl Vfs for Rejoin {
         self.fs().await?.set_permissions(path, mode).await
     }
 
-    async fn open_file_at(&self, path: &RemotePath, offset: u64) -> Result<SftpReader, VfsError> {
-        self.fs().await?.open_file_at(path, offset).await
+    async fn open_file_range(
+        &self,
+        path: &RemotePath,
+        offset: u64,
+        length: u64,
+    ) -> Result<SftpReader, VfsError> {
+        self.fs().await?.open_file_range(path, offset, length).await
     }
 
     async fn create_file(&self, path: &RemotePath, replace: bool) -> Result<SftpWriter, VfsError> {

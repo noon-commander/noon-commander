@@ -107,8 +107,11 @@ targets stored as given, never resolved), sets permissions and modification time
 writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show
 when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight,
 as `sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is
-asked again for the rest. A write goes out as it is made, and counts once the server has taken it
-(`FileWriter::written`); `settle` waits for more of those on their way
+asked again for the rest. A file opened for a range of its bytes (`Vfs::open_file_range`, which
+`open_file` and `open_file_at` read through, to the end of the file) is asked for nothing past
+the range: what a server is asked for it sends, wanted or not. A write goes out as it is made,
+and counts once the server has taken it (`FileWriter::written`); `settle` waits for more of
+those on their way
 ([ADR 0052](adr/0052-bytes-written-count-once-they-arrive.md)). A listing tells of each symlink
 the kind of its target and the target as stored; over SFTP each link asks both at once, 64 links
 at a time. Symlinks go to the server in OpenSSH's argument order (target first), which the client

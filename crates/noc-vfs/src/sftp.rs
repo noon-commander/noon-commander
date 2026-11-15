@@ -384,7 +384,12 @@ impl Vfs for SftpFs {
             .map_err(|err| VfsError::remote(err, path))
     }
 
-    async fn open_file_at(&self, path: &RemotePath, offset: u64) -> Result<SftpReader, VfsError> {
+    async fn open_file_range(
+        &self,
+        path: &RemotePath,
+        offset: u64,
+        length: u64,
+    ) -> Result<SftpReader, VfsError> {
         let mut options = self.sftp.options();
         options.read(true);
         let file = open(options, path)
@@ -404,8 +409,9 @@ impl Vfs for SftpFs {
             })
         });
         let depth = usize::try_from(IN_FLIGHT / CHUNK).unwrap_or(1);
+        let range = offset..offset.saturating_add(length);
         Ok(SftpReader {
-            pipeline: ReadPipeline::new(fetch, offset, CHUNK, depth),
+            pipeline: ReadPipeline::new(fetch, range, CHUNK, depth),
         })
     }
 
@@ -700,6 +706,64 @@ mod tests {
             return;
         };
         fixture::check_files(&server.fs, dir.path(), |name: &str| RemotePath::from(name)).await;
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn reads_a_range_from_the_middle_of_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        // More than the reads in flight hold.
+        let size = 2 * IN_FLIGHT as usize + 17;
+        let data = fixture::pattern(size);
+        std::fs::write(dir.path().join("big"), &data).unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        let big = RemotePath::from("big");
+        let chunk = CHUNK as usize;
+        // Within a chunk, on and off the chunks, and more than the reads in flight.
+        for (offset, length) in [
+            (size / 2, 1),
+            (size / 2, chunk),
+            (3 * chunk, 8 * chunk),
+            (5 * chunk + 3, 8 * chunk + 5),
+            (chunk - 1, IN_FLIGHT as usize + 2),
+            (0, size),
+        ] {
+            let read = fixture::read_range(&server.fs, &big, offset as u64, length as u64);
+            assert!(
+                read.await.unwrap() == data[offset..offset + length],
+                "{length} from {offset}"
+            );
+        }
+        let mut reader = server.fs.open_file_range(&big, 7, 0).await.unwrap();
+        assert!(reader.read().await.unwrap().is_none(), "no bytes");
+        drop(reader);
+        server.stop().await;
+    }
+
+    #[tokio::test]
+    async fn a_range_past_the_end_reads_what_there_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let size = 5 * CHUNK as usize + 17;
+        let data = fixture::pattern(size);
+        std::fs::write(dir.path().join("file"), &data).unwrap();
+        let Some(server) = Server::start(dir.path()).await else {
+            return;
+        };
+        let file = RemotePath::from("file");
+        for (offset, length) in [
+            (0, size as u64 + 1),
+            (size - 9, 100),
+            (2 * CHUNK as usize + 5, u64::from(IN_FLIGHT)),
+            (5, u64::MAX),
+            (size, 100),
+            (size + 5, 100),
+        ] {
+            let rest = data.get(offset..).unwrap_or_default();
+            let read = fixture::read_range(&server.fs, &file, offset as u64, length);
+            assert!(read.await.unwrap() == rest, "{length} from {offset}");
+        }
         server.stop().await;
     }
 

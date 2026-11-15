@@ -39,6 +39,8 @@ pub struct Config {
     pub search: SearchConfig,
     /// `[viewer]`: how the viewer, F3, reads a file.
     pub viewer: ViewerConfig,
+    /// `[edit]`: when F4 asks before it edits a file.
+    pub edit: EditConfig,
     /// `[log]`: what the TUI writes to its log.
     pub log: LogConfig,
 }
@@ -119,6 +121,22 @@ impl Default for ViewerConfig {
             host_part_kib: NonZeroUsize::new(256).unwrap_or(NonZeroUsize::MIN),
             window_mib: NonZeroUsize::new(128).unwrap_or(NonZeroUsize::MIN),
         }
+    }
+}
+
+/// The `[edit]` section: F4 edits a file in the editor of `$VISUAL` or `$EDITOR`, after a
+/// question if the file looks binary or is large.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct EditConfig {
+    /// F4 asks first before it edits a file of more mebibytes, as the editor of mc does; `0`
+    /// never asks for the size. Default: `64`.
+    pub large_mib: u64,
+}
+
+impl Default for EditConfig {
+    fn default() -> Self {
+        Self { large_mib: 64 }
     }
 }
 
@@ -598,9 +616,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, LogConfig, LogLevel,
-        MenuBar, Pause, SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar, TransferConfig,
-        UiConfig, ViewerConfig, VolumesConfig, Wheel, ZoxideConfig,
+        AnimationsConfig, Borders, Config, DEFAULT_CONFIG, DiscoveryConfig, EditConfig, LogConfig,
+        LogLevel, MenuBar, Pause, SearchConfig, SearchMode, ShellConfig, SshConfig, TabBar,
+        TransferConfig, UiConfig, ViewerConfig, VolumesConfig, Wheel, ZoxideConfig,
     };
     use crate::{ConfigError, Run, write_default_config};
 
@@ -679,6 +697,9 @@ mod tests {
         host_part_kib = 512
         window_mib = 64
 
+        [edit]
+        large_mib = 16
+
         [log]
         level = "debug"
         filter = "info,noc_ssh=trace"
@@ -750,6 +771,7 @@ mod tests {
                 host_part_kib: NonZeroUsize::new(512).unwrap(),
                 window_mib: NonZeroUsize::new(64).unwrap(),
             },
+            edit: EditConfig { large_mib: 16 },
             log: LogConfig {
                 level: LogLevel::Debug,
                 filter: "info,noc_ssh=trace".to_owned(),
@@ -800,6 +822,7 @@ mod tests {
         assert_eq!(config.viewer.part_mib.get(), 1);
         assert_eq!(config.viewer.host_part_kib.get(), 256);
         assert_eq!(config.viewer.window_mib.get(), 128);
+        assert_eq!(config.edit.large_mib, 64);
         assert_eq!(config.log.level, LogLevel::Info);
         assert_eq!(config.log.filter, "");
         assert_eq!(config.log.keep_days, 7);
@@ -1064,6 +1087,7 @@ mod tests {
         assert!(table["viewer"].get("part_mib").is_some());
         assert!(table["viewer"].get("host_part_kib").is_some());
         assert!(table["viewer"].get("window_mib").is_some());
+        assert!(table["edit"].get("large_mib").is_some());
         assert!(table["log"].get("level").is_some());
         assert!(table["log"].get("filter").is_some());
         assert!(table["log"].get("keep_days").is_some());

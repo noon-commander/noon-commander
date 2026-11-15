@@ -166,6 +166,12 @@ host_part_kib = 256
 # when scrolling comes back to them. At least two parts; less counts as two.
 window_mib = 128
 
+[edit]
+# F4 edits a file in the editor of $VISUAL or $EDITOR. It asks first for a file larger than this
+# many mebibytes, as the editor of mc does; 0 never asks for the size. It always asks first for a
+# file that looks binary: one with a NUL byte in its first 8000 bytes, as git tells one.
+large_mib = 64
+
 [log]
 # Each run of Noon Commander writes a log of its own in the logs directory under the state
 # directory (~/.local/state/noc/logs), named for the time it started (UTC) and its process ID.

@@ -1,10 +1,12 @@
-use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
-use std::time::Duration;
+use std::sync::{Arc, LazyLock, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
-use futures_util::future::join_all;
+use futures_util::FutureExt as _;
+use futures_util::future::{BoxFuture, Shared, join_all};
 
 /// A mounted file system.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,16 +39,69 @@ pub struct Space {
     pub available: u64,
 }
 
+/// The volumes as far as their file systems answered in time, and the answers still to come.
+#[derive(Debug, Default)]
+pub struct Volumes {
+    /// The system volume first, then the others by mount point; those that did not answer in
+    /// time as they are without an answer.
+    pub volumes: Vec<Volume>,
+    /// The answer of each volume that did not answer in time.
+    pub late: Vec<Late>,
+}
+
+/// The answer of a file system that did not answer in time: the volume as it is with it.
+pub struct Late {
+    mount_point: PathBuf,
+    since: Instant,
+    answer: BoxFuture<'static, Option<Volume>>,
+}
+
+impl Late {
+    /// The mount point of the volume, as listed.
+    pub fn mount_point(&self) -> &Path {
+        &self.mount_point
+    }
+
+    /// When the file system was asked, by this listing or an earlier one.
+    pub fn since(&self) -> Instant {
+        self.since
+    }
+
+    /// The volume, once its file system answers, which a dead network mount never does; or
+    /// `None` when it turns out not to be a volume to show. Dropping the future only stops
+    /// waiting: the query goes on, and the next listing waits for it.
+    pub async fn answer(self) -> Option<Volume> {
+        self.answer.await
+    }
+}
+
+impl fmt::Debug for Late {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Late")
+            .field("mount_point", &self.mount_point)
+            .field("since", &self.since)
+            .finish_non_exhaustive()
+    }
+}
+
 /// The volumes: the system volume first, then the others by mount point.
 ///
 /// Never fails: problems are logged and the list holds what could be found; `/` is always
 /// present. Each file system is asked for its details in parallel, and each answer is awaited
-/// at most `timeout`. A file system that does not answer in time, or whose earlier query is
-/// still pending (a dead network mount can block forever), stays in the list without
-/// [`Volume::space`]; on macOS it is also assumed to be a network file system of unknown type.
+/// at most `timeout`. A file system that does not answer in time (a dead network mount can
+/// block forever) stays in the list without [`Volume::space`]; on macOS it is also assumed to
+/// be a network file system of unknown type.
 pub async fn volumes(timeout: Duration) -> Vec<Volume> {
+    volumes_within(timeout).await.volumes
+}
+
+/// The volumes as [`volumes`] lists them after at most `first`, with the answer of each file
+/// system that did not answer by then. A file system still asked by an earlier listing is not
+/// asked again: this one waits for the same answer.
+pub async fn volumes_within(first: Duration) -> Volumes {
     #[cfg(target_os = "macos")]
-    let mut volumes = macos::volumes(timeout).await;
+    let mut volumes = macos::volumes(first).await;
     #[cfg(not(target_os = "macos"))]
     let mut volumes = {
         let candidates = match tokio::task::spawn_blocking(candidates).await {
@@ -56,9 +111,20 @@ pub async fn volumes(timeout: Duration) -> Vec<Volume> {
                 Vec::new()
             }
         };
-        statvfs_volumes(candidates, timeout).await
+        statvfs_volumes(candidates, first).await
     };
-    finish(&mut volumes);
+    finish(&mut volumes.volumes);
+    volumes
+}
+
+/// The volumes and the late answers of `asked`, each a volume, if it is one to show, and the
+/// answer still to come, if any.
+fn gather(asked: Vec<(Option<Volume>, Option<Late>)>) -> Volumes {
+    let mut volumes = Volumes::default();
+    for (volume, late) in asked {
+        volumes.volumes.extend(volume);
+        volumes.late.extend(late);
+    }
     volumes
 }
 
@@ -83,57 +149,120 @@ fn finish(volumes: &mut Vec<Volume>) {
     });
 }
 
-/// Mount points whose probe has not returned yet, possibly long after it timed out.
-static PROBING: Mutex<BTreeSet<PathBuf>> = Mutex::new(BTreeSet::new());
+/// The queries of file systems that have not returned yet, by path, possibly long after the
+/// listings that made them stopped waiting: a dead network mount can block forever. A listing
+/// that finds one waits for its answer rather than ask again.
+struct Probes<T> {
+    running: Arc<Mutex<HashMap<PathBuf, Probe<T>>>>,
+}
 
-/// An entry in [`PROBING`], removed on drop.
-struct InFlight(PathBuf);
+/// A query of a file system, when it was made, and its answer, which every listing that
+/// waits for it gets; `None` when the query panicked.
+struct Probe<T> {
+    since: Instant,
+    answer: Shared<BoxFuture<'static, Option<T>>>,
+}
 
-impl InFlight {
-    fn claim(path: &Path) -> Option<Self> {
-        let mut probing = PROBING.lock().unwrap_or_else(PoisonError::into_inner);
-        probing
-            .insert(path.to_path_buf())
-            .then(|| Self(path.to_path_buf()))
+impl<T> Clone for Probe<T> {
+    fn clone(&self) -> Self {
+        Self {
+            since: self.since,
+            answer: self.answer.clone(),
+        }
     }
 }
 
-impl Drop for InFlight {
+/// Takes a path out of [`Probes`] once its query returns, or panics.
+struct Returned<T> {
+    running: Arc<Mutex<HashMap<PathBuf, Probe<T>>>>,
+    path: PathBuf,
+}
+
+impl<T> Drop for Returned<T> {
     fn drop(&mut self) {
-        PROBING
-            .lock()
+        (self.running.lock())
             .unwrap_or_else(PoisonError::into_inner)
-            .remove(&self.0);
+            .remove(&self.path);
     }
 }
 
-/// Runs `probe` on `path` on a blocking thread, waiting at most `timeout`. `None` when it timed
-/// out, when an earlier probe of `path` is still running, or when it panicked.
-async fn probe<T, F>(path: PathBuf, timeout: Duration, probe: F) -> Option<T>
-where
-    T: Send + 'static,
-    F: FnOnce(&Path) -> T + Send + 'static,
-{
-    let Some(in_flight) = InFlight::claim(&path) else {
-        tracing::debug!(path = %path.display(), "previous file system query still pending");
-        return None;
-    };
-    let task = tokio::task::spawn_blocking(move || {
-        let result = probe(&in_flight.0);
-        drop(in_flight);
-        result
-    });
-    match tokio::time::timeout(timeout, task).await {
-        Ok(Ok(result)) => Some(result),
-        Ok(Err(error)) => {
-            tracing::warn!(path = %path.display(), %error, "file system query failed");
-            None
-        }
-        Err(_) => {
-            tracing::warn!(path = %path.display(), "file system query timed out");
-            None
+impl<T: Clone + Send + Sync + 'static> Probes<T> {
+    fn new() -> Self {
+        Self {
+            running: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+
+    /// The query of `path`: the one still running, or else `probe`, on a blocking thread.
+    fn probe<F>(&self, path: &Path, probe: F) -> Probe<T>
+    where
+        F: FnOnce(&Path) -> T + Send + 'static,
+    {
+        // Held until the query is in, so that it cannot return and leave before.
+        let mut running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(probe) = running.get(path) {
+            tracing::debug!(path = %path.display(), "previous file system query still pending");
+            return probe.clone();
+        }
+        let returned = Returned {
+            running: Arc::clone(&self.running),
+            path: path.to_path_buf(),
+        };
+        let task = tokio::task::spawn_blocking(move || {
+            let answer = probe(&returned.path);
+            drop(returned);
+            answer
+        });
+        let shown = path.to_path_buf();
+        let answer = async move {
+            match task.await {
+                Ok(answer) => Some(answer),
+                Err(error) => {
+                    tracing::warn!(path = %shown.display(), %error, "file system query failed");
+                    None
+                }
+            }
+        };
+        let probe = Probe {
+            since: Instant::now(),
+            answer: answer.boxed().shared(),
+        };
+        running.insert(path.to_path_buf(), probe.clone());
+        probe
+    }
+}
+
+/// Asks the file system at `path` with `probe`, or waits for the query still running, at most
+/// `first`, and makes its volume of the answer with `volume`: of `None` while there is none,
+/// with the answer to come, if it did not come in time.
+async fn ask<T, P, V>(
+    probes: &Probes<T>,
+    path: &Path,
+    first: Duration,
+    probe: P,
+    volume: V,
+) -> (Option<Volume>, Option<Late>)
+where
+    T: Clone + Send + Sync + 'static,
+    P: FnOnce(&Path) -> T + Send + 'static,
+    V: Fn(Option<T>) -> Option<Volume> + Send + 'static,
+{
+    let probe = probes.probe(path, probe);
+    if let Ok(answer) = tokio::time::timeout(first, probe.answer.clone()).await {
+        return (volume(answer), None);
+    }
+    tracing::warn!(path = %path.display(), "file system query timed out");
+    let shown = volume(None);
+    let late = Late {
+        mount_point: path.to_path_buf(),
+        since: probe.since,
+        answer: async move {
+            let answer = probe.answer.await;
+            volume(answer)
+        }
+        .boxed(),
+    };
+    (shown, Some(late))
 }
 
 /// A mount point to probe with `statvfs`, used everywhere but on macOS.
@@ -160,30 +289,36 @@ fn candidates() -> Vec<Candidate> {
     }]
 }
 
+/// The queries of `statvfs` still running, everywhere but on macOS.
 #[cfg_attr(target_os = "macos", allow(dead_code))]
-async fn statvfs_volumes(candidates: Vec<Candidate>, timeout: Duration) -> Vec<Volume> {
-    join_all(candidates.into_iter().map(|candidate| async move {
-        let space = match probe(candidate.mount_point.clone(), timeout, statvfs_space).await {
-            Some(Ok(space)) => Some(space),
-            Some(Err(error)) => {
-                tracing::warn!(
-                    path = %candidate.mount_point.display(),
-                    %error,
-                    "statvfs failed"
-                );
-                None
-            }
-            None => None,
+static STATVFS: LazyLock<Probes<Result<Space, String>>> = LazyLock::new(Probes::new);
+
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+async fn statvfs_volumes(candidates: Vec<Candidate>, first: Duration) -> Volumes {
+    let asked = join_all(candidates.into_iter().map(|candidate| async move {
+        let path = candidate.mount_point.clone();
+        let probe = |path: &Path| statvfs_space(path).map_err(|error| error.to_string());
+        let volume = move |answer: Option<Result<Space, String>>| {
+            let space = match answer {
+                Some(Ok(space)) => Some(space),
+                Some(Err(error)) => {
+                    tracing::warn!(path = %candidate.mount_point.display(), %error, "statvfs failed");
+                    None
+                }
+                None => None,
+            };
+            Some(Volume {
+                mount_point: candidate.mount_point.clone(),
+                label: candidate.label.clone(),
+                fs_type: candidate.fs_type.clone(),
+                kind: candidate.kind,
+                space,
+            })
         };
-        Volume {
-            mount_point: candidate.mount_point,
-            label: candidate.label,
-            fs_type: candidate.fs_type,
-            kind: candidate.kind,
-            space,
-        }
+        ask(&STATVFS, &path, first, probe, volume).await
     }))
-    .await
+    .await;
+    gather(asked)
 }
 
 /// The space of the file system that holds `path`. Blocking; a dead network mount hangs it.
@@ -478,17 +613,21 @@ mod macos {
     use std::io;
     use std::os::unix::ffi::OsStringExt as _;
     use std::path::{Path, PathBuf};
+    use std::sync::LazyLock;
     use std::time::Duration;
 
     use futures_util::future::join_all;
 
-    use super::{Space, Volume, VolumeKind, probe};
+    use super::{Probes, Space, Volume, VolumeKind, Volumes, ask, gather};
 
     const MNT_LOCAL: u32 = 0x0000_1000;
     /// Set on mounts that are not meant to be browsed, such as Time Machine local snapshots.
     const MNT_DONTBROWSE: u32 = 0x0010_0000;
 
-    pub(super) async fn volumes(timeout: Duration) -> Vec<Volume> {
+    /// The queries of `statfs` still running.
+    static STATFS: LazyLock<Probes<Result<Stat, String>>> = LazyLock::new(Probes::new);
+
+    pub(super) async fn volumes(first: Duration) -> Volumes {
         let candidates =
             match tokio::task::spawn_blocking(|| candidates(Path::new("/Volumes"))).await {
                 Ok(candidates) => candidates,
@@ -497,12 +636,14 @@ mod macos {
                     vec![(PathBuf::from("/"), None)]
                 }
             };
-        let volumes = join_all(candidates.into_iter().map(|(path, label)| async move {
-            let stat = probe(path.clone(), timeout, stat).await;
-            to_volume(path, label, stat)
+        let asked = join_all(candidates.into_iter().map(|(path, label)| async move {
+            let probe = |path: &Path| stat(path).map_err(|error| error.to_string());
+            let mount_point = path.clone();
+            let volume = move |stat| to_volume(mount_point.clone(), label.clone(), stat);
+            ask(&STATFS, &path, first, probe, volume).await
         }))
         .await;
-        volumes.into_iter().flatten().collect()
+        gather(asked)
     }
 
     /// `/` and the entries of `dir` (`/Volumes`) that are not symlinks, with their labels. A
@@ -539,7 +680,7 @@ mod macos {
             .collect()
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub(super) struct Stat {
         mount_on: PathBuf,
         fs_type: String,
@@ -574,7 +715,7 @@ mod macos {
     pub(super) fn to_volume(
         path: PathBuf,
         label: Option<String>,
-        stat: Option<io::Result<Stat>>,
+        stat: Option<Result<Stat, String>>,
     ) -> Option<Volume> {
         let is_root = path == Path::new("/");
         let system_or = |kind| if is_root { VolumeKind::System } else { kind };
@@ -820,7 +961,6 @@ mod tests {
 
     #[tokio::test]
     async fn statvfs_reports_space() -> io::Result<()> {
-        // Not `/`: a concurrent test probing it would find it pending.
         let dir = tempfile::tempdir()?;
         let volumes = statvfs_volumes(
             vec![Candidate {
@@ -832,7 +972,8 @@ mod tests {
             Duration::from_secs(5),
         )
         .await;
-        let [volume] = volumes.as_slice() else {
+        assert!(volumes.late.is_empty(), "{volumes:?}");
+        let [volume] = volumes.volumes.as_slice() else {
             panic!("expected one volume: {volumes:?}");
         };
         let space = volume.space.expect("space of the temporary directory");
@@ -841,40 +982,110 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn pending_probe_is_not_repeated() {
-        let path = PathBuf::from("/noc-test/pending-probe");
-        let (release, released) = std::sync::mpsc::channel::<()>();
-        let first = probe(path.clone(), Duration::from_millis(20), move |_| {
+    /// A query that returns `answer` once `released` says so.
+    fn held(
+        released: std::sync::mpsc::Receiver<()>,
+        answer: i32,
+    ) -> impl FnOnce(&Path) -> i32 + Send + 'static {
+        move |_| {
             released.recv().ok();
-        })
-        .await;
-        assert!(first.is_none(), "the first probe should time out");
+            answer
+        }
+    }
+
+    /// A volume at `path` with `answer` free bytes, if any.
+    fn answered(path: &Path) -> impl Fn(Option<i32>) -> Option<Volume> + Send + 'static + use<> {
+        let path = path.to_path_buf();
+        move |answer| {
+            Some(Volume {
+                space: answer.map(|available| Space {
+                    total: 100,
+                    available: u64::try_from(available).unwrap_or(0),
+                }),
+                ..volume(&path.to_string_lossy(), VolumeKind::Network)
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn a_query_still_running_answers_every_listing_that_waits_for_it() {
+        let probes = Probes::new();
+        let path = Path::new("/noc-test/pending");
+        let (release, released) = std::sync::mpsc::channel();
+        let first = probes.probe(path, held(released, 7));
+        let wait = tokio::time::timeout(Duration::from_millis(20), first.answer.clone()).await;
+        assert!(wait.is_err(), "the first query does not answer yet");
 
         let called = Arc::new(AtomicBool::new(false));
-        let second = probe(path.clone(), Duration::from_secs(5), {
+        let second = probes.probe(path, {
             let called = Arc::clone(&called);
-            move |_| called.store(true, Ordering::SeqCst)
-        })
-        .await;
-        assert!(second.is_none());
+            move |_| {
+                called.store(true, Ordering::SeqCst);
+                8
+            }
+        });
+        assert_eq!(second.since, first.since, "the same query");
+        release.send(()).expect("release the first query");
+        assert_eq!(second.answer.await, Some(7));
+        assert_eq!(first.answer.await, Some(7));
         assert!(
             !called.load(Ordering::SeqCst),
-            "a pending path must not be probed"
+            "not asked again while it ran"
         );
 
-        release.send(()).expect("release the first probe");
-        for _ in 0..500 {
-            if !PROBING
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .contains(&path)
-            {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        let again = probes.probe(path, |_| 9);
+        assert_eq!(again.answer.await, Some(9), "asked again once it returned");
+    }
+
+    #[tokio::test]
+    async fn a_query_that_panics_answers_nothing_and_is_made_again() {
+        let probes = Probes::new();
+        let path = Path::new("/noc-test/panics");
+        let panics = probes.probe(path, |_| -> i32 { panic!("the query fails") });
+        assert_eq!(panics.answer.await, None);
+        assert_eq!(probes.probe(path, |_| 1).answer.await, Some(1));
+    }
+
+    #[tokio::test]
+    async fn a_volume_that_does_not_answer_in_time_comes_with_its_answer_to_come() {
+        let probes = Probes::new();
+        let path = Path::new("/noc-test/late");
+        let first = Duration::from_millis(20);
+        let quick = ask(
+            &probes,
+            Path::new("/noc-test/quick"),
+            first,
+            |_| 5,
+            answered(Path::new("/noc-test/quick")),
+        )
+        .await;
+        assert!(quick.1.is_none());
+        assert_eq!(
+            quick
+                .0
+                .and_then(|volume| volume.space)
+                .map(|space| space.available),
+            Some(5)
+        );
+
+        let (release, released) = std::sync::mpsc::channel();
+        let (shown, late) = ask(&probes, path, first, held(released, 3), answered(path)).await;
+        assert_eq!(
+            shown.map(|volume| volume.space),
+            Some(None),
+            "listed without its answer"
+        );
+        let late = late.expect("its answer to come");
+        assert_eq!(late.mount_point(), path);
+
+        let (_, again) = ask(&probes, path, first, |_| 4, answered(path)).await;
+        let again = again.expect("still to come");
+        assert_eq!(again.since(), late.since(), "the same query");
+        release.send(()).expect("release the query");
+        for late in [late, again] {
+            let space = late.answer().await.and_then(|volume| volume.space);
+            assert_eq!(space.map(|space| space.available), Some(3));
         }
-        assert_eq!(probe(path, Duration::from_secs(5), |_| 7).await, Some(7));
     }
 
     #[cfg(target_os = "macos")]
@@ -903,7 +1114,8 @@ mod tests {
         fn plain_directory_is_not_a_volume() -> io::Result<()> {
             let dir = tempfile::tempdir()?;
             let path = dir.path().to_path_buf();
-            assert_eq!(to_volume(path.clone(), None, Some(stat(&path))), None);
+            let stat = stat(&path).map_err(|error| error.to_string());
+            assert_eq!(to_volume(path.clone(), None, Some(stat)), None);
             Ok(())
         }
 

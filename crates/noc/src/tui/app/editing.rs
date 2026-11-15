@@ -16,8 +16,8 @@ use crate::tui::transfer::{self};
 use crate::tui::window::Tone;
 
 use super::{
-    Again, App, Editing, Effect, Handover, Job, JobKind, Open, Purpose, Sniffed, Sniffing, Then,
-    Way,
+    Again, App, CopyRequest, Editing, Effect, Handover, Job, JobKind, Open, Purpose, Sniffed,
+    Sniffing, Then, Way,
 };
 
 impl App {
@@ -154,12 +154,7 @@ impl App {
         };
         self.last_job += 1;
         let id = self.last_job;
-        // Its own name last, so that the editor knows what kind of file it is.
-        let mut temporary = format!("edit-{}-{id}-", std::process::id()).into_bytes();
-        temporary.extend_from_slice(name);
-        let file = self
-            .runtime_dir
-            .join(std::ffi::OsStr::from_bytes(&temporary));
+        let file = copy_path(&self.runtime_dir, id, host, name);
         let cancel = CancellationToken::new();
         let mut job = Job::new(
             id,
@@ -176,7 +171,8 @@ impl App {
             dir,
             line,
         });
-        vec![Effect::Copy {
+        let make_dir = file.parent().map(Path::to_path_buf);
+        vec![Effect::Copy(CopyRequest {
             id,
             sources: vec![location],
             target: Location::Local(file),
@@ -187,8 +183,9 @@ impl App {
                 remove_sources: false,
                 overwrite: true,
             },
+            make_dir,
             cancel,
-        }]
+        })]
     }
 
     /// Opens the marked entries of the active panel, or the one under the cursor, with the
@@ -286,7 +283,7 @@ impl App {
         )
         .then(then);
         self.jobs.push(job);
-        vec![Effect::Copy {
+        vec![Effect::Copy(CopyRequest {
             id,
             sources: vec![Location::Local(copy)],
             target: remote,
@@ -297,8 +294,9 @@ impl App {
                 remove_sources: false,
                 overwrite: true,
             },
+            make_dir: None,
             cancel,
-        }]
+        })]
     }
 
     /// Says that `copy`, the edited copy of `remote`, could not go back, `why`, and where it
@@ -311,3 +309,22 @@ impl App {
         self.show_problem_way(&problem, Way::Again(again));
     }
 }
+
+/// Where F4 copies the file `name` of `host` for job `id`: `edit-PID-N-host/name` in
+/// `runtime_dir`. The file keeps its own name, by which editors know its kind, in a directory
+/// of its own, which names the host.
+pub(super) fn copy_path(runtime_dir: &Path, id: u64, host: &str, name: &[u8]) -> PathBuf {
+    let mut dir = format!("edit-{}-{id}-", std::process::id());
+    let host = host.replace('/', "_");
+    let mut end = host.len().min(NAME_MAX.saturating_sub(dir.len()));
+    while !host.is_char_boundary(end) {
+        end -= 1;
+    }
+    dir.push_str(&host[..end]);
+    runtime_dir
+        .join(dir)
+        .join(std::ffi::OsStr::from_bytes(name))
+}
+
+/// The longest name of a file, in bytes, on the file systems of macOS and Linux.
+const NAME_MAX: usize = 255;

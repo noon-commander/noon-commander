@@ -155,7 +155,8 @@ pub(crate) enum Effect {
         location: Location,
         host: Option<HostHandle>,
     },
-    /// Remove a temporary file, if it is there.
+    /// Remove a copy that F4 made, if it is there, and then its directory, which is its own,
+    /// if nothing else is left in it.
     Discard(PathBuf),
     /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
     /// task of their host.
@@ -181,17 +182,8 @@ pub(crate) enum Effect {
         host: Option<HostLink>,
         cancel: CancellationToken,
     },
-    /// Run the copy job `id` of `sources`, all local or all on one host, to `target`, or the
-    /// move job if the options remove sources, and report to [`App::job_event`]; `hosts` lead to the hosts of the sources and of the target,
-    /// if they are remote, and `cancel` stops it.
-    Copy {
-        id: u64,
-        sources: Vec<Location>,
-        target: Location,
-        hosts: (Option<HostLink>, Option<HostLink>),
-        options: CopyOptions,
-        cancel: CancellationToken,
-    },
+    /// Run the copy or move job of the request, and report to [`App::job_event`].
+    Copy(CopyRequest),
     /// Run the checksum job `id` on `targets`, groups of locations that are all local or all on
     /// the host of their handle, and report to [`App::job_event`]; `cancel` stops it.
     Checksum {
@@ -304,6 +296,21 @@ pub(crate) struct ReadRequest {
     pub(crate) host: Option<HostHandle>,
     pub(crate) want: Want,
     pub(crate) stop: CancellationToken,
+    pub(crate) cancel: CancellationToken,
+}
+
+/// The copy job `id` of `sources`, all local or all on one host, to `target`, or the move job
+/// if the options remove sources; `hosts` lead to the hosts of the sources and of the target,
+/// if they are remote, and `cancel` stops it. `make_dir` is a local directory to make first,
+/// closed to group and others: the one of the copy F4 edits.
+#[derive(Debug)]
+pub(crate) struct CopyRequest {
+    pub(crate) id: u64,
+    pub(crate) sources: Vec<Location>,
+    pub(crate) target: Location,
+    pub(crate) hosts: (Option<HostLink>, Option<HostLink>),
+    pub(crate) options: CopyOptions,
+    pub(crate) make_dir: Option<PathBuf>,
     pub(crate) cancel: CancellationToken,
 }
 

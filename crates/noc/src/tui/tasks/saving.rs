@@ -1,12 +1,11 @@
 //! Writing the state files: config, workspaces, history, recent.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use noc_config::{
     Config, History, Recent, Workspaces, add_command, remove_command, remove_workspace,
     rename_workspace, save_config, save_workspace,
 };
-use noc_vfs::VfsPath as _;
 use tokio::sync::mpsc;
 
 use crate::tui::app::{HistoryChange, RecentChange, WorkspaceChange};
@@ -134,11 +133,30 @@ pub(super) fn change_recent(
     sender
 }
 
-/// Removes a temporary file, if it is there, in a task of its own.
-pub(super) fn discard(path: PathBuf) {
-    tokio::spawn(async move {
-        if let Err(error) = tokio::fs::remove_file(&path).await {
-            tracing::debug!(path = %path.display(), %error, "cannot remove");
-        }
-    });
+/// Removes `copy`, a copy that F4 made, in a task of its own: see [`remove_copy`].
+pub(super) fn discard(copy: PathBuf) {
+    tokio::spawn(async move { remove_copy(&copy).await });
+}
+
+/// Removes `copy`, if it is there, and then its directory, if nothing else is left in it: a
+/// backup the editor left keeps it.
+pub(super) async fn remove_copy(copy: &Path) {
+    if let Err(error) = tokio::fs::remove_file(copy).await {
+        tracing::debug!(path = %copy.display(), %error, "cannot remove");
+    }
+    let Some(dir) = copy.parent() else {
+        return;
+    };
+    if let Err(error) = tokio::fs::remove_dir(dir).await {
+        tracing::debug!(path = %dir.display(), %error, "cannot remove");
+    }
+}
+
+/// Makes `dir`, closed to group and others, for a copy that F4 edits. A failure shows when the
+/// copy cannot be written there.
+pub(super) async fn make_private_dir(dir: &Path) {
+    let made = tokio::fs::DirBuilder::new().mode(0o700).create(dir).await;
+    if let Err(error) = made {
+        tracing::warn!(path = %dir.display(), %error, "cannot make a directory");
+    }
 }

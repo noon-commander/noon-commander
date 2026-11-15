@@ -676,6 +676,29 @@ async fn a_checksum_job_reports_its_sums_then_its_end() {
     }
 }
 
+#[tokio::test]
+async fn the_copy_of_f4_has_a_private_directory_that_goes_with_it_once_empty() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("edit-1-2-web");
+    make_private_dir(&dir).await;
+    let mode = std::fs::metadata(&dir).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o700);
+    let copy = dir.join("notes");
+    std::fs::write(&copy, b"a").unwrap();
+    saving::remove_copy(&copy).await;
+    assert!(!dir.exists());
+
+    // A backup the editor left stays, and so does the directory.
+    make_private_dir(&dir).await;
+    std::fs::write(&copy, b"a").unwrap();
+    std::fs::write(dir.join("notes~"), b"a").unwrap();
+    saving::remove_copy(&copy).await;
+    assert!(!copy.exists());
+    assert!(dir.join("notes~").exists());
+}
+
 #[test]
 fn reports_of_progress_wait_for_their_batch() {
     let start = Instant::now();

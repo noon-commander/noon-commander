@@ -19,7 +19,7 @@ use crate::tui::transfer::{self, Sources};
 use crate::tui::window::Tone;
 
 use super::{
-    Again, Answer, App, Change, Effect, Job, JobKind, Open, Purpose, Way, file_name,
+    Again, Answer, App, Change, CopyRequest, Effect, Job, JobKind, Open, Purpose, Way, file_name,
     files_and_dirs, remote_within,
 };
 
@@ -183,14 +183,15 @@ impl App {
             remove_sources: kind == transfer::Kind::Move,
             overwrite: false,
         };
-        let effect = Effect::Copy {
+        let effect = Effect::Copy(CopyRequest {
             id,
             sources,
             target,
             hosts: (from, to),
             options,
+            make_dir: None,
             cancel,
-        };
+        });
         let mut effects = self.launch(job, effect);
         effects.extend(noted);
         effects

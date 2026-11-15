@@ -52,6 +52,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- F4 on a host edits a copy that keeps the file's own name, in a directory of its own that names
+  the host, as `edit-4242-17-web1/nginx.conf`, where it was `edit-4242-17-nginx.conf`: the editor
+  shows the name, and knows the kind of a file by its whole name too, as `Makefile` or `.bashrc`.
 - `G` and End in the viewer go to the end of the file, not of the part read last, and at once:
   the viewer reads the last part of the file alone, on a host too, and the part under a scroll
   bar dragged far ahead. The lines there have no numbers until scrolling back reaches what was

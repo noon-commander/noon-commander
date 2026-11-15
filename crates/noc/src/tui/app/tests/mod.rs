@@ -527,14 +527,14 @@ fn answer_sniff(app: &mut App, effects: Vec<Effect>, sniffed: Sniffed) -> Vec<Ef
 /// its ends are remote, and its options.
 fn copy_job(effects: Vec<Effect>) -> (u64, Vec<Location>, Location, (bool, bool), CopyOptions) {
     match one(effects) {
-        Effect::Copy {
+        Effect::Copy(CopyRequest {
             id,
             sources,
             target,
             hosts,
             options,
             ..
-        } => {
+        }) => {
             let remote = (hosts.0.is_some(), hosts.1.is_some());
             (id, sources, target, remote, options)
         }

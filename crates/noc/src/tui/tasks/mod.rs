@@ -14,7 +14,7 @@ use noc_config::{
     Config, ConfigError, HistoryEntry, HostConfig, Hosts, Recent, Run, Workspaces, save_host,
 };
 use noc_locale::Formats;
-use noc_ops::{Algorithm, Conflict, CopyOptions, Outcome, Resolution, Step, Sum};
+use noc_ops::{Algorithm, Conflict, Outcome, Resolution, Step, Sum};
 use noc_ssh::askpass::AskpassServer;
 use noc_tools::opener::Opener;
 use noc_tools::zoxide::Scored;
@@ -29,8 +29,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument as _;
 
 use super::app::{
-    Effect, FindRequest, HistoryChange, PollRequest, ReadRequest, RecentChange, Sniffed,
-    WorkspaceChange,
+    CopyRequest, Effect, FindRequest, HistoryChange, PollRequest, ReadRequest, RecentChange,
+    Sniffed, WorkspaceChange,
 };
 use super::describe::{self, Reason};
 use super::dialog::Ask;
@@ -56,7 +56,9 @@ use batching::forward;
 pub(crate) use host::{HostHandle, HostLink, HostRequest, Relink};
 use host::{HostTask, Rejoin, prepare_ssh, resolve_address, share};
 use jobs::{CopyJob, rename, run_checksum, run_delete, write_file};
-use saving::{change_history, change_recent, change_workspaces, discard, save_configs};
+use saving::{
+    change_history, change_recent, change_workspaces, discard, make_private_dir, save_configs,
+};
 use searching::{Batches, FIND_REPORTS, Named, Searched};
 
 /// How long quitting waits for connections to shut down.
@@ -437,14 +439,7 @@ impl Tasks {
                     host,
                     cancel,
                 } => self.delete(id, targets, host, cancel),
-                Effect::Copy {
-                    id,
-                    sources,
-                    target,
-                    hosts,
-                    options,
-                    cancel,
-                } => self.copy(id, sources, target, hosts, options, cancel),
+                Effect::Copy(request) => self.copy(request),
                 Effect::Checksum {
                     id,
                     targets,
@@ -500,16 +495,17 @@ impl Tasks {
         }
     }
 
-    /// Runs the copy or move job `id` in a task of its own.
-    fn copy(
-        &mut self,
-        id: u64,
-        sources: Vec<Location>,
-        target: Location,
-        hosts: (Option<HostLink>, Option<HostLink>),
-        options: CopyOptions,
-        cancel: CancellationToken,
-    ) {
+    /// Runs the copy or move job of `request` in a task of its own, once it made its directory.
+    fn copy(&mut self, request: CopyRequest) {
+        let CopyRequest {
+            id,
+            sources,
+            target,
+            hosts,
+            options,
+            make_dir,
+            cancel,
+        } = request;
         let done = self.done.clone();
         self.reap_jobs();
         let kind = if options.remove_sources {
@@ -520,6 +516,9 @@ impl Tasks {
         let span = tracing::info_span!("job", id, kind);
         self.jobs.spawn(
             async move {
+                if let Some(dir) = make_dir {
+                    make_private_dir(&dir).await;
+                }
                 let job = CopyJob {
                     id,
                     options,

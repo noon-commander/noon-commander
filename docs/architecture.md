@@ -1680,13 +1680,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the log anew, in place of the viewer on screen. Without a log it says why, as the About page does.
 - **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
   spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
-  copied, with its times and permission bits, to `edit-PID-N-name` in the runtime directory
-  (the name last, so that the editor knows the kind of file); when the editor exits and the
-  copy's size or time changed, it goes back over the original by the copy job, with
-  `overwrite` and as `transfer.atomic_upload` says, keeping the original's permissions. Both
-  copies show the job's window. The local copy is removed once it went back, or at once if
-  it did not change; one that did not go back (a failure, Abort, or the host gone) stays, and
-  a red dialog says where. Panels on the file's directory read it again. First, F4 reads the size
+  copied, with its times and permission bits, to `edit-PID-N-host/name` in the runtime
+  directory (`editing::copy_path`): a directory of its own, closed to group and others, which
+  the copy job makes first, and the file's own name, by which the editor knows its kind, as
+  `Makefile` or `.bashrc`; a `/` in the host becomes `_`, and the host is cut to fit a name of
+  255 bytes. When the editor exits and the copy's size or time changed, it goes back over the
+  original by the copy job, with `overwrite` and as `transfer.atomic_upload` says, keeping the
+  original's permissions. Both copies show the job's window. The local copy is removed once it
+  went back, or at once if it did not change, and its directory with it unless something else
+  is left there, such as a backup the editor wrote; one that did not go back (a failure, Abort,
+  or the host gone) stays, and a red dialog says where. Panels on the file's directory read it
+  again. First, F4 reads the size
   of the file and its first 8000 bytes, through the host's session for a remote one, before
   anything is copied (`Effect::Sniff`): a file with a NUL among them looks binary, as git tells
   one (`noc_text::is_binary`), and one larger than `edit.large_mib`, 64 MiB by default, as the

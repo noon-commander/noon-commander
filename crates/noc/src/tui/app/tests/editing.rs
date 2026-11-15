@@ -109,16 +109,23 @@ fn g_x_on_a_host_says_that_only_local_files_open_externally() {
 #[test]
 fn f4_edits_a_copy_of_a_remote_file_and_sends_it_back() {
     let (mut app, _) = on_a_host();
-    let (id, sources, target, ends, options) = copy_job(f4(&mut app));
+    let effects = f4(&mut app);
+    let made = match &effects[..] {
+        [Effect::Copy(request)] => request.make_dir.clone(),
+        other => panic!("expected a copy job, got {other:?}"),
+    };
+    let (id, sources, target, ends, options) = copy_job(effects);
     assert_eq!(sources, [remote("web", "/home/deploy/notes")]);
     let Location::Local(copy) = target else {
         panic!("expected a local copy, got {target:?}");
     };
-    assert!(copy.starts_with("/run/noc"), "{copy:?}");
-    assert!(
-        copy.to_string_lossy().ends_with("-notes"),
-        "its own name last"
+    let own = format!("/run/noc/edit-{}-{id}-web/notes", std::process::id());
+    assert_eq!(
+        copy,
+        Path::new(&own),
+        "its own name, in a directory for the host"
     );
+    assert_eq!(made.as_deref(), copy.parent(), "made first");
     assert_eq!(ends, (true, false));
     assert!(options.overwrite && options.preserve);
     assert_eq!(app.take_edit(), None, "not before the copy is there");
@@ -147,6 +154,28 @@ fn f4_edits_a_copy_of_a_remote_file_and_sends_it_back() {
             .any(|effect| matches!(effect, Effect::Discard(path) if *path == copy)),
         "{effects:?}"
     );
+}
+
+#[test]
+fn a_copy_s_directory_names_its_host_within_the_longest_name() {
+    use crate::tui::app::editing::copy_path;
+
+    let pid = std::process::id();
+    let path = copy_path(Path::new("/run/noc"), 3, "a/b", b".bashrc");
+    let own = format!("/run/noc/edit-{pid}-3-a_b/.bashrc");
+    assert_eq!(path, Path::new(&own));
+
+    let host = "é".repeat(200);
+    let path = copy_path(Path::new("/run/noc"), 3, &host, b"notes");
+    let dir = path.parent().and_then(Path::file_name).unwrap();
+    assert!(dir.len() <= 255, "{}", dir.len());
+    assert!(
+        dir.len() > 250,
+        "as much of the host as fits: {}",
+        dir.len()
+    );
+    assert!(dir.to_str().is_some(), "cut between characters");
+    assert_eq!(path.file_name().unwrap(), "notes");
 }
 
 #[test]
@@ -218,8 +247,8 @@ fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
     let (handle, _requests) = HostHandle::channel();
     let effects = app.connected("web", connection, handle);
     let copied = effects.iter().any(|effect| {
-        matches!(effect, Effect::Copy { target, .. }
-            if *target == remote("web", "/home/deploy/notes"))
+        matches!(effect, Effect::Copy(request)
+            if request.target == remote("web", "/home/deploy/notes"))
     });
     assert!(copied, "{effects:?}");
 }

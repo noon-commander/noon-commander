@@ -271,7 +271,9 @@ choose a volume or a host, grouped under headings:
   sizes take at most while none is known, which one shine crosses (`window::cell_skeleton`); no
   dots turn in the title. They show once its answer comes; 5 s after it was asked
   (`menu::NO_ANSWER`), the skeleton turns to `- / -`, which an answer that comes later still
-  replaces. An answer that says the mount point is no volume, on macOS, takes its row away
+  replaces. On macOS a `statfs` that answers that the path is no mount point, or a mount not to
+  browse, takes its row away; one that fails after it hung, as a soft network mount gives up,
+  leaves it with `- / -` (`to_late_volume`)
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
   system volume, then the others by mount point; the hosts in config order. Each group shows

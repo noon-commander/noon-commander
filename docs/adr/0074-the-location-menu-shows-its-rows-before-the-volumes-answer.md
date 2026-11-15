@@ -31,9 +31,12 @@ sizes while the menu was open.
   No dots turn in the title: the rows came, and a mount that hangs would turn them for as long as
   the menu stays open.
 - **Answers come as they come.** Each one replaces its volume in the menu, and in the volumes the
-  app knows panels to be on (`Done::VolumeAnswered`, by mount point). An answer that says the mount
-  point is no volume to show, which only macOS can give, takes its row away; the cursor stays on its
-  row, or else on the row now in its place.
+  app knows panels to be on (`Done::VolumeAnswered`, by mount point). On macOS, a `statfs` that
+  answers that the path is no mount point, or a mount not to browse, takes its row away; the cursor
+  stays on its row, or else on the row now in its place. A query that fails after it hung, as a
+  soft network mount (SMB by default, NFS with `soft`) gives up after its own timeout, leaves the
+  row as it was, with `- / -`: the volume is still mounted, and if it was unmounted meanwhile, the
+  next listing leaves it out. A failure in time still leaves the volume out, as before.
 - **One query of a file system at a time.** A query still running is shared: a listing that finds
   it waits for its answer rather than ask again, so R, opening the menu again, and the listing at
   the start never start a second blocking call on a mount that hangs. A new listing stops waiting
@@ -56,6 +59,9 @@ waits as long for the space of its directory.
 - `- / -` and the skeleton tell apart sizes not known from sizes still to come; `?` no longer shows
   in the menu.
 - On macOS a row of `/Volumes` that turns out to be no mount point can show for a moment, then go.
-  `statfs` of a directory does not hang, so this does not happen in practice.
+  `statfs` of a directory does not hang, so this happens only when a mount that hung is unmounted
+  and its directory stays, or with a mount not to browse that hangs.
+- A mount that hung and was unmounted meanwhile stays in the open menu, with `- / -`, until R or
+  the next menu.
 - `noc-vfs` keeps the queries still running by path, with their answers, instead of a set of paths
   (`volumes_within`, `Late`).

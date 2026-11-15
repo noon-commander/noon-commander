@@ -233,19 +233,20 @@ impl<T: Clone + Send + Sync + 'static> Probes<T> {
 }
 
 /// Asks the file system at `path` with `probe`, or waits for the query still running, at most
-/// `first`, and makes its volume of the answer with `volume`: of `None` while there is none,
-/// with the answer to come, if it did not come in time.
-async fn ask<T, P, V>(
+/// `first`, and makes its volume of the answer with `volume`, of `None` while there is none; if
+/// the answer did not come in time, with the answer to come, of which `late` makes the volume.
+async fn ask<T, P, V, L>(
     probes: &Probes<T>,
     path: &Path,
     first: Duration,
     probe: P,
-    volume: V,
+    (volume, late): (V, L),
 ) -> (Option<Volume>, Option<Late>)
 where
     T: Clone + Send + Sync + 'static,
     P: FnOnce(&Path) -> T + Send + 'static,
-    V: Fn(Option<T>) -> Option<Volume> + Send + 'static,
+    V: Fn(Option<T>) -> Option<Volume>,
+    L: FnOnce(Option<T>) -> Option<Volume> + Send + 'static,
 {
     let probe = probes.probe(path, probe);
     if let Ok(answer) = tokio::time::timeout(first, probe.answer.clone()).await {
@@ -258,7 +259,7 @@ where
         since: probe.since,
         answer: async move {
             let answer = probe.answer.await;
-            volume(answer)
+            late(answer)
         }
         .boxed(),
     };
@@ -315,7 +316,8 @@ async fn statvfs_volumes(candidates: Vec<Candidate>, first: Duration) -> Volumes
                 space,
             })
         };
-        ask(&STATVFS, &path, first, probe, volume).await
+        // A late answer makes the volume as one in time does: the mount point is known.
+        ask(&STATVFS, &path, first, probe, (volume.clone(), volume)).await
     }))
     .await;
     gather(asked)
@@ -638,9 +640,13 @@ mod macos {
             };
         let asked = join_all(candidates.into_iter().map(|(path, label)| async move {
             let probe = |path: &Path| stat(path).map_err(|error| error.to_string());
-            let mount_point = path.clone();
-            let volume = move |stat| to_volume(mount_point.clone(), label.clone(), stat);
-            ask(&STATFS, &path, first, probe, volume).await
+            let (mount_point, shown) = (path.clone(), label.clone());
+            let volume = move |stat| to_volume(mount_point.clone(), shown.clone(), stat);
+            let late = {
+                let path = path.clone();
+                move |stat| to_late_volume(path, label, stat)
+            };
+            ask(&STATFS, &path, first, probe, (volume, late)).await
         }))
         .await;
         gather(asked)
@@ -708,6 +714,24 @@ mod macos {
             .map(|&c| c.to_ne_bytes()[0])
             .take_while(|&byte| byte != 0)
             .collect()
+    }
+
+    /// The volume at `path` once its `stat` comes after it was listed without it, as
+    /// [`to_volume`] makes it; but a query that fails after it hung, as a soft network mount
+    /// gives up, leaves the volume as it is without an answer: it is still mounted, and the next
+    /// listing finds whether it is. Only a `statfs` that answers can say it is not one to show.
+    pub(super) fn to_late_volume(
+        path: PathBuf,
+        label: Option<String>,
+        stat: Option<Result<Stat, String>>,
+    ) -> Option<Volume> {
+        match stat {
+            Some(Err(error)) => {
+                tracing::warn!(path = %path.display(), %error, "statfs failed after it hung");
+                to_volume(path, label, None)
+            }
+            stat => to_volume(path, label, stat),
+        }
     }
 
     /// The volume at `path`, or `None` when it is not one to show. `stat` is `None` when the
@@ -1051,14 +1075,19 @@ mod tests {
         let probes = Probes::new();
         let path = Path::new("/noc-test/late");
         let first = Duration::from_millis(20);
-        let quick = ask(
-            &probes,
-            Path::new("/noc-test/quick"),
-            first,
-            |_| 5,
-            answered(Path::new("/noc-test/quick")),
-        )
-        .await;
+        let quick = Path::new("/noc-test/quick");
+        let both = |path: &Path| {
+            let late = answered(path);
+            let late = move |answer| {
+                let volume = late(answer)?;
+                Some(Volume {
+                    label: Some("late".to_owned()),
+                    ..volume
+                })
+            };
+            (answered(path), late)
+        };
+        let quick = ask(&probes, quick, first, |_| 5, both(quick)).await;
         assert!(quick.1.is_none());
         assert_eq!(
             quick
@@ -1069,29 +1098,52 @@ mod tests {
         );
 
         let (release, released) = std::sync::mpsc::channel();
-        let (shown, late) = ask(&probes, path, first, held(released, 3), answered(path)).await;
+        let (shown, late) = ask(&probes, path, first, held(released, 3), both(path)).await;
         assert_eq!(
-            shown.map(|volume| volume.space),
-            Some(None),
+            shown.map(|volume| (volume.space, volume.label)),
+            Some((None, None)),
             "listed without its answer"
         );
         let late = late.expect("its answer to come");
         assert_eq!(late.mount_point(), path);
 
-        let (_, again) = ask(&probes, path, first, |_| 4, answered(path)).await;
+        let (_, again) = ask(&probes, path, first, |_| 4, both(path)).await;
         let again = again.expect("still to come");
         assert_eq!(again.since(), late.since(), "the same query");
         release.send(()).expect("release the query");
         for late in [late, again] {
-            let space = late.answer().await.and_then(|volume| volume.space);
-            assert_eq!(space.map(|space| space.available), Some(3));
+            let volume = late.answer().await.expect("a volume");
+            assert_eq!(volume.space.map(|space| space.available), Some(3));
+            assert_eq!(volume.label.as_deref(), Some("late"), "made as a late one");
         }
     }
 
     #[cfg(target_os = "macos")]
     mod macos {
-        use super::super::macos::{candidates, stat, to_volume};
+        use super::super::macos::{candidates, stat, to_late_volume, to_volume};
         use super::*;
+
+        #[test]
+        fn a_late_failure_keeps_the_volume_and_only_an_answer_takes_it_away() -> io::Result<()> {
+            let nas = PathBuf::from("/Volumes/NAS");
+            let label = Some("NAS".to_owned());
+            let failed = Some(Err("Operation timed out".to_owned()));
+            assert_eq!(
+                to_late_volume(nas.clone(), label.clone(), failed.clone()),
+                to_volume(nas.clone(), label.clone(), None),
+                "as it is without an answer"
+            );
+            assert_eq!(to_volume(nas, label, failed), None, "one in time goes");
+            let dir = tempfile::tempdir()?;
+            let path = dir.path().to_path_buf();
+            let stat = stat(&path).map_err(|error| error.to_string());
+            assert_eq!(
+                to_late_volume(path, None, Some(stat)),
+                None,
+                "no mount point"
+            );
+            Ok(())
+        }
 
         #[tokio::test]
         async fn lists_the_system_volume_first() {

@@ -1,4 +1,4 @@
-# 0087. Large windows
+# 0088. Large windows
 
 - Status: Accepted
 - Date: 2026-11-16

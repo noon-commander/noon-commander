@@ -644,7 +644,7 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
   the glyphs at the end of the field say which (`Dialog::with_search`). The globs are shell
   patterns, their field's one way, whose case the keys after Ctrl+s switch too. Both fields open
   as they were last. With no text it lists the files. The dialog is a large window
-  (`Dialog::large`, [ADR 0087](adr/0087-large-windows.md)). The picker keeps
+  (`Dialog::large`, [ADR 0088](adr/0088-large-windows.md)). The picker keeps
   the cursor of the rows and scrolls them, its rows filling the room the dialog leaves them
   (`Body.fill`); `FindWindow` (`tui/find.rs`) keeps what was found, gives the picker as many
   rows, and draws each row.
@@ -737,7 +737,7 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
 - The list of the key hints shows what the command under the cursor does, whole, in two lines
   under the rows, broken between words, without its keys, while it has rows (`Body.full`;
   [ADR 0041](adr/0041-lists-always-show-the-whole-row.md),
-  [ADR 0087](adr/0087-large-windows.md)). It is a large window, whose column of keys takes as many
+  [ADR 0088](adr/0088-large-windows.md)). It is a large window, whose column of keys takes as many
   cells as the longest keys shown, up to a third of a row. The tab menu and the zoxide window,
   whose rows are paths that nearly always fit, show
   none ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
@@ -891,7 +891,7 @@ modern settings window: there is no OK or Cancel, and every change takes effect 
   the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line
   (`[shell]`), and Search (`[search]`).
 - The dialog is a large window, 80% of the width and of the height of the screen
-  ([ADR 0087](adr/0087-large-windows.md)).
+  ([ADR 0088](adr/0088-large-windows.md)).
 - Paths under the home directory show from `~`, and are written as typed. Lists, such as
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
@@ -2228,7 +2228,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   of the screen, whatever they show, but never narrower than 76 cells where the screen has room
   (`window::large`): the help, the list of the key hints, the Configuration dialog, and the
   search of a tree; a list is large by `Body.large`, a dialog by `Dialog::large`
-  ([ADR 0087](adr/0087-large-windows.md)).
+  ([ADR 0088](adr/0088-large-windows.md)).
   `tui/window/` holds what they share: the sizes, the colors by tone (`Colors`, `Tone`), the
   frame, the buttons, and the skeleton with its shine.
   `window::draw_box` draws the frame of every window, as wide as the

@@ -2,7 +2,7 @@
 
 - Status: Accepted; amended by
   [ADR 0072](0072-the-command-history-shows-where-a-command-ran.md) and
-  [ADR 0087](0087-large-windows.md)
+  [ADR 0088](0088-large-windows.md)
 - Date: 2026-11-10
 - Amends: [ADR 0041](0041-lists-always-show-the-whole-row.md)
 

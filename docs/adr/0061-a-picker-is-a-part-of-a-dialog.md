@@ -1,7 +1,7 @@
 # 0061. A picker is a part of a dialog
 
 - Status: Accepted; amended by [ADR 0073](0073-a-window-with-buttons-is-a-dialog.md) and
-  [ADR 0087](0087-large-windows.md)
+  [ADR 0088](0088-large-windows.md)
 - Date: 2026-10-31
 - Amends: [ADR 0027](0027-search-of-a-whole-tree.md),
   [ADR 0040](0040-one-picker-for-every-list.md),

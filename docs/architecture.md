@@ -323,9 +323,12 @@ choose a volume or a host, grouped under headings:
   default, best first, without the headings of the groups; or a row's text must hold the filter,
   or match it as a regular expression, in their order, with smart case. The cursor goes to the
   first row. The filter is a text field, edited with the keys of `input`; Esc goes back to the
-  rows with the filter kept. F4, or `e` on the rows, edits the settings of the host under the
-  cursor, F8, or `d d` on the rows, disconnects it or stops connecting to it, `R` on the rows
-  reads the volumes and hosts again, and Esc or `q` on the rows, Ctrl+c, or F10 closes the menu.
+  rows with the filter kept. F3, or `g f` on the rows, views the `ssh_config` file that defines
+  the host under the cursor from its `Host` line, the file and the line its card shows, in front
+  of the menu, which is there again once the viewer closes (`Viewing::menu`); F4, or `e` on the
+  rows, edits the settings of the host, F8, or `d d` on the rows, disconnects it or stops
+  connecting to it, `R` on the rows reads the volumes and hosts again, and Esc or `q` on the rows,
+  Ctrl+c, or F10 closes the menu.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:

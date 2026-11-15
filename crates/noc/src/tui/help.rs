@@ -1335,6 +1335,7 @@ fn describe_location_menu(context: Context, action: Action) -> Option<String> {
     let text = match action {
         Action::Confirm => fl!("help-menu-open"),
         Action::Cancel => fl!("help-menu-close"),
+        Action::View => fl!("help-view-host-config"),
         Action::EditHost => fl!("help-edit-host"),
         Action::Disconnect => fl!("help-disconnect"),
         Action::Reload => fl!("help-menu-reload"),

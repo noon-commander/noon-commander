@@ -32,6 +32,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   location menu, the settings of the host under the cursor, and in the search of a whole tree
   (`f /`, `f f`) outside its fields, the file of the row at the line, which `g f` views there,
   as F3 does.
+- F3, and `g f` on the rows, in the location menu view the `ssh_config` file that defines the
+  host under the cursor, from its `Host` line, in front of the menu, which is there again once
+  the viewer closes. F3 works while the filter takes text too.
 - `W` and F2 in the Workspaces window save the tabs of both panels in place of the workspace
   under the cursor, after a question, No by default, or Yes over the workspace restored or saved
   last; F7 adds a new workspace, as `a` does. F2 and F7 work while the filter takes text too

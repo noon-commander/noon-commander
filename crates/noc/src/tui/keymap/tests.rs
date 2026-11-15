@@ -315,6 +315,21 @@ fn g_f_views_as_f3_does_in_the_search_of_a_tree_off_its_fields() {
 }
 
 #[test]
+fn g_f_and_f3_view_the_ssh_config_of_a_host_in_the_location_menu() {
+    let list = (Mode::Normal, Context::LocationMenu);
+    let filter = (Mode::Insert, Context::LocationMenu);
+    assert_eq!(typed(list, &["g", "f"]), actions(&[Action::View]));
+    assert_eq!(typed(list, &["f3"]), actions(&[Action::View]));
+    assert_eq!(
+        typed(list, &["g", "g"]),
+        actions(&[Action::Home]),
+        "the list's g g stays"
+    );
+    assert_eq!(typed(filter, &["f3"]), actions(&[Action::View]));
+    assert_eq!(typed(filter, &["g", "f"]), inserts("gf"));
+}
+
+#[test]
 fn visual_mode_selects_rows_and_acts_on_them() {
     assert_eq!(
         typed(PANEL, &["shift-v"]),

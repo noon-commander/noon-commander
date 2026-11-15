@@ -487,6 +487,13 @@ impl App {
         if action == Action::CloseTab {
             return self.tab_menu_closes();
         }
+        // F3 in the location menu views the ssh_config of the host under the cursor.
+        if action == Action::View && self.context() == Context::LocationMenu {
+            return self
+                .menu
+                .as_ref()
+                .is_some_and(|menu| menu.chosen_config().is_some());
+        }
         match action {
             Action::Help
             | Action::Quit

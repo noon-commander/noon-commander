@@ -73,6 +73,13 @@ impl App {
                 self.ask_edit_host(host);
                 Vec::new()
             }
+            // In front of the menu, which is there again once it closes.
+            MenuEvent::ViewConfig { file, line } => {
+                let location = Location::Local(file);
+                let dir = location.parent().unwrap_or_else(|| location.clone());
+                let line = u64::try_from(line).unwrap_or(u64::MAX);
+                self.view_file(location, &dir, Some(line))
+            }
             MenuEvent::Reload => self.reload_menu(),
         }
     }

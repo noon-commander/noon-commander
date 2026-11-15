@@ -137,12 +137,12 @@ impl App {
         self.read_more()
     }
 
-    /// Whether the viewer is in front of the windows: for a question about a taken name, or
-    /// with the log.
+    /// Whether the viewer is in front of the windows: for a question about a taken name, with
+    /// the log, or over the location menu.
     pub(super) fn viewer_over(&self) -> bool {
-        self.viewing
-            .as_ref()
-            .is_some_and(|viewing| viewing.question.is_some() || viewing.log.is_some())
+        self.viewing.as_ref().is_some_and(|viewing| {
+            viewing.question.is_some() || viewing.log.is_some() || viewing.menu
+        })
     }
 
     /// The dialog in front, unless the log covers it: the log stands in front of the dialogs
@@ -198,7 +198,8 @@ impl App {
         }
     }
 
-    /// Shows `viewer` on `source`, in place of the viewer on screen, if any.
+    /// Shows `viewer` on `source`, in place of the viewer on screen, if any; in front of the
+    /// location menu if that is open, which is not drawn under a viewer.
     fn open_viewer(&mut self, viewer: Viewer, source: Source) {
         self.close_viewer();
         self.last_job += 1;
@@ -212,6 +213,7 @@ impl App {
             cancel: CancellationToken::new(),
             question: None,
             log: None,
+            menu: self.menu.is_some(),
         });
     }
 

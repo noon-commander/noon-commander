@@ -323,6 +323,51 @@ fn ssh_g_runs_once_a_run_for_the_host_the_cursor_of_the_menu_rests_on() {
     assert_eq!(asked(&mut app), Asked::For(None), "{closed}");
 }
 
+#[test]
+fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
+    let mut app = at_slash();
+    let Effect::ListPlaces { generation } = one(app.handle(action(Action::LocationMenu))) else {
+        panic!("expected the places");
+    };
+    let mut listed = places();
+    listed.hosts[1].file = PathBuf::from("/home/me/.ssh/conf.d/db");
+    listed.hosts[1].line = 3;
+    app.places(generation, Ok(listed));
+    assert!(!screen_of(&mut app, 14).contains("3View"), "not on Home");
+    app.handle(action(Action::Down));
+    app.handle(action(Action::Down));
+    assert_eq!(app.chosen_host().as_deref(), Some("db"));
+    assert!(screen_of(&mut app, 14).contains("3View"));
+    let Effect::Read(ReadRequest {
+        id, location, host, ..
+    }) = one(app.handle(action(Action::View)))
+    else {
+        panic!("expected a read");
+    };
+    assert_eq!(
+        (location, host.is_none()),
+        (local("/home/me/.ssh/conf.d/db"), true)
+    );
+    assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
+    let text = (1..=40)
+        .map(|n| format!("line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    app.read(id, Ok(whole(text)));
+    let screen = screen_of(&mut app, 12);
+    assert!(
+        screen.contains("line 3") && !screen.contains("line 2 "),
+        "from its Host line: {screen}"
+    );
+    app.handle(action(Action::Quit));
+    assert_eq!(
+        app.context(),
+        Context::LocationMenu,
+        "the menu is there again"
+    );
+    assert_eq!(app.chosen_host().as_deref(), Some("db"));
+}
+
 /// Opens the dialog of F4 on `web` from the location menu of the left panel.
 fn edit_web(app: &mut App) {
     if app.menu.is_none() {

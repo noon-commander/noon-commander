@@ -238,6 +238,7 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
+| F3 | `view` | mc | g f (vim) | Same | View the ssh_config that defines the host under the cursor, from its Host line, as F3 views a file. |
 | e<br>F4 | `edit_host` | noc, mc | e (noc) | Same | Edit the settings of the host under the cursor, as e and F4 edit a file in the panels ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md), [ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)). vim's e goes to the end of a word. |
 | F8 | `disconnect` | mc | d d (vim) | Same | Disconnect the host under the cursor, as F8 deletes. |
 | R | `reload` | ranger | R (ranger) | Same | Read the volumes and hosts again, as R reads a directory again in the panels. |
@@ -246,7 +247,7 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| F4<br>F8 | `edit_host`<br>`disconnect` | mc | — | Same | As in Normal mode, while the filter takes text. |
+| F3<br>F4<br>F8 | `view`<br>`edit_host`<br>`disconnect` | mc | — | Same | As in Normal mode, while the filter takes text. |
 
 ## Tab menu (`tab_menu`, Normal and Insert mode)
 

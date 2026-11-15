@@ -867,6 +867,7 @@ help-redraw = Redraw the screen
 help-view-log = The log of this run, from its end, in front of what is open, which is there again once it closes
 help-disconnect = Disconnect the host under the cursor
 help-edit-host = Edit the settings of the host under the cursor
+help-view-host-config = View the ssh_config that defines the host under the cursor, from its Host line
 help-menu-open = Open the volume or host in the panel
 help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu

@@ -559,12 +559,14 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["ctrl-c", "f10"]),
         ],
     ),
-    // The location menu, on top of the list's. F4 and F8 edit and disconnect the host under the
-    // cursor; e edits it too, as it edits a file in the panels, and d d disconnects it.
+    // The location menu, on top of the list's. F3 views the ssh_config of the host under the
+    // cursor at its Host line, and F4 and F8 edit and disconnect the host; g f and e view and
+    // edit too, as they view and edit a file in the panels, and d d disconnects it.
     (
         Mode::Normal,
         Context::LocationMenu,
         &[
+            (Action::View, &["g f", "f3"]),
             (Action::EditHost, &["e", "f4"]),
             (Action::Disconnect, &["d d", "f8"]),
             (Action::Reload, &["shift-r"]),
@@ -573,7 +575,11 @@ pub(super) const PRESET: Preset = &[
     (
         Mode::Insert,
         Context::LocationMenu,
-        &[(Action::EditHost, &["f4"]), (Action::Disconnect, &["f8"])],
+        &[
+            (Action::View, &["f3"]),
+            (Action::EditHost, &["f4"]),
+            (Action::Disconnect, &["f8"]),
+        ],
     ),
     // The tab menu of a panel, on top of the list's: d d and F8 close the tab under the cursor.
     (

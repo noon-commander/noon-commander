@@ -950,6 +950,8 @@ struct Viewing {
     /// opened, by their ids, which stay as they were under it; a dialog that comes in front of
     /// them later stands in front of it.
     log: Option<Vec<u64>>,
+    /// It opened over the location menu, which stays under it until it closes.
+    menu: bool,
 }
 
 impl Viewing {

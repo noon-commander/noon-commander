@@ -52,6 +52,11 @@ pub(crate) enum MenuEvent {
     Disconnect(String),
     /// Edit the settings of this host.
     EditHost(String),
+    /// View the `ssh_config` file that defines a host, from the line of its `Host`.
+    ViewConfig {
+        file: PathBuf,
+        line: usize,
+    },
     /// Read the volumes and hosts again.
     Reload,
 }
@@ -339,6 +344,15 @@ impl LocationMenu {
         }
     }
 
+    /// The `ssh_config` file that defines the host under the cursor, and the line of its
+    /// `Host`, from 1.
+    pub(crate) fn chosen_config(&self) -> Option<(&Path, usize)> {
+        match self.chosen()? {
+            Item::Host(host) => Some((&host.file, host.line)),
+            Item::Home(..) | Item::Volume(_) | Item::More(..) => None,
+        }
+    }
+
     /// The mode keys are typed in: Insert while the filter takes them.
     /// The rows, for the count before a page key.
     pub(crate) fn picker_mut(&mut self) -> &mut Picker {
@@ -359,9 +373,9 @@ impl LocationMenu {
         self.picker.input()
     }
 
-    /// Takes a key: the picker's, and F4, which edits the settings of a host, F8, which
-    /// disconnects it, and R, which reads the volumes and hosts again. Enter on the row of the
-    /// rest of a group shows them.
+    /// Takes a key: the picker's, and F3, which views the `ssh_config` of a host, F4, which
+    /// edits the settings of a host, F8, which disconnects it, and R, which reads the volumes
+    /// and hosts again. Enter on the row of the rest of a group shows them.
     pub(crate) fn handle(&mut self, input: Resolved) -> MenuEvent {
         match self.picker.handle(input) {
             Pick::Chosen(row) => {
@@ -390,6 +404,13 @@ impl LocationMenu {
             },
             Pick::Other(Action::EditHost) => match self.chosen_host() {
                 Some(host) => MenuEvent::EditHost(host.to_owned()),
+                None => MenuEvent::Pending,
+            },
+            Pick::Other(Action::View) => match self.chosen_config() {
+                Some((file, line)) => MenuEvent::ViewConfig {
+                    file: file.to_path_buf(),
+                    line,
+                },
                 None => MenuEvent::Pending,
             },
             Pick::Other(Action::Reload) => MenuEvent::Reload,
@@ -1398,6 +1419,24 @@ mod tests {
         assert_eq!(menu.chosen_host(), None);
         assert_eq!(press(&mut menu, Action::Disconnect), MenuEvent::Pending);
         assert_eq!(press(&mut menu, Action::EditHost), MenuEvent::Pending);
+    }
+
+    #[test]
+    fn f3_views_the_ssh_config_of_a_host_from_its_host_line() {
+        let mut places = places();
+        places.hosts[1].file = PathBuf::from("/Users/me/.ssh/conf.d/db");
+        places.hosts[1].line = 12;
+        let mut menu = menu_with(remote("db"), &Recent::default(), places);
+        assert_eq!(
+            press(&mut menu, Action::View),
+            MenuEvent::ViewConfig {
+                file: PathBuf::from("/Users/me/.ssh/conf.d/db"),
+                line: 12,
+            }
+        );
+        press(&mut menu, Action::Home);
+        assert_eq!(menu.chosen_config(), None);
+        assert_eq!(press(&mut menu, Action::View), MenuEvent::Pending);
     }
 
     #[test]

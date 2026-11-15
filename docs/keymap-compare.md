@@ -1060,12 +1060,14 @@ their lists: their keys are under Normal mode.
 
 g l, or Ctrl+x g l for the other panel: the home directory, the volumes, and the hosts, under their
 headings, centered over both panels. It falls back to `list`, whose Enter opens the place in the
-panel, or, on the last row of a group that shows only its first places, shows the rest. The far
-column has the keys of Far's menus, its drive menu among them.
+panel, or, on the last row of a group that shows only its first places, shows the rest. The viewer
+of F3 opens in front of the menu, which is there again once it closes. The far column has the keys
+of Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| Edit the settings of the host under the cursor | `edit_host` | ✅ | e<br>F4 | — | — | — | — |
+| View the ssh_config that defines the host under the cursor, from its Host line | `view` | ⏳ | g f<br>F3 | — | — | — | — |
+| Edit the settings of the host under the cursor | `edit_host` | ⏳ | e<br>F4 | — | — | — | — |
 | Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | d d<br>F8 | — | Delete | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | R | — | Ctrl+r | — | — |
 | Lock filter | — | ⏳ | — | — | Ctrl+Alt+l | — | — |
@@ -1080,10 +1082,12 @@ column has the keys of Far's menus, its drive menu among them.
 ## Location menu (`location_menu`, Insert mode)
 
 As it opens, and after `/`, its filter takes text. It falls back to `list`, then to `input`,
-then to `global`; F4 and F8 still edit and disconnect the host under the cursor.
+then to `global`; F3, F4, and F8 still view the ssh_config of the host under the cursor, edit it,
+and disconnect it.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
+| View the ssh_config that defines the host under the cursor, from its Host line | `view` | ⏳ | F3 | — | — | — | — |
 | Edit the settings of the host under the cursor | `edit_host` | ⏳ | F4 | — | — | — | — |
 | Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | F8 | — | — | — | — |
 

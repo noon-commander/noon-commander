@@ -1598,9 +1598,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   shows the `Reading` dialog (`tui/reading.rs`, a `Dialog` that `Reading` wraps): where the part
   starts, a gauge (`Text::Gauge`), and Cancel alone, which
   Enter and Esc press too, and which stops the read and keeps what was read
-  ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). A file whose size or
-  time changes between parts is read again from the start. Text is UTF-8; invalid bytes and
-  what the terminal would act on show as `·` in the theme's faint `hidden`, as mc's `.`
+  ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). A file that grew between
+  parts, as a log that is being written, goes on past what was its end; one that shrank, or
+  whose time changed with the same size, is read again from the start. Text is UTF-8; invalid
+  bytes and what the terminal would act on show as `·` in the theme's faint `hidden`, as mc's `.`
   (`Theme.glyphs.hidden`); tabs go to stops of 8, and
   `\r\n` ends lines.
   Long lines wrap, each row after the first starting with `»`, as vim's 'showbreak' (F2 cuts

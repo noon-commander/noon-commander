@@ -350,19 +350,28 @@ impl Viewer {
     }
 
     /// Takes a part read for [`want`](Self::want). A part no longer wanted is kept if it fits.
+    /// A file that only grew since the parts before, as a log that is being written, did not
+    /// change: it goes on past what was its end.
     pub fn take(&mut self, part: Part) -> Taken {
         let again = !part.want.new && !part.want.after_feed;
         let known = self.parts.at(part.want.offset).filter(|_| again);
         let same =
             part.stopped || known.is_none_or(|index| self.parts.known()[index].len == part.len);
-        if !same || self.stamp.is_some_and(|stamp| stamp != part.stamp) {
+        // As the file was when it was asked for: a larger one has its end elsewhere.
+        let wanted = self.want() == Some(part.want);
+        let other = self.stamp.filter(|&stamp| stamp != part.stamp);
+        let grew = other.is_some_and(|stamp| stamp.size < part.stamp.size && stamp.size.is_some());
+        if !same || (other.is_some() && !grew) {
             self.reset();
             return Taken::Changed;
+        }
+        if grew {
+            self.parts.grew();
         }
         self.stamp = Some(part.stamp);
         self.parts.set_size(part.stamp.size);
         if !again {
-            self.take_new(part);
+            self.take_new(part, wanted);
         } else if let Some(index) = known
             && !part.stopped
             && !self.parts.held().contains(&index)
@@ -374,13 +383,13 @@ impl Viewer {
         Taken::Read
     }
 
-    /// Takes a part that was not known.
-    fn take_new(&mut self, part: Part) {
+    /// Takes a part that was not known; `wanted` if it is the one the viewer asks for.
+    fn take_new(&mut self, part: Part, wanted: bool) {
         let want = part.want;
         let jump = want.new && want.after_feed;
         // The part of a jump takes the place of the parts apart, which may be the ones on
         // screen: only while the viewer still goes there.
-        if jump && self.want() != Some(want) {
+        if jump && !wanted {
             return;
         }
         self.add(part, jump);
@@ -2209,13 +2218,59 @@ mod tests {
     }
 
     #[test]
+    fn a_file_that_grew_goes_on_past_what_was_its_end() {
+        let text = short_lines(1..=24);
+        let mut viewer = Viewer::new("f".to_owned(), SMALL);
+        for _ in 0..8 {
+            feed(&mut viewer, &text);
+            draw(&mut viewer, 20, 6);
+            viewer.handle(Command::Scroll(Motion::WindowDown));
+        }
+        let end = draw(&mut viewer, 20, 6);
+        assert!(end.contains("21/24 End") && end.contains("EOF"), "{end}");
+        assert_eq!(viewer.parts.held(), 1..3);
+        // The part read again on the way back finds more of the file: what was read stays.
+        let text = short_lines(1..=28);
+        for _ in 0..4 {
+            viewer.handle(Command::Scroll(Motion::WindowUp));
+        }
+        let first = viewer.want().expect("the first part again");
+        assert_eq!(viewer.take(crate::read::part_of(&text, first)), Taken::Read);
+        assert_eq!(viewer.parts.known().len(), 3);
+        let above = draw(&mut viewer, 20, 6);
+        assert!(above.contains("9/? ") && above.contains("l009"), "{above}");
+        viewer.handle(Command::Scroll(Motion::End));
+        feed(&mut viewer, &text);
+        let end = draw(&mut viewer, 20, 6);
+        assert!(end.contains("25/28 End") && end.contains("l028"), "{end}");
+    }
+
+    #[test]
+    fn the_end_of_a_file_that_grows_meanwhile_is_reached() {
+        let text = short_lines(1..=48);
+        let mut viewer = Viewer::new("f".to_owned(), SMALL);
+        feed(&mut viewer, &text);
+        draw(&mut viewer, 20, 6);
+        viewer.handle(Command::Scroll(Motion::End));
+        let last = viewer.want().expect("the last part");
+        // The part of the jump comes from a file that has a line more by now.
+        let text = short_lines(1..=49);
+        assert_eq!(viewer.take(crate::read::part_of(&text, last)), Taken::Read);
+        assert_eq!(viewer.parts.known().len(), 2, "taken, though not the end");
+        feed(&mut viewer, &text);
+        let end = draw(&mut viewer, 20, 6);
+        assert!(end.contains("l049") && end.contains("EOF"), "{end}");
+        assert!(end.contains("225B/245B End"), "{end}");
+    }
+
+    #[test]
     fn reads_the_file_again_when_it_changed() {
         let mut viewer = Viewer::new("f".to_owned(), SMALL);
         viewer.take(reply(&viewer));
         draw(&mut viewer, 20, 6);
         viewer.handle(Command::Scroll(Motion::WindowDown));
         let mut changed = reply(&viewer);
-        changed.stamp.size = Some(125);
+        changed.stamp.size = Some(115);
         assert_eq!(viewer.take(changed), Taken::Changed);
         assert!(viewer.loading());
         assert_eq!(viewer.want().map(|want| want.offset), Some(0));
@@ -2236,7 +2291,8 @@ mod tests {
         draw(&mut viewer, 20, 6);
         viewer.handle(Command::Scroll(Motion::WindowUp));
         let mut changed = crate::read::part_of(&text, viewer.want().expect("the part before"));
-        changed.stamp.size = Some(245);
+        // As large as it was, written at another time.
+        changed.stamp.modified = Some(std::time::SystemTime::UNIX_EPOCH);
         assert_eq!(viewer.take(changed), Taken::Changed);
         feed(&mut viewer, &text);
         let screen = draw(&mut viewer, 20, 6);

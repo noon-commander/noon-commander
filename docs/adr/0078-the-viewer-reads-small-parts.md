@@ -41,6 +41,11 @@ showed.
   there.
 - **The scroll bar goes by lines** when the whole file is held and is at most 16 MiB, whatever
   the size of a part: counting the rows of more takes too long.
+- **A file that grew did not change.** A part that finds the file larger than the parts before
+  it did is taken, and the file goes on past what was its end. A smaller size, or another time
+  of change with the same size, still has the file read again from its start
+  ([ADR 0038](0038-viewer-reads-a-window-of-the-file.md)). With parts of 1 MiB a log that is
+  being written would otherwise be read again at every part, and never to its end.
 
 ## Consequences
 
@@ -50,4 +55,6 @@ showed.
 - A line longer than a part stays whole only when read down. Reached from a jump, scrolling
   up, it is still cut where a part starts in it
   ([ADR 0077](0077-the-viewer-jumps-to-the-end-of-a-file.md)), now each MiB.
+- A file written over with more than it had, between two parts, shows old parts beside new
+  ones until it is viewed again.
 - A `config.toml` that sets `part_mib` keeps its value.

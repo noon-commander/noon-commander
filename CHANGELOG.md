@@ -43,6 +43,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keeps its value). A line longer than a part stays whole, up to 16 MiB, and a local file of at
   most 16 MiB is read whole behind the screen once its start shows, so that its title still has
   the number of its lines ([ADR 0078](docs/adr/0078-the-viewer-reads-small-parts.md)).
+- A file that grows while the viewer shows it, as a log that is being written, goes on past
+  what was its end, where a new part had it read again from its start.
 - The window of a job takes a count before an arrow, and Home and End, `g g`, and `G` go to
   its first button and its last, as in every dialog
   ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).

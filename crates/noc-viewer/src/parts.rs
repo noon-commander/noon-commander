@@ -89,6 +89,11 @@ impl Parts {
         self.end = true;
     }
 
+    /// Notes that the file grew: it goes on after the last known part.
+    pub(crate) fn grew(&mut self) {
+        self.end = false;
+    }
+
     /// Adds the part read for `want` where it belongs, and gives its index: after the last
     /// part read in order, after the last of those apart, before the first of them, or, read
     /// by a jump, in their place. `None` if it belongs nowhere, as a part asked for before the

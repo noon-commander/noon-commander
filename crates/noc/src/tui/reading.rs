@@ -183,6 +183,7 @@ mod tests {
         offset: 32 << 20,
         length: 16 << 20,
         new: true,
+        after_feed: false,
     };
 
     /// Draws `reading` first at `start`, then at `now`.

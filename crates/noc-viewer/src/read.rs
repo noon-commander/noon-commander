@@ -1,6 +1,6 @@
 //! Reading a file for the viewer in parts, through any [`Vfs`].
 
-use std::ops::ControlFlow;
+use std::ops::{ControlFlow, Range};
 use std::time::SystemTime;
 
 use noc_vfs::{FileKind, FileReader as _, Vfs, VfsError};
@@ -17,6 +17,10 @@ pub struct Want {
     /// Whether the part was never read: a new part ends after its last line feed, unless the
     /// file ends with it or it has none; a known one is read as it was.
     pub new: bool,
+    /// Whether the file was not read up to `offset`, as after a jump, so that a line may be
+    /// under way there: the part then starts after the first line feed from the byte before
+    /// `offset` on, at the start of a line, unless nothing follows that line feed.
+    pub after_feed: bool,
 }
 
 /// What the file was like when a part of it was read: when it changes, the parts read before
@@ -45,6 +49,8 @@ pub struct Progress {
 pub struct Part {
     /// What was asked for.
     pub want: Want,
+    /// Where it starts: where it was asked for, or after the line feed it was to start after.
+    pub(crate) offset: u64,
     /// The bytes read.
     pub(crate) len: u64,
     pub(crate) lines: Vec<String>,
@@ -57,11 +63,23 @@ pub struct Part {
 }
 
 impl Part {
-    /// The part of `bytes` read for `want`, its lines made at once: in a part of megabytes
-    /// that takes long enough to be kept away from the screen.
-    pub fn new(want: Want, bytes: &[u8], (end, stopped): (bool, bool), stamp: Stamp) -> Self {
+    /// The part of `bytes` read for `want`, from where it asks on, its lines made at once: in
+    /// a part of megabytes that takes long enough to be kept away from the screen.
+    pub fn new(want: Want, bytes: &[u8], ends: (bool, bool), stamp: Stamp) -> Self {
+        Self::at(want.offset, want, bytes, ends, stamp)
+    }
+
+    /// The part of `bytes`, which start at `offset`, read for `want`.
+    fn at(
+        offset: u64,
+        want: Want,
+        bytes: &[u8],
+        (end, stopped): (bool, bool),
+        stamp: Stamp,
+    ) -> Self {
         Self {
             want,
+            offset,
             len: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
             lines: lines_of(bytes),
             end,
@@ -99,8 +117,10 @@ pub async fn read_part<V: Vfs>(
     let total = size.map_or(want.length, |size| {
         want.length.min(size.saturating_sub(want.offset))
     });
-    let limit = usize::try_from(want.length).unwrap_or(usize::MAX);
-    let mut reader = vfs.open_file_at(path, want.offset).await?;
+    let start = start_of(want);
+    let most = want.length.saturating_add(want.offset - start);
+    let limit = usize::try_from(most).unwrap_or(usize::MAX);
+    let mut reader = vfs.open_file_at(path, start).await?;
     let mut bytes = Vec::new();
     let (mut eof, mut stopped) = (false, false);
     while bytes.len() < limit {
@@ -118,9 +138,9 @@ pub async fn read_part<V: Vfs>(
     let over = bytes.len() > limit;
     bytes.truncate(limit);
     let read = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-    let end = !over && (eof || size.is_some_and(|size| want.offset + read >= size));
-    bytes.truncate(whole_lines(&bytes, want, end));
-    tokio::task::spawn_blocking(move || Part::new(want, &bytes, (end, stopped), stamp))
+    let end = !over && (eof || size.is_some_and(|size| start + read >= size));
+    let (offset, kept) = cut(want, start, &bytes, end);
+    tokio::task::spawn_blocking(move || Part::at(offset, want, &bytes[kept], (end, stopped), stamp))
         .await
         .map_err(|error| VfsError::Io(std::io::Error::other(error)))
 }
@@ -129,18 +149,38 @@ pub async fn read_part<V: Vfs>(
 /// for, cut as a part of a file is. Its lines are made at once, on the thread that asks: for
 /// text such as the lines of a checksum file, small next to a file of megabytes.
 pub fn part_of(text: &[u8], want: Want) -> Part {
-    let start = usize::try_from(want.offset)
-        .unwrap_or(usize::MAX)
-        .min(text.len());
-    let limit = usize::try_from(want.length).unwrap_or(usize::MAX);
+    let first = start_of(want);
+    let start = usize::try_from(first).unwrap_or(usize::MAX).min(text.len());
+    let most = want.length.saturating_add(want.offset - first);
+    let limit = usize::try_from(most).unwrap_or(usize::MAX);
     let bytes = &text[start..start.saturating_add(limit).min(text.len())];
     let end = start + bytes.len() == text.len();
-    let bytes = &bytes[..whole_lines(bytes, want, end)];
+    let (offset, kept) = cut(want, first, bytes, end);
     let stamp = Stamp {
         size: Some(u64::try_from(text.len()).unwrap_or(u64::MAX)),
         modified: None,
     };
-    Part::new(want, bytes, (end, false), stamp)
+    Part::at(offset, want, &bytes[kept], (end, false), stamp)
+}
+
+/// Where the reading for `want` starts: a byte before the part that is to start after a line
+/// feed, so that a line feed right before it counts.
+fn start_of(want: Want) -> u64 {
+    want.offset - u64::from(want.after_feed && want.offset > 0)
+}
+
+/// The part that `want` asks for of `bytes`, read from `start` on: where it starts in the
+/// file, and which of the bytes it keeps. One that starts after a line feed starts after the
+/// first, unless nothing follows it: then, as without any, where it was asked for.
+fn cut(want: Want, start: u64, bytes: &[u8], end: bool) -> (u64, Range<usize>) {
+    let before = usize::try_from(want.offset.saturating_sub(start)).unwrap_or(usize::MAX);
+    let skip = match bytes.iter().position(|&byte| byte == b'\n') {
+        Some(feed) if before > 0 && feed + 1 < bytes.len() => feed + 1,
+        _ => before.min(bytes.len()),
+    };
+    let kept = whole_lines(&bytes[skip..], want, end);
+    let offset = start + u64::try_from(skip).unwrap_or(u64::MAX);
+    (offset, skip..skip + kept)
 }
 
 /// How many of `bytes`, read for `want`, the part keeps: a new part that is not the end ends
@@ -163,6 +203,15 @@ mod tests {
             offset,
             length,
             new: true,
+            after_feed: false,
+        }
+    }
+
+    /// A part that starts after a line feed.
+    fn jump(offset: u64, length: u64) -> Want {
+        Want {
+            after_feed: true,
+            ..new(offset, length)
         }
     }
 
@@ -214,6 +263,49 @@ mod tests {
         assert!(past.is_empty() && past.end);
     }
 
+    #[tokio::test]
+    async fn a_part_from_the_middle_of_a_file_starts_after_a_line_feed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("f");
+        std::fs::write(&path, b"one\ntwo\nthree\nfour\n").unwrap();
+        let part = read(&path, jump(5, 14)).await;
+        assert_eq!(
+            (part.offset, part.lines, part.end),
+            (8, lines(&["three", "four"]), true),
+            "in the middle of a line: from the next one on"
+        );
+        let part = read(&path, jump(8, 6)).await;
+        assert_eq!(
+            (part.offset, part.lines, part.len),
+            (8, lines(&["three"]), 6),
+            "the line feed before it counts"
+        );
+        let before = Want {
+            new: false,
+            ..jump(5, 9)
+        };
+        let part = read(&path, before).await;
+        assert_eq!((part.offset, part.len), (8, 6), "it ends where asked");
+        let part = read(&path, jump(9, 3)).await;
+        assert_eq!(
+            (part.offset, part.lines),
+            (9, lines(&["hre"])),
+            "no line feed: where it was asked for"
+        );
+        let part = read(&path, jump(16, 3)).await;
+        assert_eq!(
+            (part.offset, part.lines, part.end),
+            (16, lines(&["ur"]), true),
+            "nothing after the line feed: where it was asked for"
+        );
+        let part = read(&path, jump(0, 8)).await;
+        assert_eq!(
+            (part.offset, part.lines),
+            (0, lines(&["one", "two"])),
+            "no byte before the start of the file"
+        );
+    }
+
     #[test]
     fn text_in_memory_is_cut_into_parts_as_a_file_is() {
         let text = b"one\ntwo\nthree\n";
@@ -236,6 +328,12 @@ mod tests {
         let beyond = part_of(text, new(20, 4));
         assert!(beyond.is_empty() && beyond.end);
         assert!(part_of(b"", new(0, 4)).end, "nothing is whole");
+        let after = part_of(text, jump(5, 9));
+        assert_eq!(
+            (after.offset, after.lines, after.end),
+            (8, lines(&["three"]), true),
+            "from the middle of a line"
+        );
     }
 
     #[tokio::test]

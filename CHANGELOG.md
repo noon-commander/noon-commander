@@ -32,6 +32,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `G` and End in the viewer go to the end of the file, not of the part read last, and at once:
+  the viewer reads the last part of the file alone, on a host too, and the part under a scroll
+  bar dragged far ahead. The lines there have no numbers until scrolling back reaches what was
+  read before; until then the title says where the screen is in bytes, as `1.9G/2.0G 97%`. The
+  log (Ctrl+\\) opens the same way
+  ([ADR 0077](docs/adr/0077-the-viewer-jumps-to-the-end-of-a-file.md)).
 - The window of a job takes a count before an arrow, and Home and End, `g g`, and `G` go to
   its first button and its last, as in every dialog
   ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
@@ -159,6 +165,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The viewer read the same part again and again, for ever, when scrolling up reached a part it
+  had let go while it held as much as `viewer.window_mib` allows.
 - A copy or a move that could not read its source said `Cannot copy to` the source.
 - Disconnecting a host while a job ran on it did not end the job: a delete never ended, and a
   copy failed file by file. The job ends now.

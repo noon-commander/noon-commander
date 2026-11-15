@@ -469,6 +469,39 @@ fn the_viewer_reads_the_next_part_at_the_end_and_keeps_its_text_if_it_fails() {
 }
 
 #[test]
+fn g_in_a_large_file_reads_its_last_part_alone_and_says_where_it_is_in_bytes() {
+    let (mut app, read) = view_big();
+    let Effect::Read(ReadRequest { id, want, .. }) = read else {
+        panic!("expected a read");
+    };
+    let stamp = Stamp {
+        size: Some(1 << 30),
+        modified: None,
+    };
+    let first = ViewerPart::new(want, b"one\ntwo\n", (false, false), stamp);
+    assert!(app.read(id, Ok(first)).is_empty());
+    screen_of(&mut app, 16);
+    let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::End))) else {
+        panic!("expected the last part");
+    };
+    assert_eq!(
+        (want.offset, want.length),
+        ((1 << 30) - (16 << 20), 16 << 20),
+        "not the parts on the way"
+    );
+    assert!(want.new && want.after_feed, "from the start of a line");
+    let lines = (1..=40)
+        .map(|n| format!("line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let last = ViewerPart::new(want, lines.as_bytes(), (true, false), stamp);
+    assert!(app.read(id, Ok(last)).is_empty(), "it fills the screen");
+    let text = screen_of(&mut app, 16);
+    assert!(text.contains("line 40") && text.contains("EOF"), "{text}");
+    assert!(text.contains("1008M/1.0G End"), "{text}");
+}
+
+#[test]
 fn a_file_that_changed_between_parts_is_read_again() {
     let (mut app, read) = view_big();
     let Effect::Read(ReadRequest { id, want, .. }) = read else {

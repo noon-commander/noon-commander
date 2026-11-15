@@ -1,5 +1,6 @@
 //! The F3 viewer and the reads it waits for.
 
+use noc_scroll::Motion;
 use noc_vfs::Location;
 use noc_viewer::{
     Command as ViewerCommand, Part as ViewerPart, Progress as ReadProgress, Sizes as ViewerSizes,
@@ -109,7 +110,7 @@ impl App {
         };
         let location = Location::Local(path);
         let mut viewer = Viewer::new(location_text(&location), self.viewer_sizes());
-        viewer.handle(ViewerCommand::Top(usize::MAX));
+        viewer.handle(ViewerCommand::Scroll(Motion::End));
         self.open_viewer(
             viewer,
             Source::File {

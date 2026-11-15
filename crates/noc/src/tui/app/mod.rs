@@ -37,7 +37,7 @@ use super::keymap::{
 };
 use super::machine::Machine;
 use super::menu::LocationMenu;
-use super::panel::{Failure, ListRequest, Panel, location_text};
+use super::panel::{Failure, ListRequest, Panel, location_text, short_size};
 use super::progress::{JobView, Look, RowLook};
 use super::pulldown::{Command, PullDown};
 use super::reading::Reading;
@@ -980,7 +980,8 @@ impl Viewing {
             .wait_dots(&self.wait)
             .filter(|_| loading)
             .unwrap_or_else(|| decor.file(&name));
-        self.viewer.render(frame, area, &viewer_styles(theme), icon);
+        let styles = viewer_styles(theme);
+        self.viewer.render(frame, area, &styles, icon, &short_size);
         if self
             .finished
             .as_ref()

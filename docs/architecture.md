@@ -1579,8 +1579,15 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   holds, and keeps a window of `viewer.window_mib`, reading a part it dropped again when a move up
   reaches it ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). Until the end is known
   the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends
-  the text. A read longer than 150 ms shows the `Reading` dialog (`tui/reading.rs`, a `Dialog`
-  that `Reading` wraps): where the part starts, a gauge (`Text::Gauge`), and Cancel alone, which
+  the text. `G`, End, and a thumb dragged far past what was read jump: the viewer reads the part
+  there alone, the last one of the file for its end, from the start of a line
+  (`Want::after_feed`), apart from the parts read in order (`Parts`). The lines of the parts apart
+  have no numbers, so the position is `at/size percent%` in bytes, short, until scrolling up has
+  read what lies between and the parts meet; nothing counts lines behind the screen. A line to
+  go to, as a search result, is reached in order, through the parts before it
+  ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md)). A read longer than 150 ms
+  shows the `Reading` dialog (`tui/reading.rs`, a `Dialog` that `Reading` wraps): where the part
+  starts, a gauge (`Text::Gauge`), and Cancel alone, which
   Enter and Esc press too, and which stops the read and keeps what was read
   ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). A file whose size or
   time changes between parts is read again from the start. Text is UTF-8; invalid bytes and

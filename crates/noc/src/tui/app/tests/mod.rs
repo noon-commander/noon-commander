@@ -230,6 +230,7 @@ fn whole(bytes: impl Into<Vec<u8>>) -> ViewerPart {
         offset: 0,
         length,
         new: true,
+        after_feed: false,
     };
     let stamp = Stamp {
         size: Some(length),

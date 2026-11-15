@@ -288,6 +288,10 @@
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file
       that changes is read again; cancel-safe
       ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md))
+- [x] `G` and End in the viewer jump to the end of the file, and a thumb dragged far ahead to its
+      byte: the part there alone is read, on a host too; the title says where the screen is in
+      bytes until the parts read in order reach it; the log opens the same way
+      ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md))
 - [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
       Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the
       numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))

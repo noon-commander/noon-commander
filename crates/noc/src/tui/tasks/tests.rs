@@ -193,6 +193,41 @@ async fn names_to_complete_tell_directories_and_links_to_them() {
     assert_eq!(names_in(Some(remote), None).await, Ok(Vec::new()));
 }
 
+#[cfg(debug_assertions)]
+#[tokio::test]
+async fn slow_volumes_hold_back_every_answer_as_if_none_came_in_time() {
+    let space = Space {
+        total: 2,
+        available: 1,
+    };
+    let volume = |path: &str| Volume {
+        mount_point: PathBuf::from(path),
+        label: None,
+        fs_type: None,
+        kind: noc_vfs::VolumeKind::Local,
+        space: Some(space),
+    };
+    let since = Instant::now();
+    let places = Places {
+        volumes: vec![volume("/"), volume("/Volumes/NAS")],
+        waiting: [(PathBuf::from("/Volumes/NAS"), since)].into(),
+        ..Places::default()
+    };
+    let mut answers = FuturesUnordered::new();
+    let held = held_back(places, Duration::from_millis(10), &mut answers);
+    assert_eq!(held.volumes[0].space, None, "listed without its answer");
+    assert_eq!(held.waiting.len(), 2);
+    assert_eq!(
+        held.waiting[Path::new("/Volumes/NAS")],
+        since,
+        "one already waiting keeps its own answer"
+    );
+    assert_eq!(answers.len(), 1);
+    let (mount_point, answer) = answers.next().await.expect("its answer");
+    assert_eq!(mount_point, PathBuf::from("/"));
+    assert_eq!(answer.and_then(|volume| volume.space), Some(space));
+}
+
 #[test]
 fn commands_are_the_executable_files_of_path_each_once() {
     let tmp = tempfile::tempdir().unwrap();

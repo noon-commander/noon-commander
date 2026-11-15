@@ -3,14 +3,16 @@
 //! Favorites, the volumes in Mounts, and the hosts of the ssh config in SFTP. Mounts and SFTP put
 //! those used last first and show the first ten, with a row that shows the rest; the filter finds
 //! them all. Typing filters the menu; while the filter is empty, `1` … `9` and `0` open the first
-//! ten places.
+//! ten places. The sizes of a volume that did not answer in time come later, a skeleton in their
+//! place until then.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use noc_config::{Recent, SearchMode};
 use noc_scroll::scrollbar::Bar;
-use noc_vfs::{Location, Space, Volume};
+use noc_vfs::{Location, Volume};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -26,13 +28,17 @@ use super::panel::HostState;
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
 use super::places::{KnownHost, Places, volume_name, volume_of};
 use super::search::{Input, Kind};
-use super::spinner::{Spin, Wait};
+use super::spinner::{Shine, Spin, Wait};
 use super::theme::Theme;
 use super::window::{self, Colors};
 use crate::i18n::fl;
 
 /// Places of a group that show while the filter is empty, besides those always shown.
 const SHOWN: usize = 10;
+
+/// How long the sizes of a volume may take, from when it was asked, before its row gives them
+/// up and shows the marks of sizes not known.
+pub(crate) const NO_ANSWER: Duration = Duration::from_secs(5);
 
 /// What a key did in the menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,8 +76,8 @@ impl Group {
 /// A row.
 #[derive(Debug, Clone, Copy)]
 enum Item<'a> {
-    /// The home directory, with the space of the volume that holds it.
-    Home(&'a Path, Option<Space>),
+    /// The home directory, with the volume that holds it.
+    Home(&'a Path, Option<&'a Volume>),
     Volume(&'a Volume),
     Host(&'a KnownHost),
     /// The row that shows the places of a group that do not show yet: how many there are.
@@ -96,6 +102,9 @@ pub(crate) struct LocationMenu {
     contents: Contents,
     /// The listing; its lines are those with every group as it opens.
     loading: Loading,
+    /// The wait for the sizes of the volumes that did not answer in time, whose shine crosses
+    /// all their skeletons at once.
+    sizes: Wait,
     picker: Picker,
 }
 
@@ -130,6 +139,7 @@ impl LocationMenu {
                 expanded: HashSet::new(),
             },
             loading: Loading::new(generation),
+            sizes: Wait::default(),
             picker: Picker::new(Input::new(Kind::FILTER, SearchMode::Plain)),
         };
         // The home directory, before the listing.
@@ -177,6 +187,42 @@ impl LocationMenu {
         self.loading.wait()
     }
 
+    /// The wait for the sizes of volumes, while some are still to come at `at` and not given
+    /// up for yet: its shine crosses their skeletons. No dots turn in the title for it.
+    pub(crate) fn sizes_wait(&self, at: Instant) -> Option<&Wait> {
+        (self.contents.places.waiting.values())
+            .any(|since| at.saturating_duration_since(*since) < NO_ANSWER)
+            .then_some(&self.sizes)
+    }
+
+    /// When the next sizes still to come after `at` are given up for, so that their skeleton
+    /// turns to the marks of sizes not known even where nothing else draws the screen.
+    pub(crate) fn gives_up(&self, at: Instant) -> Option<Instant> {
+        (self.contents.places.waiting.values())
+            .map(|since| *since + NO_ANSWER)
+            .filter(|gives_up| *gives_up > at)
+            .min()
+    }
+
+    /// Takes the answer of the volume at `mount_point`, listed without it: the volume as it is
+    /// now, or `None` if it is not one to show. The cursor stays on its row.
+    pub(crate) fn answered(&mut self, mount_point: &Path, volume: Option<Volume>) {
+        let places = &mut self.contents.places;
+        let Some(index) =
+            (places.volumes.iter()).position(|shown| shown.mount_point == mount_point)
+        else {
+            return;
+        };
+        places.waiting.remove(mount_point);
+        match volume {
+            Some(volume) => places.volumes[index] = volume,
+            None => {
+                places.volumes.remove(index);
+            }
+        }
+        self.refresh();
+    }
+
     /// Takes the hosts that are connected, connecting, or stalled, which always show. The
     /// cursor stays on its row.
     pub(crate) fn set_connected(&mut self, connected: HashSet<String>) {
@@ -194,6 +240,10 @@ impl LocationMenu {
         }
         match result {
             Ok(places) => {
+                // A shine of its own for sizes that come again after the last had come.
+                if self.contents.places.waiting.is_empty() && !places.waiting.is_empty() {
+                    self.sizes = Wait::default();
+                }
                 self.contents.places = places;
                 let expanded = std::mem::take(&mut self.contents.expanded);
                 let items: Vec<Item<'_>> = (self.contents.rows().into_iter())
@@ -372,18 +422,24 @@ impl LocationMenu {
             .filter(|_| !self.loading.loaded())
             .map(str::to_owned);
         let note = self.note(theme);
-        let columns = SizeColumns::of(&items);
-        let widest = items
-            .iter()
-            .map(|item| cells::width(&info(*item, hosts, columns)))
-            .max()
-            .unwrap_or(0);
+        let now = spin.at();
+        let waiting = &self.contents.places.waiting;
+        let waits = |mount_point: &Path| {
+            (waiting.get(mount_point))
+                .is_some_and(|since| now.saturating_duration_since(*since) < NO_ANSWER)
+        };
+        let sizes: Vec<Option<Sizes>> = items.iter().map(|item| sizes(*item, &waits)).collect();
+        let columns = SizeColumns::of(sizes.iter().flatten());
+        let infos: Vec<Info> = (items.iter().zip(&sizes))
+            .map(|(item, sizes)| info(*item, sizes.as_ref(), hosts, columns))
+            .collect();
+        let widest = infos.iter().map(Info::width).max().unwrap_or(0);
         let look = Look {
             theme,
             decor,
             hosts,
-            columns,
             dots: spin.dots(),
+            shine: spin.shine(&self.sizes),
             focused: Colors::plain(theme).focused_style(),
         };
         let full = items.get(self.picker.cursor()).map(|item| {
@@ -405,7 +461,12 @@ impl LocationMenu {
             let info_width = widest.min(row.width / 2);
             // The name, a space, the information.
             let name_width = row.width.saturating_sub(info_width + 1);
-            look.line(items[row.index], row, (name_width, info_width))
+            look.line(
+                items[row.index],
+                &infos[row.index],
+                row,
+                (name_width, info_width),
+            )
         });
     }
 
@@ -447,8 +508,8 @@ impl Contents {
     /// the hosts, those used last first; past the first ten of a group that is not expanded,
     /// only those always shown, then a row for the rest.
     fn rows(&self) -> Vec<(Item<'_>, Shows)> {
-        let space = volume_of(&self.places.volumes, &self.home).and_then(|volume| volume.space);
-        let mut rows = vec![(Item::Home(&self.home, space), Shows::Always)];
+        let home = volume_of(&self.places.volumes, &self.home);
+        let mut rows = vec![(Item::Home(&self.home, home), Shows::Always)];
         let here = match &self.current {
             Location::Local(path) => volume_of(&self.places.volumes, path),
             Location::Remote { .. } => None,
@@ -524,18 +585,20 @@ struct Look<'a> {
     theme: &'a Theme,
     decor: Decor,
     hosts: &'a dyn Fn(&str) -> HostState,
-    columns: SizeColumns,
     /// The frame of the spinner of hosts that connect.
     dots: char,
+    /// The shine over the skeletons of sizes still to come.
+    shine: Option<Shine<'a>>,
     /// The row under the cursor.
     focused: Style,
 }
 
 impl Look<'_> {
-    /// A row: its name with its prefix, and its information, in cells of `widths`.
+    /// A row: its name with its prefix, and its `info`, in cells of `widths`.
     fn line(
         &self,
         item: Item<'_>,
+        info: &Info,
         ShownRow { selected, .. }: ShownRow,
         (name_width, info_width): (usize, usize),
     ) -> Line<'static> {
@@ -578,8 +641,18 @@ impl Look<'_> {
             spans.insert(0, Span::styled(marker, styles.0.patch(style)));
         }
         spans.push(Span::styled(" ", styles.0));
-        let info = info(item, self.hosts, self.columns);
-        spans.extend(cells::fit(&info, info_width, Align::Right, styles, marks));
+        match info {
+            Info::Text(text) => {
+                spans.extend(cells::fit(text, info_width, Align::Right, styles, marks));
+            }
+            Info::Waiting(width) => {
+                let width = (*width).min(info_width);
+                spans.push(Span::styled(" ".repeat(info_width - width), styles.0));
+                let width = u16::try_from(width).unwrap_or(u16::MAX);
+                let skeleton = window::cell_skeleton(width, styles.0, self.theme, self.shine);
+                spans.extend(skeleton);
+            }
+        }
         Line::from(spans).style(styles.0)
     }
 }
@@ -623,24 +696,40 @@ fn key(item: Item<'_>) -> Key {
     }
 }
 
-/// The free space and the size of the volume of a row, as it shows them; none for a host, the
-/// row of the rest of a group, or a volume whose space is not known.
-fn sizes(item: Item<'_>) -> Option<(String, String)> {
-    let space = match item {
-        Item::Home(_, space) => space,
-        Item::Volume(volume) => volume.space,
-        Item::Host(_) | Item::More(..) => None,
-    };
-    // Pseudo file systems report no size.
-    let space = space.filter(|space| space.total > 0)?;
-    Some((
-        super::panel::short_size(space.available),
-        super::panel::short_size(space.total),
-    ))
+/// The free space and the size of the volume of a row, as far as they are known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Sizes {
+    /// As the row shows them.
+    Known(String, String),
+    /// Still to come from a volume that did not answer in time.
+    Waiting,
+    /// The volume told none, or did not answer in [`NO_ANSWER`].
+    Unknown,
 }
 
-/// The cells of the widest free space and of the widest size of the rows, each of which takes
-/// as many, so that the slashes between them line up.
+/// The sizes of the volume of a row, a volume or the home directory; none for a host or the row
+/// of the rest of a group. A volume whose mount point `waits` has them still to come.
+fn sizes(item: Item<'_>, waits: &dyn Fn(&Path) -> bool) -> Option<Sizes> {
+    let volume = match item {
+        Item::Home(_, volume) => volume,
+        Item::Volume(volume) => Some(volume),
+        Item::Host(_) | Item::More(..) => return None,
+    };
+    // Pseudo file systems report no size.
+    let space = (volume.and_then(|volume| volume.space)).filter(|space| space.total > 0);
+    Some(match (space, volume) {
+        (Some(space), _) => Sizes::Known(
+            super::panel::short_size(space.available),
+            super::panel::short_size(space.total),
+        ),
+        (None, Some(volume)) if waits(&volume.mount_point) => Sizes::Waiting,
+        (None, _) => Sizes::Unknown,
+    })
+}
+
+/// The cells of the free space and of the size of the rows, each of which takes as many, so
+/// that the slashes between them line up: as many as the widest sizes known, or as many as
+/// sizes take at most while none is known but some are still to come.
 #[derive(Debug, Clone, Copy, Default)]
 struct SizeColumns {
     free: usize,
@@ -648,48 +737,101 @@ struct SizeColumns {
 }
 
 impl SizeColumns {
-    fn of(items: &[Item<'_>]) -> Self {
-        items.iter().filter_map(|item| sizes(*item)).fold(
-            Self::default(),
-            |columns, (free, total)| Self {
-                free: columns.free.max(cells::width(&free)),
-                total: columns.total.max(cells::width(&total)),
-            },
+    fn of<'a>(sizes: impl Iterator<Item = &'a Sizes>) -> Self {
+        let mut columns = Self::default();
+        let (mut known, mut waiting, mut unknown) = (false, false, false);
+        for sizes in sizes {
+            match sizes {
+                Sizes::Known(free, total) => {
+                    known = true;
+                    columns.free = columns.free.max(cells::width(free));
+                    columns.total = columns.total.max(cells::width(total));
+                }
+                Sizes::Waiting => waiting = true,
+                Sizes::Unknown => unknown = true,
+            }
+        }
+        if waiting && !known {
+            let widest = cells::short_size_width(&noc_locale::current());
+            columns = Self {
+                free: widest,
+                total: widest,
+            };
+        }
+        if unknown {
+            let mark = cells::width(&fl!("menu-space-unknown"));
+            columns.free = columns.free.max(mark);
+            columns.total = columns.total.max(mark);
+        }
+        columns
+    }
+
+    /// Cells of the sizes of a row, the slash between them too.
+    fn width(self) -> usize {
+        let between = fl!("menu-space", free = "", total = "");
+        self.free + cells::width(&between) + self.total
+    }
+
+    /// `free` and `total` in their columns, with the slash between them.
+    fn text(self, free: &str, total: &str) -> String {
+        let right = |text: &str, width: usize| {
+            let pad = width.saturating_sub(cells::width(text));
+            format!("{}{text}", " ".repeat(pad))
+        };
+        fl!(
+            "menu-space",
+            free = right(free, self.free),
+            total = right(total, self.total)
         )
     }
 }
 
-/// Right of a row: the free space and the size of the volume of the home directory or of a
-/// volume, in `columns`, or the address of a host.
-fn info(item: Item<'_>, hosts: &dyn Fn(&str) -> HostState, columns: SizeColumns) -> String {
-    let right = |text: String, width: usize| {
-        let pad = width.saturating_sub(cells::width(&text));
-        format!("{}{text}", " ".repeat(pad))
-    };
-    match item {
-        Item::Home(..) | Item::Volume(_) => sizes(item).map_or_else(
-            || fl!("menu-free-unknown"),
-            |(free, total)| {
-                fl!(
-                    "menu-space",
-                    free = right(free, columns.free),
-                    total = right(total, columns.total)
-                )
-            },
-        ),
-        Item::Host(host) => {
+/// What a row shows right of its name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Info {
+    Text(String),
+    /// A skeleton of so many cells, where the sizes of a volume are still to come.
+    Waiting(usize),
+}
+
+impl Info {
+    fn width(&self) -> usize {
+        match self {
+            Self::Text(text) => cells::width(text),
+            Self::Waiting(width) => *width,
+        }
+    }
+}
+
+/// Right of a row: the `sizes` of the volume of the home directory or of a volume, in
+/// `columns`, or the address of a host.
+fn info(
+    item: Item<'_>,
+    sizes: Option<&Sizes>,
+    hosts: &dyn Fn(&str) -> HostState,
+    columns: SizeColumns,
+) -> Info {
+    let text = match (item, sizes) {
+        (_, Some(Sizes::Known(free, total))) => columns.text(free, total),
+        (_, Some(Sizes::Waiting)) => return Info::Waiting(columns.width()),
+        (_, Some(Sizes::Unknown)) => {
+            let mark = fl!("menu-space-unknown");
+            columns.text(&mark, &mark)
+        }
+        (Item::Host(host), None) => {
             let address = hosts(&host.alias).address.or_else(|| host.address.clone());
             cells::sanitize(address.unwrap_or_default().as_bytes())
         }
-        Item::More(..) => String::new(),
-    }
+        (Item::Home(..) | Item::Volume(_) | Item::More(..), None) => String::new(),
+    };
+    Info::Text(text)
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Instant;
 
-    use noc_vfs::VolumeKind;
+    use noc_vfs::{Space, VolumeKind};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -735,6 +877,7 @@ mod tests {
                 host("db", None, None),
                 host("proxy", None, Some("root@proxy.example.org")),
             ],
+            ..Places::default()
         }
     }
 
@@ -745,6 +888,7 @@ mod tests {
             hosts: (1..=count)
                 .map(|index| host(&format!("h{index:02}"), None, None))
                 .collect(),
+            ..Places::default()
         }
     }
 
@@ -1085,7 +1229,7 @@ mod tests {
             volumes: (0..12)
                 .map(|index| volume(&format!("/Volumes/v{index:02}"), None, VolumeKind::Local))
                 .collect(),
-            hosts: Vec::new(),
+            ..Places::default()
         };
         let here = Location::Local(PathBuf::from("/Volumes/v11/photos"));
         let menu = menu_with(here, &Recent::default(), volumes);
@@ -1219,6 +1363,7 @@ mod tests {
                 sized("/Volumes/pseudo", "pseudo", 0, 0),
             ],
             hosts: vec![host("web", None, Some("deploy@10.0.0.5"))],
+            ..Places::default()
         };
         let mut menu = menu_with(home(), &Recent::default(), places);
         let text = draw(&mut menu, 22);
@@ -1232,13 +1377,121 @@ mod tests {
         assert!(row("USB").contains(" 12.0G / 64.0G ║"), "{text}");
         assert!(row("Big").contains("  1.5T / 20.0T ║"), "{text}");
         let column = slash(row("Home"));
-        for name in ["Macintosh HD", "USB", "Big"] {
+        for name in ["Macintosh HD", "USB", "Big", "share", "pseudo"] {
             assert_eq!(slash(row(name)), column, "{name}: {text}");
         }
         for name in ["share", "pseudo"] {
-            assert!(row(name).contains("  ? ║"), "{name}: {text}");
+            assert!(row(name).contains("     - /     - ║"), "{name}: {text}");
         }
         assert!(row("web").contains(" deploy@10.0.0.5 ║"), "{text}");
+    }
+
+    /// Places with the volumes `/`, which has answered, and `/Volumes/NAS`, which was asked
+    /// `ago` and has not, and no hosts.
+    fn waiting(ago: Duration) -> Places {
+        let since = Instant::now().checked_sub(ago).unwrap_or_else(Instant::now);
+        Places {
+            volumes: vec![
+                volume("/", Some("Macintosh HD"), VolumeKind::System),
+                Volume {
+                    space: None,
+                    ..volume("/Volumes/NAS", Some("NAS"), VolumeKind::Network)
+                },
+            ],
+            waiting: [(PathBuf::from("/Volumes/NAS"), since)].into(),
+            ..Places::default()
+        }
+    }
+
+    #[test]
+    fn a_volume_still_to_answer_shows_a_skeleton_as_wide_as_the_sizes_known() {
+        let mut menu = menu_with(home(), &Recent::default(), waiting(Duration::ZERO));
+        insta::assert_snapshot!(draw(&mut menu, 12));
+        let at = Instant::now();
+        assert!(menu.sizes_wait(at).is_some(), "the shine crosses it");
+        let gives_up = menu.gives_up(at).expect("given up for in time");
+        assert!(gives_up > at && gives_up <= at + NO_ANSWER);
+        assert!(menu.wait().is_none(), "no dots in the title");
+    }
+
+    #[test]
+    fn a_skeleton_with_no_sizes_known_is_as_wide_as_sizes_take_at_most() {
+        let mut places = waiting(Duration::ZERO);
+        places.volumes.remove(0);
+        let mut menu = LocationMenu::new(Side::Left, home(), PathBuf::from("/nowhere"), 1)
+            .recent(&Recent::default());
+        menu.listed(1, Ok(places));
+        let text = draw(&mut menu, 12);
+        let widest = cells::short_size_width(&noc_locale::current());
+        let skeleton = format!(" {} ║", "-".repeat(2 * widest + 3));
+        let nas = (text.lines())
+            .find(|line| line.contains(" NAS "))
+            .unwrap_or_default();
+        assert!(nas.contains(&skeleton), "{text}");
+        let home = (text.lines())
+            .find(|line| line.contains(" Home "))
+            .unwrap_or_default();
+        let mark = format!("{}-", " ".repeat(widest - 1));
+        assert!(
+            home.contains(&format!(" {mark} / {mark} ║")),
+            "in the same columns: {text}"
+        );
+    }
+
+    #[test]
+    fn sizes_that_do_not_come_in_time_are_given_up_for_and_come_later_still() {
+        let mut menu = menu_with(home(), &Recent::default(), waiting(NO_ANSWER));
+        let text = draw(&mut menu, 12);
+        let nas = (text.lines())
+            .find(|line| line.contains(" NAS "))
+            .unwrap_or_default();
+        assert!(nas.contains("    - /    - ║"), "{text}");
+        assert!(!nas.contains("-----"), "{text}");
+        let at = Instant::now();
+        assert!(menu.sizes_wait(at).is_none(), "no shine any more");
+        assert_eq!(menu.gives_up(at), None);
+
+        press(&mut menu, Action::End);
+        assert_eq!(
+            menu.chosen().map(key),
+            Some(Key::Volume(PathBuf::from("/Volumes/NAS")))
+        );
+        let answered = volume("/Volumes/NAS", Some("NAS"), VolumeKind::Network);
+        menu.answered(Path::new("/Volumes/NAS"), Some(answered));
+        let text = draw(&mut menu, 12);
+        let nas = (text.lines())
+            .find(|line| line.contains(" NAS "))
+            .unwrap_or_default();
+        assert!(nas.contains(" 212G / 994G ║"), "{text}");
+        assert_eq!(
+            menu.chosen().map(key),
+            Some(Key::Volume(PathBuf::from("/Volumes/NAS"))),
+            "the cursor stays"
+        );
+        assert!(menu.contents.places.waiting.is_empty());
+    }
+
+    #[test]
+    fn a_volume_that_turns_out_not_to_be_one_goes_and_others_answer_nothing() {
+        let mut menu = menu_with(home(), &Recent::default(), waiting(Duration::ZERO));
+        menu.answered(Path::new("/Volumes/gone"), None);
+        assert_eq!(menu.items().len(), 3, "not listed: nothing changes");
+        menu.answered(Path::new("/Volumes/NAS"), None);
+        assert_eq!(keys(&menu), [Key::Home, Key::Volume(PathBuf::from("/"))]);
+        assert!(menu.sizes_wait(Instant::now()).is_none());
+    }
+
+    #[test]
+    fn home_waits_with_the_volume_that_holds_it() {
+        let mut places = waiting(Duration::ZERO);
+        places.volumes[1].mount_point = PathBuf::from("/Users");
+        places.waiting = [(PathBuf::from("/Users"), Instant::now())].into();
+        let mut menu = menu_with(home(), &Recent::default(), places);
+        let text = draw(&mut menu, 12);
+        let home = (text.lines())
+            .find(|line| line.contains(" Home "))
+            .unwrap_or_default();
+        assert!(home.contains(" ----------- ║"), "{text}");
     }
 
     #[test]

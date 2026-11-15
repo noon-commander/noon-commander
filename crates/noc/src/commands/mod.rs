@@ -33,6 +33,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
                 crate::tui::DebugOptions {
                     slow_spinners: cli.slow_spinners,
                     slow_connections: cli.slow_connections,
+                    slow_volumes: cli.slow_volumes,
                     slow_windows: cli.slow_windows,
                     show_sizes: cli.show_sizes,
                 },

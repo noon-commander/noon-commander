@@ -15,7 +15,7 @@ pub(crate) use colors::{Colors, Tone};
 pub(crate) use frame::{draw_box, draw_frame, draw_separator, frame_around, pop_up, right_frame};
 pub(crate) use gauge::{gauge, ratio, unknown_gauge};
 pub(crate) use skeleton::{
-    SKELETON_ROWS, draw_skeleton, draw_title_dots, shine_bar, status_skeleton,
+    SKELETON_ROWS, cell_skeleton, draw_skeleton, draw_title_dots, shine_bar, status_skeleton,
 };
 
 /// Width of a window, in cells, borders included, where the screen has room.

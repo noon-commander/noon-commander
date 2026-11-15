@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures_util::future::{BoxFuture, FutureExt as _};
+use futures_util::stream::{FuturesUnordered, StreamExt as _};
 use noc_config::{
     Config, ConfigError, HistoryEntry, HostConfig, Hosts, Recent, Run, Workspaces, save_host,
 };
@@ -17,7 +18,9 @@ use noc_ops::{Algorithm, Conflict, CopyOptions, Outcome, Resolution, Step, Sum};
 use noc_ssh::askpass::AskpassServer;
 use noc_tools::opener::Opener;
 use noc_tools::zoxide::Scored;
-use noc_vfs::{LocalFs, Location, Metadata, RemotePath, Space, Vfs, VfsError, VfsPath as _};
+use noc_vfs::{
+    LocalFs, Location, Metadata, RemotePath, Space, Vfs, VfsError, VfsPath as _, Volume,
+};
 use noc_viewer::{Part, Progress, Want, read_part};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
@@ -66,6 +69,12 @@ pub(crate) enum Done {
     Places {
         generation: u64,
         result: Result<Places, String>,
+    },
+    /// The volume at `mount_point` answered after [`Done::Places`] listed it without its
+    /// answer: as it is now, or `None` if it turned out not to be one to show.
+    VolumeAnswered {
+        mount_point: PathBuf,
+        volume: Option<Volume>,
     },
     /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
@@ -298,7 +307,16 @@ pub(crate) struct Tasks {
     zoxide_query: Option<AbortHandle>,
     /// New working directories for the process, which one task changes to in turn.
     work_dirs: mpsc::UnboundedSender<PathBuf>,
+    /// The listing of the places, until the volumes it listed without their answers have
+    /// answered; a newer one replaces it.
+    places: Option<AbortHandle>,
+    /// Debug builds only: how long the answer of every volume is held back (`--slow-volumes`).
+    #[cfg(debug_assertions)]
+    slow_volumes: Option<Duration>,
 }
+
+/// The answer of a volume that did not answer in time, once it comes.
+type Answer = BoxFuture<'static, (PathBuf, Option<Volume>)>;
 
 impl Tasks {
     /// Prepares the runtime directory and the askpass bridge, and cleans up after crashed
@@ -327,7 +345,17 @@ impl Tasks {
             zoxide_adds,
             zoxide_query: None,
             work_dirs: change_work_dirs(),
+            places: None,
+            #[cfg(debug_assertions)]
+            slow_volumes: None,
         }
+    }
+
+    /// Debug builds only: holds back the answer of every volume of the location menu by
+    /// `delay`, as if none answered in time (`--slow-volumes`).
+    #[cfg(debug_assertions)]
+    pub(crate) fn slow_volumes(&mut self, delay: Option<Duration>) {
+        self.slow_volumes = delay;
     }
 
     /// Makes `dir` the working directory of the process, after the changes before.
@@ -723,14 +751,45 @@ impl Tasks {
         });
     }
 
-    /// Reads the volumes and the hosts for the location menu.
-    fn list_places(&self, generation: u64) {
+    /// Reads the volumes and the hosts for the location menu, then sends the answers of the
+    /// volumes that did not answer in time, as they come. A newer listing stops waiting for
+    /// them: it waits for those still to come itself.
+    fn list_places(&mut self, generation: u64) {
+        if let Some(listing) = self.places.take() {
+            listing.abort();
+        }
         let context = Arc::clone(&self.context);
         let done = self.done.clone();
-        tokio::spawn(async move {
-            let result = places::read_places(context).await;
+        #[cfg(debug_assertions)]
+        let slow = self.slow_volumes;
+        let listing = tokio::spawn(async move {
+            let (result, late) = places::read_places(context, places::FIRST_ANSWER).await;
+            let mut answers: FuturesUnordered<Answer> = (late.into_iter())
+                .map(|late| {
+                    let mount_point = late.mount_point().to_path_buf();
+                    late.answer().map(|volume| (mount_point, volume)).boxed()
+                })
+                .collect();
+            #[cfg(debug_assertions)]
+            let result = match (result, slow) {
+                (Ok(places), Some(delay)) => Ok(held_back(places, delay, &mut answers)),
+                (result, _) => result,
+            };
+            // Before the answers, so that none comes before the listing that waits for it.
             let _ = done.send(Done::Places { generation, result });
+            while let Some((mount_point, volume)) = answers.next().await {
+                if done
+                    .send(Done::VolumeAnswered {
+                        mount_point,
+                        volume,
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
         });
+        self.places = Some(listing.abort_handle());
     }
 
     /// Lists a local directory here.
@@ -1099,6 +1158,27 @@ async fn list(location: Location) -> Result<Listed, ListError> {
         listing: Listing::Dir(entries),
         space: space.ok().flatten(),
     })
+}
+
+/// Debug builds only: `places` with every volume as if it did not answer in time, without its
+/// space, its answer added to `answers`, coming `delay` from now (`--slow-volumes`).
+#[cfg(debug_assertions)]
+fn held_back(
+    mut places: Places,
+    delay: Duration,
+    answers: &mut FuturesUnordered<Answer>,
+) -> Places {
+    let since = Instant::now();
+    for volume in &mut places.volumes {
+        if places.waiting.contains_key(&volume.mount_point) {
+            continue;
+        }
+        places.waiting.insert(volume.mount_point.clone(), since);
+        let answer = (volume.mount_point.clone(), Some(volume.clone()));
+        volume.space = None;
+        answers.push(tokio::time::sleep(delay).map(move |()| answer).boxed());
+    }
+    places
 }
 
 /// The space of the file system that holds `path`, or `None` if it cannot be told.

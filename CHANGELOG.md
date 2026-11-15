@@ -51,6 +51,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0072](docs/adr/0072-the-command-history-shows-where-a-command-ran.md)).
 - The location menu (`g l`) shows the size of the home directory's volume and of each volume
   after its free space, as `212G / 994G`, with the slashes of the rows in one column.
+- The location menu shows its rows after at most 150 ms, where a network mount that hung kept it
+  waiting 500 ms. The sizes of a volume that has not answered by then are a faint bar with a
+  shine, which they replace once they come, in the menu that is open; after 5 s the bar gives way
+  to `- / -`, which an answer that comes later still replaces. `- / -` also stands for a volume
+  that tells no size, in place of `?`. A volume that hangs is never asked again until it answers,
+  however often the menu opens or `R` lists the volumes again
+  ([ADR 0074](docs/adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.

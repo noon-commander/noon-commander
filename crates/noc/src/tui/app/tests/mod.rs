@@ -303,6 +303,7 @@ fn places() -> Places {
                 address: None,
             })
             .to_vec(),
+        ..Places::default()
     }
 }
 

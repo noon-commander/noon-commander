@@ -45,12 +45,17 @@ impl App {
         let turns = self.config.animations.spinners;
         let mut due: Option<Instant> = None;
         let mut at = |time: Instant| due = Some(due.map_or(time, |due| due.min(time)));
-        for wait in self.waits() {
+        // The shine over the sizes of volumes still to come stops once they are given up for.
+        let sizes = self.menu.as_ref().and_then(|menu| menu.sizes_wait(drawn));
+        for wait in self.waits().into_iter().chain(sizes) {
             match wait.shows() {
                 Some(shows) if shows > drawn => at(shows),
                 Some(_) if turns => at(wait.moves_after(drawn)),
                 _ => {}
             }
+        }
+        if let Some(gives_up) = self.menu.as_ref().and_then(|menu| menu.gives_up(drawn)) {
+            at(gives_up);
         }
         let connecting = self
             .hosts

@@ -1,4 +1,5 @@
 use super::*;
+use crate::tui::menu::NO_ANSWER;
 
 /// Types `text` in the filter of the list in front, after `/`.
 fn filter(app: &mut App, text: &str) {
@@ -429,7 +430,7 @@ fn hosts_and_volumes_used_last_come_first_and_go_to_recent_toml() {
     };
     let places = Places {
         volumes: vec![volume("/"), volume("/Volumes/USB")],
-        hosts: Vec::new(),
+        ..Places::default()
     };
     app.places(0, Ok(places));
     app.active = Side::Left;
@@ -448,6 +449,56 @@ fn hosts_and_volumes_used_last_come_first_and_go_to_recent_toml() {
     );
     answer(&mut app, effects, &Listing::Dir(Vec::new()));
     assert_eq!(app.take_recent(), None, "already the first");
+}
+
+#[test]
+fn a_volume_that_answers_late_changes_the_menu_and_the_volumes_of_the_panels() {
+    let mut app = loaded();
+    let Effect::ListPlaces { generation } = one(app.handle(action(Action::LocationMenu))) else {
+        panic!("expected a listing for the menu");
+    };
+    let volume = |path: &str, space| noc_vfs::Volume {
+        mount_point: PathBuf::from(path),
+        label: None,
+        fs_type: None,
+        kind: noc_vfs::VolumeKind::Network,
+        space,
+    };
+    let since = Instant::now();
+    let places = Places {
+        volumes: vec![volume("/", None), volume("/Volumes/NAS", None)],
+        waiting: [(PathBuf::from("/Volumes/NAS"), since)].into(),
+        ..Places::default()
+    };
+    app.places(generation, Ok(places));
+    assert_eq!(
+        app.spin_due(since),
+        Some(since + NO_ANSWER),
+        "drawn again once it is given up for, with spinners off too"
+    );
+
+    let space = noc_vfs::Space {
+        total: 994 << 30,
+        available: 212 << 30,
+    };
+    app.volume_answered(
+        Path::new("/Volumes/NAS"),
+        Some(volume("/Volumes/NAS", Some(space))),
+    );
+    assert_eq!(app.volumes[1].space, Some(space));
+    assert!(screen_of(&mut app, 14).contains("212G / 994G"));
+    assert_eq!(app.spin_due(since), None, "nothing to wait for");
+
+    app.volume_answered(Path::new("/Volumes/gone"), None);
+    assert_eq!(app.volumes.len(), 2, "a volume not listed stays out");
+    app.handle(action(Action::Cancel));
+    app.volume_answered(Path::new("/Volumes/NAS"), None);
+    let shown: Vec<_> = app
+        .volumes
+        .iter()
+        .map(|volume| &volume.mount_point)
+        .collect();
+    assert_eq!(shown, [Path::new("/")], "with the menu closed too");
 }
 
 #[test]

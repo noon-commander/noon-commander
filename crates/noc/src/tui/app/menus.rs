@@ -1,7 +1,9 @@
 //! The location menu, the pull-down menu, and the configuration.
 
+use std::path::Path;
+
 use noc_config::{Config, Recent};
-use noc_vfs::Location;
+use noc_vfs::{Location, Volume};
 
 use crate::about::Tool;
 use crate::i18n::fl;
@@ -370,6 +372,24 @@ impl App {
         if let Some(menu) = &mut self.menu {
             menu.listed(generation, result);
             self.sizes.menu = menu.lines_listed().or(self.sizes.menu);
+        }
+    }
+
+    /// Takes the answer of the volume at `mount_point`, which a listing had without it: as it
+    /// is now, or `None` if it is not one to show. A volume no longer listed stays out.
+    pub(crate) fn volume_answered(&mut self, mount_point: &Path, volume: Option<Volume>) {
+        if let Some(index) =
+            (self.volumes.iter()).position(|shown| shown.mount_point == mount_point)
+        {
+            match &volume {
+                Some(volume) => self.volumes[index] = volume.clone(),
+                None => {
+                    self.volumes.remove(index);
+                }
+            }
+        }
+        if let Some(menu) = &mut self.menu {
+            menu.answered(mount_point, volume);
         }
     }
 

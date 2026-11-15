@@ -124,6 +124,10 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
             result,
         } => tasks.run(app.listed(panel, generation, result)),
         Done::Places { generation, result } => app.places(generation, result),
+        Done::VolumeAnswered {
+            mount_point,
+            volume,
+        } => app.volume_answered(&mount_point, volume),
         Done::Created {
             panel,
             location,
@@ -209,10 +213,21 @@ pub(crate) struct DebugOptions {
     pub(crate) slow_spinners: Option<Duration>,
     /// A connection made or ended, on top of that (`--slow-connections`).
     pub(crate) slow_connections: Option<Duration>,
+    /// The answer of every volume in the location menu, as if none answered in time
+    /// (`--slow-volumes`).
+    pub(crate) slow_volumes: Option<Duration>,
     /// A window growing or shrinking, from start to end (`--slow-windows`).
     pub(crate) slow_windows: Option<Duration>,
     /// Each window writes its size on its frame (`--show-sizes`).
     pub(crate) show_sizes: bool,
+}
+
+/// Debug builds only: slows down the windows of `app` and the answers of volumes in `tasks`,
+/// and has windows show their sizes, as `debug` says.
+#[cfg(debug_assertions)]
+fn debug_app(app: &mut App, tasks: &mut Tasks, debug: DebugOptions) {
+    app.debug_windows(debug);
+    tasks.slow_volumes(debug.slow_volumes);
 }
 
 /// Debug builds only: holds back each result of background work as `debug` says, from when it
@@ -323,7 +338,7 @@ pub(crate) async fn run(
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = start_app(&context, (&start, log), (&tz, system), asked.modes.keys());
     #[cfg(debug_assertions)]
-    app.debug_windows(debug);
+    debug_app(&mut app, &mut tasks, debug);
     tasks.run(effects);
     let result = loop {
         if app.quits() {

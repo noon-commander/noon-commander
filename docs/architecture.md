@@ -144,13 +144,20 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   Linux the mounts of `/proc/self/mountinfo` that are `/`, on a `/dev/` device, or a network
   file system, without pseudo file systems or those under `/proc`, `/sys`, `/dev`, `/run`
   (but `/run/media`), `/snap`, and `/boot`; elsewhere only `/`. Their sizes come from
-  `statfs`/`statvfs` on blocking threads, each awaited for at most 500 ms: a volume that does
-  not answer (a dead network mount can block forever) is listed with `?` and is not asked
-  again until the earlier call returns. `[volumes] hide` leaves out mount points by pattern;
-  the system volume always stays. A volume is named by its label or else its mount point, and
-  opens at its mount point, the system volume at `/`.
+  `statfs`/`statvfs` on blocking threads (on macOS `statfs` also tells a mount point from a
+  directory, its type, and whether it is local). A query still running is shared by path: a
+  listing that finds it waits for its answer and never asks again while it runs, since a dead
+  network mount can block forever. `noc_vfs::volumes_within` lists the volumes after at most a
+  given time, those that did not answer by then as they are without an answer, each with its
+  answer to come (`Late`); `noc_vfs::volumes`, for `noc ls`, waits up to 500 ms and drops the
+  answers still to come. `[volumes] hide` leaves out mount points by pattern; the system volume
+  always stays. A volume is named by its label or else its mount point, and opens at its mount
+  point, the system volume at `/`.
 - The app reads the volumes once at start, in the background, to know which volume a panel is
-  on; the location menu reads them again each time it opens.
+  on; the location menu reads them again each time it opens. Answers that come after a listing
+  (`Done::VolumeAnswered`) replace their volumes in both; a newer listing stops waiting for those
+  of the one before it, and waits for the answers still to come itself
+  ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
 - Hosts come in config order, named by their `label` from `hosts.toml` if set, with the address
   of this session's `ssh -G`, or else the one cached from an earlier one. `[discovery] hide`
   leaves out hosts by pattern.
@@ -256,8 +263,16 @@ choose a volume or a host, grouped under headings:
   the volume that holds it; the user's favorites will join it. Mounts holds the volumes, with
   their free space and size, and SFTP the hosts, with their addresses. Each of the two numbers
   takes as many cells as the widest of the rows shown, so the slashes between them line up; a
-  volume that did not tell its space, or tells a size of 0, shows `?`. Plugins for other
-  backends will be a group of their own. A group without rows is not drawn.
+  volume that did not tell its space, or tells a size of 0, shows `- / -` in those columns.
+  Plugins for other backends will be a group of their own. A group without rows is not drawn.
+- The rows show after at most 150 ms, as long as a wait goes before its spinner shows
+  (`places::FIRST_ANSWER`). The sizes of a volume that has not answered by then, and of the home
+  directory on it, are a skeleton as wide as the sizes known in the other rows, or as wide as
+  sizes take at most while none is known, which one shine crosses (`window::cell_skeleton`); no
+  dots turn in the title. They show once its answer comes; 5 s after it was asked
+  (`menu::NO_ANSWER`), the skeleton turns to `- / -`, which an answer that comes later still
+  replaces. An answer that says the mount point is no volume, on macOS, takes its row away
+  ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
   system volume, then the others by mount point; the hosts in config order. Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is
@@ -2251,7 +2266,9 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   failed right of the filter. In debug builds, `--slow-spinners SECONDS` holds back every result of
   background work by that long, in order, and `--slow-connections SECONDS` holds back only
   connections made or ended, in a queue of their own, so the dots of a host connecting can be
-  watched in the location menu. Each frame goes out as synchronized output (`draw_whole` in
+  watched in the location menu; `--slow-volumes SECONDS` lists every volume in the location menu
+  as if none answered in time and sends each answer that long after, so the skeletons of their
+  sizes and `- / -` can be watched. Each frame goes out as synchronized output (`draw_whole` in
   `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine
   changes. A spinner's next frame is due 40 ms after a frame that drew the shine of its `Wait`
   moving over a bar, which the shine tells it, else 80 ms later, the next frame of the dots, or

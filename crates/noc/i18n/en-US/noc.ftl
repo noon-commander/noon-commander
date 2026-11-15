@@ -202,8 +202,9 @@ menu-more = { $count } more…
 # Right of the home directory and of a volume: the free space and the size of the file system,
 # such as 212G / 994G. Each comes padded, so that the slashes of the rows line up.
 menu-space = { $free } / { $total }
-# Right of a place whose free space and size are not known.
-menu-free-unknown = ?
+# In place of the free space and of the size, each, of a volume that did not tell them, or did
+# not answer in 5 seconds: - / -.
+menu-space-unknown = -
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }
 

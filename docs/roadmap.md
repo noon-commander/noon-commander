@@ -272,6 +272,10 @@
   rows to come, as many rows as the window had the last time; a job's gauge is a faint bar with the
   shine running to and fro until it knows how far it is; R in the location menu keeps the rows;
   `--slow-spinners` and `--slow-connections` in debug builds ([ADR 0037](adr/0037-spinners.md))
+- [x] The location menu shows its rows after at most 150 ms; the sizes of a volume that has not
+      answered are a skeleton until its answer comes, and `- / -` after 5 s; a volume is never
+      asked again while it has not answered; `--slow-volumes` in debug builds
+      ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

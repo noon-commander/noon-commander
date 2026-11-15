@@ -111,6 +111,19 @@ pub(crate) fn status_skeleton(
     Line::from(shine_bar(length, middle, &glyph, style))
 }
 
+/// A skeleton of a value still to come in a row that has come, such as the sizes of a volume,
+/// over `width` cells, in the colors of `style`: a faint bar, which a `shine`, if any, crosses
+/// as it crosses the bars of skeleton rows, from one end to the other.
+pub(crate) fn cell_skeleton(
+    width: u16,
+    style: Style,
+    theme: &Theme,
+    shine: Option<Shine<'_>>,
+) -> Vec<Span<'static>> {
+    let glyph = theme.glyphs.skeleton.to_string();
+    shine_bar(width, shine_middle(shine, width), &glyph, style)
+}
+
 /// Cells from the middle of a shine to where it fades out.
 const SHINE_HALF: u16 = 5;
 
@@ -204,6 +217,26 @@ mod tests {
         assert_eq!(shining[..3], still[..3]);
         assert_eq!(shining[23 + 6], next);
         assert_eq!(shining[23 + 2], faint);
+    }
+
+    #[test]
+    fn a_skeleton_in_a_cell_is_one_bar_that_the_shine_crosses_from_end_to_end() {
+        let theme = Theme::terminal();
+        let style = Style::new()
+            .fg(Color::Rgb(255, 255, 255))
+            .bg(Color::Rgb(0, 0, 0));
+        let colors = |shine| {
+            (cell_skeleton(11, style, &theme, shine).iter())
+                .map(|span| span.style.fg)
+                .collect::<Vec<_>>()
+        };
+        let still = colors(None);
+        assert_eq!(still.len(), 11);
+        assert!(still.iter().all(|fg| *fg == Some(Color::Rgb(64, 64, 64))));
+        // Coming in five cells before the bar, ten cells on its middle is on cell 5.
+        let shining = colors(Some(Shine::after(10)));
+        assert_eq!(shining[5], Some(Color::Rgb(166, 166, 166)));
+        assert_eq!((shining[0], shining[10]), (still[0], still[10]));
     }
 
     #[test]

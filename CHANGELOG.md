@@ -89,6 +89,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `⌂`, and `›` without icons. The date and time it ran are on the line over them, at its right
   end, in the color of the title. The whole command no longer shows under the rows
   ([ADR 0072](docs/adr/0072-the-command-history-shows-where-a-command-ran.md)).
+- Under the rows of the window of checksums of several files, the whole checksum of the file under
+  the cursor is a block of groups of 8 digits, at most 4 to a line, as
+  `ba7816bf 8f01cfea 414140de 5dae2223`. With icons, the file's icon goes in front of its name and
+  a pound sign in front of its checksum, whose next lines are indented as far
+  ([ADR 0087](docs/adr/0087-the-whole-checksum-under-the-list-is-in-blocks.md)).
 - The location menu (`g l`) shows the size of the home directory's volume and of each volume
   after its free space, as `212G / 994G`, with the slashes of the rows in one column.
 - The location menu shows its rows after at most 150 ms, where a network mount that hung kept it

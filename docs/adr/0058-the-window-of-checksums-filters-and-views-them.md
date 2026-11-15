@@ -1,6 +1,8 @@
 # 0058. The window of checksums filters them and views them
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0087](0087-the-whole-checksum-under-the-list-is-in-blocks.md), after which the whole
+  checksum under the list is in blocks of groups of 8 digits
 - Date: 2026-10-31
 - Amends: [ADR 0008](0008-clipboard-through-osc-52.md),
   [ADR 0015](0015-viewer-and-text-crates.md), [ADR 0036](0036-lists-open-in-insert-mode.md)

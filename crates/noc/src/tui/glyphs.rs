@@ -318,6 +318,9 @@ pub(crate) const DESCENDING: char = '↓';
 pub(crate) const MATCH: char = '✓';
 pub(crate) const MISMATCH: char = '✗';
 pub(crate) const SKIPPED: char = '-';
+/// With `ui.icons` only, in front of the whole checksum under the list of checksums:
+/// nf-md-pound, as `f #`.
+pub(crate) const CHECKSUM: char = '󰐣';
 
 /// In the frame of a panel, beside a marked row.
 pub(crate) const MARKED_ROW: char = '▌';
@@ -424,6 +427,13 @@ mod tests {
         // nf-md-menu_right.
         assert_eq!(u32::from(Glyphs::NERD.active), 0xf035f);
         assert_eq!(Glyphs::PLAIN.active, Glyphs::PLAIN.folds.0, "a closed fold");
+    }
+
+    #[test]
+    fn a_whole_checksum_is_a_pound_sign() {
+        // nf-md-pound, in one cell.
+        assert_eq!(u32::from(CHECKSUM), 0xf0423);
+        assert_eq!(noc_text::width(&CHECKSUM.to_string()), 1);
     }
 
     #[test]

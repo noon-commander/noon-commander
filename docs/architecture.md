@@ -1782,7 +1782,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   shortened in the middle and a mark (✓, ✗, or `-` for skipped), under a filter that finds a
   file by its name or its checksum, and under the list, apart from it by a line as in the
   location menu, the name and the whole checksum of the file under the cursor, in as many lines
-  whichever it is ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). The
+  whichever it is ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)): the
+  checksum in groups of 8 digits, at most 4 to a line, and with `ui.icons` the file's icon in
+  front of the name and a pound sign in front of the checksum
+  ([ADR 0087](adr/0087-the-whole-checksum-under-the-list-is-in-blocks.md)). The
   window opens on the rows, in Normal mode (`checksums`, falling back to `dialog`); `/` types in
   the filter. One file, or two compared, are a dialog: each name with its whole checksum, then,
   between two lines, the verdict (✓ matches or ✗ not, the same or different), in color.

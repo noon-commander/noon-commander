@@ -360,7 +360,7 @@ impl App {
             return;
         }
         let middle = |window| (window, Grows::FromMiddle);
-        let theme = &self.theme;
+        let (theme, decor) = (&self.theme, self.decor);
         if let Some(window) = &mut self.workspaces_window {
             let last = self.workspace.as_deref();
             stage.show(frame, middle(zoom::Window::Workspaces), |frame| {
@@ -403,7 +403,7 @@ impl App {
         }
         if let Some(results) = self.results.front_mut() {
             stage.show(frame, middle(zoom::Window::Results(results.id)), |frame| {
-                results.window.render(frame, panels, theme);
+                results.window.render(frame, panels, (theme, decor));
             });
         }
         self.render_dialogs(frame, panels, spin, stage);

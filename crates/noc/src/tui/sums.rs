@@ -13,6 +13,7 @@ use noc_scroll::Motion;
 use noc_scroll::scrollbar::Bar;
 
 use super::cells::{self, Align, Marks};
+use super::decor::Decor;
 use super::dialog::{Button, Dialog, DialogEvent, Text, even_lines};
 use super::edit::Registers;
 use super::glyphs;
@@ -28,6 +29,9 @@ use crate::i18n::fl;
 const LIST_ROWS: u16 = 10;
 /// Hex digits on either side of the gap where the list shortens a checksum.
 const SHORT: usize = 8;
+/// Hex digits of a group of the whole checksum under the list, and most groups on a line.
+const GROUP: usize = 8;
+const GROUPS: usize = 4;
 
 /// How a file's checksum compares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,16 +222,29 @@ impl SumsWindow {
     }
 
     /// Draws the window centered in `area`: the picker of files if there are several, with the
-    /// name and the whole checksum of the one under the cursor apart below it, in as many
-    /// lines for each, so that nothing moves as the cursor goes from one to the next; else each
-    /// file and the verdict. Then the buttons.
-    pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
+    /// name and the whole checksum of the one under the cursor apart below it, the checksum in
+    /// [`blocks`], in as many lines for each, so that nothing moves as the cursor goes from one
+    /// to the next; with `decor`'s icons, the file's in front of its name and a pound sign in
+    /// front of its checksum. Else each file and the verdict. Then the buttons.
+    pub(crate) fn render(
+        &mut self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        (theme, decor): (&Theme, Decor),
+    ) {
         let Some(picker) = self.dialog.picker() else {
             self.dialog.render(frame, area, theme);
             return;
         };
         let colors = Colors::plain(theme);
         let room = self.dialog.text_width(area).max(1);
+        let hex_lead = if decor.icons() {
+            format!("{} ", glyphs::CHECKSUM)
+        } else {
+            String::new()
+        };
+        let indent = " ".repeat(cells::width(&hex_lead));
+        let hex_room = room.saturating_sub(indent.len()).max(1);
         let shown = picker.shown(self.rows.iter());
         let lines: Vec<MenuLine> = (0..shown.len()).map(MenuLine::Row).collect();
         let cursor = picker.cursor().min(shown.len().saturating_sub(1));
@@ -235,7 +252,7 @@ impl SumsWindow {
             .map(|row| {
                 row.hex
                     .as_ref()
-                    .map_or(1, |hex| even_lines(hex, room).len())
+                    .map_or(1, |hex| blocks(hex, hex_room).len())
             })
             .max()
             .unwrap_or(1)
@@ -243,14 +260,28 @@ impl SumsWindow {
         let mut footer = vec![Line::default(); 1 + hex_rows];
         if let Some(row) = shown.get(cursor) {
             let styles = colors.body_styles();
-            let name = cells::fit(&row.name, room, Align::Left, styles, theme.glyphs.marks);
+            let lead = if decor.icons() {
+                format!("{} ", decor.file(row.name.as_bytes()))
+            } else {
+                String::new()
+            };
+            let name_room = room.saturating_sub(cells::width(&lead));
+            let mut name = vec![Span::raw(lead)];
+            name.extend(cells::fit(
+                &row.name,
+                name_room,
+                Align::Left,
+                styles,
+                theme.glyphs.marks,
+            ));
             footer[0] = Line::from(name);
             let hex = match &row.hex {
-                Some(hex) => even_lines(hex, room),
+                Some(hex) => blocks(hex, hex_room),
                 None => vec![fl!("checksum-skipped")],
             };
-            for (line, text) in footer[1..].iter_mut().zip(hex) {
-                *line = Line::raw(text);
+            let leads = std::iter::once(hex_lead).chain(std::iter::repeat(indent));
+            for ((line, text), lead) in footer[1..].iter_mut().zip(hex).zip(leads) {
+                *line = Line::from(vec![Span::raw(lead), Span::raw(text)]);
             }
         }
         let footer = footer
@@ -274,6 +305,23 @@ impl SumsWindow {
                 Line::from(list_line(shown[row.index], row.width, styles, marks)).style(styles.0)
             });
     }
+}
+
+/// A whole checksum in groups of [`GROUP`] digits, a blank between two, at most [`GROUPS`] on a
+/// line and as many as fit in `room` cells, as even as the lines can be; where not even one group
+/// fits, in even lines without groups.
+fn blocks(hex: &str, room: usize) -> Vec<String> {
+    let fit = ((room + 1) / (GROUP + 1)).min(GROUPS);
+    if fit == 0 {
+        return even_lines(hex, room);
+    }
+    let chars: Vec<char> = hex.chars().collect();
+    let groups: Vec<String> = chars.chunks(GROUP).map(String::from_iter).collect();
+    let per = groups
+        .len()
+        .div_ceil(groups.len().div_ceil(fit).max(1))
+        .max(1);
+    groups.chunks(per).map(|line| line.join(" ")).collect()
 }
 
 /// What the filter finds a file by: its name, and its checksum, or that it was skipped.
@@ -355,9 +403,18 @@ mod tests {
     }
 
     fn terminal(window: &mut SumsWindow, width: u16, height: u16) -> Terminal<TestBackend> {
+        terminal_with(window, (width, height), Decor::new(false))
+    }
+
+    fn terminal_with(
+        window: &mut SumsWindow,
+        (width, height): (u16, u16),
+        decor: Decor,
+    ) -> Terminal<TestBackend> {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        let theme = Theme::terminal();
         terminal
-            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
+            .draw(|frame| window.render(frame, frame.area(), (&theme, decor)))
             .unwrap();
         terminal
     }
@@ -446,7 +503,72 @@ mod tests {
                 .position(|bottom| bottom)
         };
         assert_eq!(frame(&first), frame(&second), "{first}\n{second}");
-        assert!(second.contains(&long[..64]) && second.contains(&long[64..]));
+        for line in blocks(&long, 72) {
+            assert!(second.contains(&line), "{line}\n{second}");
+        }
+    }
+
+    #[test]
+    fn a_whole_checksum_is_in_blocks_of_four_groups_of_eight() {
+        let sha256 = ABC;
+        assert_eq!(
+            blocks(sha256, 70),
+            [
+                "ba7816bf 8f01cfea 414140de 5dae2223",
+                "b00361a3 96177a9c b410ff61 f20015ad",
+            ]
+        );
+        let sha512 = "0123456789abcdef".repeat(8);
+        assert_eq!(blocks(&sha512, 70).len(), 4);
+        assert!(blocks(&sha512, 70).iter().all(|line| line.len() == 35));
+        let md5 = &ABC[..32];
+        assert_eq!(blocks(md5, 70), ["ba7816bf 8f01cfea 414140de 5dae2223"]);
+        // Five groups of SHA-1 break as evenly as they can.
+        let sha1 = &ABC[..40];
+        assert_eq!(
+            blocks(sha1, 70),
+            ["ba7816bf 8f01cfea 414140de", "5dae2223 b00361a3",]
+        );
+        // As many groups as fit, down to one.
+        let narrow = blocks(sha256, 26);
+        assert_eq!(narrow.len(), 3);
+        assert!(narrow.iter().all(|line| line.len() <= 26), "{narrow:?}");
+        assert_eq!(blocks(sha256, 8).len(), 8);
+        // Not even a group: lines of digits alone.
+        assert_eq!(blocks(sha256, 7), even_lines(sha256, 7));
+        assert_eq!(blocks("", 70), Vec::<String>::new());
+    }
+
+    #[test]
+    fn icons_go_in_front_of_the_name_and_the_checksum_under_the_list() {
+        let long = "0123456789abcdef".repeat(8);
+        let rows = vec![
+            row("dir/a.rs", Some(&long), Mark::None),
+            row("dir/b.txt", None, Mark::Skipped),
+        ];
+        let mut window = window(rows, None, ALL.to_vec());
+        let screen = |window: &mut SumsWindow| {
+            terminal_with(window, (80, 20), Decor::new(true))
+                .backend()
+                .to_string()
+        };
+        insta::assert_snapshot!(screen(&mut window));
+        let name = format!("{} dir/a.rs", Decor::new(true).file(b"a.rs"));
+        let first = screen(&mut window);
+        assert!(first.contains(&name), "{first}");
+        let hex = blocks(&long, 70);
+        assert!(
+            first.contains(&format!("{} {}", glyphs::CHECKSUM, hex[0])),
+            "{first}"
+        );
+        assert!(first.contains(&format!("   {}", hex[1])), "{first}");
+        press(&mut window, Action::Down);
+        let second = screen(&mut window);
+        let skipped = format!("{} {}", glyphs::CHECKSUM, fl!("checksum-skipped"));
+        assert!(second.contains(&skipped), "{second}");
+        // Without icons, none.
+        let plain = draw(&mut window, 80, 20);
+        assert!(!plain.contains(glyphs::CHECKSUM), "{plain}");
     }
 
     #[test]

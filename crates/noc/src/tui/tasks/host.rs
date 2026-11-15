@@ -283,12 +283,11 @@ pub(super) async fn resolve_address(
             user: resolved.user,
             jump: resolved.proxy_jump,
         },
+        Err(SshError::Cancelled) => return,
         Err(error) => {
-            tracing::debug!(%host, error = %describe::chain(&error), "ssh -G failed");
-            let Some(reason) = describe::ssh_error(&error) else {
-                return;
-            };
-            Done::NotResolved { host, reason }
+            // The card of the host says that it failed; why, which may run long, goes here.
+            tracing::warn!(%host, error = %describe::chain(&error), "ssh -G failed");
+            Done::NotResolved { host }
         }
     });
 }

@@ -1,4 +1,6 @@
 use super::*;
+use noc_vfs::LateAnswer;
+
 use crate::tui::menu::{LocationMenu, NO_ANSWER};
 
 /// Types `text` in the filter of the list in front, after `/`.
@@ -485,22 +487,55 @@ fn a_volume_that_answers_late_changes_the_menu_and_the_volumes_of_the_panels() {
     };
     app.volume_answered(
         Path::new("/Volumes/NAS"),
-        Some(volume("/Volumes/NAS", Some(space))),
+        LateAnswer::Volume(volume("/Volumes/NAS", Some(space))),
     );
     assert_eq!(app.volumes[1].space, Some(space));
     assert!(screen_of(&mut app, 14).contains("212G / 994G"));
     assert_eq!(app.spin_due(since), None, "nothing to wait for");
 
-    app.volume_answered(Path::new("/Volumes/gone"), None);
+    app.volume_answered(Path::new("/Volumes/gone"), LateAnswer::Gone);
     assert_eq!(app.volumes.len(), 2, "a volume not listed stays out");
     app.handle(action(Action::Cancel));
-    app.volume_answered(Path::new("/Volumes/NAS"), None);
+    app.volume_answered(Path::new("/Volumes/NAS"), LateAnswer::Gone);
     let shown: Vec<_> = app
         .volumes
         .iter()
         .map(|volume| &volume.mount_point)
         .collect();
     assert_eq!(shown, [Path::new("/")], "with the menu closed too");
+}
+
+#[test]
+fn a_volume_whose_answer_fails_after_it_hung_stays_and_does_not_respond() {
+    let mut app = loaded();
+    let Effect::ListPlaces { generation } = one(app.handle(action(Action::LocationMenu))) else {
+        panic!("expected a listing for the menu");
+    };
+    let nas = noc_vfs::Volume {
+        mount_point: PathBuf::from("/Volumes/NAS"),
+        label: None,
+        fs_type: None,
+        source: None,
+        kind: noc_vfs::VolumeKind::Network,
+        space: None,
+    };
+    let places = Places {
+        volumes: vec![nas.clone()],
+        waiting: [(PathBuf::from("/Volumes/NAS"), Instant::now())].into(),
+        ..Places::default()
+    };
+    app.places(generation, Ok(places));
+    assert!(
+        !screen_of(&mut app, 14).contains("not responding"),
+        "it waits"
+    );
+    app.volume_answered(Path::new("/Volumes/NAS"), LateAnswer::Failed);
+    assert_eq!(app.volumes, [nas], "still mounted, as it was");
+    let text = screen_of(&mut app, 14);
+    assert!(
+        text.contains("/Volumes/NAS") && text.contains("not responding"),
+        "{text}"
+    );
 }
 
 #[test]
@@ -548,10 +583,11 @@ fn the_menu_shows_failures_and_fresh_addresses() {
         Some("web")
     );
     let text = screen_of(&mut app, 16);
-    assert!(
-        text.contains("✗ web · deploy@10.0.0.9"),
-        "in its card: {text}"
-    );
+    // The card's, under the row's.
+    let card = (text.lines())
+        .rfind(|line| line.contains("✗ web "))
+        .unwrap_or_default();
+    assert!(card.contains(" deploy@10.0.0.9 ║"), "in its card: {text}");
     assert!(text.contains("Connection refused"), "{text}");
 
     // A new attempt clears the failure.

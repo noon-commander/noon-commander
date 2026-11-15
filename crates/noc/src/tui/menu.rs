@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use noc_config::{Recent, SearchMode};
 use noc_scroll::scrollbar::Bar;
-use noc_vfs::{Location, Volume, VolumeKind};
+use noc_vfs::{LateAnswer, Location, Volume, VolumeKind};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -37,8 +37,12 @@ use crate::i18n::fl;
 /// Places of a group that show while the filter is empty, besides those always shown.
 const SHOWN: usize = 10;
 
+/// Cells of the skeleton in place of the address of a host in its card, as many as an address
+/// such as `user@10.0.0.5` takes.
+const ADDRESS_SKELETON: usize = 16;
+
 /// How long the sizes of a volume may take, from when it was asked, before its row gives them
-/// up and shows the marks of sizes not known.
+/// up and says that it does not respond.
 pub(crate) const NO_ANSWER: Duration = Duration::from_secs(5);
 
 /// What a key did in the menu.
@@ -218,7 +222,8 @@ impl LocationMenu {
     }
 
     /// When the next sizes still to come after `at` are given up for, so that their skeleton
-    /// turns to the marks of sizes not known even where nothing else draws the screen.
+    /// turns to the words that the volume does not respond even where nothing else draws the
+    /// screen.
     pub(crate) fn gives_up(&self, at: Instant) -> Option<Instant> {
         (self.contents.places.waiting.values())
             .map(|since| *since + NO_ANSWER)
@@ -227,8 +232,9 @@ impl LocationMenu {
     }
 
     /// Takes the answer of the volume at `mount_point`, listed without it: the volume as it is
-    /// now, or `None` if it is not one to show. The cursor stays on its row.
-    pub(crate) fn answered(&mut self, mount_point: &Path, volume: Option<Volume>) {
+    /// now, not one to show, or failed, which leaves it as one that does not respond. The cursor
+    /// stays on its row.
+    pub(crate) fn answered(&mut self, mount_point: &Path, answer: LateAnswer) {
         let places = &mut self.contents.places;
         let Some(index) =
             (places.volumes.iter()).position(|shown| shown.mount_point == mount_point)
@@ -236,10 +242,13 @@ impl LocationMenu {
             return;
         };
         places.waiting.remove(mount_point);
-        match volume {
-            Some(volume) => places.volumes[index] = volume,
-            None => {
+        match answer {
+            LateAnswer::Volume(volume) => places.volumes[index] = volume,
+            LateAnswer::Gone => {
                 places.volumes.remove(index);
+            }
+            LateAnswer::Failed => {
+                places.failed.insert(mount_point.to_path_buf());
             }
         }
         self.refresh();
@@ -470,9 +479,15 @@ impl LocationMenu {
             .map(str::to_owned);
         let note = self.note(theme);
         let now = spin.at();
-        let waiting = &self.contents.places.waiting;
+        let Places {
+            waiting, failed, ..
+        } = &self.contents.places;
+        // One whose answer failed after it hung has not answered either.
         let asked = |mount_point: &Path| {
-            (waiting.get(mount_point)).map(|since| now.saturating_duration_since(*since))
+            let ago = waiting
+                .get(mount_point)
+                .map(|since| now.saturating_duration_since(*since));
+            ago.or_else(|| failed.contains(mount_point).then_some(NO_ANSWER))
         };
         let sizes: Vec<Option<Sizes>> = items.iter().map(|item| sizes(*item, &asked)).collect();
         let columns = SizeColumns::of(sizes.iter().flatten());
@@ -483,6 +498,7 @@ impl LocationMenu {
         let look = Look {
             theme,
             decor,
+            side: self.side,
             hosts,
             dots: spin.dots(),
             shine: spin.shine(&self.sizes),
@@ -535,7 +551,10 @@ impl LocationMenu {
     fn note(&self, theme: &Theme) -> Option<Line<'static>> {
         let reason = self.loading.error().filter(|_| self.loading.loaded())?;
         let text = fl!("menu-reload-failed", reason = reason);
-        Some(Line::styled(text, theme.invalid(theme.dialog)))
+        Some(Line::styled(
+            text,
+            theme.dialog.patch(theme.dialog_error_text),
+        ))
     }
 }
 
@@ -667,6 +686,8 @@ fn after(lead: Span<'static>, line: Line<'static>) -> Line<'static> {
 struct Look<'a> {
     theme: &'a Theme,
     decor: Decor,
+    /// The side of the panel of the menu.
+    side: Side,
     hosts: &'a dyn Fn(&str) -> HostState,
     /// The frame of the spinner of hosts that connect.
     dots: char,
@@ -726,8 +747,24 @@ impl Look<'_> {
             spans.insert(0, Span::styled(marker, styles.0.patch(style)));
         }
         spans.push(Span::styled(" ", styles.0));
+        // The words in place of sizes have colors of their own, but under the cursor.
+        let words = |style: Style| {
+            if selected {
+                styles
+            } else {
+                (styles.0.patch(style), styles.1)
+            }
+        };
         match info {
             Info::Text(text) => {
+                spans.extend(cells::fit(text, info_width, Align::Right, styles, marks));
+            }
+            Info::NotResponding(text) => {
+                let styles = words(self.theme.dialog_warning_text);
+                spans.extend(cells::fit(text, info_width, Align::Right, styles, marks));
+            }
+            Info::Unknown(text) => {
+                let styles = words(self.theme.disabled);
                 spans.extend(cells::fit(text, info_width, Align::Right, styles, marks));
             }
             Info::Waiting(width) => {
@@ -828,125 +865,204 @@ impl Look<'_> {
                 (lines, Some(label))
             }
             Item::More(..) => {
-                let names = hidden.join(&fl!("menu-card-separator"));
-                let (icon, _, room) = lead(self.decor.more(), dialog);
-                let first = after(icon, text(&names, Cut::End, room));
-                (vec![first, Line::default()], None)
+                let (icon, indent, room) = lead(self.decor.more(), dialog);
+                let (first, second) = two_lines(hidden, room);
+                let lines = vec![
+                    after(icon, text(&first, Cut::End, room)),
+                    after(indent, text(&second, Cut::End, room)),
+                ];
+                (lines, None)
             }
         }
     }
 
-    /// How to reach `host`, in `width` cells, after its alias: its address and the host ssh
-    /// jumps through, from this run's `ssh -G` as `state` has them, else why that failed, in the
-    /// colors of errors; else a skeleton, as `ssh -G` runs for every host the cursor rests on:
-    /// no text that would show for the moment before it starts.
+    /// The line of `host`, in `width` cells: its alias, and against the right end how to reach
+    /// it, its address and the host ssh jumps through, from this run's `ssh -G` as `state` has
+    /// them, else that it failed, in the colors of errors, why going to the log alone; else a
+    /// skeleton, as `ssh -G` runs for every host the cursor rests on: no text that would show
+    /// for the moment before it starts.
     fn reach_line(&self, host: &KnownHost, state: &HostState, width: usize) -> Line<'static> {
         let dialog = self.theme.dialog;
-        let (text, style) = if let Some(address) = &state.address {
+        let end = if let Some(address) = &state.address {
             let address = cells::sanitize(address.as_bytes());
             let text = match &state.jump {
                 Some(jump) => fl!("menu-card-via", address = address, jump = jump.as_str()),
                 None => address,
             };
-            (text, dialog)
-        } else if let Some(reason) = &state.unresolved {
-            let text = fl!("menu-card-not-resolved", reason = reason.as_str());
-            (text, self.theme.invalid(dialog))
+            Some((text, dialog))
+        } else if state.unresolved {
+            let style = dialog.patch(self.theme.dialog_error_text);
+            Some((fl!("menu-card-not-resolved"), style))
         } else {
-            (String::new(), dialog)
+            None
         };
         let alias = cells::sanitize(host.alias.as_bytes());
-        let lead = fl!("menu-card-both", first = alias, second = "");
-        let lead_width = cells::width(&lead).min(width);
-        let lead = cells::fit_cut(&lead, lead_width, Align::Left, Cut::End);
-        let room = width - lead_width;
+        let wanted = end
+            .as_ref()
+            .map_or(ADDRESS_SKELETON, |(text, _)| cells::width(text));
+        let (start_width, end_width) = ends(width, cells::width(&alias), wanted);
         let marks = self.theme.glyphs.marks;
-        let mut spans = cells::spans(lead, (dialog, self.theme.truncated_dialog), marks);
-        if text.is_empty() {
-            let room = u16::try_from(room).unwrap_or(u16::MAX);
-            let skeleton = window::status_skeleton(room, dialog, self.theme, self.address_shine);
-            spans.extend(skeleton.spans);
+        let truncated = self.theme.truncated_dialog;
+        let start = cells::fit_cut(&alias, start_width, Align::Left, Cut::End);
+        let mut spans = cells::spans(start, (dialog, truncated), marks);
+        spans.push(Span::styled(
+            " ".repeat(width - start_width - end_width),
+            dialog,
+        ));
+        if let Some((text, style)) = end {
+            let end = cells::fit_cut(&text, end_width, Align::Right, Cut::Middle);
+            spans.extend(cells::spans(end, (style, truncated), marks));
         } else {
-            let fitted = cells::fit_cut(&text, room, Align::Left, Cut::End);
-            spans.extend(cells::spans(
-                fitted,
-                (style, self.theme.truncated_dialog),
-                marks,
-            ));
+            let end_width = u16::try_from(end_width).unwrap_or(u16::MAX);
+            let shine = self.address_shine;
+            spans.extend(window::cell_skeleton(end_width, dialog, self.theme, shine));
         }
         Line::from(spans)
     }
 
     /// How the space of a volume is, in `width` cells: its free space and its size, a skeleton
-    /// while they are still to come, or why they are not known.
+    /// while they are still to come, that it does not respond, in the colors of warnings, or,
+    /// faint, that it tells none.
     fn sizes_line(&self, sizes: Option<&Sizes>, width: usize) -> Line<'static> {
-        let text = match sizes {
+        let dialog = self.theme.dialog;
+        let (text, style) = match sizes {
             Some(Sizes::Known {
                 free,
                 total,
                 percent,
             }) => {
                 let (free, total, percent) = (free.clone(), total.clone(), *percent);
-                fl!(
+                let text = fl!(
                     "menu-card-space",
                     free = free,
                     total = total,
                     percent = percent
-                )
+                );
+                (text, dialog)
             }
             Some(Sizes::Waiting) => {
                 let width = u16::try_from(width).unwrap_or(u16::MAX);
-                return window::status_skeleton(width, self.theme.dialog, self.theme, self.shine);
+                return window::status_skeleton(width, dialog, self.theme, self.shine);
             }
-            Some(Sizes::GivenUp) => fl!("menu-card-no-answer", seconds = NO_ANSWER.as_secs()),
-            Some(Sizes::Unknown) | None => fl!("menu-card-no-space"),
+            Some(Sizes::NotResponding) => (
+                fl!("menu-card-not-responding"),
+                dialog.patch(self.theme.dialog_warning_text),
+            ),
+            Some(Sizes::Unknown) | None => (
+                fl!("menu-card-size-unknown"),
+                dialog.patch(self.theme.disabled),
+            ),
         };
-        let styles = (self.theme.dialog, self.theme.truncated_dialog);
+        let styles = (style, self.theme.truncated_dialog);
         let fit = (Align::Left, Cut::End);
         cells::fitted(&text, width, fit, styles, self.theme.glyphs.marks)
     }
 
-    /// How a host is, in `width` cells, after `indent`: connected, with the tabs on it;
-    /// connecting; why its last attempt failed, in the colors of errors; or, after a folder in
-    /// place of `indent`, where opening it goes.
+    /// How a host is, in `width` cells, after `indent`: connected; connecting; why its last
+    /// attempt failed, in the colors of errors; or, when it is not connected, where opening it
+    /// goes, each directory after a folder, in place of `indent`: the remote one on the side of
+    /// the panel of the menu, and the one the other panel goes to, if any, on the other side.
     fn status_line(&self, state: &HostState, indent: Span<'static>, width: usize) -> Line<'static> {
         let dialog = self.theme.dialog;
         let (text, style) = match state.status {
-            HostStatus::Connected => (fl!("menu-card-connected", tabs = state.tabs), dialog),
+            HostStatus::Connected => (fl!("menu-card-connected"), dialog),
             HostStatus::Connecting => (fl!("menu-card-connecting"), dialog),
             HostStatus::Failed | HostStatus::Stalled => {
                 let reason = state.reason.clone();
                 (
                     reason.unwrap_or_else(|| fl!("menu-card-failed")),
-                    self.theme.invalid(dialog),
+                    dialog.patch(self.theme.dialog_error_text),
                 )
             }
-            HostStatus::Idle => {
-                let opens = match &state.opens {
-                    Some(dir) => fl!("menu-card-opens", dir = dir.as_str()),
-                    None => fl!("menu-card-opens-home"),
-                };
-                let text = match &state.other {
-                    Some(dir) => fl!("menu-card-other", opens = opens, dir = dir.as_str()),
-                    None => opens,
-                };
-                (text, dialog)
-            }
+            HostStatus::Idle => return self.opens_line(state, width),
         };
-        let lead = match state.status {
-            HostStatus::Idle => Span::styled(format!("{} ", self.decor.opens()), dialog),
-            HostStatus::Connected
-            | HostStatus::Connecting
-            | HostStatus::Failed
-            | HostStatus::Stalled => indent,
-        };
-        let room = width.saturating_sub(cells::width(&lead.content));
-        let mut spans = vec![lead];
+        let room = width.saturating_sub(cells::width(&indent.content));
+        let mut spans = vec![indent];
         let fitted = cells::fit_cut(&text, room, Align::Left, Cut::End);
         let styles = (style, self.theme.truncated_dialog);
         spans.extend(cells::spans(fitted, styles, self.theme.glyphs.marks));
         Line::from(spans)
     }
+
+    /// Where opening a host as `state` has it goes, in `width` cells: the remote directory, `~`
+    /// for its home, on the side of the panel of the menu, and the local one the other panel
+    /// goes to, if any, on the other side, each after a folder, as in the history; the one on
+    /// the left in the column of the icons. A directory too long loses its start.
+    fn opens_line(&self, state: &HostState, width: usize) -> Line<'static> {
+        let dialog = self.theme.dialog;
+        let opens = Some(state.opens.as_deref().unwrap_or("~"));
+        let other = state.other.as_deref();
+        let (start, end) = match self.side {
+            Side::Left => (opens, other),
+            Side::Right => (other, opens),
+        };
+        let lead = format!("{} ", self.decor.opens());
+        let wanted =
+            |dir: Option<&str>| dir.map_or(0, |dir| cells::width(&lead) + cells::width(dir));
+        let (start_width, end_width) = ends(width, wanted(start), wanted(end));
+        let dir = |dir: Option<&str>, width: usize, align: Align| {
+            let Some(dir) = dir else {
+                return vec![Span::styled(" ".repeat(width), dialog)];
+            };
+            let room = width.saturating_sub(cells::width(&lead));
+            let path = cells::fit_cut(dir, room.min(cells::width(dir)), Align::Left, Cut::Start);
+            let styles = (dialog, self.theme.truncated_dialog);
+            let mut spans = vec![Span::styled(lead.clone(), dialog)];
+            spans.extend(cells::spans(path, styles, self.theme.glyphs.marks));
+            let pad = Span::styled(" ".repeat(room.saturating_sub(cells::width(dir))), dialog);
+            match align {
+                Align::Right => spans.insert(0, pad),
+                Align::Left | Align::Center => spans.push(pad),
+            }
+            spans
+        };
+        let mut spans = dir(start, start_width, Align::Left);
+        spans.push(Span::styled(
+            " ".repeat(width - start_width - end_width),
+            dialog,
+        ));
+        spans.extend(dir(end, end_width, Align::Right));
+        Line::from(spans)
+    }
+}
+
+/// How many cells of a line of `width` its start and its end take, for an end of `wanted`
+/// cells after a start of `lead`: the end what the start leaves after a blank, but at least half
+/// the line, so that a long start does not crowd it out; the start the rest but the blank.
+fn ends(width: usize, lead: usize, wanted: usize) -> (usize, usize) {
+    if wanted == 0 {
+        return (width, 0);
+    }
+    let end = wanted.min(width.saturating_sub(lead + 1).max(width / 2));
+    (width.saturating_sub(end + 1), end)
+}
+
+/// `names` over two lines of `width` cells, between separators: as many whole names as fit on
+/// the first, at least one, and the rest on the second, which loses its end where it is too
+/// long.
+fn two_lines(names: &[String], width: usize) -> (String, String) {
+    let separator = fl!("menu-card-separator");
+    let after_last = separator.trim_end();
+    let mut first = String::new();
+    let mut taken = 0;
+    for name in names {
+        let joined = if taken == 0 {
+            name.clone()
+        } else {
+            format!("{first}{separator}{name}")
+        };
+        let more = taken + 1 < names.len();
+        let shown = cells::width(&joined) + if more { cells::width(after_last) } else { 0 };
+        if taken > 0 && shown > width {
+            break;
+        }
+        first = joined;
+        taken += 1;
+    }
+    if taken < names.len() {
+        first.push_str(after_last);
+    }
+    (first, names[taken..].join(&separator))
 }
 
 /// What the filter finds a row by; a host also by its address in `addresses`.
@@ -999,8 +1115,8 @@ enum Sizes {
     },
     /// Still to come from a volume that did not answer in time.
     Waiting,
-    /// Given up for: the volume did not answer in [`NO_ANSWER`].
-    GivenUp,
+    /// Given up for: the volume did not answer in [`NO_ANSWER`], or its answer failed.
+    NotResponding,
     /// The volume told none.
     Unknown,
 }
@@ -1027,7 +1143,7 @@ fn sizes(item: Item<'_>, asked: &dyn Fn(&Path) -> Option<Duration>) -> Option<Si
             }
         }
         (None, Some(ago)) if ago < NO_ANSWER => Sizes::Waiting,
-        (None, Some(_)) => Sizes::GivenUp,
+        (None, Some(_)) => Sizes::NotResponding,
         (None, None) => Sizes::Unknown,
     })
 }
@@ -1044,7 +1160,7 @@ struct SizeColumns {
 impl SizeColumns {
     fn of<'a>(sizes: impl Iterator<Item = &'a Sizes>) -> Self {
         let mut columns = Self::default();
-        let (mut known, mut waiting, mut unknown) = (false, false, false);
+        let (mut known, mut waiting) = (false, false);
         for sizes in sizes {
             match sizes {
                 Sizes::Known { free, total, .. } => {
@@ -1053,7 +1169,7 @@ impl SizeColumns {
                     columns.total = columns.total.max(cells::width(total));
                 }
                 Sizes::Waiting => waiting = true,
-                Sizes::GivenUp | Sizes::Unknown => unknown = true,
+                Sizes::NotResponding | Sizes::Unknown => {}
             }
         }
         if waiting && !known {
@@ -1062,11 +1178,6 @@ impl SizeColumns {
                 free: widest,
                 total: widest,
             };
-        }
-        if unknown {
-            let mark = cells::width(&fl!("menu-space-unknown"));
-            columns.free = columns.free.max(mark);
-            columns.total = columns.total.max(mark);
         }
         columns
     }
@@ -1097,12 +1208,18 @@ enum Info {
     Text(String),
     /// A skeleton of so many cells, where the sizes of a volume are still to come.
     Waiting(usize),
+    /// In place of the sizes of a volume: that it does not respond, which warns.
+    NotResponding(String),
+    /// In place of the sizes of a volume: that it tells none, faint.
+    Unknown(String),
 }
 
 impl Info {
     fn width(&self) -> usize {
         match self {
-            Self::Text(text) => cells::width(text),
+            Self::Text(text) | Self::NotResponding(text) | Self::Unknown(text) => {
+                cells::width(text)
+            }
             Self::Waiting(width) => *width,
         }
     }
@@ -1111,16 +1228,13 @@ impl Info {
 /// Right of a row: the `sizes` of the volume of the home directory or of a volume, in
 /// `columns`; nothing for a host, whose address is in its card.
 fn info(sizes: Option<&Sizes>, columns: SizeColumns) -> Info {
-    let text = match sizes {
-        Some(Sizes::Known { free, total, .. }) => columns.text(free, total),
-        Some(Sizes::Waiting) => return Info::Waiting(columns.width()),
-        Some(Sizes::GivenUp | Sizes::Unknown) => {
-            let mark = fl!("menu-space-unknown");
-            columns.text(&mark, &mark)
-        }
-        None => String::new(),
-    };
-    Info::Text(text)
+    match sizes {
+        Some(Sizes::Known { free, total, .. }) => Info::Text(columns.text(free, total)),
+        Some(Sizes::Waiting) => Info::Waiting(columns.width()),
+        Some(Sizes::NotResponding) => Info::NotResponding(fl!("menu-space-not-responding")),
+        Some(Sizes::Unknown) => Info::Unknown(fl!("menu-space-unknown")),
+        None => Info::Text(String::new()),
+    }
 }
 
 #[cfg(test)]
@@ -1254,7 +1368,6 @@ mod tests {
                 HostStatus::Idle
             },
             address: (alias == "web").then(|| "deploy@10.0.0.5".to_owned()),
-            tabs: 2,
             ..HostState::default()
         };
         // Drawn again once what it waits for shows, with a still spinner.
@@ -1702,11 +1815,11 @@ mod tests {
         assert!(row("USB").contains(" 12.0G / 64.0G ║"), "{text}");
         assert!(row("Big").contains("  1.5T / 20.0T ║"), "{text}");
         let column = slash(row("Home"));
-        for name in ["Macintosh HD", "USB", "Big", "share", "pseudo"] {
+        for name in ["Macintosh HD", "USB", "Big"] {
             assert_eq!(slash(row(name)), column, "{name}: {text}");
         }
         for name in ["share", "pseudo"] {
-            assert!(row(name).contains("     - /     - ║"), "{name}: {text}");
+            assert!(row(name).contains(" size unknown ║"), "{name}: {text}");
         }
 
         press(&mut menu, Action::End);
@@ -1769,11 +1882,7 @@ mod tests {
         let home = (text.lines())
             .find(|line| line.contains(" Home "))
             .unwrap_or_default();
-        let mark = format!("{}-", " ".repeat(widest - 1));
-        assert!(
-            home.contains(&format!(" {mark} / {mark} ║")),
-            "in the same columns: {text}"
-        );
+        assert!(home.contains(" size unknown ║"), "{text}");
     }
 
     #[test]
@@ -1783,7 +1892,7 @@ mod tests {
         let nas = (text.lines())
             .find(|line| line.contains(" NAS "))
             .unwrap_or_default();
-        assert!(nas.contains("    - /    - ║"), "{text}");
+        assert!(nas.contains(" not responding ║"), "{text}");
         assert!(!nas.contains("-----"), "{text}");
         let at = Instant::now();
         assert!(menu.sizes_wait(at).is_none(), "no shine any more");
@@ -1795,7 +1904,7 @@ mod tests {
             Some(Key::Volume(PathBuf::from("/Volumes/NAS")))
         );
         let answered = volume("/Volumes/NAS", Some("NAS"), VolumeKind::Network);
-        menu.answered(Path::new("/Volumes/NAS"), Some(answered));
+        menu.answered(Path::new("/Volumes/NAS"), LateAnswer::Volume(answered));
         let text = draw(&mut menu, 12);
         let nas = (text.lines())
             .find(|line| line.contains(" NAS "))
@@ -1812,11 +1921,74 @@ mod tests {
     #[test]
     fn a_volume_that_turns_out_not_to_be_one_goes_and_others_answer_nothing() {
         let mut menu = menu_with(home(), &Recent::default(), waiting(Duration::ZERO));
-        menu.answered(Path::new("/Volumes/gone"), None);
+        menu.answered(Path::new("/Volumes/gone"), LateAnswer::Gone);
         assert_eq!(menu.items().len(), 3, "not listed: nothing changes");
-        menu.answered(Path::new("/Volumes/NAS"), None);
+        menu.answered(Path::new("/Volumes/NAS"), LateAnswer::Gone);
         assert_eq!(keys(&menu), [Key::Home, Key::Volume(PathBuf::from("/"))]);
         assert!(menu.sizes_wait(Instant::now()).is_none());
+    }
+
+    #[test]
+    fn a_volume_whose_answer_fails_after_it_hung_does_not_respond_at_once() {
+        let mut menu = menu_with(home(), &Recent::default(), waiting(Duration::ZERO));
+        menu.answered(Path::new("/Volumes/NAS"), LateAnswer::Failed);
+        assert!(menu.contents.places.waiting.is_empty());
+        let at = Instant::now();
+        assert!(menu.sizes_wait(at).is_none(), "no shine");
+        assert_eq!(menu.gives_up(at), None, "nothing to give up for");
+        let text = draw(&mut menu, 12);
+        let nas = (text.lines())
+            .find(|line| line.contains(" NAS "))
+            .unwrap_or_default();
+        assert!(nas.contains(" not responding ║"), "before 5 s: {text}");
+        press(&mut menu, Action::End);
+        let [_, _, space] = card(&mut menu, &idle);
+        assert!(space.starts_with("║   Not responding "), "{space}");
+    }
+
+    #[test]
+    fn what_a_volume_does_not_tell_has_colors_of_its_own_but_under_the_cursor() {
+        let mut places = waiting(NO_ANSWER);
+        places.volumes.push(Volume {
+            space: None,
+            ..volume("/Volumes/share", Some("share"), VolumeKind::Network)
+        });
+        let mut menu = menu_with(home(), &Recent::default(), places);
+        let theme = Theme::mc_classic();
+        let draw_in = |menu: &mut LocationMenu| {
+            let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let decor = Decor::new(false);
+                    menu.render(frame, frame.area(), &theme, decor, &idle, &still());
+                })
+                .unwrap();
+            terminal.backend().buffer().clone()
+        };
+        let fg = |buffer: &ratatui::buffer::Buffer, text: &str| {
+            let at = crate::tui::mouse::find(buffer, text);
+            Some(buffer[(at.x, at.y)].fg)
+        };
+        let warning = theme.dialog_warning_text.fg;
+        let buffer = draw_in(&mut menu);
+        assert_eq!(fg(&buffer, "not responding"), warning);
+        assert_eq!(fg(&buffer, "size unknown"), theme.disabled.fg);
+        press(&mut menu, Action::End);
+        let buffer = draw_in(&mut menu);
+        let cursor = Colors::plain(&theme).focused_style().fg;
+        assert_eq!(fg(&buffer, "size unknown"), cursor, "under the cursor");
+        assert_eq!(
+            fg(&buffer, "Size unknown"),
+            theme.disabled.fg,
+            "faint in the card"
+        );
+        press(&mut menu, Action::Up);
+        let buffer = draw_in(&mut menu);
+        assert_eq!(
+            fg(&buffer, "Not responding"),
+            warning,
+            "a warning in the card"
+        );
     }
 
     #[test]
@@ -1875,12 +2047,12 @@ mod tests {
         let connected = |_: &str| HostState {
             status: HostStatus::Connected,
             address: Some("deploy@10.0.0.5".to_owned()),
-            tabs: 1,
             ..HostState::default()
         };
         let ([_, reach, how], buffer) = card_in(&mut menu, &connected, &theme, Decor::new(true));
-        assert!(reach.starts_with("║ 󰒋 web · deploy@10.0.0.5 "), "{reach}");
-        assert!(how.starts_with("║   Connected · 1 tab "), "{how}");
+        assert!(reach.starts_with("║ 󰒋 web "), "{reach}");
+        assert!(reach.ends_with(" deploy@10.0.0.5 ║"), "{reach}");
+        assert!(how.starts_with("║   Connected "), "{how}");
         let at = crate::tui::mouse::find(&buffer, "󰒋 web");
         assert_eq!(
             buffer[(at.x, at.y)].fg,
@@ -1889,7 +2061,8 @@ mod tests {
         );
 
         let ([_, _, how], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
-        assert!(how.starts_with("║  Opens the remote home "), "{how}");
+        let home = format!("║ {} ~ ", Glyphs::NERD.ran.dir);
+        assert!(how.starts_with(&home), "{how}");
 
         press(&mut menu, Action::Home);
         let ([_, path, space], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
@@ -1941,7 +2114,7 @@ mod tests {
             mounted.starts_with("║ + //me@nas/share on /Volumes/share "),
             "{mounted}"
         );
-        assert!(space.starts_with("║   Tells no free space "), "{space}");
+        assert!(space.starts_with("║   Size unknown "), "{space}");
 
         press(&mut menu, Action::Home);
         let [label, path, space] = card(&mut menu, &idle);
@@ -1970,22 +2143,21 @@ mod tests {
         let mut menu = menu_with(home(), &Recent::default(), waiting(NO_ANSWER));
         press(&mut menu, Action::End);
         let [_, _, space] = card(&mut menu, &idle);
-        assert!(space.starts_with("║   Did not answer in 5 s "), "{space}");
+        assert!(space.starts_with("║   Not responding "), "{space}");
     }
 
     #[test]
     fn the_card_of_a_host_says_where_it_is_defined_how_to_reach_it_and_how_it_is() {
-        let mut places = places();
-        places.hosts[0].line = 12;
-        places.hosts[1].file = PathBuf::from("/etc/ssh/ssh_config");
-        places.hosts[1].line = 40;
-        let mut menu = menu_with(remote("web"), &Recent::default(), places);
+        let mut defined = places();
+        defined.hosts[0].line = 12;
+        defined.hosts[1].file = PathBuf::from("/etc/ssh/ssh_config");
+        defined.hosts[1].line = 40;
+        let mut menu = menu_with(remote("web"), &Recent::default(), defined);
         let state = |alias: &str| match alias {
             "web" => HostState {
                 status: HostStatus::Connected,
                 address: Some("deploy@10.0.0.5".to_owned()),
                 jump: Some("bastion".to_owned()),
-                tabs: 1,
                 ..HostState::default()
             },
             "db" => HostState {
@@ -2002,16 +2174,19 @@ mod tests {
         };
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" ~/.ssh/config:12 ─╢"), "{label}");
+        assert!(reach.starts_with("║ ● web "), "{reach}");
         assert!(
-            reach.starts_with("║ ● web · deploy@10.0.0.5 via bastion "),
-            "{reach}"
+            reach.ends_with(" deploy@10.0.0.5 via bastion ║"),
+            "at the right end: {reach}"
         );
-        assert!(how.starts_with("║   Connected · 1 tab "), "{how}");
+        assert_eq!(how.trim_end_matches(['║', ' ']), "║   Connected");
 
         press(&mut menu, Action::Down);
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" /etc/ssh/ssh_config:40 ─╢"), "{label}");
-        assert!(reach.starts_with("║ ✗ db · ------"), "{reach}");
+        assert!(reach.starts_with("║ ✗ db "), "{reach}");
+        let skeleton = format!(" {} ║", "-".repeat(ADDRESS_SKELETON));
+        assert!(reach.ends_with(&skeleton), "{reach}");
         assert!(
             how.starts_with("║   Permission denied (publickey). "),
             "{how}"
@@ -2019,31 +2194,47 @@ mod tests {
 
         press(&mut menu, Action::Down);
         let [_, reach, how] = card(&mut menu, &state);
-        assert!(
-            reach.starts_with("║ ○ proxy · root@proxy.example.org "),
-            "{reach}"
-        );
-        assert!(
-            how.starts_with("║ › Opens /srv/app · other panel ~/logs "),
-            "{how}"
-        );
+        assert!(reach.starts_with("║ ○ proxy "), "{reach}");
+        assert!(reach.ends_with(" root@proxy.example.org ║"), "{reach}");
+        let panel = "where the host opens on the side of the panel, the other panel's on the other";
+        assert!(how.starts_with("║ › /srv/app "), "{panel}: {how}");
+        assert!(how.ends_with(" › ~/logs ║"), "{panel}: {how}");
         let [_, _, how] = card(&mut menu, &idle);
-        assert!(how.starts_with("║ › Opens the remote home "), "{how}");
+        assert_eq!(how.trim_end_matches(['║', ' ']), "║ › ~", "its home");
+
+        let mut right = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1)
+            .recent(&Recent::default());
+        right.listed(1, Ok(places()));
+        press(&mut right, Action::End);
+        let [_, _, how] = card(&mut right, &state);
+        assert!(how.starts_with("║ › ~/logs "), "{panel}: {how}");
+        assert!(how.ends_with(" › /srv/app ║"), "{panel}: {how}");
+        let [_, _, how] = card(&mut right, &idle);
+        let alone = "against the right end alone";
+        assert!(
+            how.starts_with("║   ") && how.ends_with(" › ~ ║"),
+            "{alone}: {how}"
+        );
     }
 
     #[test]
-    fn why_a_host_failed_and_why_ssh_g_did_are_in_the_colors_of_errors() {
+    fn the_address_of_a_host_takes_what_its_alias_leaves_but_at_least_half() {
+        assert_eq!(ends(40, 3, 15), (24, 15), "as long as it is");
+        assert_eq!(ends(40, 30, 35), (19, 20), "half against a long alias");
+        assert_eq!(ends(40, 3, 50), (3, 36), "the rest after a short one");
+        assert_eq!(ends(40, 3, 0), (40, 0), "nothing at the end");
+    }
+
+    #[test]
+    fn why_a_host_failed_and_that_ssh_g_did_are_in_the_colors_of_errors_not_crossed_out() {
         let failed = |_: &str| HostState {
             status: HostStatus::Failed,
             reason: Some("Connection refused".to_owned()),
-            unresolved: Some("Bad configuration option".to_owned()),
+            unresolved: true,
             ..HostState::default()
         };
         let theme = Theme::mc_classic();
-        for text in [
-            "Connection refused",
-            "ssh -G failed: Bad configuration option",
-        ] {
+        for text in ["Connection refused", "ssh -G failed"] {
             let mut menu = menu_with(remote("db"), &Recent::default(), places());
             let mut terminal = Terminal::new(TestBackend::new(70, 30)).unwrap();
             terminal
@@ -2054,9 +2245,17 @@ mod tests {
                 .unwrap();
             let buffer = terminal.backend().buffer();
             let at = crate::tui::mouse::find(buffer, text);
-            let fg = buffer[(at.x, at.y)].fg;
-            assert_eq!(Some(fg), theme.invalid(theme.dialog).fg, "{text}");
-            assert_ne!(Some(fg), theme.dialog.fg, "apart from the dialog's: {text}");
+            let cell = &buffer[(at.x, at.y)];
+            assert_eq!(Some(cell.fg), theme.dialog_error_text.fg, "{text}");
+            assert_ne!(
+                Some(cell.fg),
+                theme.dialog.fg,
+                "apart from the dialog's: {text}"
+            );
+            let crossed = cell
+                .modifier
+                .contains(ratatui::style::Modifier::CROSSED_OUT);
+            assert!(!crossed, "nothing typed wrong: {text}");
         }
     }
 
@@ -2069,8 +2268,8 @@ mod tests {
             ..HostState::default()
         };
         let [_, reach, _] = card(&mut menu, &fresh);
-        let fresh = "║ ○ web · deploy@10.0.0.9 via gate ";
-        assert!(reach.starts_with(fresh), "this run's: {reach}");
+        let fresh = " deploy@10.0.0.9 via gate ║";
+        assert!(reach.ends_with(fresh), "this run's: {reach}");
         assert!(
             menu.address_wait(&|_| true).is_none(),
             "no skeleton to shine over once ssh -G told it"
@@ -2079,15 +2278,18 @@ mod tests {
         press(&mut menu, Action::Down);
         let [_, reach, _] = card(&mut menu, &idle);
         let skeleton = "from the start, before ssh -G runs: no text in between";
-        assert!(reach.starts_with("║ ○ db · ------"), "{skeleton}: {reach}");
+        assert!(reach.starts_with("║ ○ db     "), "{skeleton}: {reach}");
+        assert!(reach.ends_with("------ ║"), "{skeleton}: {reach}");
         assert!(menu.address_wait(&|_| false).is_some());
         let failed = |_: &str| HostState {
-            unresolved: Some("Bad configuration option".to_owned()),
+            unresolved: true,
             ..HostState::default()
         };
         let [_, reach, _] = card(&mut menu, &failed);
-        let failed = "║ ○ db · ssh -G failed: Bad configuration option ";
-        assert!(reach.starts_with(failed), "{reach}");
+        assert!(
+            reach.ends_with(" ssh -G failed ║"),
+            "why is in the log: {reach}"
+        );
     }
 
     #[test]
@@ -2098,6 +2300,33 @@ mod tests {
         assert!(label.ends_with("──╢") && !label.contains(':'), "{label}");
         assert!(names.starts_with("║ ▾ h11, h12, h13, h14 "), "{names}");
         assert_eq!(empty.trim_matches(['║', ' ']), "");
+
+        let mut menu = menu_with(home(), &Recent::default(), many_hosts(60));
+        press(&mut menu, Action::End);
+        let [_, first, second] = card(&mut menu, &idle);
+        let first = first.trim_end_matches(['║', ' ']);
+        assert!(first.starts_with("║ ▾ h11, h12, "), "{first}");
+        assert!(first.ends_with(','), "whole names, then the rest: {first}");
+        let last = first.rsplit(' ').next().unwrap_or_default();
+        let last: u32 = last.trim_matches(['h', ',']).parse().unwrap();
+        let under = format!("║   h{}, ", last + 1);
+        assert!(second.starts_with(&under), "under the names: {second}");
+        assert!(second.ends_with("» ║"), "the end cut short: {second}");
+    }
+
+    #[test]
+    fn names_go_over_two_lines_whole() {
+        let names = ["alpha", "beta", "gamma", "delta"].map(str::to_owned);
+        let lines = |width| two_lines(&names, width);
+        let both = |first: &str, second: &str| (first.to_owned(), second.to_owned());
+        assert_eq!(lines(40), both("alpha, beta, gamma, delta", ""));
+        assert_eq!(lines(13), both("alpha, beta,", "gamma, delta"));
+        assert_eq!(
+            lines(3),
+            both("alpha,", "beta, gamma, delta"),
+            "one at least"
+        );
+        assert_eq!(two_lines(&[], 10), both("", ""));
     }
 
     #[test]

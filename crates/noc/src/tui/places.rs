@@ -1,6 +1,6 @@
 //! What the location menu lists: the mounted volumes and the hosts.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -31,6 +31,9 @@ pub(crate) struct Places {
     /// The mount points of the volumes that did not answer in time, whose answers are still to
     /// come, and when they were asked.
     pub(crate) waiting: HashMap<PathBuf, Instant>,
+    /// The mount points of the volumes whose answers failed after they hung: they have not
+    /// answered.
+    pub(crate) failed: HashSet<PathBuf>,
 }
 
 /// A host of the ssh config.
@@ -85,6 +88,7 @@ pub(crate) async fn read_places(
         volumes: volumes.volumes,
         hosts,
         waiting,
+        failed: HashSet::new(),
     };
     (Ok(places), volumes.late)
 }

@@ -1,6 +1,7 @@
 # 0076. ssh -G for the host under the cursor of the location menu
 
-- Status: Accepted; amended by [ADR 0079](0079-ssh-g-results-are-not-cached.md)
+- Status: Accepted; amended by [ADR 0079](0079-ssh-g-results-are-not-cached.md),
+  [ADR 0081](0081-words-for-sizes-not-known-and-cards-with-two-ends.md)
 - Date: 2026-11-15
 - Amends: [ADR 0075](0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)
 

@@ -126,8 +126,8 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
         Done::Places { generation, result } => app.places(generation, result),
         Done::VolumeAnswered {
             mount_point,
-            volume,
-        } => app.volume_answered(&mount_point, volume),
+            answer,
+        } => app.volume_answered(&mount_point, answer),
         Done::Created {
             panel,
             location,
@@ -160,7 +160,7 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
             jump,
         } => app.resolved(host, address, &user, jump),
         Done::Resolving { host } => app.resolving(host),
-        Done::NotResolved { host, reason } => app.not_resolved(host, &reason),
+        Done::NotResolved { host } => app.not_resolved(host),
         Done::Ask(ask) => app.ask(ask),
         Done::Notice {
             id,

@@ -253,8 +253,7 @@ fn a_host_tells_where_it_opens_how_many_tabs_are_on_it_and_why_it_failed() {
     );
 
     let (app, _) = on_a_host();
-    let state = app.host_state("web");
-    assert_eq!((state.status, state.tabs), (HostStatus::Connected, 1));
+    assert_eq!(app.host_state("web").status, HostStatus::Connected);
 }
 
 /// What the app asks of `ssh -G` now.
@@ -296,11 +295,9 @@ fn ssh_g_runs_once_a_run_for_the_host_the_cursor_of_the_menu_rests_on() {
     assert!(app.ssh_g.resolving.contains("db"));
     let runs = "it runs: nothing waits to start";
     assert_eq!(asked(&mut app), Asked::For(None), "{runs}");
-    app.not_resolved("db".to_owned(), "line 3: Bad\nconfiguration option");
-    let state = app.host_state("db");
+    app.not_resolved("db".to_owned());
     assert!(!app.ssh_g.resolving.contains("db"));
-    let reason = Some("line 3: Bad configuration option");
-    assert_eq!(state.unresolved.as_deref(), reason, "on one line");
+    assert!(app.host_state("db").unresolved);
     assert_eq!(asked(&mut app), Asked::Nothing, "not again in this run");
 
     app.handle(action(Action::Up));
@@ -315,7 +312,7 @@ fn ssh_g_runs_once_a_run_for_the_host_the_cursor_of_the_menu_rests_on() {
     app.handle(action(Action::Down));
     assert_eq!(asked(&mut app), Asked::Nothing);
     app.handle(action(Action::Reload));
-    assert_eq!(app.host_state("db").unresolved, None);
+    assert!(!app.host_state("db").unresolved);
     assert_eq!(asked(&mut app), asked_for("db"), "R lets it run again");
     app.handle(action(Action::Cancel));
     assert!(app.menu.is_none());

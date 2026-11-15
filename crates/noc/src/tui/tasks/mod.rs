@@ -19,8 +19,8 @@ use noc_ssh::askpass::AskpassServer;
 use noc_tools::opener::Opener;
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
-    DirEntry, FileReader as _, LocalFs, Location, Metadata, RemotePath, Space, Vfs, VfsError,
-    VfsPath as _, Volume,
+    DirEntry, FileReader as _, LateAnswer, LocalFs, Location, Metadata, RemotePath, Space, Vfs,
+    VfsError, VfsPath as _,
 };
 use noc_viewer::{Part, Progress, Stamp, Want, read_part};
 use tokio::sync::{mpsc, oneshot};
@@ -81,10 +81,10 @@ pub(crate) enum Done {
         result: Result<Places, String>,
     },
     /// The volume at `mount_point` answered after [`Done::Places`] listed it without its
-    /// answer: as it is now, or `None` if it turned out not to be one to show.
+    /// answer: as it is now, not one to show, or failed.
     VolumeAnswered {
         mount_point: PathBuf,
-        volume: Option<Volume>,
+        answer: LateAnswer,
     },
     /// A report from the job `id` of [`Effect::Delete`] or [`Effect::Copy`].
     Job { id: u64, event: JobEvent },
@@ -143,8 +143,8 @@ pub(crate) enum Done {
     },
     /// `ssh -G` runs for the host of [`Effect::Resolve`], after its wait.
     Resolving { host: String },
-    /// `ssh -G` failed for a host, for `reason`.
-    NotResolved { host: String, reason: String },
+    /// `ssh -G` failed for a host; why is in the log.
+    NotResolved { host: String },
     /// The attempt or connection of [`Effect::Connect`] ended; `reason` is `None` if it was
     /// asked to stop.
     Closed {
@@ -349,7 +349,7 @@ pub(crate) struct Tasks {
 }
 
 /// The answer of a volume that did not answer in time, once it comes.
-type Answer = BoxFuture<'static, (PathBuf, Option<Volume>)>;
+type Answer = BoxFuture<'static, (PathBuf, LateAnswer)>;
 
 impl Tasks {
     /// Prepares the runtime directory and the askpass bridge, and cleans up after crashed
@@ -824,7 +824,7 @@ impl Tasks {
             let mut answers: FuturesUnordered<Answer> = (late.into_iter())
                 .map(|late| {
                     let mount_point = late.mount_point().to_path_buf();
-                    late.answer().map(|volume| (mount_point, volume)).boxed()
+                    late.answer().map(|answer| (mount_point, answer)).boxed()
                 })
                 .collect();
             #[cfg(debug_assertions)]
@@ -834,11 +834,11 @@ impl Tasks {
             };
             // Before the answers, so that none comes before the listing that waits for it.
             let _ = done.send(Done::Places { generation, result });
-            while let Some((mount_point, volume)) = answers.next().await {
+            while let Some((mount_point, answer)) = answers.next().await {
                 if done
                     .send(Done::VolumeAnswered {
                         mount_point,
-                        volume,
+                        answer,
                     })
                     .is_err()
                 {
@@ -1338,7 +1338,10 @@ fn held_back(
             continue;
         }
         places.waiting.insert(volume.mount_point.clone(), since);
-        let answer = (volume.mount_point.clone(), Some(volume.clone()));
+        let answer = (
+            volume.mount_point.clone(),
+            LateAnswer::Volume(volume.clone()),
+        );
         volume.space = None;
         answers.push(tokio::time::sleep(delay).map(move |()| answer).boxed());
     }

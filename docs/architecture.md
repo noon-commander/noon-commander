@@ -266,43 +266,48 @@ choose a volume or a host, grouped under headings:
   their free space and size, and SFTP the hosts, whose addresses are in their cards
   ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)). Each of the two numbers
   takes as many cells as the widest of the rows shown, so the slashes between them line up; a
-  volume that did not tell its space, or tells a size of 0, shows `- / -` in those columns.
+  volume that did not tell its space, or tells a size of 0, says `size unknown` there, faint
+  ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
   Plugins for other backends will be a group of their own. A group without rows is not drawn.
 - The rows show after at most 150 ms, as long as a wait goes before its spinner shows
   (`places::FIRST_ANSWER`). The sizes of a volume that has not answered by then, and of the home
   directory on it, are a skeleton as wide as the sizes known in the other rows, or as wide as
   sizes take at most while none is known, which one shine crosses (`window::cell_skeleton`); no
   dots turn in the title. They show once its answer comes; 5 s after it was asked
-  (`menu::NO_ANSWER`), the skeleton turns to `- / -`, which an answer that comes later still
-  replaces. On macOS a `statfs` that answers that the path is no mount point, or a mount not to
-  browse, takes its row away; one that fails after it hung, as a soft network mount gives up,
-  leaves it with `- / -` (`to_late_volume`)
+  (`menu::NO_ANSWER`), the skeleton turns to `not responding`, in the colors of warnings
+  (`theme.dialog_warning_text`), which an answer that comes later still replaces. On macOS a
+  `statfs` that answers that the path is no mount point, or a mount not to browse, takes its row
+  away; a query that fails after it hung, as a soft network mount gives up, leaves it, not
+  responding (`LateAnswer::Failed`, `Places::failed`)
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
 - Under the rows, a card of the place under the cursor, two lines under a line that names, at its
   right end in the color of the title, its kind or where it is defined
   ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)):
 
   ```text
-  ╟───────────────── apfs · local ─╢   ╟─────────────── ~/.ssh/config:12 ─╢
-  ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ● web · deploy@10.0.0.5 via jump ║
-  ║   12.0G free of 64.0G (18%)    ║   ║   Connected · 2 tabs             ║
+  ╟───────────────── apfs · local ─╢   ╟──────────────────── ~/.ssh/config:12 ─╢
+  ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ○ web      deploy@10.0.0.5 via bastion ║
+  ║   12.0G free of 64.0G (18%)    ║   ║ › /srv/app                    › ~/logs ║
   ```
 
   The first line starts with the icon of the row, a host's in the color of its status; the second
-  stands under its text, or after a folder (`glyphs.ran.dir`, as in the history) where it says
-  where opening a host goes. The home directory shows its path and the space of its volume, with
-  the volume and the type of
-  its file system over them; a volume what it mounts and where (`Volume::source`, without the
-  password of a URL), then its free space, its size, and the share free, a skeleton while they are
-  to come, `Did not answer in 5 s`, or `Tells no free space`; a host the file and line of its
-  `Host` line, its alias, address, and `ProxyJump`, from this run's `ssh -G`, which runs once the
-  cursor rests on the host, else a skeleton until `ssh -G` tells them, or
-  `ssh -G failed: reason` in the colors of errors
-  ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), then
-  `Connected` with the tabs on it, `Connecting`, why its last attempt failed in the colors of errors
-  (`App::failed` keeps it until a new attempt), or where opening it goes, `Opens /srv/app · other
-  panel ~/logs` or `Opens the remote home`; the row of the rest the names of the places it stands
-  for. Every card has two lines, so the box keeps its height.
+  stands under its text, or starts with a folder (`glyphs.ran.dir`, as in the history) where it
+  says where opening a host goes. The home directory shows its path and the space of its volume,
+  with the volume and the type of its file system over them; a volume what it mounts and where
+  (`Volume::source`, without the password of a URL), then its free space, its size, and the share
+  free, a skeleton while they are to come, `Not responding` in the colors of warnings, or
+  `Size unknown`, faint. A host shows the file and line of its `Host` line over the card; its
+  alias, and at the right end its address and `ProxyJump`, from this run's `ssh -G`, which runs
+  once the cursor rests on the host, else a skeleton until `ssh -G` tells them, or
+  `ssh -G failed` in the colors of errors (`theme.dialog_error_text`, not crossed out), why going
+  to the log ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md));
+  the end takes what the alias leaves, but at least half the line (`menu::ends`). Then
+  `Connected`, `Connecting…`, why its last attempt failed in the colors of errors (`App::failed`
+  keeps it until a new attempt), or, not connected, where opening it goes, after folders: the
+  remote directory, `~` for its home, on the side of the panel of the menu, and the local
+  `other_dir` on the other side. The row of the rest names the places it stands for over both
+  lines, whole names first. Every card has two lines, so the box keeps its height
+  ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
   system volume, then the others by mount point; the hosts in config order. Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is
@@ -2357,14 +2362,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   connections made or ended, in a queue of their own, so the dots of a host connecting can be
   watched in the location menu; `--slow-volumes SECONDS` lists every volume in the location menu
   as if none answered in time and sends each answer that long after, so the skeletons of their
-  sizes and `- / -` can be watched. Each frame goes out as synchronized output (`draw_whole` in
-  `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine
-  changes. A spinner's next frame is due 40 ms after a frame that drew the shine of its `Wait`
-  moving over a bar, which the shine tells it, else 80 ms later, the next frame of the dots, or
-  sooner when a resting shine sweeps again (`Wait::moves_after`). A frame that only a spinner or
-  a window that grows asked for is for time alone (`App::frame_for_time`): a side whose panel does
-  not move with time puts back the cells it drew on the last frame (`render::Frames`), and a window
-  that shows whole stays where it was found, without `Stage::show` looking for it again
+  sizes and `not responding` can be watched. Each frame goes out as synchronized output
+  (`draw_whole` in `tui/mod.rs`), so the cursor of a field does not show on its way through the
+  cells a shine changes. A spinner's next frame is due 40 ms after a frame that drew the shine of
+  its `Wait` moving over a bar, which the shine tells it, else 80 ms later, the next frame of the
+  dots, or sooner when a resting shine sweeps again (`Wait::moves_after`). A frame that only a
+  spinner or a window that grows asked for is for time alone (`App::frame_for_time`): a side whose
+  panel does not move with time puts back the cells it drew on the last frame (`render::Frames`),
+  and a window that shows whole stays where it was found, without `Stage::show` looking for it again
   ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
 - **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
   `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons

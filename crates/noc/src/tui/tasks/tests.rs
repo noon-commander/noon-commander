@@ -227,11 +227,10 @@ async fn ssh_g_reports_the_address_of_a_host_or_why_it_has_none() {
 
     let missing = context(&tmp.path().join("no-ssh"));
     resolve_address(missing, "db".to_owned(), stop(), done).await;
-    let Some(Done::NotResolved { host, reason }) = results.recv().await else {
-        panic!("expected why there is none");
+    let Some(Done::NotResolved { host }) = results.recv().await else {
+        panic!("expected that there is none");
     };
     assert_eq!(host, "db");
-    assert!(reason.contains("no-ssh"), "{reason}");
 }
 
 #[cfg(debug_assertions)]
@@ -241,7 +240,7 @@ async fn slow_volumes_hold_back_every_answer_as_if_none_came_in_time() {
         total: 2,
         available: 1,
     };
-    let volume = |path: &str| Volume {
+    let volume = |path: &str| noc_vfs::Volume {
         mount_point: PathBuf::from(path),
         label: None,
         fs_type: None,
@@ -267,7 +266,10 @@ async fn slow_volumes_hold_back_every_answer_as_if_none_came_in_time() {
     assert_eq!(answers.len(), 1);
     let (mount_point, answer) = answers.next().await.expect("its answer");
     assert_eq!(mount_point, PathBuf::from("/"));
-    assert_eq!(answer.and_then(|volume| volume.space), Some(space));
+    let LateAnswer::Volume(volume) = answer else {
+        panic!("expected a volume");
+    };
+    assert_eq!(volume.space, Some(space));
 }
 
 #[test]

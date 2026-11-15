@@ -22,4 +22,4 @@ pub use location::Location;
 pub use remote_path::RemotePath;
 pub use sftp::{SftpFs, SftpReader, SftpWriter};
 pub use vfs::{Vfs, VfsPath};
-pub use volumes::{Late, Space, Volume, VolumeKind, Volumes, volumes, volumes_within};
+pub use volumes::{Late, LateAnswer, Space, Volume, VolumeKind, Volumes, volumes, volumes_within};

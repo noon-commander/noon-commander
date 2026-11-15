@@ -72,7 +72,19 @@ pub struct Volumes {
 pub struct Late {
     mount_point: PathBuf,
     since: Instant,
-    answer: BoxFuture<'static, Option<Volume>>,
+    answer: BoxFuture<'static, LateAnswer>,
+}
+
+/// What a file system that did not answer in time answered at last.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LateAnswer {
+    /// The volume as it is with its answer.
+    Volume(Volume),
+    /// It turned out not to be a volume to show.
+    Gone,
+    /// The query failed after it hung, as a soft network mount gives up after a timeout of its
+    /// own: the volume is still mounted, as it was listed, and has not answered.
+    Failed,
 }
 
 impl Late {
@@ -86,10 +98,10 @@ impl Late {
         self.since
     }
 
-    /// The volume, once its file system answers, which a dead network mount never does; or
-    /// `None` when it turns out not to be a volume to show. Dropping the future only stops
-    /// waiting: the query goes on, and the next listing waits for it.
-    pub async fn answer(self) -> Option<Volume> {
+    /// What the file system answered, once it does, which a dead network mount never does.
+    /// Dropping the future only stops waiting: the query goes on, and the next listing waits
+    /// for it.
+    pub async fn answer(self) -> LateAnswer {
         self.answer.await
     }
 }
@@ -266,7 +278,7 @@ where
     T: Clone + Send + Sync + 'static,
     P: FnOnce(&Path) -> T + Send + 'static,
     V: Fn(Option<T>) -> Option<Volume>,
-    L: FnOnce(Option<T>) -> Option<Volume> + Send + 'static,
+    L: FnOnce(Option<T>) -> LateAnswer + Send + 'static,
 {
     let probe = probes.probe(path, probe);
     if let Ok(answer) = tokio::time::timeout(first, probe.answer.clone()).await {
@@ -339,8 +351,21 @@ async fn statvfs_volumes(candidates: Vec<Candidate>, first: Duration) -> Volumes
                 space,
             })
         };
-        // A late answer makes the volume as one in time does: the mount point is known.
-        ask(&STATVFS, &path, first, probe, (volume.clone(), volume)).await
+        // A late answer makes the volume as one in time does, the mount point being known; a
+        // failure leaves it as it was listed.
+        let late = {
+            let (volume, path) = (volume.clone(), path.clone());
+            move |answer: Option<Result<Space, String>>| match answer {
+                Some(Ok(space)) => (volume(Some(Ok(space))))
+                    .map_or(LateAnswer::Gone, LateAnswer::Volume),
+                Some(Err(error)) => {
+                    tracing::warn!(path = %path.display(), %error, "statvfs failed after it hung");
+                    LateAnswer::Failed
+                }
+                None => LateAnswer::Failed,
+            }
+        };
+        ask(&STATVFS, &path, first, probe, (volume, late)).await
     }))
     .await;
     gather(asked)
@@ -644,7 +669,9 @@ mod macos {
 
     use futures_util::future::join_all;
 
-    use super::{Probes, Space, Volume, VolumeKind, Volumes, ask, gather, without_password};
+    use super::{
+        LateAnswer, Probes, Space, Volume, VolumeKind, Volumes, ask, gather, without_password,
+    };
 
     const MNT_LOCAL: u32 = 0x0000_1000;
     /// Set on mounts that are not meant to be browsed, such as Time Machine local snapshots.
@@ -745,21 +772,24 @@ mod macos {
             .collect()
     }
 
-    /// The volume at `path` once its `stat` comes after it was listed without it, as
-    /// [`to_volume`] makes it; but a query that fails after it hung, as a soft network mount
-    /// gives up, leaves the volume as it is without an answer: it is still mounted, and the next
-    /// listing finds whether it is. Only a `statfs` that answers can say it is not one to show.
+    /// The answer of the volume at `path` once its `stat` comes after it was listed without it,
+    /// as [`to_volume`] makes it; but a query that fails after it hung, as a soft network mount
+    /// gives up, fails: the volume is still mounted, and the next listing finds whether it is.
+    /// Only a `statfs` that answers can say it is not one to show.
     pub(super) fn to_late_volume(
         path: PathBuf,
         label: Option<String>,
         stat: Option<Result<Stat, String>>,
-    ) -> Option<Volume> {
+    ) -> LateAnswer {
         match stat {
             Some(Err(error)) => {
                 tracing::warn!(path = %path.display(), %error, "statfs failed after it hung");
-                to_volume(path, label, None)
+                LateAnswer::Failed
             }
-            stat => to_volume(path, label, stat),
+            Some(Ok(stat)) => {
+                to_volume(path, label, Some(Ok(stat))).map_or(LateAnswer::Gone, LateAnswer::Volume)
+            }
+            None => LateAnswer::Failed,
         }
     }
 
@@ -1151,12 +1181,12 @@ mod tests {
         let quick = Path::new("/noc-test/quick");
         let both = |path: &Path| {
             let late = answered(path);
-            let late = move |answer| {
-                let volume = late(answer)?;
-                Some(Volume {
+            let late = move |answer| match late(answer) {
+                Some(volume) => LateAnswer::Volume(Volume {
                     label: Some("late".to_owned()),
                     ..volume
-                })
+                }),
+                None => LateAnswer::Gone,
             };
             (answered(path), late)
         };
@@ -1185,7 +1215,9 @@ mod tests {
         assert_eq!(again.since(), late.since(), "the same query");
         release.send(()).expect("release the query");
         for late in [late, again] {
-            let volume = late.answer().await.expect("a volume");
+            let LateAnswer::Volume(volume) = late.answer().await else {
+                panic!("a volume");
+            };
             assert_eq!(volume.space.map(|space| space.available), Some(3));
             assert_eq!(volume.label.as_deref(), Some("late"), "made as a late one");
         }
@@ -1203,17 +1235,23 @@ mod tests {
             let failed = Some(Err("Operation timed out".to_owned()));
             assert_eq!(
                 to_late_volume(nas.clone(), label.clone(), failed.clone()),
-                to_volume(nas.clone(), label.clone(), None),
-                "as it is without an answer"
+                LateAnswer::Failed,
+                "still mounted, and has not answered"
             );
             assert_eq!(to_volume(nas, label, failed), None, "one in time goes");
             let dir = tempfile::tempdir()?;
             let path = dir.path().to_path_buf();
-            let stat = stat(&path).map_err(|error| error.to_string());
+            let dir_stat = stat(&path).map_err(|error| error.to_string());
             assert_eq!(
-                to_late_volume(path, None, Some(stat)),
-                None,
+                to_late_volume(path, None, Some(dir_stat)),
+                LateAnswer::Gone,
                 "no mount point"
+            );
+            let root = stat(Path::new("/")).map_err(|error| error.to_string());
+            let answered = to_late_volume(PathBuf::from("/"), None, Some(root));
+            assert!(
+                matches!(answered, LateAnswer::Volume(volume) if volume.space.is_some()),
+                "the volume with its answer"
             );
             Ok(())
         }

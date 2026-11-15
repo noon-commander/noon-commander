@@ -414,9 +414,8 @@ struct SshG {
     users: HashMap<String, String>,
     /// The `ProxyJump` of the hosts in `addresses` that have one, terminal-safe.
     jumps: HashMap<String, String>,
-    /// Why it failed, terminal-safe and on one line, until `R` in the location menu lets it run
-    /// again.
-    unresolved: HashMap<String, String>,
+    /// Those it failed for, until `R` in the location menu lets it run again.
+    unresolved: HashSet<String>,
     /// The hosts it runs for, from the location menu.
     resolving: HashSet<String>,
     /// The host that the location menu asked it for last, which may still wait to start.

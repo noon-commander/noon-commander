@@ -49,7 +49,7 @@ impl App {
         let sizes = self.menu.as_ref().and_then(|menu| menu.sizes_wait(drawn));
         // And the one over the address of the host under the cursor, until ssh -G tells it.
         let told = |host: &str| {
-            self.ssh_g.addresses.contains_key(host) || self.ssh_g.unresolved.contains_key(host)
+            self.ssh_g.addresses.contains_key(host) || self.ssh_g.unresolved.contains(host)
         };
         let address = (self.menu.as_ref()).and_then(|menu| menu.address_wait(&told));
         for wait in self.waits().into_iter().chain(sizes).chain(address) {
@@ -101,7 +101,7 @@ impl App {
             .chain(self.host_settings.hosts.keys())
             .chain(self.last_dirs.keys())
             .chain(&known.resolving)
-            .chain(known.unresolved.keys())
+            .chain(&known.unresolved)
             .map(|host| (host.clone(), self.host_state(host)))
             .collect()
     }

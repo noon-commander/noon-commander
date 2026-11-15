@@ -275,8 +275,8 @@
   shine running to and fro until it knows how far it is; R in the location menu keeps the rows;
   `--slow-spinners` and `--slow-connections` in debug builds ([ADR 0037](adr/0037-spinners.md))
 - [x] The location menu shows its rows after at most 150 ms; the sizes of a volume that has not
-      answered are a skeleton until its answer comes, and `- / -` after 5 s; a volume is never
-      asked again while it has not answered; `--slow-volumes` in debug builds
+      answered are a skeleton until its answer comes, and `not responding` after 5 s; a volume
+      is never asked again while it has not answered; `--slow-volumes` in debug builds
       ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md))
 - [x] The location menu shows a card of the place under the cursor in place of its whole row:
       what a volume mounts and how much of it is free, where a host is defined, how to reach it,
@@ -288,6 +288,11 @@
 - [x] No cache of `ssh -G`: addresses come from this run's alone, in the cards of hosts, not in
       their rows; `noc debug hosts` runs `ssh -G` each time
       ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
+- [x] Words in place of sizes not known, `not responding` in the colors of warnings and
+      `size unknown`, faint; cards of hosts with the address at the right end, `ssh -G` failures
+      in the log, one word for how a host is, the directories it opens after folders on the sides
+      of their panels; errors no longer crossed out; the row of the rest named over two lines
+      ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

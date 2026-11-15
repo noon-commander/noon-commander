@@ -92,6 +92,11 @@ pub(crate) struct Theme {
     /// The status of a host in the location menu, drawn over `dialog`, which the panel colors
     /// may not show on: idle, connecting, connected, failed.
     pub(crate) dialog_host: [Style; 4],
+    /// Drawn over `dialog`: what warns, as a volume that does not respond in the location menu;
+    /// and what tells that something failed, as why a host could not connect. Neither is crossed
+    /// out, as what is typed wrong is ([`Theme::invalid`]).
+    pub(crate) dialog_warning_text: Style,
+    pub(crate) dialog_error_text: Style,
     /// F-key bar: the key numbers.
     pub(crate) fkey_number: Style,
     /// F-key bar: the labels.
@@ -316,6 +321,8 @@ impl Theme {
                 fg(Color::Green),
                 fg(Color::Red),
             ],
+            dialog_warning_text: fg(Color::Yellow),
+            dialog_error_text: fg(Color::Red),
             fkey_number: on(Color::White, Color::Black),
             fkey_label: on(Color::Black, Color::Cyan),
             // mc's `[menu]` colors.
@@ -428,6 +435,9 @@ impl Theme {
             truncated_warning: reversed.bold(),
             hidden: plain.dim(),
             dialog_host: [plain.dim(), plain, plain.bold(), plain],
+            // As the messages on the line of the mode.
+            dialog_warning_text: plain.bold(),
+            dialog_error_text: plain.bold(),
             fkey_number: plain,
             fkey_label: reversed,
             menu_bar: reversed,
@@ -526,6 +536,8 @@ impl Theme {
             truncated_warning: on(p.warning, p.base).bold(),
             hidden: fg(p.overlay0),
             dialog_host: [fg(p.subtext0), fg(p.yellow), fg(p.green), fg(p.red)],
+            dialog_warning_text: fg(p.peach),
+            dialog_error_text: fg(p.red),
             fkey_number: on(p.text, p.crust),
             fkey_label: on(p.text, p.surface0),
             menu_bar: on(p.text, p.surface0),
@@ -634,6 +646,10 @@ impl Theme {
             truncated_warning: on(p.warning, p.ink).bold(),
             hidden: fg(p.faint),
             dialog_host: [fg(p.muted), fg(p.accent), fg(p.green), fg(p.red)],
+            // The shade of warnings that is their text on their fields, apart from the gold of
+            // titles and of hosts that connect.
+            dialog_warning_text: fg(p.warning_focus),
+            dialog_error_text: fg(p.red),
             fkey_number: on(p.accent, p.deep).bold(),
             fkey_label: on(p.text, p.deep),
             menu_bar: bar,
@@ -1271,6 +1287,32 @@ mod tests {
                     if let (Some(fg), Some(bg)) = (marked.fg, marked.bg) {
                         assert_ne!(fg, bg, "{name} {depth:?}: {surface}");
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn text_that_warns_or_tells_a_failure_in_a_dialog_stands_out_and_is_not_crossed_out() {
+        for name in Theme::NAMES {
+            for depth in [ColorDepth::TrueColor, ColorDepth::Indexed] {
+                let theme = Theme::by_name(name, depth).unwrap();
+                let roles = [
+                    ("warning", theme.dialog_warning_text),
+                    ("error", theme.dialog_error_text),
+                ];
+                for (role, style) in roles {
+                    let text = theme.dialog.patch(style);
+                    assert_ne!(text, theme.dialog, "{name} {depth:?}: {role}");
+                    let crossed = text.add_modifier.contains(Modifier::CROSSED_OUT);
+                    assert!(!crossed, "{name} {depth:?}: {role}");
+                    if let (Some(fg), Some(bg)) = (text.fg, text.bg) {
+                        assert_ne!(fg, bg, "{name} {depth:?}: {role}");
+                    }
+                }
+                let [warning, error] = roles.map(|(_, style)| style.fg);
+                if warning.is_some() {
+                    assert_ne!(warning, error, "{name} {depth:?}");
                 }
             }
         }

@@ -158,13 +158,11 @@ pub(crate) struct HostState {
     pub(crate) address: Option<String>,
     /// The `ProxyJump` that `ssh -G` gave with `address`, terminal-safe; `None` without one.
     pub(crate) jump: Option<String>,
-    /// Why `ssh -G` failed for it in this session, terminal-safe, on one line.
-    pub(crate) unresolved: Option<String>,
+    /// `ssh -G` failed for it in this run; why is in the log.
+    pub(crate) unresolved: bool,
     /// Why the last attempt failed, or the connection was lost, while it is `Failed` or
     /// `Stalled`: terminal-safe, on one line.
     pub(crate) reason: Option<String>,
-    /// Tabs of both panels on the host.
-    pub(crate) tabs: usize,
     /// The remote directory that opening it goes to, terminal-safe: the last one shown on it,
     /// with `remember_dir`, else its `start_dir`; `None` for the remote home.
     pub(crate) opens: Option<String>,

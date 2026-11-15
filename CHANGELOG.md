@@ -90,24 +90,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   after its free space, as `212G / 994G`, with the slashes of the rows in one column.
 - The location menu shows its rows after at most 150 ms, where a network mount that hung kept it
   waiting 500 ms. The sizes of a volume that has not answered by then are a faint bar with a
-  shine, which they replace once they come, in the menu that is open; after 5 s the bar gives way
-  to `- / -`, which an answer that comes later still replaces. `- / -` also stands for a volume
-  that tells no size, in place of `?`. A volume that hangs is never asked again until it answers,
-  however often the menu opens or `R` lists the volumes again
-  ([ADR 0074](docs/adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
+  shine, which they replace once they come, in the menu that is open; after 5 s, or once the
+  query fails after it hung, the bar gives way to `not responding`, in the colors of warnings,
+  which an answer that comes later still replaces. A volume that tells no size says
+  `size unknown`, faint, in place of `?`. A volume that hangs is never asked again until it
+  answers, however often the menu opens or `R` lists the volumes again
+  ([ADR 0074](docs/adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md),
+  [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
 - Under its rows the location menu shows a card of the place under the cursor in place of the
   whole row. For a volume: the type of its file system and its kind, what it mounts and where, as
   `/dev/disk4s1 on /Volumes/USB`, and its free space, size, and the share free; for the home
   directory its path and the space of its volume; for a host: the file and line of its `Host` line,
-  its alias, address, and `ProxyJump`, and how it is: connected with the tabs on it, why its last
-  attempt failed, in the colors of errors, or where opening it goes; for the row of the rest, the
-  names it stands for. Its first line starts with the icon of the row, a host's in the color of its
-  status, and where a host opens comes after a folder. The menu keeps its height
-  ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)).
+  its alias, and at the right end its address and `ProxyJump`; then how it is, `Connected` or
+  `Connecting…`, why its last attempt failed, in the colors of errors, or, not connected, the
+  directories opening it goes to, after folders, each on the side of its panel; for the row of
+  the rest, the names it stands for, over two lines. Its first line starts with the icon of the
+  row, a host's in the color of its status. The menu keeps its height
+  ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),
+  [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
 - Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
   run, and its card shows the address and the `ProxyJump` it gives, a faint bar with a shine
-  until then, or why `ssh -G` failed, in the colors of errors. R in the menu lets it run again for
-  hosts it failed for. One that has started runs to its end
+  until then, or `ssh -G failed`, in the colors of errors, why going to the log. R in the menu
+  lets it run again for hosts it failed for. One that has started runs to its end
   ([ADR 0076](docs/adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
@@ -201,6 +205,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Why `R` in the location menu could not list the places again, right of the filter, was crossed
+  out, as what is typed wrong is. It shows in the colors of errors, as everything that failed in
+  the menu, and nothing there is crossed out
+  ([ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
 - The viewer read the same part again and again, for ever, when scrolling up reached a part it
   had let go while it held as much as `viewer.window_mib` allows.
 - A copy or a move that could not read its source said `Cannot copy to` the source.

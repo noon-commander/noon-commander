@@ -202,15 +202,17 @@ menu-more = { $count } more…
 # Right of the home directory and of a volume: the free space and the size of the file system,
 # such as 212G / 994G. Each comes padded, so that the slashes of the rows line up.
 menu-space = { $free } / { $total }
-# In place of the free space and of the size, each, of a volume that did not tell them, or did
-# not answer in 5 seconds: - / -.
-menu-space-unknown = -
+# In place of the sizes of a volume that did not answer in 5 seconds, or whose answer failed, in
+# the colors of warnings.
+menu-space-not-responding = not responding
+# In place of the sizes of a volume that tells none, faint.
+menu-space-unknown = size unknown
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }
 # The card of the place under the cursor, under the rows: on the line over it, at its right end,
 # what kind it is or where it is defined; then two lines, what it is and how it is.
-# Two parts of a line of the card: the volume and the type of its file system, a host and its
-# address.
+# Two parts of the line over the card: the volume and the type of its file system, or the type
+# and the kind of a volume.
 menu-card-both = { $first } · { $second }
 # The kinds of volumes, after the type of the file system on the line over the card.
 menu-card-system = system
@@ -220,31 +222,26 @@ menu-card-network = network
 menu-card-mounted = { $source } on { $mount_point }
 # The free space and the size of a volume, and the share free.
 menu-card-space = { $free } free of { $total } ({ $percent }%)
-# In place of the space of a volume that has not answered in so many seconds.
-menu-card-no-answer = Did not answer in { $seconds } s
-# In place of the space of a volume that tells none.
-menu-card-no-space = Tells no free space
+# In place of the space of a volume that did not answer in time, or whose answer failed, in the
+# colors of warnings.
+menu-card-not-responding = Not responding
+# In place of the space of a volume that tells none, faint.
+menu-card-size-unknown = Size unknown
 # On the line over the card of a host: the file of its Host line in the ssh config, and the line.
 menu-card-defined = { $file }:{ $line }
-# The address of a host, and the host ssh jumps through to reach it.
+# At the right end of the line of a host, after its alias: its address, and the host ssh jumps
+# through to reach it.
 menu-card-via = { $address } via { $jump }
-# In place of the address of a host, in the colors of errors, when ssh -G failed for it: why.
-menu-card-not-resolved = ssh -G failed: { $reason }
-# How a host is, after its marker: connected, with the tabs of both panels on it.
-menu-card-connected = Connected · { $tabs ->
-        [0] no tabs
-        [one] { $tabs } tab
-       *[other] { $tabs } tabs
-    }
-menu-card-connecting = Connecting
-# After the marker of a host whose last attempt failed, where ssh told no reason.
+# In place of the address of a host, in the colors of errors, when ssh -G failed for it; why goes
+# to the log.
+menu-card-not-resolved = ssh -G failed
+# How a host is, under its alias: connected, or connecting. One that is not connected shows where
+# opening it goes instead, as directories.
+menu-card-connected = Connected
+menu-card-connecting = Connecting…
+# Under the alias of a host whose last attempt failed, where ssh told no reason.
 menu-card-failed = Could not connect
-# Where opening a host that is not connected goes: a remote directory, or its home.
-menu-card-opens = Opens { $dir }
-menu-card-opens-home = Opens the remote home
-# Where the other panel goes as the host opens, after where the host opens.
-menu-card-other = { $opens } · other panel { $dir }
-# Between the names of the places a row of the rest stands for.
+# Between the names of the places a row of the rest stands for, over two lines.
 menu-card-separator = {", "}
 
 ## The zoxide window of g z (src/tui/jump): the directories zoxide ranks highest for the

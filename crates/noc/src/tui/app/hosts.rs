@@ -335,12 +335,11 @@ impl App {
         self.ssh_g.resolving.insert(host);
     }
 
-    /// Takes why `ssh -G` failed for `host`; it does not run for it again until `R` in the
+    /// Takes that `ssh -G` failed for `host`; it does not run for it again until `R` in the
     /// location menu.
-    pub(crate) fn not_resolved(&mut self, host: String, reason: &str) {
+    pub(crate) fn not_resolved(&mut self, host: String) {
         self.ssh_g.resolving.remove(&host);
-        let reason = reason.split_whitespace().collect::<Vec<_>>().join(" ");
-        (self.ssh_g.unresolved).insert(host, cells::sanitize(reason.as_bytes()));
+        self.ssh_g.unresolved.insert(host);
     }
 
     /// The `ssh -G` that the location menu asks for, if that changed since the last call: for the
@@ -352,7 +351,7 @@ impl App {
             .and_then(LocationMenu::chosen_host)
             .filter(|host| {
                 !known.addresses.contains_key(*host)
-                    && !known.unresolved.contains_key(*host)
+                    && !known.unresolved.contains(*host)
                     && !known.resolving.contains(*host)
             })
             .map(str::to_owned);
@@ -372,13 +371,6 @@ impl App {
             None if self.failed.contains_key(host) => HostStatus::Failed,
             None => HostStatus::Idle,
         };
-        let tabs = [Side::Left, Side::Right]
-            .into_iter()
-            .flat_map(|side| self.tabs(side).iter())
-            .filter(|tab| {
-                matches!(tab.panel.location(), Location::Remote { host: on, .. } if on == host)
-            })
-            .count();
         let settings = self.host_settings.get(host);
         let remembered = (settings.is_some_and(HostConfig::remember_dir))
             .then(|| self.last_dirs.get(host))
@@ -391,9 +383,8 @@ impl App {
             status,
             address: self.ssh_g.addresses.get(host).cloned(),
             jump: self.ssh_g.jumps.get(host).cloned(),
-            unresolved: self.ssh_g.unresolved.get(host).cloned(),
+            unresolved: self.ssh_g.unresolved.contains(host),
             reason: self.failed.get(host).cloned(),
-            tabs,
             opens: remembered.or(started),
             other: (settings.and_then(HostConfig::other_dir))
                 .map(|dir| cells::sanitize(dir.as_bytes())),

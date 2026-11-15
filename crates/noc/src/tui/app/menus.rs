@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use noc_config::{Config, Recent};
-use noc_vfs::{Location, Volume};
+use noc_vfs::{LateAnswer, Location};
 
 use crate::about::Tool;
 use crate::i18n::fl;
@@ -386,20 +386,22 @@ impl App {
     }
 
     /// Takes the answer of the volume at `mount_point`, which a listing had without it: as it
-    /// is now, or `None` if it is not one to show. A volume no longer listed stays out.
-    pub(crate) fn volume_answered(&mut self, mount_point: &Path, volume: Option<Volume>) {
+    /// is now, not one to show, or failed, which leaves it as it is. A volume no longer listed
+    /// stays out.
+    pub(crate) fn volume_answered(&mut self, mount_point: &Path, answer: LateAnswer) {
         if let Some(index) =
             (self.volumes.iter()).position(|shown| shown.mount_point == mount_point)
         {
-            match &volume {
-                Some(volume) => self.volumes[index] = volume.clone(),
-                None => {
+            match &answer {
+                LateAnswer::Volume(volume) => self.volumes[index] = volume.clone(),
+                LateAnswer::Gone => {
                     self.volumes.remove(index);
                 }
+                LateAnswer::Failed => {}
             }
         }
         if let Some(menu) = &mut self.menu {
-            menu.answered(mount_point, volume);
+            menu.answered(mount_point, answer);
         }
     }
 

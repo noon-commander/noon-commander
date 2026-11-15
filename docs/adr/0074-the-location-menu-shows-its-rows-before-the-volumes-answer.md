@@ -1,6 +1,6 @@
 # 0074. The location menu shows its rows before the volumes answer
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0081](0081-words-for-sizes-not-known-and-cards-with-two-ends.md)
 - Date: 2026-11-15
 - Amends: [ADR 0021](0021-location-menu-replaces-the-virtual-root.md),
   [ADR 0037](0037-spinners.md)

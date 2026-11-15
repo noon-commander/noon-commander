@@ -7,272 +7,141 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-16
+
 ### Added
 
-- A setting of the viewer, `viewer.host_part_kib`, 256 by default, in Options → Configuration…
-  under View and edit: how much of a file on a host F3 reads at once. A smaller part shows sooner
-  on a slow connection.
-- Go to directory (`g d`) leaves a host for a local directory with `:`: `:` alone goes back to
-  the last local directory of the panel, `:path` starts there, and `:/…` and `:~/…` are local,
-  with Tab completing them. A name that starts with a colon is `./:name`
-  ([ADR 0065](docs/adr/0065-a-colon-without-a-host-is-local.md)).
-- Alt+1 … Alt+9 show the tab of that number in the active panel, as `2g t` does, and Alt+0 the
-  last tab; Ctrl+x before them, the other panel's. They work in Visual mode too.
-- Settings of the log, `[log]`, in a new category of Options → Configuration…, Log: `level`,
-  `filter` (directives such as `info,noc_ssh=trace` in place of the level), and `keep_days`, how
-  many days a log file stays after it was last written to, 7 by default, or always with 0. They
-  take effect at once.
-- A log that cannot be written is said in a dialog at the start, and on the About page of the
-  help.
-- Ctrl+\\ views the log of this run from its end, in every mode, and Command → View the log; it
-  opens in front of the menus, windows, and dialogs, which are there again once it closes. Without
-  the kitty keyboard protocol Ctrl+\\ arrives as Ctrl+4, which works too.
-- `o o` opens the Configuration dialog, as Options → Configuration… does, which shows the key.
-- `e` edits as F4 does in two more places, as it edits a file in the panels: on the rows of the
-  location menu, the settings of the host under the cursor, and in the search of a whole tree
-  (`f /`, `f f`) outside its fields, the file of the row at the line, which `g f` views there,
-  as F3 does.
-- F3, and `g f` on the rows, in the location menu view the `ssh_config` file that defines the
-  host under the cursor, from its `Host` line, in front of the menu, which is there again once
-  the viewer closes. F3 works while the filter takes text too.
-- `W` and F2 in the Workspaces window save the tabs of both panels in place of the workspace
-  under the cursor, after a question, No by default, or Yes over the workspace restored or saved
-  last; F7 adds a new workspace, as `a` does. F2 and F7 work while the filter takes text too
-  ([ADR 0070](docs/adr/0070-workspaces-by-name-and-saved-in-place.md)).
-- The viewer edits its file with `e` and F4, at the line on top, and reads it again once the
-  editor changed it, a file on a host once the copy went back; `g x` opens it externally, and `R`
-  reads it again, as in the panels. `] f` and `[ f` view the next file and the one before: of
-  the panel, whose cursor goes along, of the files the search of a tree found, or of the
-  directory of the log. `F` follows the end of the file as it grows, as `tail -f` and less's `F`
+- The viewer edits its file with `e` and F4, at the line on top, and reads it again once it
+  changed; `g x` opens it externally, `R` reads it again, `] f` and `[ f` view the next file and
+  the one before, and `F` follows the end of the file as it grows, as `tail -f` does
   ([ADR 0080](docs/adr/0080-the-viewer-edits-opens-and-follows-its-file.md)).
-- F4 asks first, Cancel by default, before it edits a file that looks binary (a NUL in its first
-  8,000 bytes, as git tells one), or one larger than `edit.large_mib`, 64 MiB by default; 0 never
-  asks for the size. The setting is in Options → Configuration… under View and edit, which was
-  Viewer.
+- Ctrl+\\ views the log of this run from its end, in every mode, as F9 → Command → View the log
+  does; without the kitty keyboard protocol it arrives as Ctrl+4, which works too.
+- In the location menu (`g l`), F3 and `g f` view the `ssh_config` file that defines the host
+  under the cursor, at its `Host` line, and `e` edits the host's settings, as F4 does.
+- In the search of a tree (`f /`, `f f`), `e` edits the file of the row at its line, as F4
+  does, and `g f` views it, as F3 does.
+- In the Workspaces window (`t w`), `W` and F2 save the tabs of both panels in place of the
+  workspace under the cursor, and F7 adds one, as `a` does
+  ([ADR 0070](docs/adr/0070-workspaces-by-name-and-saved-in-place.md)).
+- Alt+1 … Alt+9 show the tab of that number in the active panel, and Alt+0 the last one, in
+  Visual mode too.
+- `o o` opens the Configuration dialog.
+- Go to directory (`g d`) leaves a host for a local directory with `:`: `:` alone goes back to
+  the panel's last local directory, and `:/…` and `:~/…` are local paths
+  ([ADR 0065](docs/adr/0065-a-colon-without-a-host-is-local.md)).
+- F4 asks first, Cancel by default, before it edits a file that looks binary or is larger than
+  `edit.large_mib`.
+- A dialog at the start, and the About page of the help, say when the log cannot be written.
+- Settings, all in Options → Configuration…: `viewer.host_part_kib`, how much of a file on a host
+  F3 reads at once (256 KiB); `edit.large_mib`, the size above which F4 asks (64 MiB; 0 never
+  asks); and, in a new Log category, `log.level`, `log.filter` (such as `info,noc_ssh=trace`),
+  and `log.keep_days`, how long a log file stays after its last write (7 days; 0 keeps all).
 
 ### Changed
 
-- The help (F1), the list of the key hints (Ctrl+k twice), the Configuration dialog, and the
-  search of a tree (`f /`, `f f`) are large windows: 80% of the width and of the height of the
-  screen, whatever they show, but never narrower than the other windows, 76 cells. The help took
-  70% of the screen, the Configuration dialog 76 cells by 20 rows, the search of a tree 76 cells
-  and the whole height, and the list of the key hints 76 cells and as many rows as it showed
-  ([ADR 0087](docs/adr/0087-large-windows.md)).
-- Under its rows the list of the key hints shows what the command under the cursor does, whole,
-  broken between words, without its keys. Its column of keys is as wide as the longest keys, up to
-  a third of a row, where it was 24 cells at most.
-- F4 on a host edits a copy that keeps the file's own name, in a directory of its own that names
-  the host, as `edit-4242-17-web1/nginx.conf`, where it was `edit-4242-17-nginx.conf`: the editor
-  shows the name, and knows the kind of a file by its whole name too, as `Makefile` or `.bashrc`.
-- `G` and End in the viewer go to the end of the file, not of the part read last, and at once:
-  the viewer reads the last part of the file alone, on a host too, and the part under a scroll
-  bar dragged far ahead. The lines there have no numbers until scrolling back reaches what was
-  read before; until then the title says where the screen is in bytes, as `1.9G/2.0G 97%`. The
-  log (Ctrl+\\) opens the same way
-  ([ADR 0077](docs/adr/0077-the-viewer-jumps-to-the-end-of-a-file.md)).
-- The viewer shows a large file sooner, and scrolls through it without stopping to read as
-  long: it reads parts of 1 MiB where it read 16 (`viewer.part_mib`; a `config.toml` that sets it
-  keeps its value). A line longer than a part stays whole, up to 16 MiB, and a local file of at
-  most 16 MiB is read whole behind the screen once its start shows, so that its title still has
-  the number of its lines ([ADR 0078](docs/adr/0078-the-viewer-reads-small-parts.md)).
-- A file that grows while the viewer shows it, as a log that is being written, goes on past
-  what was its end, where a new part had it read again from its start.
-- The viewer reads a file on a host in parts of 256 KiB, so that it shows once that much has
-  arrived, where it waited for 16 MiB. A part takes one round trip less, and the host is asked
-  for no byte past it, where it sent up to 2 MiB more for nothing
-  ([ADR 0078](docs/adr/0078-the-viewer-reads-small-parts.md)).
-- The window of a job takes a count before an arrow, and Home and End, `g g`, and `G` go to
-  its first button and its last, as in every dialog
-  ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
-- The list of jobs (`f j`) takes the keys as every dialog with rows does: its rows are a stop of
-  the focus, where the motions move the cursor, with a count, PageUp and PageDown a page, and
-  Enter, Space, and a double click press Show; Tab, Left, and Right go to the buttons, where Up
-  and Down move the focus. The wheel scrolls the rows. Right, Right, Enter aborts the job under
-  the cursor, as Alt+a does.
-- The tab menu (`t t`) and the zoxide window (`g z`) no longer repeat the row under the cursor in
-  two lines under the rows, and are three lines shorter
-  ([ADR 0071](docs/adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).
-- The rows of the command history (`q :`) show the command alone, across the whole row. Under them
-  two lines say where the command under the cursor ran: its host, or `local`, then its directory,
-  with `~` for the home directory. A server, a monitor, and a folder go in front of them, or `≡`,
-  `⌂`, and `›` without icons. The date and time it ran are on the line over them, at its right
-  end, in the color of the title. The whole command no longer shows under the rows
-  ([ADR 0072](docs/adr/0072-the-command-history-shows-where-a-command-ran.md)).
-- Under the rows of the window of checksums of several files, the whole checksum of the file under
-  the cursor is a block of groups of 8 digits, at most 4 to a line, as
-  `ba7816bf 8f01cfea 414140de 5dae2223`. With icons, the file's icon goes in front of its name and
-  a pound sign in front of its checksum, whose next lines are indented as far
-  ([ADR 0087](docs/adr/0087-the-whole-checksum-under-the-list-is-in-blocks.md)).
-- The location menu (`g l`) shows the size of the home directory's volume and of each volume
-  after its free space, as `212G / 994G`, with the slashes of the rows in one column.
-- The location menu shows its rows after at most 150 ms, where a network mount that hung kept it
-  waiting 500 ms. The sizes of a volume that has not answered by then are a faint bar with a
-  shine, which they replace once they come, in the menu that is open; after 5 s, or once the
-  query fails after it hung, the bar gives way to `not responding`, in the colors of warnings,
-  which an answer that comes later still replaces. A volume that tells no size says
-  `size unknown`, faint, in place of `?`. A volume that hangs is never asked again until it
-  answers, however often the menu opens or `R` lists the volumes again
-  ([ADR 0074](docs/adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md),
-  [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
-- Under its rows the location menu shows a card of the place under the cursor in place of the
-  whole row. Its first line says what the place is, and at the right end where it comes from. For
-  a volume: the type of its file system and its kind, its mount point and what it mounts, as
-  `/dev/disk4s1`, and its free space, size, and the share free; for the home directory the same of
-  its volume, its path and the name of its volume, and the space of its volume; for a host: `sftp`,
-  its address and `ProxyJump`, and the file and line of its `Host` line; then how it is,
-  `Not connected`, `Connected`, `Connecting…`, or why its last attempt failed, in the colors of
-  errors; for the row of the rest, the names it stands for, over two lines. Its first line starts
-  with the icon of the row, a host's in the color of its status. The menu keeps its height
-  ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),
-  [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md),
-  [ADR 0082](docs/adr/0082-hosts-are-named-by-their-alias.md),
-  [ADR 0083](docs/adr/0083-a-host-not-connected-says-so.md),
-  [ADR 0084](docs/adr/0084-cards-show-a-place-and-where-it-comes-from.md)).
-- Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
-  run, and its card shows the address and the `ProxyJump` it gives, a faint bar with a shine
-  until then, or `ssh -G failed`, in the colors of errors, why going to the log. R in the menu
-  lets it run again for hosts it failed for. One that has started runs to its end
-  ([ADR 0076](docs/adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)).
-
-- The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
-  the panels order names, and the digits of F9 → Workspace follow that order.
-- The columns of tabs in the Workspaces window no longer say Left and Right: a triangle marks the
-  tab that shows on the side with the keys, and each row's count of that side's tabs is bold.
-- The Workspaces window marks the workspace restored or saved last with a dot, as F9 → Workspace
-  does, and opens with the cursor on it.
-- `t W` asks before saving over the workspace restored or saved last too, as `W` in the window
-  does, with Yes as the default; over another one, No stays the default.
-
-- The key hints show a key that only starts one sequence as that sequence whole, with what it
-  does, as `] t` and `Z Z, F10`, rather than `+1 key`.
-- The list of the key hints (Ctrl+k twice) shows its rows under headings: the keys of the panels,
-  the text fields, and the viewer in groups, such as Navigation, Two panels, Tabs, Marks and
-  selection, Search, Files, Motions, and Changes, and the keys of the other parts under their
-  names, such as Everywhere. The headings go while the filter ranks the rows best first. The help
-  of F1 shows the same groups over the keys of the panels, the text fields, and the viewer. The
-  pull-down menu (`g m`, F9) is in Other, and `g +`, `g -`, and `g *` in Marks and selection, so
-  they come later in the help and in the key hints of which-key
-  ([ADR 0086](docs/adr/0086-groups-of-keys-live-in-the-preset.md)).
-- A window that waits for its rows, such as the location menu or the search of a tree, takes a
-  fifth of the processor it took: a frame that only a spinner asks for puts back what the panels
-  drew rather than draw them again, a shine at rest draws at the pace of the dots, and the times
-  and sizes of rows are written once ([ADR 0069](docs/adr/0069-a-frame-for-time-alone.md)).
-- Each run of the TUI writes a log of its own, `~/.local/state/noc/logs/noc-<time>-<pid>.log`,
-  readable by the user alone, and kept for `log.keep_days` days after its last write; the
-  subcommands no longer write one. A thread of its own writes it, and its lines say which host,
-  job, search, or prompt they come from, and how long each took
-  ([ADR 0067](docs/adr/0067-a-log-file-for-each-run.md)). `~/.local/state/noc/noc.log` is no
-  longer written, and can be removed.
-
-- Visual mode stays with its tab: going to the other panel (Ctrl+w, Tab, a click) or to another
-  tab keeps the rows selected, which show there and are selected again once the panel or the tab
-  has the keys. Ctrl+x runs its command on them
-  ([ADR 0066](docs/adr/0066-visual-mode-stays-with-its-tab.md)).
-- A panel that reads another directory, or connects to a host to open one, no longer shows the
-  rows it leaves: once the dots turn in its title, a skeleton of three rows stands in their place
-  and in place of the status line, and the frame shows no totals. Meanwhile the rows take no keys
-  or clicks, sorting and the command line aside; a listing that fails shows them again, with the
-  cursor and the marks ([ADR 0068](docs/adr/0068-a-panel-hides-the-rows-it-leaves.md)).
-
-- F10 and `Z Z` always ask before quitting: Yes is the default, or No while jobs run.
-- A notice of ssh, such as a request to touch a security key or to use Touch ID, turns the dots
-  in front of its title while ssh waits, and has Cancel, which stops connecting, in place of OK,
-  which hid the dialog alone.
-- Error dialogs say what failed, then the path on a line of its own, then, under a line, why,
-  and always the code of the system, such as `Code: 13`, or `Code: —` where there is none
+- Each run of the TUI writes a log of its own in `~/.local/state/noc/logs/`, readable by the user
+  alone, whose lines name the host, job, or search they come from; the subcommands write none.
+  `~/.local/state/noc/noc.log` is no longer written and can be removed
+  ([ADR 0067](docs/adr/0067-a-log-file-for-each-run.md)).
+- Errors say what failed, then the path, then why, with the code of the system, and offer a way
+  on rather than OK: Retry, Connect for a host that is not connected, or Change… to edit what was
+  typed. Dialogs show only the buttons that act
   ([ADR 0063](docs/adr/0063-errors-in-parts-and-the-order-of-buttons.md)).
-- A failed copy, move, delete, or checksum names the step that failed, such as `Cannot read` or
-  `Cannot create`, and asks as the question about a taken name does: Retry (the default), Skip,
-  and Abort for this failure, and The rest for the later ones, Ask each time, Skip every failure,
-  or Skip failures with the same code. Ignore is now Skip. What would change nothing does not
-  show: Retry where the target is the source itself, The rest at the last entry, Skip for the only
-  one.
-- The question about a taken name has no The rest at the last entry, and no Skip for the only
-  one.
-- Renaming or saving onto a file asks the question of a copy about a taken name: both files with
-  their sizes and times, Overwrite, Rename… to a free name, and Cancel, the default.
-- The dialog after a directory could not be read has Retry, Up, Go to, and Cancel in place of OK;
-  Retry is the default, or Up where the panel has nothing to show.
-- Replacing a workspace by Save as has No as the default.
-- A shell of `!` or `:` that cannot run, and an edited remote file whose changes did not go back,
-  say so in parts too, with the code of the system and where the edited copy stays.
-- Most errors offer a way on rather than OK: Retry does it again (F7, save, F3, F4, an edited
-  copy that did not go back, `!` and `:`, the settings, workspaces, and history files); Connect
-  connects a host that is not connected and then does what could not start; Change… opens
-  Shift+F6, F5, F6, or F7 again with what was typed, after a rename that failed, a copy onto its
-  source, or a directory name that is taken.
-
-- A copy, move, delete, or checksum on a host whose connection is lost waits for it, rather than
-  ending: Retry in Connection connects again, and the job goes on where it was, copying again
-  only the file it was cut off in; Cancel ends it
+- A failed copy, move, delete, or checksum names the step that failed and asks as the question
+  about a taken name does: Retry, Skip, Abort, and what to do with the later failures. Ignore is
+  now Skip. Renaming or saving onto a file asks the question about a taken name too.
+- A copy, move, delete, or checksum on a host whose connection is lost waits for it: Retry
+  connects again, and the job goes on where it was
   ([ADR 0064](docs/adr/0064-jobs-wait-for-a-lost-host.md)).
-- The question of ssh about a host key shows in the colors of warnings. A yes/no question from
-  a server shows as a question of its own, in the colors of dialogs, whose No answers `no`; it can
-  no longer pass for one about a host key ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
-- Every dialog and list is 76 cells wide where the screen has room: the dialogs of `g +` and
-  `g -`, Find file… (`f /`), the location menu (`g l`), the zoxide window (`g z`), the
-  workspaces, the tab menu (`t t`), which no longer grows with its locations, and the window
-  over the viewer while it reads.
-- What a list says of the rows it does not show, `24 more…`, is faint, apart from the rows: the
-  last row of a group of the location menu, but under the cursor, the last line of a column of
-  tabs in the workspaces, and the last cell of the key hints, which no longer says `… 24 more`.
-  A chevron down goes in front of it, in the column of the icons of the location menu.
-- The location menu lists the hosts not used lately by name, after those used last, where it
-  listed them in the order of the ssh config. Names compare as in the panels, with the numbers in
-  them by value while `ui.natural_sort` is on
-  ([ADR 0085](docs/adr/0085-the-location-menu-lists-hosts-by-name.md)).
-- The fields of the host settings (F4 on a host) have short labels: Remote directory, Other panel
-  directory, and Shell, whose explanations show faint in the empty fields. Run with in Options →
-  Configuration… under Command line is Shell too.
+- F10 and `Z Z` always ask before quitting: Yes by default, or No while jobs run.
+- `t W` asks before saving over any workspace: Yes by default over the one restored or saved
+  last, which it replaced without asking, and No over another, where Yes was the default.
+- The Workspaces window and F9 → Workspace list the workspaces by name. The window marks the one
+  restored or saved last and opens on it; its columns of tabs mark the side with the keys rather
+  than say Left and Right.
+- Visual mode stays with its tab: going to the other panel or to another tab keeps the rows
+  selected ([ADR 0066](docs/adr/0066-visual-mode-stays-with-its-tab.md)).
+- A panel that reads another directory, or connects to a host, shows a skeleton in place of the
+  rows it leaves ([ADR 0068](docs/adr/0068-a-panel-hides-the-rows-it-leaves.md)).
+- The viewer:
+  - `G` and End go to the end of the file at once, on a host too, and the log opens there
+    ([ADR 0077](docs/adr/0077-the-viewer-jumps-to-the-end-of-a-file.md)).
+  - It reads parts of 1 MiB where it read 16 (`viewer.part_mib`; a value set in `config.toml`
+    stays), and of 256 KiB on a host, so that a file shows sooner
+    ([ADR 0078](docs/adr/0078-the-viewer-reads-small-parts.md)).
+  - A file that grows while it shows goes on past what was its end, rather than being read again.
+- The location menu (`g l`):
+  - It shows its rows within 150 ms, before the volumes answer; a volume that hangs says
+    `not responding` and is not asked again until it answers
+    ([ADR 0074](docs/adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
+  - It shows the size of each volume after its free space, as `212G / 994G`.
+  - Under the rows, a card of the place under the cursor takes the place of the whole row; a
+    host's gives its address and `ProxyJump`, from `ssh -G` once the cursor rests on it, and
+    whether it is connected
+    ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),
+    [ADR 0076](docs/adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)).
+  - It lists the hosts not used lately by name, not in the order of the ssh config
+    ([ADR 0085](docs/adr/0085-the-location-menu-lists-hosts-by-name.md)).
+- The help (F1), the list of the key hints (Ctrl+k twice), the Configuration dialog, and the
+  search of a tree take 80% of the screen, at least 76 cells
+  ([ADR 0088](docs/adr/0088-large-windows.md)). Every other dialog and list is 76 cells wide
+  where the screen has room, such as the dialogs of `g +` and `g -` and the tab menu (`t t`).
+- The help and the list of the key hints show the keys in groups, such as Navigation, Tabs, and
+  Marks and selection ([ADR 0086](docs/adr/0086-groups-of-keys-live-in-the-preset.md)). The list
+  says in full what the command under the cursor does, and the key hints show a key that starts
+  one sequence as that sequence, as `] t`, rather than `+1 key`.
+- The window of a job and the list of jobs (`f j`) take the keys of every dialog, such as a
+  count, `g g`, and `G`; the list moves its cursor with the motions and goes to its buttons with
+  Tab ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
+- The command history (`q :`) shows only the command on each row, and under the rows where and
+  when the command under the cursor ran
+  ([ADR 0072](docs/adr/0072-the-command-history-shows-where-a-command-ran.md)). The tab menu
+  and the zoxide window (`g z`) no longer repeat the row under the cursor
+  ([ADR 0071](docs/adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)).
+- The window of checksums of several files shows the whole checksum of the file under the cursor
+  in groups of 8 digits
+  ([ADR 0087](docs/adr/0087-the-whole-checksum-under-the-list-is-in-blocks.md)).
+- F4 on a host edits a copy that keeps the file's name, so that the editor knows its kind, as
+  `Makefile` or `.bashrc`.
+- ssh: a question about a host key shows in the colors of warnings, a server's yes/no question as
+  one of its own, and a notice such as a request to touch a security key has Cancel, which stops
+  connecting ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
+- What a list says of the rows it does not show, as `24 more…`, is faint.
+- A window that waits for its rows, such as the location menu, takes a fifth of the processor it
+  took ([ADR 0069](docs/adr/0069-a-frame-for-time-alone.md)).
+- In Options → Configuration…, Viewer is now View and edit, and Command line → Run with is Shell.
+  The fields of the host settings (F4 on a host) have shorter labels.
 
 ### Removed
 
-- The labels of hosts: `label` in `hosts.toml` and its field in the dialog of F4. A host is named
-  by its alias everywhere: in the location menu, the prompt of the command line, the title of the
-  terminal, the command history, and `noc debug hosts`. A `label` left in `hosts.toml` is an
+- Host labels: a host is named by its alias everywhere. A `label` left in `hosts.toml` is an
   error; delete the line ([ADR 0082](docs/adr/0082-hosts-are-named-by-their-alias.md)).
-- The cache of `ssh -G` results, `~/.cache/noc/resolve.json`, which nothing reads any more and
-  which may be deleted: an address shows as `ssh -G` says it in this run. The rows of hosts in the
-  location menu no longer show addresses, which their cards do, and the filter finds a host by its
-  address once `ssh -G` has told it. `noc debug hosts` runs `ssh -G` for every host each time, and
-  `--resolve` is gone ([ADR 0079](docs/adr/0079-ssh-g-results-are-not-cached.md)).
-- `NOC_LOG`: `log.level` and `log.filter` take its place.
-- Stop and Close in the window over the viewer while it reads a part that takes a while: Cancel
-  alone takes their place, the default, which stops the reading and keeps what was read, as Esc
-  did; Esc in the viewer then closes it
+- The cache of `ssh -G` results, `~/.cache/noc/resolve.json`, which can be deleted. The rows of
+  hosts in the location menu no longer show addresses, which their cards do, and
+  `noc debug hosts` has no `--resolve` any more
+  ([ADR 0079](docs/adr/0079-ssh-g-results-are-not-cached.md)).
+- `NOC_LOG`: set `log.level` or `log.filter` instead.
+- Stop and Close in the window over the viewer while it reads: Cancel takes their place
   ([ADR 0073](docs/adr/0073-a-window-with-buttons-is-a-dialog.md)).
 
 ### Fixed
 
-- Why `R` in the location menu could not list the places again, right of the filter, was crossed
-  out, as what is typed wrong is. It shows in the colors of errors, as everything that failed in
-  the menu, and nothing there is crossed out
-  ([ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
-- The viewer read the same part again and again, for ever, when scrolling up reached a part it
-  had let go while it held as much as `viewer.window_mib` allows.
+- The viewer froze on a file of very long lines, such as one of zero bytes, and could read the
+  same part again and again when scrolling back up.
+- A failed reload (`R`) of the location menu was crossed out, as text typed wrong is; it shows in
+  the colors of errors.
 - A copy or a move that could not read its source said `Cannot copy to` the source.
-- Disconnecting a host while a job ran on it did not end the job: a delete never ended, and a
-  copy failed file by file. The job ends now.
-- A copy retried after a failure that also kept it from removing what it wrote asked whether to
-  replace that file, or left its temporary file behind.
-- When ssh asked again about a host key on the terminal, after an answer that was neither yes nor
-  no, what was typed did not show.
-- Dialogs dropped the spaces a line of their text starts with, such as the indent of the other
-  names of a host key in ssh's question; such a line and the lines it breaks into keep them.
+- Disconnecting a host while a job ran on it did not end the job.
+- A copy retried after a failure asked whether to replace its own partial file, or left its
+  temporary file behind.
 - Cancel or Esc on a password, a code, or a server's question did not stop connecting: ssh sent
-  the server an empty answer and asked again. It stops connecting now, and sends nothing
-  ([ADR 0003](docs/adr/0003-askpass-bridge.md)).
-- A lost connection could give as its reason something ssh wrote while it connected, such as the
-  last line of the picture of `VisualHostKey`. The reason is now what ssh wrote after it
-  connected, else the signal that ended ssh, such as when it was killed, else that the
-  connection is closed.
-- The viewer froze on a file of lines of megabytes, such as one of zero bytes: each frame
-  counted the cells of every line on screen from its start, wrapped or cut, wrapped its lines
-  twice when it held the whole file, and wrapped them all again for each part it read. A line
-  is counted and wrapped once now.
-- What a list says in place of its rows took one line, and the rest of it did not show, such as
-  the end of why the zoxide window lists nothing, and of how to save a workspace when none is
-  saved. It takes the lines it wraps into now.
+  the server an empty answer and asked again.
+- A lost connection could give as its reason something ssh wrote while it connected.
+- ssh's repeated question about a host key on the terminal did not show what was typed.
+- Dialogs dropped the indent of their lines, such as that of the other names of a host key.
+- What a list says in place of its rows, such as why the zoxide window is empty, showed only
+  its first line.
 
 ## [0.3.1] - 2026-11-01
 

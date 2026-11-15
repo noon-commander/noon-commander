@@ -48,7 +48,7 @@ pub enum DiscoveryWarning {
 pub struct Discovery {
     /// Hosts in config order. A name is listed once, at its first definition.
     pub hosts: Vec<DiscoveredHost>,
-    /// Every file that was read, for cache invalidation.
+    /// Every file that was read, in the order read.
     pub files: Vec<PathBuf>,
     /// Problems that were skipped.
     pub warnings: Vec<DiscoveryWarning>,
@@ -89,14 +89,6 @@ impl DiscoveryOptions {
             home,
             system_config: PathBuf::from("/etc/ssh/ssh_config"),
         }
-    }
-
-    /// The top-level config files ssh reads: `config_file`, unless it is `none`, or
-    /// `<home>/.ssh/config` and `system_config`, whether they exist or not. Include them in the
-    /// files of a [`ConfigStamp`](crate::ConfigStamp), so that creating a missing config file
-    /// changes it.
-    pub fn root_files(&self) -> Vec<PathBuf> {
-        self.roots().into_iter().map(|(file, _)| file).collect()
     }
 
     fn roots(&self) -> Vec<(PathBuf, Origin)> {
@@ -995,40 +987,6 @@ mod tests {
                 ..tree.options()
             };
             assert_eq!(discover(&options, &no_env), Discovery::default());
-        }
-    }
-
-    #[test]
-    fn root_files_are_what_ssh_reads_first() {
-        let tree = Tree::new();
-        assert_eq!(
-            tree.options().root_files(),
-            [
-                tree.path("home/.ssh/config"),
-                tree.path("etc/ssh/ssh_config")
-            ]
-        );
-        assert_eq!(
-            DiscoveryOptions::new(PathBuf::from("/home/u"), None).root_files(),
-            [
-                PathBuf::from("/home/u/.ssh/config"),
-                PathBuf::from("/etc/ssh/ssh_config")
-            ]
-        );
-
-        let custom = tree.path("custom/ssh_config");
-        let options = DiscoveryOptions {
-            config_file: Some(custom.clone()),
-            ..tree.options()
-        };
-        assert_eq!(options.root_files(), [custom]);
-
-        for none in ["none", "NONE"] {
-            let options = DiscoveryOptions {
-                config_file: Some(PathBuf::from(none)),
-                ..tree.options()
-            };
-            assert_eq!(options.root_files(), Vec::<PathBuf>::new());
         }
     }
 

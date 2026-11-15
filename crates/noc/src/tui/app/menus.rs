@@ -33,6 +33,7 @@ impl App {
             .recent(&self.recent)
             .lines_like(self.sizes.menu);
         menu.set_connected(self.hosts.keys().cloned().collect());
+        menu.set_addresses(self.ssh_g.addresses.clone());
         self.menu = Some(menu);
         vec![Effect::ListPlaces { generation }]
     }

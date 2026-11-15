@@ -1,6 +1,6 @@
 # 0076. ssh -G for the host under the cursor of the location menu
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0079](0079-ssh-g-results-are-not-cached.md)
 - Date: 2026-11-15
 - Amends: [ADR 0075](0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)
 
@@ -22,24 +22,24 @@ every host at once, as at startup, but may for the host the user is at.
   got there, keys, the mouse, or the menu opening on it (`App::take_resolve`, asked between events;
   `Tasks::resolve`, which waits). Moving over hosts runs it for none of them: a newer request, or
   the cursor leaving the hosts, or the menu closing, stops the one that waits to start.
-- **Once a run for each host**, cached or not: a cached address is from an earlier run and may be
-  out of date. The cached one shows until the new one comes. A host that this run resolved, by the
-  menu or by connecting, is not asked again.
+- **Once a run for each host**. A host that this run resolved, by the menu or by connecting, is not
+  asked again. An address cached by an earlier run stood in until then; there is no cache since
+  [ADR 0079](0079-ssh-g-results-are-not-cached.md).
 - **One that started runs to its end**, as the user chose, though the cursor leaves the host or the
-  menu closes; its result goes to the cache, as a connection's does, within `ssh -G`'s own timeout
-  of 15 s.
-- **Until it tells the address of a host with none cached**, the card shows a skeleton in place of
-  the address, after the alias, which a shine crosses, from the moment the cursor is on the host;
-  with a cached one, it shows that one. A first version wrote `address not known yet` there until
-  `ssh -G` started, 150 ms later, and it flickered as the cursor moved: `ssh -G` runs for every
-  host the cursor rests on, so there is no host whose address it will not tell, or fail to. The
-  row keeps its column empty until the address comes.
+  menu closes; the app keeps its result for the run, as a connection's, within `ssh -G`'s own
+  timeout of 15 s.
+- **Until it tells the address**, the card shows a skeleton in place of the address, after the
+  alias, which a shine crosses, from the moment the cursor is on the host. A first version wrote
+  `address not known yet` there until `ssh -G` started, 150 ms later, and it flickered as the
+  cursor moved: `ssh -G` runs for every host the cursor rests on, so there is no host whose
+  address it will not tell, or fail to. The row shows no address
+  ([ADR 0079](0079-ssh-g-results-are-not-cached.md)).
 - **A failure shows in the card**, in place of the address, in the colors of errors:
   `ssh -G failed: reason`, on one line. It does not run again for that host in this run, until R in
   the menu lists the places again, which lets it run again for every host it failed for.
 - The address and the user that `ssh -G` gives come with the `ProxyJump` too (`Done::Resolved`),
-  which the card shows over the cached one; a connection's `ssh -G` reports its failure the same
-  way (`Done::NotResolved`).
+  which the card shows; a connection's `ssh -G` reports its failure the same way
+  (`Done::NotResolved`).
 
 ## Consequences
 

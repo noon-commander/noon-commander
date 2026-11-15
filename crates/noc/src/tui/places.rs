@@ -1,14 +1,12 @@
 //! What the location menu lists: the mounted volumes and the hosts.
 
 use std::collections::HashMap;
-use std::io;
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use noc_ssh::pattern::wildcard_match;
-use noc_ssh::{CachedHost, Target};
 use noc_vfs::{Late, Volume, VolumeKind, Volumes};
 
 use super::cells;
@@ -42,37 +40,27 @@ pub(crate) struct KnownHost {
     pub(crate) alias: String,
     /// The host's label from `hosts.toml`.
     pub(crate) label: Option<String>,
-    /// `user@hostname[:port]` from an earlier `ssh -G`, if cached.
-    pub(crate) address: Option<String>,
-    /// The `ProxyJump` of an earlier `ssh -G`, if cached and not direct.
-    pub(crate) jump: Option<String>,
     /// The file of its `Host` line, and the line, from 1.
     pub(crate) file: PathBuf,
     pub(crate) line: usize,
 }
 
-/// The hosts that `discovery.hide` does not hide, in config order, with the addresses cached by
-/// earlier runs. Discovery warnings go to the log.
+/// The hosts that `discovery.hide` does not hide, in config order. Discovery warnings go to the
+/// log.
 ///
-/// Blocking: reads the ssh config files and the cache.
+/// Blocking: reads the ssh config files.
 pub(crate) fn read_hosts(context: &Context) -> Vec<KnownHost> {
     let discovery = context.scan();
     for warning in &discovery.warnings {
         tracing::warn!("{}", describe(warning));
     }
-    let cache = context.load_cache(&discovery);
     discovery
         .visible(&context.config().discovery.hide)
-        .map(|host| {
-            let cached = cache.get(&Target::new(host.alias.as_str()));
-            KnownHost {
-                alias: host.alias.clone(),
-                label: context.label(&host.alias),
-                address: cached.map(CachedHost::address),
-                jump: cached.and_then(|cached| cached.proxy_jump.clone()),
-                file: host.file.clone(),
-                line: host.line,
-            }
+        .map(|host| KnownHost {
+            alias: host.alias.clone(),
+            label: context.label(&host.alias),
+            file: host.file.clone(),
+            line: host.line,
         })
         .collect()
 }
@@ -141,18 +129,8 @@ pub(crate) fn volume_name(volume: &Volume) -> String {
     }
 }
 
-/// Stores what `ssh -G` said about `alias` in the cache, for the next listing and run.
-///
-/// Blocking: reads the ssh config files and writes the cache.
-pub(crate) fn remember(context: &Context, alias: &str, host: CachedHost) -> io::Result<()> {
-    let mut cache = context.load_cache(&context.scan());
-    cache.insert(&Target::new(alias), host);
-    cache.save()
-}
-
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
     use std::fs;
     use std::path::PathBuf;
 
@@ -161,15 +139,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_visible_hosts_with_labels_and_cached_addresses() {
+    fn reads_visible_hosts_with_labels() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         let ssh_dir = dir.path().join("ssh");
         fs::create_dir_all(&ssh_dir).unwrap();
         let ssh_config = ssh_dir.join("config");
         fs::write(&ssh_config, "Host web\nHost db\nHost github.com\nHost *\n").unwrap();
-        let cache_home = dir.path().join("cache");
-        let env = move |name: &str| (name == "XDG_CACHE_HOME").then(|| OsString::from(&cache_home));
         let mut config = Config::default();
         config.ssh.config_file = Some(ssh_config.clone());
         config.discovery.hide = vec!["github.*".to_owned()];
@@ -181,17 +157,9 @@ mod tests {
                 ..SftpHost::default()
             }),
         );
-        let paths = Paths::resolve(&home, 501, &env);
+        let paths = Paths::resolve(&home, 501, &|_| None);
         let config_file = dir.path().join("config.toml");
         let context = Context::new(paths, config, config_file, hosts);
-
-        let db = CachedHost {
-            user: "admin".to_owned(),
-            hostname: "10.0.0.5".to_owned(),
-            port: 2222,
-            proxy_jump: Some("bastion".to_owned()),
-        };
-        remember(&context, "db", db).unwrap();
 
         assert_eq!(
             read_hosts(&context),
@@ -199,16 +167,12 @@ mod tests {
                 KnownHost {
                     alias: "web".to_owned(),
                     label: Some("Prod".to_owned()),
-                    address: None,
-                    jump: None,
                     file: ssh_config.clone(),
                     line: 1,
                 },
                 KnownHost {
                     alias: "db".to_owned(),
                     label: None,
-                    address: Some("admin@10.0.0.5:2222".to_owned()),
-                    jump: Some("bastion".to_owned()),
                     file: ssh_config,
                     line: 2,
                 },

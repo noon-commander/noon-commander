@@ -448,22 +448,16 @@ fn debug_hosts_lists_ssh_config_hosts() {
         .collect();
     assert_eq!(
         lines,
-        ["prod-web (also prod-web.example.com)", "nas Storage"]
-    );
-
-    let output = sandbox.run(&["debug", "hosts", "--resolve"]);
-    assert!(output.status.success(), "{}", stderr(&output));
-    assert!(
-        stdout(&output).contains("tester@prod-web.example:2222"),
-        "{}",
-        stdout(&output)
+        [
+            "prod-web tester@prod-web.example:2222 (also prod-web.example.com)",
+            "nas tester@nas.example:2222 Storage"
+        ]
     );
 }
 
 #[test]
-fn debug_hosts_shows_cached_addresses_until_ssh_config_changes() {
+fn debug_hosts_runs_ssh_g_each_time_and_keeps_nothing() {
     let sandbox = Sandbox::new(&[("FAKE_SSH_PORT", "2222")]);
-    // The cache also watches the names next to ssh_config, so it gets a directory of its own.
     let ssh_config = sandbox.path("home/.ssh/config");
     std::fs::write(&ssh_config, "Host web\n").unwrap();
     std::fs::write(
@@ -475,21 +469,20 @@ fn debug_hosts_shows_cached_addresses_until_ssh_config_changes() {
         ),
     )
     .unwrap();
-    let resolved = sandbox.run(&["debug", "hosts", "--resolve"]);
+    let resolved = sandbox.run(&["debug", "hosts"]);
     assert!(resolved.status.success(), "{}", stderr(&resolved));
     assert_eq!(stdout(&resolved), "web  tester@web.example:2222\n");
-    assert!(sandbox.path("cache/noc/resolve.json").is_file());
+    assert!(!sandbox.path("cache/noc").exists(), "nothing cached");
 
-    // Without the fake ssh, the address can only come from the cache.
+    // Without ssh, no address of an earlier run stands in.
     std::fs::remove_file(sandbox.path("ssh")).unwrap();
-    let cached = sandbox.run(&["debug", "hosts"]);
-    assert!(cached.status.success(), "{}", stderr(&cached));
-    assert_eq!(stdout(&cached), stdout(&resolved));
-
-    std::fs::write(&ssh_config, "Host web\n  Port 2200\n").unwrap();
-    let changed = sandbox.run(&["debug", "hosts"]);
-    assert!(changed.status.success(), "{}", stderr(&changed));
-    assert_eq!(stdout(&changed), "web\n");
+    let failed = sandbox.run(&["debug", "hosts"]);
+    assert!(failed.status.success(), "{}", stderr(&failed));
+    assert!(
+        stdout(&failed).starts_with("web  error: "),
+        "{}",
+        stdout(&failed)
+    );
 }
 
 #[test]

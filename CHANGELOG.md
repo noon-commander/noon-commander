@@ -88,10 +88,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   status, and where a host opens comes after a folder. The menu keeps its height
   ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)).
 - Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
-  run, and its card shows the address and the `ProxyJump` it gives, the cached ones until then, a
-  faint bar with a shine where none is known, or why `ssh -G` failed, in the colors of errors. R in
-  the menu lets it run again for hosts it failed for. One that has started runs to its end, and its
-  result goes to the cache
+  run, and its card shows the address and the `ProxyJump` it gives, a faint bar with a shine
+  until then, or why `ssh -G` failed, in the colors of errors. R in the menu lets it run again for
+  hosts it failed for. One that has started runs to its end
   ([ADR 0076](docs/adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
@@ -172,6 +171,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
+- The cache of `ssh -G` results, `~/.cache/noc/resolve.json`, which nothing reads any more and
+  which may be deleted: an address shows as `ssh -G` says it in this run. The rows of hosts in the
+  location menu no longer show addresses, which their cards do, and the filter finds a host by its
+  address once `ssh -G` has told it. `noc debug hosts` runs `ssh -G` for every host each time, and
+  `--resolve` is gone ([ADR 0079](docs/adr/0079-ssh-g-results-are-not-cached.md)).
 - `NOC_LOG`: `log.level` and `log.filter` take its place.
 - Stop and Close in the window over the viewer while it reads a part that takes a while: Cancel
   alone takes their place, the default, which stops the reading and keeps what was read, as Esc

@@ -161,9 +161,8 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   (`Done::VolumeAnswered`) replace their volumes in both; a newer listing stops waiting for those
   of the one before it, and waits for the answers still to come itself
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
-- Hosts come in config order, named by their `label` from `hosts.toml` if set, with the address
-  of this session's `ssh -G`, or else the one cached from an earlier one. `[discovery] hide`
-  leaves out hosts by pattern.
+- Hosts come in config order, named by their `label` from `hosts.toml` if set; their address
+  comes from this run's `ssh -G` alone. `[discovery] hide` leaves out hosts by pattern.
 - Opening a host connects in the background and opens, shown as an absolute path, the last
   directory shown on it in this session if `remember_dir` is set and the directory is still
   there, else the configured `start_dir`, else the remote home directory. If the host has an
@@ -248,10 +247,10 @@ choose a volume or a host, grouped under headings:
  ║ + Macintosh HD                  212G /  994G ║
  ║ + USB                          12.0G / 64.0G ║
  ║ SFTP                                         ║
- ║ ● Prod                       deploy@10.0.0.5 ║
+ ║ ● Prod                                       ║
  ║ ○ db                                         ║
- ║ ○ staging                    ubuntu@stg:2222 ║
- ║ ✗ nas                              admin@nas ║
+ ║ ○ staging                                    ║
+ ║ ✗ nas                                        ║
  ║ ○ backup                                     ║
  ║ ○ ci                                         ║
  ║ ○ git                                        ║
@@ -264,7 +263,8 @@ choose a volume or a host, grouped under headings:
 
 - Favorites holds `Home`, which opens the home directory, with the free space and the size of
   the volume that holds it; the user's favorites will join it. Mounts holds the volumes, with
-  their free space and size, and SFTP the hosts, with their addresses. Each of the two numbers
+  their free space and size, and SFTP the hosts, whose addresses are in their cards
+  ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)). Each of the two numbers
   takes as many cells as the widest of the rows shown, so the slashes between them line up; a
   volume that did not tell its space, or tells a size of 0, shows `- / -` in those columns.
   Plugins for other backends will be a group of their own. A group without rows is not drawn.
@@ -296,7 +296,7 @@ choose a volume or a host, grouped under headings:
   password of a URL), then its free space, its size, and the share free, a skeleton while they are
   to come, `Did not answer in 5 s`, or `Tells no free space`; a host the file and line of its
   `Host` line, its alias, address, and `ProxyJump`, from this run's `ssh -G`, which runs once the
-  cursor rests on the host, else from the cache, else a skeleton until `ssh -G` tells them, or
+  cursor rests on the host, else a skeleton until `ssh -G` tells them, or
   `ssh -G failed: reason` in the colors of errors
   ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), then
   `Connected` with the tabs on it, `Connecting`, why its last attempt failed in the colors of errors
@@ -317,7 +317,8 @@ choose a volume or a host, grouped under headings:
   with the active panel, as after Ctrl+w f and Ctrl+w v. After Esc, `j` and `k` move too, and
   `g g` and `G` go to the first and the last row.
 - The filter, which `/` types in again, finds the places by name, path or mount point,
-  alias, label, and address, and finds every one, hidden ones too; the rows of more go away while
+  alias, label, and the address `ssh -G` told in this run (`LocationMenu::set_addresses`), and
+  finds every one, hidden ones too; the rows of more go away while
   the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
   default, best first, without the headings of the groups; or a row's text must hold the filter,
   or match it as a regular expression, in their order, with smart case. The cursor goes to the
@@ -333,7 +334,7 @@ choose a volume or a host, grouped under headings:
   whole and atomically, one change after another. Mount points that are not UTF-8 are not kept,
   since TOML cannot hold them.
 - The menu is modal (keymap context `location_menu`). Each time it opens, and on `R`, a
-  background task reads the volumes, scans the ssh config, and loads the cache of `ssh -G`;
+  background task reads the volumes and scans the ssh config;
   that listing carries a generation of its own, so a stale one is dropped. A host that connects
   or disconnects while the menu is open shows its new state at once, and the cursor stays on
   its row.
@@ -919,11 +920,10 @@ predicates. So:
    when the TUI connects to a host, once a run for a host that the cursor of the location menu
    rests on for 150 ms, which, once started, runs to its end
    ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), or for
-   `noc debug hosts --resolve`, with bounded parallelism; never for every host at startup. A
-   failure shows in the card of the host until R in the menu. Results are cached in
-   `~/.cache/noc/resolve.json`, valid while the ssh settings, the config files read
-   (inode, mtime, size), and the names in their directories stay the same, so earlier
-   addresses show at once. A cached entry only stands in until `ssh -G` runs again.
+   `noc debug hosts`, for every host, with bounded parallelism; never for every host at startup
+   of the TUI. A failure shows in the card of the host until R in the menu. Results live in the
+   app for the run (`App::ssh_g`) and are never cached
+   ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)).
 4. `discovery.hide` hides patterns such as `github.com`.
 
 ## Authentication
@@ -958,7 +958,7 @@ noc -V, --version            the version: noc 0.2.0
 noc config init              write the commented default config.toml
 noc config paths             show the files and directories in use
 noc debug version            version, build, system, terminal, editor, zoxide: one `key value` line each
-noc debug hosts [--resolve]  hosts from ssh_config with cached addresses; --resolve runs ssh -G
+noc debug hosts              hosts from ssh_config with their addresses; runs ssh -G for each
 noc debug ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 ```
 
@@ -1274,7 +1274,7 @@ variables:
 | Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
 | Data (workspaces, bookmarks) | `~/.local/share/noc/` (`workspaces.toml`) |
 | State (`history.toml`, `recent.toml`, last directories, `logs/`) | `~/.local/state/noc/` |
-| Cache (`ssh -G` results) | `~/.cache/noc/` |
+| Cache (unused since [ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
 Unknown keys are errors, so a typo does not silently fall back to a default. `noc config init`

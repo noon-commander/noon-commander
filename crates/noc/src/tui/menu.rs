@@ -6,7 +6,7 @@
 //! ten places. The sizes of a volume that did not answer in time come later, a skeleton in their
 //! place until then.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -123,6 +123,8 @@ struct Contents {
     recent: Recent,
     /// Hosts that are connected, connecting, or stalled, which always show.
     connected: HashSet<String>,
+    /// Where `ssh -G` said hosts connect to in this run, which the filter finds them by.
+    addresses: HashMap<String, String>,
     /// Groups that show all their places.
     expanded: HashSet<Group>,
 }
@@ -139,6 +141,7 @@ impl LocationMenu {
                 places: Places::default(),
                 recent: Recent::default(),
                 connected: HashSet::new(),
+                addresses: HashMap::new(),
                 expanded: HashSet::new(),
             },
             loading: Loading::new(generation),
@@ -199,12 +202,12 @@ impl LocationMenu {
             .then_some(&self.sizes)
     }
 
-    /// The wait for the address of the host under the cursor, while it has none cached and
-    /// `ssh -G` has not told it, nor failed for it, in this run, as `told` says: its shine
-    /// crosses the skeleton in the card.
+    /// The wait for the address of the host under the cursor, while `ssh -G` has not told it,
+    /// nor failed for it, in this run, as `told` says: its shine crosses the skeleton in the
+    /// card.
     pub(crate) fn address_wait(&self, told: &dyn Fn(&str) -> bool) -> Option<&Wait> {
         match self.chosen()? {
-            Item::Host(host) if host.address.is_none() && !told(&host.alias) => Some(&self.address),
+            Item::Host(host) if !told(&host.alias) => Some(&self.address),
             Item::Home(..) | Item::Volume(_) | Item::Host(_) | Item::More(..) => None,
         }
     }
@@ -242,6 +245,15 @@ impl LocationMenu {
     pub(crate) fn set_connected(&mut self, connected: HashSet<String>) {
         if self.contents.connected != connected {
             self.contents.connected = connected;
+            self.refresh();
+        }
+    }
+
+    /// Takes where `ssh -G` said hosts connect to in this run, which the filter finds them by.
+    /// The cursor stays on its row.
+    pub(crate) fn set_addresses(&mut self, addresses: HashMap<String, String>) {
+        if self.contents.addresses != addresses {
+            self.contents.addresses = addresses;
             self.refresh();
         }
     }
@@ -304,7 +316,7 @@ impl LocationMenu {
         self.contents
             .rows()
             .into_iter()
-            .map(|(item, shows)| (texts(item), shows))
+            .map(|(item, shows)| (texts(item, &self.contents.addresses), shows))
             .collect()
     }
 
@@ -443,8 +455,8 @@ impl LocationMenu {
         };
         let sizes: Vec<Option<Sizes>> = items.iter().map(|item| sizes(*item, &asked)).collect();
         let columns = SizeColumns::of(sizes.iter().flatten());
-        let infos: Vec<Info> = (items.iter().zip(&sizes))
-            .map(|(item, sizes)| info(*item, sizes.as_ref(), hosts, columns))
+        let infos: Vec<Info> = (sizes.iter())
+            .map(|sizes| info(sizes.as_ref(), columns))
             .collect();
         let widest = infos.iter().map(Info::width).max().unwrap_or(0);
         let look = Look {
@@ -804,30 +816,21 @@ impl Look<'_> {
     }
 
     /// How to reach `host`, in `width` cells, after its alias: its address and the host ssh
-    /// jumps through, from this session's `ssh -G` as `state` has them, else why that failed, in
-    /// the colors of errors, else from the cache; else a skeleton, as `ssh -G` runs for every
-    /// host the cursor rests on: no text that would show for the moment before it starts.
+    /// jumps through, from this run's `ssh -G` as `state` has them, else why that failed, in the
+    /// colors of errors; else a skeleton, as `ssh -G` runs for every host the cursor rests on:
+    /// no text that would show for the moment before it starts.
     fn reach_line(&self, host: &KnownHost, state: &HostState, width: usize) -> Line<'static> {
-        let reach = |address: &str, jump: Option<&String>| match jump {
-            Some(jump) => fl!(
-                "menu-card-via",
-                address = cells::sanitize(address.as_bytes()),
-                jump = jump.as_str()
-            ),
-            None => cells::sanitize(address.as_bytes()),
-        };
         let dialog = self.theme.dialog;
         let (text, style) = if let Some(address) = &state.address {
-            (reach(address, state.jump.as_ref()), dialog)
+            let address = cells::sanitize(address.as_bytes());
+            let text = match &state.jump {
+                Some(jump) => fl!("menu-card-via", address = address, jump = jump.as_str()),
+                None => address,
+            };
+            (text, dialog)
         } else if let Some(reason) = &state.unresolved {
             let text = fl!("menu-card-not-resolved", reason = reason.as_str());
             (text, self.theme.invalid(dialog))
-        } else if let Some(address) = &host.address {
-            let jump = host
-                .jump
-                .as_ref()
-                .map(|jump| cells::sanitize(jump.as_bytes()));
-            (reach(address, jump.as_ref()), dialog)
         } else {
             (String::new(), dialog)
         };
@@ -925,8 +928,8 @@ impl Look<'_> {
     }
 }
 
-/// What the filter finds a row by.
-fn texts(item: Item<'_>) -> Vec<String> {
+/// What the filter finds a row by; a host also by its address in `addresses`.
+fn texts(item: Item<'_>, addresses: &HashMap<String, String>) -> Vec<String> {
     match item {
         Item::Home(home, _) => vec![fl!("menu-home"), home.to_string_lossy().into_owned()],
         Item::Volume(volume) => vec![
@@ -936,7 +939,7 @@ fn texts(item: Item<'_>) -> Vec<String> {
         Item::Host(host) => [
             Some(&host.alias),
             host.label.as_ref(),
-            host.address.as_ref(),
+            addresses.get(&host.alias),
         ]
         .into_iter()
         .flatten()
@@ -1085,25 +1088,16 @@ impl Info {
 }
 
 /// Right of a row: the `sizes` of the volume of the home directory or of a volume, in
-/// `columns`, or the address of a host.
-fn info(
-    item: Item<'_>,
-    sizes: Option<&Sizes>,
-    hosts: &dyn Fn(&str) -> HostState,
-    columns: SizeColumns,
-) -> Info {
-    let text = match (item, sizes) {
-        (_, Some(Sizes::Known { free, total, .. })) => columns.text(free, total),
-        (_, Some(Sizes::Waiting)) => return Info::Waiting(columns.width()),
-        (_, Some(Sizes::GivenUp | Sizes::Unknown)) => {
+/// `columns`; nothing for a host, whose address is in its card.
+fn info(sizes: Option<&Sizes>, columns: SizeColumns) -> Info {
+    let text = match sizes {
+        Some(Sizes::Known { free, total, .. }) => columns.text(free, total),
+        Some(Sizes::Waiting) => return Info::Waiting(columns.width()),
+        Some(Sizes::GivenUp | Sizes::Unknown) => {
             let mark = fl!("menu-space-unknown");
             columns.text(&mark, &mark)
         }
-        (Item::Host(host), None) => {
-            let address = hosts(&host.alias).address.or_else(|| host.address.clone());
-            cells::sanitize(address.unwrap_or_default().as_bytes())
-        }
-        (Item::Home(..) | Item::Volume(_) | Item::More(..), None) => String::new(),
+        None => String::new(),
     };
     Info::Text(text)
 }
@@ -1136,12 +1130,10 @@ mod tests {
         }
     }
 
-    fn host(alias: &str, label: Option<&str>, address: Option<&str>) -> KnownHost {
+    fn host(alias: &str, label: Option<&str>) -> KnownHost {
         KnownHost {
             alias: alias.to_owned(),
             label: label.map(str::to_owned),
-            address: address.map(str::to_owned),
-            jump: None,
             file: PathBuf::from("/Users/me/.ssh/config"),
             line: 1,
         }
@@ -1158,9 +1150,9 @@ mod tests {
                 },
             ],
             hosts: vec![
-                host("web", Some("Prod"), Some("deploy@10.0.0.5")),
-                host("db", None, None),
-                host("proxy", None, Some("root@proxy.example.org")),
+                host("web", Some("Prod")),
+                host("db", None),
+                host("proxy", None),
             ],
             ..Places::default()
         }
@@ -1171,7 +1163,7 @@ mod tests {
         Places {
             volumes: vec![volume("/", None, VolumeKind::System)],
             hosts: (1..=count)
-                .map(|index| host(&format!("h{index:02}"), None, None))
+                .map(|index| host(&format!("h{index:02}"), None))
                 .collect(),
             ..Places::default()
         }
@@ -1240,6 +1232,7 @@ mod tests {
             } else {
                 HostStatus::Idle
             },
+            address: (alias == "web").then(|| "deploy@10.0.0.5".to_owned()),
             tabs: 2,
             ..HostState::default()
         };
@@ -1335,12 +1328,19 @@ mod tests {
         );
         typed(&mut menu, "1");
         assert!(menu.items().is_empty());
-        let mut home = menu_at(home());
-        typed(&mut home, "hom");
-        assert_eq!(home.chosen().map(key), Some(Key::Home));
+        let mut at_home = menu_at(home());
+        typed(&mut at_home, "hom");
+        assert_eq!(at_home.chosen().map(key), Some(Key::Home));
         assert_eq!(press(&mut menu, Action::Confirm), MenuEvent::Pending);
         let text = draw(&mut menu, 12);
         assert!(text.contains("Nothing matches"), "{text}");
+
+        let mut menu = menu_at(home());
+        typed(&mut menu, "admin@10");
+        assert!(menu.items().is_empty(), "no address until ssh -G tells it");
+        menu.set_addresses([("db".to_owned(), "admin@10.0.0.7".to_owned())].into());
+        let told = "the address ssh -G told in this run";
+        assert_eq!(keys(&menu), [Key::Host("db".to_owned())], "{told}");
     }
 
     #[test]
@@ -1648,7 +1648,7 @@ mod tests {
                 },
                 sized("/Volumes/pseudo", "pseudo", 0, 0),
             ],
-            hosts: vec![host("web", None, Some("deploy@10.0.0.5"))],
+            hosts: vec![host("web", None)],
             ..Places::default()
         };
         let mut menu = menu_with(home(), &Recent::default(), places);
@@ -1669,7 +1669,20 @@ mod tests {
         for name in ["share", "pseudo"] {
             assert!(row(name).contains("     - /     - ║"), "{name}: {text}");
         }
-        assert!(row("web").contains(" deploy@10.0.0.5 ║"), "{text}");
+
+        press(&mut menu, Action::End);
+        let told = |_: &str| HostState {
+            address: Some("deploy@10.0.0.5".to_owned()),
+            ..HostState::default()
+        };
+        let (_, buffer) = card_in(&mut menu, &told, &Theme::terminal(), Decor::new(false));
+        let lines = (0..buffer.area.height).filter(|&y| {
+            let line: String = (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect();
+            line.contains("deploy@10.0.0.5")
+        });
+        assert_eq!(lines.count(), 1, "a host's address is in its card alone");
     }
 
     /// Places with the volumes `/`, which has answered, and `/Volumes/NAS`, which was asked
@@ -1822,6 +1835,7 @@ mod tests {
         let theme = Theme::mc_classic().with_glyphs(&Glyphs::NERD);
         let connected = |_: &str| HostState {
             status: HostStatus::Connected,
+            address: Some("deploy@10.0.0.5".to_owned()),
             tabs: 1,
             ..HostState::default()
         };
@@ -1923,7 +1937,6 @@ mod tests {
     #[test]
     fn the_card_of_a_host_says_where_it_is_defined_how_to_reach_it_and_how_it_is() {
         let mut places = places();
-        places.hosts[0].jump = Some("bastion".to_owned());
         places.hosts[0].line = 12;
         places.hosts[1].file = PathBuf::from("/etc/ssh/ssh_config");
         places.hosts[1].line = 40;
@@ -1931,6 +1944,8 @@ mod tests {
         let state = |alias: &str| match alias {
             "web" => HostState {
                 status: HostStatus::Connected,
+                address: Some("deploy@10.0.0.5".to_owned()),
+                jump: Some("bastion".to_owned()),
                 tabs: 1,
                 ..HostState::default()
             },
@@ -1940,6 +1955,7 @@ mod tests {
                 ..HostState::default()
             },
             _ => HostState {
+                address: Some("root@proxy.example.org".to_owned()),
                 opens: Some("/srv/app".to_owned()),
                 other: Some("~/logs".to_owned()),
                 ..HostState::default()
@@ -2006,7 +2022,7 @@ mod tests {
     }
 
     #[test]
-    fn the_card_of_a_host_takes_its_address_from_ssh_g_and_waits_for_it_with_none() {
+    fn the_card_of_a_host_takes_its_address_from_ssh_g_and_waits_for_it() {
         let mut menu = menu_with(remote("web"), &Recent::default(), places());
         let fresh = |_: &str| HostState {
             address: Some("deploy@10.0.0.9".to_owned()),
@@ -2015,16 +2031,10 @@ mod tests {
         };
         let [_, reach, _] = card(&mut menu, &fresh);
         let fresh = "║ ○ web · deploy@10.0.0.9 via gate ";
-        assert!(reach.starts_with(fresh), "this session's: {reach}");
-        let [_, reach, _] = card(&mut menu, &idle);
-        let cached = "║ ○ web · deploy@10.0.0.5 ";
+        assert!(reach.starts_with(fresh), "this run's: {reach}");
         assert!(
-            reach.starts_with(cached),
-            "the cached one meanwhile: {reach}"
-        );
-        assert!(
-            menu.address_wait(&|_| false).is_none(),
-            "no skeleton to shine over"
+            menu.address_wait(&|_| true).is_none(),
+            "no skeleton to shine over once ssh -G told it"
         );
 
         press(&mut menu, Action::Down);
@@ -2032,10 +2042,6 @@ mod tests {
         let skeleton = "from the start, before ssh -G runs: no text in between";
         assert!(reach.starts_with("║ ○ db · ------"), "{skeleton}: {reach}");
         assert!(menu.address_wait(&|_| false).is_some());
-        assert!(
-            menu.address_wait(&|_| true).is_none(),
-            "once ssh -G told it"
-        );
         let failed = |_: &str| HostState {
             unresolved: Some("Bad configuration option".to_owned()),
             ..HostState::default()

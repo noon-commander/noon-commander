@@ -1,5 +1,5 @@
 use super::*;
-use crate::tui::menu::NO_ANSWER;
+use crate::tui::menu::{LocationMenu, NO_ANSWER};
 
 /// Types `text` in the filter of the list in front, after `/`.
 fn filter(app: &mut App, text: &str) {
@@ -542,9 +542,17 @@ fn the_menu_shows_failures_and_fresh_addresses() {
         }
     );
     menu_on(&mut app, Side::Left);
-    let text = screen_of(&mut app, 14);
-    assert!(text.contains("✗ web"), "{text}");
-    assert!(text.contains("deploy@10.0.0.9"), "{text}");
+    app.handle(action(Action::Down));
+    assert_eq!(
+        app.menu.as_ref().and_then(LocationMenu::chosen_host),
+        Some("web")
+    );
+    let text = screen_of(&mut app, 16);
+    assert!(
+        text.contains("✗ web · deploy@10.0.0.9"),
+        "in its card: {text}"
+    );
+    assert!(text.contains("Connection refused"), "{text}");
 
     // A new attempt clears the failure.
     app.handle(action(Action::Cancel));

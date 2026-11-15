@@ -325,6 +325,9 @@ impl App {
         known.resolving.remove(&host);
         known.unresolved.remove(&host);
         known.addresses.insert(host, address);
+        if let Some(menu) = &mut self.menu {
+            menu.set_addresses(self.ssh_g.addresses.clone());
+        }
     }
 
     /// Takes that `ssh -G` runs for `host`, from the location menu.

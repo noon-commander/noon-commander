@@ -1,6 +1,6 @@
 # 0007. Typed host settings in hosts.toml, written by the TUI
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0079](0079-ssh-g-results-are-not-cached.md)
 - Date: 2026-10-02
 
 ## Context
@@ -31,7 +31,8 @@ had to pass the argument validator.
   there, before `start_dir`. Nothing is written to disk for it.
 - Per-host ssh `args` are removed; `ssh.args` stays for every invocation, and per-host options go
   in ssh_config. The ssh command line is: program → forced options → `-F` and `ssh.args` → role
-  options → `--` → destination. The `ssh -G` cache is keyed by destination alone (format 2).
+  options → `--` → destination. The `ssh -G` cache is keyed by destination alone (format 2), until
+  there is none ([ADR 0079](0079-ssh-g-results-are-not-cached.md)).
 - F4 on a host edits its table. Noon Commander reads the file again before writing, changes only
   that table through `toml_edit`, so comments, formatting, and other tables stay, removes values
   that are defaults and a table left with none, refuses to touch a file that is not valid TOML,

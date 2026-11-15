@@ -22,7 +22,7 @@ use noc_vfs::{
     LocalFs, Location, Metadata, RemotePath, Space, Vfs, VfsError, VfsPath as _, Volume,
 };
 use noc_viewer::{Part, Progress, Want, read_part};
-use tokio::sync::{Mutex, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument as _;
@@ -299,8 +299,6 @@ pub(crate) struct Tasks {
     hosts: JoinSet<()>,
     /// Jobs that run here, not in the task of a host.
     jobs: JoinSet<()>,
-    /// Taken while the `ssh -G` cache is read, changed, and written.
-    cache: Arc<Mutex<()>>,
     /// Changes to the config file, which one task writes in turn, so that a change never
     /// overtakes the one before it.
     config_saves: mpsc::UnboundedSender<(Config, Config)>,
@@ -349,7 +347,6 @@ impl Tasks {
             askpass,
             hosts: JoinSet::new(),
             jobs: JoinSet::new(),
-            cache: Arc::new(Mutex::new(())),
             config_saves,
             workspace_changes,
             history_changes,
@@ -546,7 +543,6 @@ impl Tasks {
                 Arc::clone(&self.context),
                 host.clone(),
                 stop.clone(),
-                Arc::clone(&self.cache),
                 self.done.clone(),
             )
             .instrument(span.clone()),
@@ -562,8 +558,8 @@ impl Tasks {
     }
 
     /// Runs `ssh -G` for `host` after [`RESOLVE_DELAY`], unless a newer request comes first;
-    /// `None` only stops the one that waits. One that has started runs to its end, and its
-    /// result goes to the cache, as a connection's does.
+    /// `None` only stops the one that waits. One that has started runs to its end, and the app
+    /// keeps its result for this run, as a connection's.
     fn resolve(&mut self, host: Option<String>) {
         if let Some(waiting) = self.resolve.take() {
             waiting.abort();
@@ -572,7 +568,6 @@ impl Tasks {
             return;
         };
         let context = Arc::clone(&self.context);
-        let cache = Arc::clone(&self.cache);
         let done = self.done.clone();
         let waiting = tokio::spawn(async move {
             tokio::time::sleep(RESOLVE_DELAY).await;
@@ -580,7 +575,7 @@ impl Tasks {
             let _ = done.send(Done::Resolving { host: host.clone() });
             let span = tracing::info_span!("resolve", %host);
             let stop = CancellationToken::new();
-            tokio::spawn(resolve_address(context, host, stop, cache, done).instrument(span));
+            tokio::spawn(resolve_address(context, host, stop, done).instrument(span));
         });
         self.resolve = Some(waiting.abort_handle());
     }

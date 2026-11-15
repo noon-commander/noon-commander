@@ -22,7 +22,8 @@ pub struct Paths {
     /// History, recent hosts and volumes, last directories, and logs: `$XDG_STATE_HOME/noc`,
     /// by default `~/.local/state/noc`.
     pub state_dir: PathBuf,
-    /// Cached `ssh -G` results: `$XDG_CACHE_HOME/noc`, by default `~/.cache/noc`.
+    /// The cache: `$XDG_CACHE_HOME/noc`, by default `~/.cache/noc`. Nothing goes there now; the
+    /// results of `ssh -G` went there.
     pub cache_dir: PathBuf,
     /// Control sockets, the askpass socket, and temporary files: `$XDG_RUNTIME_DIR/noc`,
     /// else `$TMPDIR/noc-<uid>`, else `/tmp/noc-<uid>`. Call

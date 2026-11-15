@@ -80,14 +80,9 @@ pub(crate) enum ConfigCommand {
 pub(crate) enum DebugCommand {
     /// Print the version, build, system, terminal, editor, and zoxide, one `key value` line each.
     Version,
-    /// List the hosts from `ssh_config`.
-    Hosts {
-        /// Run `ssh -G` for every host to show and cache where it connects to. This also runs
-        /// the commands of `Match exec` lines in `ssh_config`. Without it, addresses come from
-        /// the cache of earlier runs, as long as the ssh configuration has not changed.
-        #[arg(long)]
-        resolve: bool,
-    },
+    /// List the hosts from `ssh_config` with where each connects to, from `ssh -G`, which runs
+    /// for every host, and with it the commands of `Match exec` lines in `ssh_config`.
+    Hosts,
     /// List a directory.
     Ls {
         /// A local path, or `host:path` for a remote one; `host:` is the remote home

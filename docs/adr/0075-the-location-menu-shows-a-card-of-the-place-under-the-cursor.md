@@ -1,7 +1,8 @@
 # 0075. The location menu shows a card of the place under the cursor
 
 - Status: Accepted; amended by
-  [ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)
+  [ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md),
+  [ADR 0079](0079-ssh-g-results-are-not-cached.md)
 - Date: 2026-11-15
 - Amends: [ADR 0041](0041-lists-always-show-the-whole-row.md),
   [ADR 0021](0021-location-menu-replaces-the-virtual-root.md)
@@ -64,5 +65,6 @@ was said once, in the dialog that asked to retry, and was gone after Cancel.
 - The menu keeps its height; nothing new is asked of a volume or a host.
 - The reason a connection failed stays known after its dialog closes (`App::failed` keeps it), and
   shows in the menu.
-- `KnownHost` carries the file and the line of its `Host` line, and the `ProxyJump` of its cached
-  `ssh -G`; `HostState` the reason of a failure, the tabs on the host, and where it opens.
+- `KnownHost` carries the file and the line of its `Host` line, and carried the `ProxyJump` of its
+  cached `ssh -G` until [ADR 0079](0079-ssh-g-results-are-not-cached.md); `HostState` the reason
+  of a failure, the tabs on the host, and where it opens.

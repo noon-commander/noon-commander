@@ -208,17 +208,9 @@ async fn ssh_g_reports_the_address_of_a_host_or_why_it_has_none() {
         "/../noc-ssh/tests/support/fake-ssh"
     ));
     let (done, mut results) = mpsc::unbounded_channel();
-    let cache = Arc::new(Mutex::new(()));
     let stop = CancellationToken::new;
     let web = context(fake);
-    resolve_address(
-        web,
-        "web".to_owned(),
-        stop(),
-        Arc::clone(&cache),
-        done.clone(),
-    )
-    .await;
+    resolve_address(web, "web".to_owned(), stop(), done.clone()).await;
     let Some(Done::Resolved {
         host,
         address,
@@ -230,9 +222,11 @@ async fn ssh_g_reports_the_address_of_a_host_or_why_it_has_none() {
     };
     let resolved = (host.as_str(), address.as_str(), user.as_str(), jump);
     assert_eq!(resolved, ("web", "tester@web.example", "tester", None));
+    let cache = tmp.path().join(".cache/noc");
+    assert!(!cache.exists(), "nothing cached");
 
     let missing = context(&tmp.path().join("no-ssh"));
-    resolve_address(missing, "db".to_owned(), stop(), cache, done).await;
+    resolve_address(missing, "db".to_owned(), stop(), done).await;
     let Some(Done::NotResolved { host, reason }) = results.recv().await else {
         panic!("expected why there is none");
     };

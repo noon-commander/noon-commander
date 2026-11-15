@@ -303,8 +303,6 @@ fn places() -> Places {
             .map(|alias| KnownHost {
                 alias: alias.to_owned(),
                 label: None,
-                address: None,
-                jump: None,
                 file: PathBuf::from("/home/me/.ssh/config"),
                 line: 1,
             })

@@ -154,7 +154,7 @@ pub(crate) struct Failure {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct HostState {
     pub(crate) status: HostStatus,
-    /// From `ssh -G` in this session, fresher than the cached address in the listing.
+    /// `user@hostname[:port]` from `ssh -G` in this run; `None` until it tells.
     pub(crate) address: Option<String>,
     /// The `ProxyJump` that `ssh -G` gave with `address`, terminal-safe; `None` without one.
     pub(crate) jump: Option<String>,

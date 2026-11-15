@@ -5,8 +5,8 @@ use std::sync::{Arc, PoisonError, RwLock};
 
 use color_eyre::eyre::{Result, WrapErr as _, bail};
 use noc_config::{Config, ConfigError, Hosts, Paths};
+use noc_ssh::SshSettings;
 use noc_ssh::discovery::{Discovery, DiscoveryOptions, DiscoveryWarning, discover};
-use noc_ssh::{ConfigStamp, ResolveCache, SshSettings};
 use noc_tools::fd::Fd;
 use noc_tools::ripgrep::Ripgrep;
 use noc_tools::zoxide::Zoxide;
@@ -153,16 +153,6 @@ impl Context {
     /// Blocking: call it from a blocking thread.
     pub(crate) fn scan(&self) -> Discovery {
         discover(&self.discovery_options(), &|name| std::env::var(name).ok())
-    }
-
-    /// The `ssh -G` cache, valid for the files `discovery` read and for the ssh settings.
-    ///
-    /// Blocking: call it from a blocking thread.
-    pub(crate) fn load_cache(&self, discovery: &Discovery) -> ResolveCache {
-        let mut files = discovery.files.clone();
-        files.extend(self.discovery_options().root_files());
-        let path = self.paths.cache_dir.join("resolve.json");
-        ResolveCache::load(path, ConfigStamp::read(&files, &self.settings()))
     }
 }
 

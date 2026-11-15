@@ -11,7 +11,8 @@
 
 - [x] `noc-config`: XDG paths, TOML schema, defaults, `noc config init`
 - [x] Host discovery: scanner for `Host`, `Match`, and `Include`; lazy `ssh -G`
-- [x] Cache for `ssh -G` results, keyed by the state of the config files
+- [x] Cache for `ssh -G` results, keyed by the state of the config files; removed in M4
+      ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
 - [x] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
 - [x] Master connection, SFTP channels, askpass bridge
       ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
@@ -24,6 +25,7 @@
 - [x] TUI skeleton: alternate screen, event loop, two panels, F10 quits, terminal restore
 - [x] Local panels: listing, navigation, background loading, errors
 - [x] Virtual root: `[Local]` and the hosts from ssh_config, with labels and cached addresses
+      (no cache since [ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
 - [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
       connections
 - [x] Disconnect, `ssh -G` on connect, connection state in the root
@@ -283,6 +285,9 @@
 - [x] `ssh -G` for the host the cursor of the location menu rests on, once a run, with a
       skeleton in its card meanwhile and its failure there
       ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md))
+- [x] No cache of `ssh -G`: addresses come from this run's alone, in the cards of hosts, not in
+      their rows; `noc debug hosts` runs `ssh -G` each time
+      ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

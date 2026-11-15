@@ -44,9 +44,9 @@ pub(super) async fn run(
             })
             .await?)
         }
-        DebugCommand::Hosts { resolve } => {
+        DebugCommand::Hosts => {
             let context = Context::load(paths, config_path)?;
-            hosts::run(&context, resolve).await
+            hosts::run(&context).await
         }
         DebugCommand::Ls { location } => {
             let context = Context::load(paths, config_path)?;

@@ -1065,7 +1065,7 @@ column has the keys of Far's menus, its drive menu among them.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| Edit the settings of the host under the cursor | `edit_host` | ✅ | F4 | — | — | — | — |
+| Edit the settings of the host under the cursor | `edit_host` | ✅ | e<br>F4 | — | — | — | — |
 | Disconnect the host under the cursor, or stop connecting to it | `disconnect` | ⏳ | d d<br>F8 | — | Delete | — | — |
 | Read the volumes and hosts again | `reload` | ⏳ | R | — | Ctrl+r | — | — |
 | Lock filter | — | ⏳ | — | — | Ctrl+Alt+l | — | — |
@@ -1284,7 +1284,8 @@ finds files and directories by name with fd, and Go to goes into a directory; f 
 Find files and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to
 `dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them;
 Enter and Space on a row go to it.
-F3 and F4 work wherever the focus is, but in the open list of the modes (`combo_box`). In the field
+F3 and F4 work wherever the focus is, but in the open list of the modes (`combo_box`); g f and e
+view and edit too where the focus is not on a field, as in the panels. In the field
 of the text, Ctrl+s and a letter take it as it is or as a
 regular expression and switch its case (`search_input`); in the field of the globs, shell patterns,
 they switch their case, which by name, where fd tells case apart in them, they cannot. Each field
@@ -1295,8 +1296,8 @@ result as a directory of its own.
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| View the file, from the line | `view` | ⏳ | F3 | F3 | F3 | — | — |
-| Edit the file, at the line | `edit` | ⏳ | F4 | F4 | F4 | — | — |
+| View the file, from the line | `view` | ⏳ | g f<br>F3 | F3 | F3 | — | — |
+| Edit the file, at the line | `edit` | ⏳ | e<br>F4 | F4 | F4 | — | — |
 | Half a page up | `half_page_up` | ⏳ | Ctrl+u | — | — | — | — |
 | Half a page down | `half_page_down` | ⏳ | Ctrl+d | — | — | — | — |
 | The files found in a panel | — | ⏳ | — | Panelize | Panel (F2) | — | — |

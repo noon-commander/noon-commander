@@ -323,9 +323,9 @@ choose a volume or a host, grouped under headings:
   default, best first, without the headings of the groups; or a row's text must hold the filter,
   or match it as a regular expression, in their order, with smart case. The cursor goes to the
   first row. The filter is a text field, edited with the keys of `input`; Esc goes back to the
-  rows with the filter kept. F4 edits the settings of the host under the cursor, F8, or `d d`
-  on the rows, disconnects it or stops connecting to it, `R` on the rows reads the volumes and
-  hosts again, and Esc or `q` on the rows, Ctrl+c, or F10 closes the menu.
+  rows with the filter kept. F4, or `e` on the rows, edits the settings of the host under the
+  cursor, F8, or `d d` on the rows, disconnects it or stops connecting to it, `R` on the rows
+  reads the volumes and hosts again, and Esc or `q` on the rows, Ctrl+c, or F10 closes the menu.
 - `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
   the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
   a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
@@ -655,8 +655,9 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
   Insert mode, typing in the text; Tab, Up, and Down go through the fields, the rows, and the
   buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the rows have the
   focus, the motions and the page keys move their cursor. F3 and F4 work wherever the focus is,
-  the keys after Ctrl+s in the field of the text, and the letters of the dialog work as in every
-  dialog ([ADR 0033](adr/0033-letters-in-dialogs.md)). The wheel scrolls the rows.
+  and `g f` and `e` as they do off the fields, the keys after Ctrl+s in the field of the text,
+  and the letters of the dialog work as in every dialog
+  ([ADR 0033](adr/0033-letters-in-dialogs.md)). The wheel scrolls the rows.
 - The rows are the files, in the order of their paths, each with how many lines matched, and their
   lines with their numbers, the matches in a color of their own (`find_match`), apart from the
   cursor's; a line too long starts a little before its first match. The rows of a search stay until

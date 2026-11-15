@@ -271,6 +271,50 @@ fn the_lists_take_their_filter_in_insert_mode() {
 }
 
 #[test]
+fn e_edits_as_f4_does_where_it_is_no_text() {
+    for (place, edit) in [
+        (PANEL, Action::Edit),
+        ((Mode::Normal, Context::Find), Action::Edit),
+        ((Mode::Normal, Context::LocationMenu), Action::EditHost),
+    ] {
+        assert_eq!(typed(place, &["e"]), actions(&[edit]), "{place:?}");
+        assert_eq!(typed(place, &["f4"]), actions(&[edit]), "{place:?}");
+    }
+    for place in [
+        (Mode::Insert, Context::QuickSearch),
+        (Mode::Insert, Context::LocationMenu),
+        (Mode::Insert, Context::FindInput),
+    ] {
+        assert_eq!(typed(place, &["e"]), inserts("e"), "{place:?}");
+    }
+    assert_eq!(
+        typed((Mode::Normal, Context::FindInput), &["e"]),
+        actions(&[Action::WordEnd])
+    );
+    assert_eq!(
+        typed(VISUAL_PANEL, &["e"]),
+        [],
+        "its letters act on the rows"
+    );
+}
+
+#[test]
+fn g_f_views_as_f3_does_in_the_search_of_a_tree_off_its_fields() {
+    let find = (Mode::Normal, Context::Find);
+    assert_eq!(typed(find, &["g", "f"]), actions(&[Action::View]));
+    assert_eq!(typed(find, &["f3"]), actions(&[Action::View]));
+    assert_eq!(
+        typed(find, &["g", "g"]),
+        actions(&[Action::Home]),
+        "the dialog's g g stays"
+    );
+    assert_eq!(
+        typed((Mode::Insert, Context::FindInput), &["g", "f"]),
+        inserts("gf")
+    );
+}
+
+#[test]
 fn visual_mode_selects_rows_and_acts_on_them() {
     assert_eq!(
         typed(PANEL, &["shift-v"]),

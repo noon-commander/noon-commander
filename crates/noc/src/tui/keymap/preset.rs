@@ -560,12 +560,12 @@ pub(super) const PRESET: Preset = &[
         ],
     ),
     // The location menu, on top of the list's. F4 and F8 edit and disconnect the host under the
-    // cursor; d d disconnects it too.
+    // cursor; e edits it too, as it edits a file in the panels, and d d disconnects it.
     (
         Mode::Normal,
         Context::LocationMenu,
         &[
-            (Action::EditHost, &["f4"]),
+            (Action::EditHost, &["e", "f4"]),
             (Action::Disconnect, &["d d", "f8"]),
             (Action::Reload, &["shift-r"]),
         ],
@@ -701,14 +701,15 @@ pub(super) const PRESET: Preset = &[
     ),
     // The dialog of the search of a whole tree, on top of the dialogs': F3 and F4 view and edit
     // the file of the row at the line, as in the results of mc's Find File, wherever the focus
-    // is. On the rows, Ctrl+u and Ctrl+d move half a page, as in the lists. In the field of the
-    // text, Ctrl+s and the key after it switch how it matches (`search_input`).
+    // is; off the fields, g f and e view and edit it too, as in the panels. On the rows, Ctrl+u
+    // and Ctrl+d move half a page, as in the lists. In the field of the text, Ctrl+s and the key
+    // after it switch how it matches (`search_input`).
     (
         Mode::Normal,
         Context::Find,
         &[
-            (Action::View, &["f3"]),
-            (Action::Edit, &["f4"]),
+            (Action::View, &["g f", "f3"]),
+            (Action::Edit, &["e", "f4"]),
             (Action::HalfPageUp, &["ctrl-u"]),
             (Action::HalfPageDown, &["ctrl-d"]),
         ],

@@ -238,7 +238,7 @@ not:
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| F4 | `edit_host` | mc | — | Same | Edit the settings of the host under the cursor, as F4 edits a file ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md), [ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)). |
+| e<br>F4 | `edit_host` | noc, mc | e (noc) | Same | Edit the settings of the host under the cursor, as e and F4 edit a file in the panels ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md), [ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)). vim's e goes to the end of a word. |
 | F8 | `disconnect` | mc | d d (vim) | Same | Disconnect the host under the cursor, as F8 deletes. |
 | R | `reload` | ranger | R (ranger) | Same | Read the volumes and hosts again, as R reads a directory again in the panels. |
 
@@ -298,11 +298,18 @@ not:
 | Tab<br>Ctrl+i | `next_field` | noc | — | Same | The commands of the panel's host, or of all hosts: the window's one switch, as Tab goes to the next field of a dialog. vim's Tab is Ctrl+i, which goes forward through the jump list. |
 | F8 | `delete` | mc | d d (vim), in Normal mode | Same | Remove the command, as F8 deletes. |
 
-## Search of a whole tree (`find`, Normal mode; `find_input`, Normal and Insert mode)
+## Search of a whole tree (`find`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
 | --- | --- | --- | --- | --- | --- |
-| F3<br>F4 | `view`<br>`edit` | mc, Far | — | Same | View the file of the row from its line, or edit it at the line, as in the results of mc's and Far's Find file. |
+| F3 | `view` | mc, Far | g f (vim) | Same | View the file of the row from its line, as in the results of mc's and Far's Find file. |
+| e<br>F4 | `edit` | noc, mc, Far | e (noc) | Same | Edit the file of the row at the line, as e edits a file in the panels, and F4 in the results of mc's and Far's Find file. vim's e goes to the end of a word. |
+
+## Search of a whole tree (`find_input`, Normal and Insert mode)
+
+| Keys | Action | From | Vim-style keys | Without kitty | Why |
+| --- | --- | --- | --- | --- | --- |
+| F3<br>F4 | `view`<br>`edit` | mc, Far | — | Same | As in `find`, in the fields too, whose letters stay theirs: text, or the keys of a field in Normal mode, rather than g f and e. |
 
 ## Checksums (`checksums`, Normal and Insert mode)
 

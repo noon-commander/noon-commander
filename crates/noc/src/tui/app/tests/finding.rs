@@ -169,6 +169,27 @@ fn f3_views_a_file_found_at_its_line_and_f4_edits_it_there() {
 }
 
 #[test]
+fn g_f_and_e_view_and_edit_a_file_found_as_f3_and_f4_do() {
+    let mut app = with_files(&["a1", "b2"]);
+    found_main(&mut app);
+    assert_eq!(app.place(), (Mode::Normal, Context::Find));
+    let effects = keys(&mut app, &["g", "f"]);
+    let Some(Effect::Read(ReadRequest { location, .. })) = effects.first() else {
+        panic!("expected a read, got {effects:?}");
+    };
+    assert_eq!(*location, local("/srv/src/run/main.rs"));
+    assert_eq!(app.context(), Context::Viewer);
+    keys(&mut app, &["q"]);
+    assert_eq!(app.context(), Context::Find);
+    keys(&mut app, &["e"]);
+    assert!(matches!(
+        app.take_handover(),
+        Some(Handover::Edit { file, line: Some(3) })
+            if file == Path::new("/srv/src/run/main.rs")
+    ));
+}
+
+#[test]
 fn files_and_dirs_find_names_with_fd_and_enter_opens_a_directory() {
     let mut app = with_files(&["a1", "b2"]);
     keys(&mut app, &["f", "/"]);

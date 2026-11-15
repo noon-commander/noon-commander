@@ -210,8 +210,8 @@ menu-space-unknown = size unknown
 # Right of the filter, in the colors of errors, when R could not list them again.
 menu-reload-failed = Not listed again: { $reason }
 # The card of the place under the cursor, under the rows: on the line over it, at its right end,
-# what kind of place it is, or of volume the home directory is on; then two lines, what it is and
-# how it is.
+# what kind of place it is, or of volume the home directory is on; then two lines: what it is,
+# with where it comes from at the right end, and how it is.
 # Two parts of the line over the card: the type of the file system of a volume, and its kind.
 menu-card-both = { $first } · { $second }
 # The kinds of volumes, after the type of the file system on the line over the card.
@@ -220,8 +220,10 @@ menu-card-local = local
 menu-card-network = network
 # The kind of a host, on the line over its card.
 menu-card-sftp = sftp
-# What a volume mounts and where, as the mount command says it: /dev/disk4s1 on /Volumes/USB.
-menu-card-mounted = { $source } on { $mount_point }
+# At the right end of the first line of the card of a volume, after its mount point, in place of
+# what it mounts: in the colors of warnings when the volume did not answer, faint when it told
+# none.
+menu-card-source-unknown = source unknown
 # The free space and the size of a volume, and the share free.
 menu-card-space = { $free } free of { $total } ({ $percent }%)
 # In place of the space of a volume that did not answer in time, or whose answer failed, in the

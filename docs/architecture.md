@@ -287,23 +287,27 @@ choose a volume or a host, grouped under headings:
 
   ```text
   ╟───────────────── apfs · local ─╢   ╟────────────────────────────────────────── sftp ─╢
-  ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ○ deploy@10.0.0.5 via bastion  ~/.ssh/config:12 ║
+  ║ + /Volumes/USB    /dev/disk4s1 ║   ║ ○ deploy@10.0.0.5 via bastion  ~/.ssh/config:12 ║
   ║   12.0G free of 64.0G (18%)    ║   ║   Not connected                                 ║
   ```
 
-  The first line starts with the icon of the row, a host's in the color of its status; the second
-  stands under its text. The home directory shows its path and the space of its volume,
-  with the type of the file system of the volume and its kind over them, as the card of the
-  volume; a volume what it mounts and where
-  (`Volume::source`, without the password of a URL), then its free space, its size, and the share
-  free, a skeleton while they are to come, `Not responding` in the colors of warnings, or
-  `Size unknown`, faint. A host shows `sftp` over the card; then not its alias, which the row
-  shows, but its address and `ProxyJump`, from this run's `ssh -G`, which runs once the cursor
-  rests on the host, else a skeleton until `ssh -G` tells them, or `ssh -G failed` in the colors
-  of errors (`theme.dialog_error_text`, not crossed out), why going to the log
+  The first line starts with the icon of the row, a host's in the color of its status, then says
+  what the place is, and against the right end where it comes from, which takes what the start
+  leaves, but at least half the line (`Look::first_line`, `menu::ends`), and loses its start
+  where it is too long ([ADR 0084](adr/0084-cards-show-a-place-and-where-it-comes-from.md)); the
+  second stands under its text. The home directory shows its path and the name of its volume,
+  then the space of the volume, with the type of the file system of the volume and its kind over
+  them, as the card of the volume. A volume shows its mount point and what it mounts
+  (`Volume::source`, without the password of a URL): a skeleton while it is to come with the
+  sizes, `source unknown` in the colors of warnings once the volume has not answered, faint where
+  it told none; then its free space, its size, and the share free, a skeleton while they are to
+  come, `Not responding` in the colors of warnings, or `Size unknown`, faint. A host shows `sftp`
+  over the card; then not its alias, which the row shows, but its address and `ProxyJump`, from
+  this run's `ssh -G`, which runs once the cursor rests on the host, else a skeleton until
+  `ssh -G` tells them, or `ssh -G failed` in the colors of errors (`theme.dialog_error_text`, not
+  crossed out), why going to the log
   ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); against the
-  right end the file and line of its `Host` line, which takes what the address leaves, but at
-  least half the line (`menu::ends`), and loses its start where it is too long
+  right end the file and line of its `Host` line
   ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). Then `Not connected`, `Connected`,
   `Connecting…`, or why its last attempt failed in the colors of errors (`App::failed` keeps it
   until a new attempt); where opening it goes shows in the dialog of F4 alone

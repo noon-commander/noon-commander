@@ -37,9 +37,10 @@ use crate::i18n::fl;
 /// Places of a group that show while the filter is empty, besides those always shown.
 const SHOWN: usize = 10;
 
-/// Cells of the skeleton in place of the address of a host in its card, as many as an address
-/// such as `user@10.0.0.5` takes.
-const ADDRESS_SKELETON: usize = 16;
+/// Cells of the skeleton on the first line of a card in place of what is still to come, the
+/// address of a host or what a volume mounts: as many as an address such as `user@10.0.0.5`
+/// takes.
+const SKELETON: usize = 16;
 
 /// How long the sizes of a volume may take, from when it was asked, before its row gives them
 /// up and says that it does not respond.
@@ -685,7 +686,7 @@ struct Look<'a> {
     hosts: &'a dyn Fn(&str) -> HostState,
     /// The frame of the spinner of hosts that connect.
     dots: char,
-    /// The shine over the skeletons of sizes still to come.
+    /// The shine over the skeletons of sizes still to come, and of what volumes mount.
     shine: Option<Shine<'a>>,
     /// The shine over the skeleton of the address of a host still to come.
     address_shine: Option<Shine<'a>>,
@@ -693,7 +694,7 @@ struct Look<'a> {
     focused: Style,
 }
 
-impl Look<'_> {
+impl<'a> Look<'a> {
     /// A row: its name with its prefix, and its `info`, in cells of `widths`.
     fn line(
         &self,
@@ -775,7 +776,9 @@ impl Look<'_> {
     /// it is, and what goes on the line over them. `sizes` are those of the volume of a volume
     /// or of the home directory, `hidden` the names of the places a row of the rest stands for;
     /// `home` shortens the path of the ssh config. The first line starts with the icon of the
-    /// row, in its colors; the second stands under its text.
+    /// row, in its colors, then says what the place is, a path or an address, and against its
+    /// right end where it comes from: the volume of the home directory, what a volume mounts, the
+    /// `Host` line of a host. The second stands under its text.
     fn card(
         &self,
         item: Item<'_>,
@@ -804,9 +807,13 @@ impl Look<'_> {
             Item::Home(path, volume) => {
                 let label = volume.map(volume_label);
                 let path = cells::sanitize(path.as_os_str().as_bytes());
+                let start = End::Text(path, dialog, Cut::Start);
+                let end = volume.map_or(End::Nothing, |volume| {
+                    End::Text(volume_name(volume), dialog, Cut::Start)
+                });
                 let (icon, indent, room) = lead(self.decor.home().to_owned(), dialog);
                 let lines = vec![
-                    after(icon, text(&path, Cut::Start, room)),
+                    after(icon, self.first_line(start, end, room)),
                     after(indent, self.sizes_line(sizes, room)),
                 ];
                 (lines, label)
@@ -814,18 +821,14 @@ impl Look<'_> {
             Item::Volume(volume) => {
                 let label = volume_label(volume);
                 let mount_point = cells::sanitize(volume.mount_point.as_os_str().as_bytes());
-                let mounted = match &volume.source {
-                    Some(source) => fl!(
-                        "menu-card-mounted",
-                        source = cells::sanitize(source.as_bytes()),
-                        mount_point = mount_point
-                    ),
-                    None => mount_point,
-                };
+                let start = End::Text(mount_point, dialog, Cut::Start);
                 let icon = self.decor.volume(volume.kind).to_owned();
                 let (icon, indent, room) = lead(icon, dialog);
                 let lines = vec![
-                    after(icon, text(&mounted, Cut::Middle, room)),
+                    after(
+                        icon,
+                        self.first_line(start, self.source(volume, sizes), room),
+                    ),
                     after(indent, self.sizes_line(sizes, room)),
                 ];
                 (lines, Some(label))
@@ -834,10 +837,11 @@ impl Look<'_> {
                 let state = (self.hosts)(&host.alias);
                 let file = home_text(&host.file, home);
                 let defined = fl!("menu-card-defined", file = file, line = host.line);
+                let end = End::Text(defined, dialog, Cut::Start);
                 let status = dialog.patch(self.theme.dialog_host_status(state.status));
                 let (icon, indent, room) = lead(self.decor.host(state.status, self.dots), status);
                 let lines = vec![
-                    after(icon, self.reach_line(&state, &defined, room)),
+                    after(icon, self.first_line(self.reach(&state), end, room)),
                     self.status_line(&state, indent, width),
                 ];
                 (lines, Some(fl!("menu-card-sftp")))
@@ -854,50 +858,83 @@ impl Look<'_> {
         }
     }
 
-    /// The line of a host, in `width` cells: how to reach it, its address and the host ssh
-    /// jumps through, from this run's `ssh -G` as `state` has them, else that it failed, in the
-    /// colors of errors, why going to the log alone; else a skeleton, as `ssh -G` runs for every
-    /// host the cursor rests on: no text that would show for the moment before it starts. Against
-    /// the right end where it is `defined`, which loses its start where it is too long.
-    fn reach_line(&self, state: &HostState, defined: &str, width: usize) -> Line<'static> {
+    /// The first line of a card, in `width` cells: `start`, what the place is, and `end`, where
+    /// it comes from, against the right end, which takes what the start leaves, but at least half
+    /// the line.
+    fn first_line(&self, start: End<'_>, end: End<'_>, width: usize) -> Line<'static> {
+        let (start_width, end_width) = ends(width, start.wanted(), end.wanted());
+        let mut spans = self.end_spans(start, start_width, Align::Left);
+        spans.push(Span::styled(
+            " ".repeat(width - start_width - end_width),
+            self.theme.dialog,
+        ));
+        spans.extend(self.end_spans(end, end_width, Align::Right));
+        Line::from(spans)
+    }
+
+    /// `end` in `width` cells, against the side `align` says.
+    fn end_spans(&self, end: End<'_>, width: usize, align: Align) -> Vec<Span<'static>> {
         let dialog = self.theme.dialog;
-        let start = if let Some(address) = &state.address {
+        match end {
+            End::Text(text, style, cut) => {
+                let fitted = cells::fit_cut(&text, width, align, cut);
+                let styles = (style, self.theme.truncated_dialog);
+                cells::spans(fitted, styles, self.theme.glyphs.marks)
+            }
+            End::Skeleton(shine) => {
+                let skeleton = SKELETON.min(width);
+                let cells = u16::try_from(skeleton).unwrap_or(u16::MAX);
+                let mut spans = window::cell_skeleton(cells, dialog, self.theme, shine);
+                let pad = Span::styled(" ".repeat(width - skeleton), dialog);
+                match align {
+                    Align::Right => spans.insert(0, pad),
+                    Align::Left | Align::Center => spans.push(pad),
+                }
+                spans
+            }
+            End::Nothing => vec![Span::styled(" ".repeat(width), dialog)],
+        }
+    }
+
+    /// How to reach a host as `state` has it: its address and the host ssh jumps through, from
+    /// this run's `ssh -G`, else that it failed, in the colors of errors, why going to the log
+    /// alone; else a skeleton, as `ssh -G` runs for every host the cursor rests on: no text that
+    /// would show for the moment before it starts. The address loses its middle.
+    fn reach(&self, state: &HostState) -> End<'a> {
+        let dialog = self.theme.dialog;
+        if let Some(address) = &state.address {
             let address = cells::sanitize(address.as_bytes());
             let text = match &state.jump {
                 Some(jump) => fl!("menu-card-via", address = address, jump = jump.as_str()),
                 None => address,
             };
-            Some((text, dialog))
+            End::Text(text, dialog, Cut::Middle)
         } else if state.unresolved {
             let style = dialog.patch(self.theme.dialog_error_text);
-            Some((fl!("menu-card-not-resolved"), style))
+            End::Text(fl!("menu-card-not-resolved"), style, Cut::End)
         } else {
-            None
+            End::Skeleton(self.address_shine)
+        }
+    }
+
+    /// What `volume` mounts, as `sizes` tell how it answered: a skeleton while its answer is
+    /// to come; `source unknown` in the colors of warnings once it has not answered, and faint
+    /// where it answered without. A device or a share loses its start.
+    fn source(&self, volume: &Volume, sizes: Option<&Sizes>) -> End<'a> {
+        let dialog = self.theme.dialog;
+        if let Some(source) = &volume.source {
+            return End::Text(cells::sanitize(source.as_bytes()), dialog, Cut::Start);
+        }
+        let style = match sizes {
+            Some(Sizes::Waiting) => return End::Skeleton(self.shine),
+            Some(Sizes::NotResponding) => self.theme.dialog_warning_text,
+            Some(Sizes::Known { .. } | Sizes::Unknown) | None => self.theme.disabled,
         };
-        let wanted = start
-            .as_ref()
-            .map_or(ADDRESS_SKELETON, |(text, _)| cells::width(text));
-        let (start_width, end_width) = ends(width, wanted, cells::width(defined));
-        let marks = self.theme.glyphs.marks;
-        let truncated = self.theme.truncated_dialog;
-        let mut spans = if let Some((text, style)) = start {
-            let start = cells::fit_cut(&text, start_width, Align::Left, Cut::Middle);
-            cells::spans(start, (style, truncated), marks)
-        } else {
-            let skeleton = ADDRESS_SKELETON.min(start_width);
-            let cells = u16::try_from(skeleton).unwrap_or(u16::MAX);
-            let shine = self.address_shine;
-            let mut spans = window::cell_skeleton(cells, dialog, self.theme, shine);
-            spans.push(Span::styled(" ".repeat(start_width - skeleton), dialog));
-            spans
-        };
-        spans.push(Span::styled(
-            " ".repeat(width - start_width - end_width),
-            dialog,
-        ));
-        let end = cells::fit_cut(defined, end_width, Align::Right, Cut::Start);
-        spans.extend(cells::spans(end, (dialog, truncated), marks));
-        Line::from(spans)
+        End::Text(
+            fl!("menu-card-source-unknown"),
+            dialog.patch(style),
+            Cut::End,
+        )
     }
 
     /// How the space of a volume is, in `width` cells: its free space and its size, a skeleton
@@ -960,6 +997,26 @@ impl Look<'_> {
         let styles = (style, self.theme.truncated_dialog);
         spans.extend(cells::spans(fitted, styles, self.theme.glyphs.marks));
         Line::from(spans)
+    }
+}
+
+/// One end of the first line of a card.
+enum End<'a> {
+    /// Text in a style, which loses its start, its middle, or its end where it is too long.
+    Text(String, Style, Cut),
+    /// What is still to come: a skeleton of [`SKELETON`] cells at most, with its shine.
+    Skeleton(Option<Shine<'a>>),
+    Nothing,
+}
+
+impl End<'_> {
+    /// The cells it would take.
+    fn wanted(&self) -> usize {
+        match self {
+            Self::Text(text, ..) => cells::width(text),
+            Self::Skeleton(_) => SKELETON,
+            Self::Nothing => 0,
+        }
     }
 }
 
@@ -1924,6 +1981,11 @@ mod tests {
             theme.disabled.fg,
             "faint in the card"
         );
+        assert_eq!(
+            fg(&buffer, "source unknown"),
+            theme.disabled.fg,
+            "it answered without"
+        );
         press(&mut menu, Action::Up);
         let buffer = draw_in(&mut menu);
         assert_eq!(
@@ -1931,6 +1993,7 @@ mod tests {
             warning,
             "a warning in the card"
         );
+        assert_eq!(fg(&buffer, "source unknown"), warning, "it did not answer");
     }
 
     #[test]
@@ -2014,7 +2077,7 @@ mod tests {
     }
 
     #[test]
-    fn the_card_of_a_volume_says_what_it_mounts_and_how_much_is_free() {
+    fn the_card_of_a_volume_says_where_it_is_what_it_mounts_and_how_much_is_free() {
         let usb = Volume {
             source: Some("/dev/disk4s1".to_owned()),
             space: Some(Space {
@@ -2038,9 +2101,10 @@ mod tests {
         let mut menu = menu_with(at, &Recent::default(), places);
         let [label, mounted, space] = card(&mut menu, &idle);
         assert!(label.ends_with(" apfs · local ─╢"), "{label}");
+        assert!(mounted.starts_with("║ + /Volumes/USB "), "{mounted}");
         assert!(
-            mounted.starts_with("║ + /dev/disk4s1 on /Volumes/USB "),
-            "{mounted}"
+            mounted.ends_with(" /dev/disk4s1 ║"),
+            "at the right end: {mounted}"
         );
         assert!(
             space.starts_with("║   12.0G free of 64.0G (18%) "),
@@ -2050,10 +2114,8 @@ mod tests {
         press(&mut menu, Action::Down);
         let [label, mounted, space] = card(&mut menu, &idle);
         assert!(label.ends_with(" smbfs · network ─╢"), "{label}");
-        assert!(
-            mounted.starts_with("║ + //me@nas/share on /Volumes/share "),
-            "{mounted}"
-        );
+        assert!(mounted.starts_with("║ + /Volumes/share "), "{mounted}");
+        assert!(mounted.ends_with(" //me@nas/share ║"), "{mounted}");
         assert!(space.starts_with("║   Size unknown "), "{space}");
 
         press(&mut menu, Action::Home);
@@ -2063,6 +2125,10 @@ mod tests {
             "as the card of its volume: {label}"
         );
         assert!(path.starts_with("║ ~ /Users/me "), "{path}");
+        assert!(
+            path.ends_with(" Macintosh HD ║"),
+            "the name of its volume: {path}"
+        );
         assert!(space.starts_with("║   212G free of 994G (21%) "), "{space}");
     }
 
@@ -2078,11 +2144,14 @@ mod tests {
             "its type is still to come: {label}"
         );
         assert!(mounted.starts_with("║ + /Volumes/NAS "), "{mounted}");
+        let skeleton = format!(" {} ║", "-".repeat(SKELETON));
+        assert!(mounted.ends_with(&skeleton), "what it mounts: {mounted}");
         assert!(space.starts_with("║   ------"), "a skeleton: {space}");
 
         let mut menu = menu_with(home(), &Recent::default(), waiting(NO_ANSWER));
         press(&mut menu, Action::End);
-        let [_, _, space] = card(&mut menu, &idle);
+        let [_, mounted, space] = card(&mut menu, &idle);
+        assert!(mounted.ends_with(" source unknown ║"), "{mounted}");
         assert!(space.starts_with("║   Not responding "), "{space}");
     }
 
@@ -2129,7 +2198,7 @@ mod tests {
         press(&mut menu, Action::Down);
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" sftp ─╢"), "{label}");
-        let skeleton = format!("║ ✗ {} ", "-".repeat(ADDRESS_SKELETON));
+        let skeleton = format!("║ ✗ {} ", "-".repeat(SKELETON));
         assert!(reach.starts_with(&skeleton), "{reach}");
         assert!(reach.ends_with(" /etc/ssh/ssh_config:40 ║"), "{reach}");
         assert!(

@@ -24,7 +24,8 @@ use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
 use super::spinner::{Shine, Spin};
 use super::theme::Theme;
 use super::window::{
-    Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around, right_frame,
+    Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around, inner_width,
+    right_frame,
 };
 use crate::i18n::fl;
 
@@ -125,11 +126,13 @@ pub(crate) struct Waiting<'a> {
 }
 
 impl<'a> Body<'a> {
-    /// Lines the box has for the rows: those of the skeleton while they are still to come.
-    fn shown(&self) -> u16 {
-        let lines = self
-            .skeleton()
-            .unwrap_or_else(|| u16::try_from(self.lines.len()).unwrap_or(u16::MAX));
+    /// Lines the box has for the rows: those of the skeleton while they are still to come, else
+    /// the `message` lines that show in their place, if any.
+    fn shown(&self, message: Option<usize>) -> u16 {
+        let lines = (self.skeleton()).unwrap_or_else(|| {
+            let lines = message.unwrap_or(self.lines.len());
+            u16::try_from(lines).unwrap_or(u16::MAX)
+        });
         lines.max(1).min(self.max_lines.unwrap_or(u16::MAX))
     }
 
@@ -659,7 +662,8 @@ impl Picker {
     ) {
         let colors = Colors::plain(theme);
         // Borders, and what is inside them.
-        let height = self.height(&body).saturating_add(2);
+        let width = inner_width(body.width, area);
+        let height = self.height(&body, width).saturating_add(2);
         let boxed = draw_box(frame, area, (body.width, height), body.title, colors, theme);
         if let Some(dots) = body.dots() {
             draw_title_dots(frame, boxed, body.title, (dots, theme.busy_dialog), colors);
@@ -676,13 +680,26 @@ impl Picker {
         self.draw_inside(frame, boxed, theme, body, row);
     }
 
-    /// Lines it takes inside a frame for `body`: the filter and the line under it, or a line
-    /// alone without a filter; the rows, and what is under them; or the skeleton, in place of
-    /// the rows and of the whole row under them.
-    pub(crate) fn height(&self, body: &Body<'_>) -> u16 {
-        (body.shown().saturating_add(self.top()))
+    /// Lines it takes inside a frame `width` cells across for `body`: the filter and the line
+    /// under it, or a line alone without a filter; the rows, or the lines of the message in
+    /// their place, and what is under them; or the skeleton, in place of the rows and of the
+    /// whole row under them.
+    pub(crate) fn height(&self, body: &Body<'_>, width: usize) -> u16 {
+        let message = self.message_lines(body, width).map(|lines| lines.len());
+        (body.shown(message).saturating_add(self.top()))
             .saturating_add(body.below())
             .saturating_add(body.waiting_full())
+    }
+
+    /// The lines, `width` cells across, of what shows in place of the rows: the message of
+    /// `body`, or what [`nothing`](Self::nothing) says, or none once no row shows; `None` while
+    /// rows show.
+    fn message_lines(&self, body: &Body<'_>, width: usize) -> Option<Vec<String>> {
+        let message = (body.message.clone()).or_else(|| self.nothing(body.nothing.clone()));
+        match message {
+            Some(message) => Some(cells::wrap(&message, width)),
+            None => (self.len() == 0).then(Vec::new),
+        }
     }
 
     /// Lines over the rows: the filter and the line under it, or the line alone, or none.
@@ -735,6 +752,8 @@ impl Picker {
         body: Body<'_>,
         row: &mut dyn FnMut(ShownRow) -> Line<'static>,
     ) {
+        let width = usize::from(inner.width);
+        let message = self.message_lines(&body, width);
         let lines = body.lines;
         let skeleton = body.skeleton();
         let shine = body.shine();
@@ -748,7 +767,6 @@ impl Picker {
             column: body.footer_column,
             label: body.footer_label,
         };
-        let width = usize::from(inner.width);
         let line = |index: u16| Rect::new(inner.x, inner.y + index, inner.width, 1);
         match self.over {
             Over::Filter => {
@@ -772,11 +790,9 @@ impl Picker {
             }
             return;
         }
-        let message = body.message.or_else(|| self.nothing(body.nothing));
-        if message.is_some() || rows == 0 {
+        if let Some(message) = message {
             let room = top..inner.height.saturating_sub(below);
-            let message = message.unwrap_or_default();
-            for (index, text) in room.zip(cells::wrap(&message, width)) {
+            for (index, text) in room.zip(message) {
                 frame.render_widget(Line::styled(text, theme.dialog), line(index));
             }
             draw_below(frame, inner, below, parts, theme);
@@ -994,6 +1010,8 @@ fn heading_line(heading: &str, width: usize, theme: &Theme) -> Line<'static> {
 mod tests {
     use super::*;
     use noc_config::SearchMode;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
 
     fn picker(rows: &[&str], mode: SearchMode) -> Picker {
         let mut picker = Picker::new(Input::new(Kind::FILTER, mode));
@@ -1011,6 +1029,54 @@ mod tests {
 
     fn press(picker: &mut Picker, action: Action) -> Pick {
         picker.handle(Resolved::Action(action))
+    }
+
+    /// Draws `picker` with `body` centered on a screen 40 cells across.
+    fn drawn(picker: &mut Picker, body: Body<'_>) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(40, 12)).unwrap();
+        terminal
+            .draw(|frame| {
+                let theme = Theme::terminal();
+                picker.render(frame, frame.area(), &theme, body, &mut |_| Line::default());
+            })
+            .unwrap();
+        terminal.backend().to_string()
+    }
+
+    #[test]
+    fn a_message_in_place_of_the_rows_takes_the_lines_it_wraps_into() {
+        let message = "No row is here yet: the search finds them as it goes.";
+        let nothing = "Nothing matches. Esc goes back to the rows, with the filter.";
+        let bodies = [
+            (
+                message,
+                Body {
+                    message: Some(message.to_owned()),
+                    ..Body::default()
+                },
+            ),
+            (
+                nothing,
+                Body {
+                    nothing: Some(nothing.to_owned()),
+                    ..Body::default()
+                },
+            ),
+        ];
+        for (text, body) in bodies {
+            // 30 cells across, the frame included, leave 26 inside.
+            let body = Body {
+                title: "List",
+                width: 30,
+                ..body
+            };
+            let screen = drawn(&mut picker(&[], SearchMode::Plain), body);
+            let lines = cells::wrap(text, 26);
+            assert!(lines.len() > 1, "{lines:?}");
+            for line in lines {
+                assert!(screen.contains(&line), "{line:?}: {screen}");
+            }
+        }
     }
 
     #[test]

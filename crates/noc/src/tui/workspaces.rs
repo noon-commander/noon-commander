@@ -753,7 +753,11 @@ mod tests {
     fn says_how_to_save_one_when_there_are_none() {
         let mut window =
             WorkspacesWindow::new(Vec::new(), Input::new(Kind::FILTER, SearchMode::Plain));
-        assert!(draw(&mut window, 10).contains("a here"));
+        let text = draw(&mut window, 10);
+        assert!(
+            text.contains("a here") && text.contains("under a name."),
+            "the whole of it, on the lines it takes: {text}"
+        );
     }
 
     #[test]

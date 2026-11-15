@@ -89,6 +89,29 @@ fn rows_without_a_filter_are_a_stop_whose_motions_move_their_cursor() {
 }
 
 #[test]
+fn a_message_in_place_of_the_rows_takes_the_lines_it_wraps_into() {
+    let mut dialog = with_rows(0);
+    let message = "No row is here yet: the search finds them as it goes.";
+    let mut terminal = Terminal::new(TestBackend::new(40, 16)).unwrap();
+    terminal
+        .draw(|frame| {
+            let body = Body {
+                message: Some(message.to_owned()),
+                ..Body::default()
+            };
+            let theme = Theme::terminal();
+            dialog.render_picker(frame, frame.area(), &theme, body, &mut |_| Line::default());
+        })
+        .unwrap();
+    let screen = terminal.backend().to_string();
+    let lines = cells::wrap(message, dialog.text_width(Rect::new(0, 0, 40, 16)));
+    assert!(lines.len() > 1, "{lines:?}");
+    for line in lines {
+        assert!(screen.contains(&line), "{line:?}: {screen}");
+    }
+}
+
+#[test]
 fn the_mouse_and_the_wheel_move_over_the_rows() {
     let mut dialog = with_rows(30);
     let terminal = draw_rows(&mut dialog, None);

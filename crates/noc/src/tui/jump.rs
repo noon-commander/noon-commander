@@ -476,7 +476,11 @@ mod tests {
         let bars = text.lines().filter(|line| line.contains("---")).count();
         assert_eq!(bars, 1, "a skeleton of the rows to come: {text}");
         menu.found(1, Ok(Vec::new()));
-        assert!(draw(&mut menu, 10).contains("zoxide knows no directory"));
+        let text = draw(&mut menu, 10);
+        assert!(
+            text.contains("zoxide knows no directory") && text.contains("you work in."),
+            "the whole of it, on the lines it takes: {text}"
+        );
         menu.found(1, Err("zoxide is not installed".to_owned()));
         assert!(draw(&mut menu, 10).contains("zoxide is not installed"));
     }

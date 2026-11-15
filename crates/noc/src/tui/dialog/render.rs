@@ -155,7 +155,7 @@ impl Dialog {
         let body = picker
             .as_ref()
             .and_then(|draw| Some((&*draw.picker, draw.body.as_ref()?)));
-        let picker_rows = body.map_or(0, |(picker, body)| picker.height(body));
+        let picker_rows = body.map_or(0, |(picker, body)| picker.height(body, text_width));
         let fill = body.is_some_and(|(_, body)| body.fill);
         let dots = body.and_then(|(_, body)| body.dots()).or_else(|| {
             let (wait, spin) = (self.wait.as_ref()?, spin?);
@@ -348,7 +348,9 @@ impl Dialog {
                     let height = if body.fill {
                         room
                     } else {
-                        draw.picker.height(&body).min(room)
+                        draw.picker
+                            .height(&body, usize::from(inner.width))
+                            .min(room)
                     };
                     let area = Rect::new(inner.x, inner.y + index, inner.width, height);
                     self.picker_area.set(Some(area));

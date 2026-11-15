@@ -245,6 +245,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   counted the cells of every line on screen from its start, wrapped or cut, wrapped its lines
   twice when it held the whole file, and wrapped them all again for each part it read. A line
   is counted and wrapped once now.
+- What a list says in place of its rows took one line, and the rest of it did not show, such as
+  the end of why the zoxide window lists nothing, and of how to save a workspace when none is
+  saved. It takes the lines it wraps into now.
 
 ## [0.3.1] - 2026-11-01
 

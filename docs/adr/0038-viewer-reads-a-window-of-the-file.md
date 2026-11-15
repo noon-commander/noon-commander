@@ -1,6 +1,7 @@
 # 0038. The viewer reads a window of the file
 
-- Status: Accepted; amended by [ADR 0077](0077-the-viewer-jumps-to-the-end-of-a-file.md)
+- Status: Accepted; amended by [ADR 0077](0077-the-viewer-jumps-to-the-end-of-a-file.md),
+  [ADR 0078](0078-the-viewer-reads-small-parts.md)
 - Date: 2026-10-18
 - Amends: [ADR 0015](0015-viewer-and-text-crates.md), [ADR 0023](0023-paging-stops-at-the-end.md),
   [ADR 0037](0037-spinners.md)

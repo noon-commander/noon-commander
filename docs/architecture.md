@@ -1574,14 +1574,20 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far
   the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when
   the text does not fit, and its own F-key bar. It reads the file in parts of `viewer.part_mib`,
-  locally or through the host's shared session, in the background (closing the viewer stops
-  that), each ending after its last line feed, the next when a move down shows the end of what it
-  holds, and keeps a window of `viewer.window_mib`, reading a part it dropped again when a move up
-  reaches it ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). Until the end is known
+  1 MiB by default, so that the first screen waits for little, locally or through the host's
+  shared session, in the background (closing the viewer stops that), each ending after its last
+  line feed, or going on to the first for up to 16 MiB where a line is longer than the part
+  (`Want::most`), the next when a move down shows the end of what it holds, and keeps a window of
+  `viewer.window_mib`, reading a part it dropped again when a move up reaches it
+  ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). A local file of at most 16 MiB is
+  read whole behind the screen once its first part shows, with no window (`Want::ahead`), so
+  that its lines are all counted
+  ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md)). Until the end is known
   the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends
   the text. `G`, End, and a thumb dragged far past what was read jump: the viewer reads the part
   there alone, the last one of the file for its end, from the start of a line
-  (`Want::after_feed`), apart from the parts read in order (`Parts`). The lines of the parts apart
+  (`Want::after_feed`), apart from the parts read in order (`Parts`); a local file is read on in
+  order instead where that is no more than 16 MiB. The lines of the parts apart
   have no numbers, so the position is `at/size percent%` in bytes, short, until scrolling up has
   read what lies between and the parts meet; nothing counts lines behind the screen. A line to
   go to, as a search result, is reached in order, through the parts before it

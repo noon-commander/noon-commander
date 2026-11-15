@@ -1,5 +1,6 @@
 //! The window over the viewer while it reads a part of a file that takes a while: where the
-//! part starts, a gauge, and Cancel, which stops the reading. A dialog, which this wraps.
+//! part starts, a gauge, and Cancel, which stops the reading. A dialog, which this wraps. A part
+//! read ahead of the screen, which nothing waits for, shows none.
 
 use std::cell::Cell;
 use std::time::Instant;
@@ -98,7 +99,7 @@ impl Reading {
 
     /// The wait whose spinner the window shows with, while it may still show.
     pub(crate) fn wait(&self) -> Option<&Wait> {
-        (!self.stopped && self.finished.is_none()).then_some(&self.wait)
+        (!self.want.ahead && !self.stopped && self.finished.is_none()).then_some(&self.wait)
     }
 
     /// Whether the window is on screen and takes the keys.
@@ -157,9 +158,10 @@ impl Reading {
         }
     }
 
-    /// Draws the window over `area`, once the reading has taken as long as a spinner waits.
+    /// Draws the window over `area`, once the reading has taken as long as a spinner waits;
+    /// never for a part read ahead of the screen.
     pub(crate) fn render(&self, frame: &mut Frame<'_>, area: Rect, theme: &Theme, spin: &Spin) {
-        if self.stopped || spin.wait_dots(&self.wait).is_none() {
+        if self.want.ahead || self.stopped || spin.wait_dots(&self.wait).is_none() {
             return;
         }
         self.shown.set(true);
@@ -182,8 +184,10 @@ mod tests {
     const WANT: Want = Want {
         offset: 32 << 20,
         length: 16 << 20,
+        most: 16 << 20,
         new: true,
         after_feed: false,
+        ahead: false,
     };
 
     /// Draws `reading` first at `start`, then at `now`.

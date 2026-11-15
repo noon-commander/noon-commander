@@ -102,7 +102,7 @@ impl LogLevel {
 #[serde(default, deny_unknown_fields)]
 pub struct ViewerConfig {
     /// Mebibytes of a part: how much it reads at once, before showing anything and again each
-    /// time scrolling reaches the edge of what it holds. Default: `16`.
+    /// time scrolling reaches the edge of what it holds. Default: `1`.
     pub part_mib: NonZeroUsize,
     /// Mebibytes of the parts it holds at once; the ones farthest away go, to be read again
     /// when scrolling comes back. At least two parts; less counts as two. Default: `128`.
@@ -112,7 +112,7 @@ pub struct ViewerConfig {
 impl Default for ViewerConfig {
     fn default() -> Self {
         Self {
-            part_mib: NonZeroUsize::new(16).unwrap_or(NonZeroUsize::MIN),
+            part_mib: NonZeroUsize::MIN,
             window_mib: NonZeroUsize::new(128).unwrap_or(NonZeroUsize::MIN),
         }
     }
@@ -791,7 +791,7 @@ mod tests {
         assert_eq!(config.search.fd, Path::new("fd"));
         assert_eq!(config.search.max_results.get(), 10_000);
         assert_eq!(config.search.max_per_file.get(), 100);
-        assert_eq!(config.viewer.part_mib.get(), 16);
+        assert_eq!(config.viewer.part_mib.get(), 1);
         assert_eq!(config.viewer.window_mib.get(), 128);
         assert_eq!(config.log.level, LogLevel::Info);
         assert_eq!(config.log.filter, "");

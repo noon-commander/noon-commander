@@ -308,19 +308,22 @@ fn a_rename_changes_and_a_write_retries_and_cancel_does_nothing() {
     assert_eq!((again, bytes), (location, b"x".to_vec()));
 }
 
+/// The size of `/srv/big`: more than the viewer reads ahead of the screen.
+const BIG: u64 = 100 << 20;
+
 /// The viewer of `/srv/big` with the read it starts.
 fn view_big() -> (App, Effect) {
     let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
-    answer(&mut app, effects, &Listing::Dir(vec![file("big", 1000)]));
+    answer(&mut app, effects, &Listing::Dir(vec![file("big", BIG)]));
     app.handle(action(Action::Down));
     let read = one(app.handle(action(Action::View)));
     (app, read)
 }
 
-/// The part of `/srv/big`, 1,000 bytes long, that `want` asks for, holding `bytes`.
+/// The part of `/srv/big` that `want` asks for, holding `bytes`.
 fn part_of_big(want: Want, bytes: &[u8]) -> ViewerPart {
     let stamp = Stamp {
-        size: Some(1000),
+        size: Some(BIG),
         modified: None,
     };
     ViewerPart::new(want, bytes, (false, false), stamp)
@@ -435,7 +438,8 @@ fn the_viewer_reads_the_next_part_at_the_end_and_keeps_its_text_if_it_fails() {
             .is_empty()
     );
     screen_of(&mut app, 16);
-    let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::End))) else {
+    let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::PageDown)))
+    else {
         panic!("expected the next part");
     };
     assert_eq!((want.offset, want.new), (8, true));
@@ -486,7 +490,7 @@ fn g_in_a_large_file_reads_its_last_part_alone_and_says_where_it_is_in_bytes() {
     };
     assert_eq!(
         (want.offset, want.length),
-        ((1 << 30) - (16 << 20), 16 << 20),
+        ((1 << 30) - (1 << 20), 1 << 20),
         "not the parts on the way"
     );
     assert!(want.new && want.after_feed, "from the start of a line");
@@ -498,7 +502,50 @@ fn g_in_a_large_file_reads_its_last_part_alone_and_says_where_it_is_in_bytes() {
     assert!(app.read(id, Ok(last)).is_empty(), "it fills the screen");
     let text = screen_of(&mut app, 16);
     assert!(text.contains("line 40") && text.contains("EOF"), "{text}");
-    assert!(text.contains("1008M/1.0G End"), "{text}");
+    assert!(text.contains("1023M/1.0G End"), "{text}");
+}
+
+#[test]
+fn a_small_file_is_read_on_behind_the_screen_without_a_window() {
+    let (mut app, read) = view_big();
+    let Effect::Read(ReadRequest { id, want, .. }) = read else {
+        panic!("expected a read");
+    };
+    let stamp = Stamp {
+        size: Some(1 << 20),
+        modified: None,
+    };
+    let first = ViewerPart::new(want, b"one\ntwo\n", (false, false), stamp);
+    let Effect::Read(ReadRequest { id, want, .. }) = one(app.read(id, Ok(first))) else {
+        panic!("expected the next part");
+    };
+    assert!(want.ahead && want.offset == 8, "{want:?}");
+    let text = screen_of(&mut app, 16);
+    assert!(text.contains("two") && !text.contains("Reading"), "{text}");
+    assert_eq!(app.context(), Context::Viewer, "the keys are the viewer's");
+    let rest = ViewerPart::new(want, b"three\n", (true, false), stamp);
+    assert!(app.read(id, Ok(rest)).is_empty());
+    let text = screen_of(&mut app, 16);
+    assert!(text.contains("1/3 End") && text.contains("three"), "{text}");
+}
+
+#[test]
+fn a_file_on_a_host_is_read_only_as_far_as_the_screen_needs() {
+    let (mut app, _connection) = on_a_host();
+    app.handle(action(Action::Down));
+    let Effect::Read(ReadRequest {
+        id, want, location, ..
+    }) = one(app.handle(action(Action::View)))
+    else {
+        panic!("expected a read");
+    };
+    assert_eq!(location, remote("web", "/home/deploy/notes"));
+    let stamp = Stamp {
+        size: Some(1 << 20),
+        modified: None,
+    };
+    let first = ViewerPart::new(want, b"one\ntwo\n", (false, false), stamp);
+    assert!(app.read(id, Ok(first)).is_empty(), "nothing ahead of it");
 }
 
 #[test]
@@ -512,7 +559,8 @@ fn a_file_that_changed_between_parts_is_read_again() {
             .is_empty()
     );
     screen_of(&mut app, 16);
-    let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::End))) else {
+    let Effect::Read(ReadRequest { id, want, .. }) = one(app.handle(action(Action::PageDown)))
+    else {
         panic!("expected the next part");
     };
     let mut part = part_of_big(want, b"three\n");

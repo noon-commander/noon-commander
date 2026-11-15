@@ -1,6 +1,6 @@
 # 0077. The viewer jumps to the end of a file
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0078](0078-the-viewer-reads-small-parts.md)
 - Date: 2026-11-15
 - Amends: [ADR 0038](0038-viewer-reads-a-window-of-the-file.md)
 
@@ -56,8 +56,9 @@ only to go to one (F5), by reading the file up to it.
 - The end of a file of any size shows after one part is read.
 - After a jump the lines have no numbers until the parts meet; nothing counts them meanwhile. A
   search result in the same file is reached from the start of the file, in order.
-- A line longer than a part, where a jump lands in it, is cut there: the part starts at the byte
-  asked for. Once the parts meet, such a line counts twice.
+- A line longer than a part is cut where a jump lands in it, and where a part read before the
+  parts apart starts in it: such a part starts at the byte asked for. Once the parts meet, the
+  line counts once more for each cut.
 - `Viewer::render` takes how a size is written; `noc-viewer` has no units of its own.
 - A part read back into a full window was let go at once, as it lay above the screen, and asked
   for again, for ever. The window lets go of parts at the other end from the one a scroll just

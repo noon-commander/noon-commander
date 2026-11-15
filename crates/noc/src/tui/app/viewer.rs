@@ -22,6 +22,12 @@ use super::{
     viewer_command,
 };
 
+/// A file of no more bytes is read whole once its first part shows, and the end of a file no
+/// further from what was read is read up to rather than jumped to: as much as the viewer read
+/// before it showed anything, when its parts were that large, so that such files still have
+/// all their lines counted.
+const READ_AHEAD: u64 = 16 << 20;
+
 impl App {
     /// Views the file under the cursor of the active panel, as F3 does in mc; a directory
     /// opens as with Enter.
@@ -50,7 +56,8 @@ impl App {
         line: Option<u64>,
     ) -> Vec<Effect> {
         let host = self.handle_for(&location).ok().flatten();
-        let mut viewer = Viewer::new(location_text(&location), self.viewer_sizes());
+        let sizes = self.viewer_sizes(Some(&location));
+        let mut viewer = Viewer::new(location_text(&location), sizes);
         if let Some(line) = line {
             let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
             viewer.handle(ViewerCommand::Top(line));
@@ -65,7 +72,8 @@ impl App {
     /// front once the viewer closes.
     pub(super) fn view_for(&mut self, location: Location, question: Open) -> Vec<Effect> {
         let host = self.handle_for(&location).ok().flatten();
-        let viewer = Viewer::new(location_text(&location), self.viewer_sizes());
+        let sizes = self.viewer_sizes(Some(&location));
+        let viewer = Viewer::new(location_text(&location), sizes);
         self.open_viewer(viewer, Source::File { location, host });
         if let Some(viewing) = &mut self.viewing {
             viewing.question = Some(Box::new(question));
@@ -81,7 +89,7 @@ impl App {
         bytes: Vec<u8>,
         question: Open,
     ) -> Vec<Effect> {
-        let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes());
+        let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes(None));
         let source = Source::Text {
             name,
             bytes,
@@ -109,7 +117,8 @@ impl App {
             None => return Vec::new(),
         };
         let location = Location::Local(path);
-        let mut viewer = Viewer::new(location_text(&location), self.viewer_sizes());
+        let sizes = self.viewer_sizes(Some(&location));
+        let mut viewer = Viewer::new(location_text(&location), sizes);
         viewer.handle(ViewerCommand::Scroll(Motion::End));
         self.open_viewer(
             viewer,
@@ -153,7 +162,7 @@ impl App {
     pub(super) fn view_sums(&mut self, results: Results) -> Vec<Effect> {
         let name = sums_name(&results);
         let bytes = sums_file(&results.lines);
-        let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes());
+        let viewer = Viewer::new(cells::sanitize(name.as_bytes()), self.viewer_sizes(None));
         let results = Some(Box::new(results));
         self.open_viewer(
             viewer,
@@ -166,18 +175,21 @@ impl App {
         self.read_more()
     }
 
-    /// How much of a file the viewer reads at once, and holds: `viewer.part_mib` and
-    /// `viewer.window_mib`.
-    fn viewer_sizes(&self) -> ViewerSizes {
+    /// How much of the file at `location`, or of text the app holds, the viewer reads at once,
+    /// and holds: `viewer.part_mib` and `viewer.window_mib`; and how much it reads ahead of the
+    /// screen, nothing on a host, where every part read is sent.
+    fn viewer_sizes(&self, location: Option<&Location>) -> ViewerSizes {
         let mebibytes = |count: std::num::NonZeroUsize| {
             u64::try_from(count.get())
                 .unwrap_or(u64::MAX)
                 .saturating_mul(1 << 20)
         };
         let viewer = &self.config.viewer;
+        let far = matches!(location, Some(Location::Remote { .. }));
         ViewerSizes {
             part: mebibytes(viewer.part_mib),
             window: mebibytes(viewer.window_mib),
+            ahead: if far { 0 } else { READ_AHEAD },
         }
     }
 

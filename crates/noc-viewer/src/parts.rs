@@ -155,44 +155,51 @@ impl Parts {
         Some(Want {
             offset: part.offset,
             length: part.len,
+            most: part.len,
             new: false,
             after_feed: false,
+            ahead: false,
         })
     }
 
-    /// What to ask for to read the next part in order from the start, of `length` bytes at
-    /// most: no further than the parts apart, which it then joins.
-    pub(crate) fn in_order(&self, length: u64) -> Option<Want> {
+    /// What to ask for to read the next part in order from the start, of `length` bytes, or
+    /// `most` where a line goes on: no further than the parts apart, which it then joins.
+    pub(crate) fn in_order(&self, length: u64, most: u64) -> Option<Want> {
         let offset = self.frontier();
-        let length = match self.apart_start() {
-            Some(start) => length.min(start - offset),
+        let room = match self.apart_start() {
+            Some(start) => start - offset,
             None if self.end => return None,
-            None => length,
+            None => u64::MAX,
         };
         Some(Want {
             offset,
-            length,
+            length: length.min(room),
+            most: most.min(room),
             new: true,
             after_feed: false,
+            ahead: false,
         })
     }
 
-    /// What to ask for to read a new part of `length` bytes after the last known one.
-    pub(crate) fn on(&self, length: u64) -> Option<Want> {
+    /// What to ask for to read a new part after the last known one, of `length` bytes, or
+    /// `most` where a line goes on.
+    pub(crate) fn on(&self, length: u64, most: u64) -> Option<Want> {
         (!self.end).then(|| Want {
             offset: self.last_end(),
             length,
+            most,
             new: true,
             after_feed: false,
+            ahead: false,
         })
     }
 
     /// What to ask for to read the part after the held ones.
-    pub(crate) fn next(&self, length: u64) -> Option<Want> {
+    pub(crate) fn next(&self, length: u64, most: u64) -> Option<Want> {
         if self.apart == Some(self.held.end) {
-            return self.in_order(length);
+            return self.in_order(length, most);
         }
-        self.again(self.held.end).or_else(|| self.on(length))
+        self.again(self.held.end).or_else(|| self.on(length, most))
     }
 
     /// What to ask for to read the part before the held ones: before the parts apart, what
@@ -207,13 +214,15 @@ impl Parts {
         }
         let start = self.known[self.held.start].offset;
         if start - self.frontier() <= length {
-            return self.in_order(length);
+            return self.in_order(length, length);
         }
         Some(Want {
             offset: start - length,
             length,
+            most: length,
             new: false,
             after_feed: true,
+            ahead: false,
         })
     }
 
@@ -329,8 +338,10 @@ mod tests {
     const NEXT: Want = Want {
         offset: 0,
         length: 0,
+        most: 0,
         new: true,
         after_feed: false,
+        ahead: false,
     };
     const JUMP: Want = Want {
         after_feed: true,
@@ -371,17 +382,19 @@ mod tests {
         let next = Want {
             offset: 150,
             length: 64,
+            most: 96,
             ..NEXT
         };
-        assert_eq!(parts.next(64), Some(next));
+        assert_eq!(parts.next(64, 96), Some(next));
         let first = Want {
             length: 100,
+            most: 100,
             new: false,
             ..NEXT
         };
         assert_eq!(parts.previous(64), Some(first));
         parts.ends();
-        assert_eq!(parts.next(64), None);
+        assert_eq!(parts.next(64, 96), None);
         assert!(!parts.more_after() && parts.more_before() && !parts.whole());
         assert_eq!(parts.lines(), Some(15));
         assert_eq!(parts.add(known(150, 10, 1), NEXT, true), None, "all known");
@@ -404,9 +417,10 @@ mod tests {
         let on = Want {
             offset: 150,
             length: 64,
+            most: 96,
             ..NEXT
         };
-        assert_eq!(parts.next(64), Some(on), "on in order");
+        assert_eq!(parts.next(64, 96), Some(on), "on in order");
 
         parts.set_held(2..3);
         assert!(parts.more_before() && !parts.more_after());
@@ -414,6 +428,7 @@ mod tests {
         let before = Want {
             offset: 836,
             length: 64,
+            most: 64,
             ..BEFORE
         };
         assert_eq!(parts.previous(64), Some(before));
@@ -433,9 +448,10 @@ mod tests {
         let after = Want {
             offset: 600,
             length: 64,
+            most: 96,
             ..NEXT
         };
-        assert_eq!(parts.on(64), Some(after));
+        assert_eq!(parts.on(64, 96), Some(after));
         assert_eq!(parts.add(known(600, 50, 5), NEXT, false), Some(3));
     }
 
@@ -444,13 +460,14 @@ mod tests {
         let mut parts = parts();
         parts.add(known(400, 100, 10), JUMP, true);
         parts.set_held(2..3);
-        // No further than the parts apart.
+        // No further than the parts apart, a line that goes on neither.
         let most = Want {
             offset: 150,
-            length: 250,
+            length: 100,
+            most: 250,
             ..NEXT
         };
-        assert_eq!(parts.in_order(1000), Some(most));
+        assert_eq!(parts.in_order(100, 1000), Some(most));
         assert_eq!(parts.add(known(150, 300, 30), NEXT, false), None);
         assert_eq!(parts.add(known(150, 100, 10), NEXT, false), Some(2));
         assert_eq!((parts.held(), parts.apart_start()), (3..4, Some(400)));
@@ -458,6 +475,7 @@ mod tests {
         let between = Want {
             offset: 250,
             length: 150,
+            most: 150,
             ..NEXT
         };
         assert_eq!(parts.previous(200), Some(between));

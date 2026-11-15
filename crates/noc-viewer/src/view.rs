@@ -21,6 +21,12 @@ use crate::text::{Columns, cut, row_of, row_starts, rows_of_lines, width};
 /// frame.
 const LONG_LINE: usize = 1 << 12;
 
+/// As many bytes are still worked through in one go, whatever the size of a part: a line that
+/// goes on past its part, up to its line feed; a part on the way to a line, whose lines are
+/// only counted; and the rows of a whole file wrapped, which its scroll bar goes by. More takes
+/// long enough to see.
+const AT_ONCE: u64 = 16 << 20;
+
 /// Whether rows after the first of a wrapped line start with a mark in `width` cells: not
 /// where it would leave no room for text.
 fn breaks(width: usize) -> bool {
@@ -43,7 +49,8 @@ pub enum Command {
     /// parts of the file on the way to it.
     Top(usize),
     /// Goes where the thumb of the scroll bar was dragged, in its units: lines when the whole
-    /// file is held and is no more than a part, else bytes.
+    /// file is held and is not too large to count its rows, else bytes; to a byte that is far
+    /// from what was read, by a jump.
     Bar(usize),
     /// One column left, when lines are cut.
     Left,
@@ -100,10 +107,15 @@ pub struct Styles {
 /// How much of a file the viewer reads at once, and how much it holds, in bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sizes {
-    /// A part read at once.
+    /// A part read at once: what the first screen waits for.
     pub part: u64,
     /// The parts held; at least two.
     pub window: u64,
+    /// What it reads without being asked, where reading is cheap: a file of no more bytes
+    /// whole, part by part ahead of the screen, so that all its lines are counted; and on in
+    /// order, rather than by a jump, to the end of a file or to a byte no further from what
+    /// was read. Nothing for a file on a host, which sends only what the screen needs.
+    pub ahead: u64,
 }
 
 /// What came of a part the viewer took.
@@ -221,18 +233,22 @@ impl Viewer {
     /// a scroll past the held parts or a place to go to needs.
     pub fn want(&self) -> Option<Want> {
         let length = self.sizes.part.max(1);
+        let most = length.max(AT_ONCE);
         if self.loading() {
             return Some(Want {
                 offset: 0,
                 length,
+                most,
                 new: true,
                 after_feed: false,
+                ahead: false,
             });
         }
         let Some(goal) = self.goal else {
-            return match self.pull? {
-                Pull::Forward => self.parts.next(length),
-                Pull::Back => self.parts.previous(length),
+            return match self.pull {
+                Some(Pull::Forward) => self.parts.next(length, most),
+                Some(Pull::Back) => self.parts.previous(length),
+                None => self.ahead(length, most),
             };
         };
         let part = match goal {
@@ -243,8 +259,23 @@ impl Viewer {
         };
         match part {
             Some(index) => self.unheld(index),
-            None => self.toward(goal, length),
+            None => self.toward(goal, length, most),
         }
+    }
+
+    /// The part to read ahead of the screen, which waits for nothing: the next one of a file
+    /// small enough to read and hold whole, until it is held. Not of a file that tells no size,
+    /// which may never end.
+    fn ahead(&self, length: u64, most: u64) -> Option<Want> {
+        let size = self.parts.size().filter(|&size| size > 0)?;
+        if self.stopped.is_some() || size > self.sizes.ahead.min(self.window()) {
+            return None;
+        }
+        let next = self.parts.next(length, most)?;
+        Some(Want {
+            ahead: true,
+            ..next
+        })
     }
 
     /// What to ask for to read known part `index` again, unless it is held.
@@ -256,22 +287,26 @@ impl Viewer {
     }
 
     /// The part to read on the way to `goal`, which no known part has. A line takes the parts
-    /// in order, which count the lines up to it. The end of the file and a byte take them in
-    /// order too while they are near; else the part there, apart from the others, so that
-    /// going there takes one part however large the file.
-    fn toward(&self, goal: Goal, length: u64) -> Option<Want> {
+    /// in order, which count the lines up to it, large ones, as their lines are not made for
+    /// the screen. The end of the file and a byte take them in order too while they are near;
+    /// else the part there, apart from the others, so that going there takes one part however
+    /// large the file.
+    fn toward(&self, goal: Goal, length: u64, most: u64) -> Option<Want> {
         let jump = |offset| Want {
             offset,
             length,
+            most,
             new: true,
             after_feed: true,
+            ahead: false,
         };
         // Where the file ends before the goal, its last part has it.
         let last = || self.unheld(self.last_part()?);
         // A file that reports no size has no place to jump to.
         let size = self.parts.size().unwrap_or(0);
         match goal {
-            Goal::Start | Goal::Line(_) => self.parts.in_order(length).or_else(last),
+            Goal::Start => self.parts.in_order(length, most),
+            Goal::Line(_) => self.parts.in_order(most, most).or_else(last),
             Goal::Byte(byte) => {
                 // Not read: between the parts in order and those apart, or after the last.
                 let between = self.parts.apart_start().is_some_and(|start| byte < start);
@@ -285,23 +320,28 @@ impl Viewer {
                     // No nearer the end than a part, which then has the byte.
                     Some(jump(byte.min(size - length)))
                 } else if between {
-                    self.parts.in_order(length)
+                    self.parts.in_order(length, most)
                 } else {
-                    self.parts.on(length).or_else(last)
+                    self.parts.on(length, most).or_else(last)
                 }
             }
             Goal::End if size > self.parts.last_end().saturating_add(self.near()) => {
                 Some(jump(size - length))
             }
-            Goal::End => self.parts.on(length),
+            Goal::End => self.parts.on(length, most),
         }
     }
 
     /// How far past what was read the end of the file, or a byte to go to, still counts as
-    /// near: reading on to it costs no more than the part a jump would read. At least a part,
-    /// so that a jump lands after what was read.
+    /// near: reading on to it, which keeps the numbers of the lines, takes no longer than one
+    /// sees. At least a part, so that a jump lands after what was read.
     fn near(&self) -> u64 {
-        self.sizes.part.max(1)
+        self.sizes.ahead.max(self.sizes.part.max(1))
+    }
+
+    /// The bytes it holds at most: the window, and no less than two parts.
+    fn window(&self) -> u64 {
+        self.sizes.window.max(self.sizes.part.saturating_mul(2))
     }
 
     /// The index of the last known part.
@@ -535,7 +575,7 @@ impl Viewer {
     /// side away from it, and never the one a scroll past the held parts just read, which it
     /// would ask for again, for ever.
     fn trim(&mut self) {
-        let window = self.sizes.window.max(self.sizes.part.saturating_mul(2));
+        let window = self.window();
         loop {
             let held = self.parts.held();
             if held.len() < 2 || self.parts.held_bytes() <= window {
@@ -781,9 +821,9 @@ impl Viewer {
     }
 
     /// Whether the scroll bar goes in lines, which takes counting the rows of every line held:
-    /// when the whole file is held and is no more than a part, else in bytes.
+    /// when the whole file is held and is not too large for that, else in bytes.
     fn bar_in_lines(&self) -> bool {
-        self.parts.whole() && self.parts.held_bytes() <= self.sizes.part
+        self.parts.whole() && self.parts.held_bytes() <= AT_ONCE
     }
 
     /// Whether it waits for the file.
@@ -949,7 +989,7 @@ impl Viewer {
     }
 
     /// The thumb in bytes of the file, as if the lines of each part were of one length: while
-    /// only parts of the file are held, or more than a part.
+    /// only parts of the file are held, or too much to count its rows.
     fn thumb_in_bytes(&self) -> (usize, usize, usize) {
         let lines = u64::try_from(self.lines().len().max(1)).unwrap_or(u64::MAX);
         let rows = u64::try_from(self.page).unwrap_or(u64::MAX);
@@ -1087,6 +1127,7 @@ mod tests {
     const SIZES: Sizes = Sizes {
         part: 1 << 20,
         window: 1 << 22,
+        ahead: 0,
     };
 
     const STAMP: Stamp = Stamp {
@@ -1099,8 +1140,10 @@ mod tests {
         let want = Want {
             offset,
             length: SIZES.part,
+            most: AT_ONCE,
             new: true,
             after_feed: false,
+            ahead: false,
         };
         Part::new(want, bytes, (end, false), STAMP)
     }
@@ -1631,6 +1674,7 @@ mod tests {
         let sizes = Sizes {
             part: 128,
             window: 256,
+            ahead: 0,
         };
         let mut viewer = Viewer::new("f".to_owned(), sizes);
         let step = |viewer: &mut Viewer, command| {
@@ -1722,13 +1766,16 @@ mod tests {
     const SMALL: Sizes = Sizes {
         part: 40,
         window: 80,
+        ahead: 0,
     };
 
     const NEXT: Want = Want {
         offset: 40,
         length: 40,
+        most: AT_ONCE,
         new: true,
         after_feed: false,
+        ahead: false,
     };
 
     #[test]
@@ -1773,6 +1820,7 @@ mod tests {
         viewer.handle(Command::Scroll(Motion::Home));
         let first = Want {
             offset: 0,
+            most: 40,
             new: false,
             ..NEXT
         };
@@ -1806,6 +1854,7 @@ mod tests {
         }
         let first = Want {
             offset: 0,
+            most: 40,
             new: false,
             ..NEXT
         };
@@ -1827,6 +1876,15 @@ mod tests {
         viewer.take(reply(&viewer));
         draw(&mut viewer, 20, 6);
         viewer.handle(Command::Top(20));
+        let stretch = Want {
+            length: AT_ONCE,
+            ..NEXT
+        };
+        assert_eq!(
+            viewer.want(),
+            Some(stretch),
+            "as much as it counts in one go"
+        );
         while viewer.want().is_some() {
             viewer.take(reply(&viewer));
         }
@@ -1835,11 +1893,7 @@ mod tests {
             screen.contains("21/24 End") && screen.contains("l024"),
             "{screen}"
         );
-        assert_eq!(
-            viewer.parts.held(),
-            2..3,
-            "the parts on the way only counted"
-        );
+        assert_eq!(viewer.parts.held(), 1..2, "the part with the line alone");
     }
 
     #[test]
@@ -1870,6 +1924,7 @@ mod tests {
         }
         let before = Want {
             offset: 160,
+            most: 40,
             new: false,
             after_feed: true,
             ..NEXT
@@ -1942,6 +1997,138 @@ mod tests {
     }
 
     #[test]
+    fn a_file_small_enough_is_read_whole_ahead_of_the_screen() {
+        let sizes = Sizes {
+            ahead: 200,
+            ..SMALL
+        };
+        let text = short_lines(1..=16);
+        let first = |text: &[u8]| {
+            let mut viewer = Viewer::new("f".to_owned(), sizes);
+            let want = viewer.want().expect("the first part");
+            viewer.take(crate::read::part_of(text, want));
+            viewer
+        };
+        let mut viewer = first(&text);
+        let top = draw(&mut viewer, 20, 6);
+        assert!(top.contains("1/? "), "{top}");
+        let ahead = Want {
+            ahead: true,
+            ..NEXT
+        };
+        assert_eq!(viewer.want(), Some(ahead), "though the screen shows no end");
+        viewer.stop();
+        assert_eq!(viewer.want(), None, "stopped until the next move");
+        viewer.handle(Command::Scroll(Motion::Down));
+        feed(&mut viewer, &text);
+        let whole = draw(&mut viewer, 20, 6);
+        assert!(whole.contains("2/16 37%"), "all its lines counted: {whole}");
+        assert_eq!(viewer.parts.held(), 0..2);
+
+        // Not one that the window does not hold, nor one that tells no size.
+        let mut viewer = first(&short_lines(1..=17));
+        draw(&mut viewer, 20, 6);
+        assert_eq!(viewer.want(), None);
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        viewer.take(part(0, &short_lines(1..=8), false));
+        assert_eq!(viewer.want(), None);
+    }
+
+    #[test]
+    fn the_end_no_further_than_it_reads_ahead_is_read_in_order() {
+        let sizes = Sizes {
+            ahead: 200,
+            ..SMALL
+        };
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        let text = short_lines(1..=48);
+        viewer.take(crate::read::part_of(&text, viewer.want().expect("a part")));
+        draw(&mut viewer, 20, 6);
+        viewer.handle(Command::Scroll(Motion::End));
+        assert_eq!(viewer.want(), Some(NEXT));
+        feed(&mut viewer, &text);
+        let end = draw(&mut viewer, 20, 6);
+        assert!(end.contains("45/48 End") && end.contains("l048"), "{end}");
+
+        // A byte more, and it jumps.
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        let text = [text, b"x".to_vec()].concat();
+        viewer.take(crate::read::part_of(&text, viewer.want().expect("a part")));
+        draw(&mut viewer, 20, 6);
+        viewer.handle(Command::Scroll(Motion::End));
+        assert_eq!(viewer.want().map(|want| want.after_feed), Some(true));
+    }
+
+    /// Reads the parts `viewer` wants from the file at `path`, as the app does.
+    async fn read(viewer: &mut Viewer, path: &std::path::PathBuf) {
+        use std::ops::ControlFlow;
+        for _ in 0..10_000 {
+            let Some(want) = viewer.want() else {
+                return;
+            };
+            let go_on = |_| ControlFlow::Continue(());
+            let part = crate::read::read_part(&noc_vfs::LocalFs, path, want, go_on);
+            viewer.take(part.await.unwrap());
+        }
+        panic!("it wants {:?} for ever", viewer.want());
+    }
+
+    #[tokio::test]
+    async fn a_file_read_part_by_part_has_every_line_once_whichever_way_it_is_read() {
+        use std::fmt::Write as _;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("f");
+        // A window for all of it, so that the lines held can be told from those of the file.
+        let sizes = Sizes {
+            part: 4096,
+            window: 1 << 30,
+            ahead: 0,
+        };
+        // Lines of many lengths, down the file; some are longer than a part.
+        let mut text = String::new();
+        for n in 0..4000 {
+            let length = if n % 700 == 350 { 9000 } else { n * 31 % 211 };
+            writeln!(text, "{n:04} {}", "x".repeat(length)).unwrap();
+        }
+        std::fs::write(&path, &text).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        for _ in 0..10_000 {
+            read(&mut viewer, &path).await;
+            draw(&mut viewer, 40, 12);
+            if viewer.at_file_end() {
+                break;
+            }
+            viewer.handle(Command::Scroll(Motion::WindowDown));
+        }
+        assert_eq!(viewer.lines(), lines, "read down");
+        assert_eq!(viewer.parts.lines(), Some(lines.len()));
+
+        // Up from a jump to the end; no line is longer than a part, which a jump would cut.
+        let text = text.replace(&"x".repeat(9000), "long");
+        std::fs::write(&path, &text).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        read(&mut viewer, &path).await;
+        draw(&mut viewer, 40, 12);
+        viewer.handle(Command::Scroll(Motion::End));
+        read(&mut viewer, &path).await;
+        let end = draw(&mut viewer, 40, 12);
+        assert!(end.contains("3999") && end.contains("EOF"), "{end}");
+        assert_eq!(viewer.parts.lines(), None, "not counted");
+        for _ in 0..10_000 {
+            if !viewer.parts.more_before() {
+                break;
+            }
+            viewer.handle(Command::Scroll(Motion::WindowUp));
+            read(&mut viewer, &path).await;
+            draw(&mut viewer, 40, 12);
+        }
+        assert_eq!(viewer.lines(), lines, "read up from the end");
+        assert_eq!(viewer.parts.lines(), Some(lines.len()), "the parts met");
+    }
+
+    #[test]
     fn a_byte_far_from_what_was_read_is_jumped_to() {
         let text = short_lines(1..=48);
         let mut viewer = Viewer::new("f".to_owned(), SMALL);
@@ -1977,9 +2164,11 @@ mod tests {
             screen.contains("l045") && screen.contains("EOF"),
             "{screen}"
         );
-        // A byte near what was read is read up to in order, and its line has a number.
+        // A byte near what was read is read up to in order, no further than the parts apart,
+        // and its line has a number.
         viewer.handle(Command::Bar(60));
-        assert_eq!(viewer.want(), Some(NEXT));
+        let on = Want { most: 160, ..NEXT };
+        assert_eq!(viewer.want(), Some(on));
         feed(&mut viewer, &text);
         let screen = draw(&mut viewer, 20, 6);
         assert!(

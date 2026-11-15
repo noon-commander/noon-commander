@@ -106,6 +106,8 @@ pub(crate) struct LocationMenu {
     /// The wait for the sizes of the volumes that did not answer in time, whose shine crosses
     /// all their skeletons at once.
     sizes: Wait,
+    /// The wait for the address of a host from `ssh -G`, whose shine crosses its skeleton.
+    address: Wait,
     picker: Picker,
 }
 
@@ -141,6 +143,7 @@ impl LocationMenu {
             },
             loading: Loading::new(generation),
             sizes: Wait::default(),
+            address: Wait::default(),
             picker: Picker::new(Input::new(Kind::FILTER, SearchMode::Plain)),
         };
         // The home directory, before the listing.
@@ -194,6 +197,16 @@ impl LocationMenu {
         (self.contents.places.waiting.values())
             .any(|since| at.saturating_duration_since(*since) < NO_ANSWER)
             .then_some(&self.sizes)
+    }
+
+    /// The wait for the address of the host under the cursor, while it has none cached and
+    /// `ssh -G` has not told it, nor failed for it, in this run, as `told` says: its shine
+    /// crosses the skeleton in the card.
+    pub(crate) fn address_wait(&self, told: &dyn Fn(&str) -> bool) -> Option<&Wait> {
+        match self.chosen()? {
+            Item::Host(host) if host.address.is_none() && !told(&host.alias) => Some(&self.address),
+            Item::Home(..) | Item::Volume(_) | Item::Host(_) | Item::More(..) => None,
+        }
     }
 
     /// When the next sizes still to come after `at` are given up for, so that their skeleton
@@ -440,6 +453,7 @@ impl LocationMenu {
             hosts,
             dots: spin.dots(),
             shine: spin.shine(&self.sizes),
+            address_shine: spin.shine(&self.address),
             focused: Colors::plain(theme).focused_style(),
         };
         // No card while the skeleton stands for the rows: it takes the lines of the card too.
@@ -618,6 +632,8 @@ struct Look<'a> {
     dots: char,
     /// The shine over the skeletons of sizes still to come.
     shine: Option<Shine<'a>>,
+    /// The shine over the skeleton of the address of a host still to come.
+    address_shine: Option<Shine<'a>>,
     /// The row under the cursor.
     focused: Style,
 }
@@ -748,18 +764,10 @@ impl Look<'_> {
                 let state = (self.hosts)(&host.alias);
                 let file = home_text(&host.file, home);
                 let label = fl!("menu-card-defined", file = file, line = host.line);
-                let address = (state.address.as_ref()).or(host.address.as_ref());
-                let address = match (address, &host.jump) {
-                    (Some(address), Some(jump)) => fl!(
-                        "menu-card-via",
-                        address = cells::sanitize(address.as_bytes()),
-                        jump = cells::sanitize(jump.as_bytes())
-                    ),
-                    (Some(address), None) => cells::sanitize(address.as_bytes()),
-                    (None, _) => fl!("menu-card-no-address"),
-                };
-                let first = both(&cells::sanitize(host.alias.as_bytes()), &address);
-                let lines = vec![text(&first, Cut::End), self.status_line(&state, width)];
+                let lines = vec![
+                    self.reach_line(host, &state, width),
+                    self.status_line(&state, width),
+                ];
                 (lines, Some(label))
             }
             Item::More(..) => {
@@ -767,6 +775,56 @@ impl Look<'_> {
                 (vec![text(&names, Cut::End), Line::default()], None)
             }
         }
+    }
+
+    /// How to reach `host`, in `width` cells, after its alias: its address and the host ssh
+    /// jumps through, from this session's `ssh -G` as `state` has them, else why that failed, in
+    /// the colors of errors, else from the cache; else a skeleton, as `ssh -G` runs for every
+    /// host the cursor rests on: no text that would show for the moment before it starts.
+    fn reach_line(&self, host: &KnownHost, state: &HostState, width: usize) -> Line<'static> {
+        let reach = |address: &str, jump: Option<&String>| match jump {
+            Some(jump) => fl!(
+                "menu-card-via",
+                address = cells::sanitize(address.as_bytes()),
+                jump = jump.as_str()
+            ),
+            None => cells::sanitize(address.as_bytes()),
+        };
+        let dialog = self.theme.dialog;
+        let (text, style) = if let Some(address) = &state.address {
+            (reach(address, state.jump.as_ref()), dialog)
+        } else if let Some(reason) = &state.unresolved {
+            let text = fl!("menu-card-not-resolved", reason = reason.as_str());
+            (text, self.theme.invalid(dialog))
+        } else if let Some(address) = &host.address {
+            let jump = host
+                .jump
+                .as_ref()
+                .map(|jump| cells::sanitize(jump.as_bytes()));
+            (reach(address, jump.as_ref()), dialog)
+        } else {
+            (String::new(), dialog)
+        };
+        let alias = cells::sanitize(host.alias.as_bytes());
+        let lead = fl!("menu-card-both", first = alias, second = "");
+        let lead_width = cells::width(&lead).min(width);
+        let lead = cells::fit_cut(&lead, lead_width, Align::Left, Cut::End);
+        let room = width - lead_width;
+        let marks = self.theme.glyphs.marks;
+        let mut spans = cells::spans(lead, (dialog, self.theme.truncated_dialog), marks);
+        if text.is_empty() {
+            let room = u16::try_from(room).unwrap_or(u16::MAX);
+            let skeleton = window::status_skeleton(room, dialog, self.theme, self.address_shine);
+            spans.extend(skeleton.spans);
+        } else {
+            let fitted = cells::fit_cut(&text, room, Align::Left, Cut::End);
+            spans.extend(cells::spans(
+                fitted,
+                (style, self.theme.truncated_dialog),
+                marks,
+            ));
+        }
+        Line::from(spans)
     }
 
     /// How the space of a volume is, in `width` cells: its free space and its size, a skeleton
@@ -1823,10 +1881,7 @@ mod tests {
         press(&mut menu, Action::Down);
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" /etc/ssh/ssh_config:40 ─╢"), "{label}");
-        assert!(
-            reach.starts_with("║ db · address not known yet "),
-            "{reach}"
-        );
+        assert!(reach.starts_with("║ db · ------"), "{reach}");
         assert!(
             how.starts_with("║ ✗ Permission denied (publickey). "),
             "{how}"
@@ -1847,26 +1902,72 @@ mod tests {
     }
 
     #[test]
-    fn the_reason_a_host_failed_is_in_the_colors_of_errors() {
-        let mut menu = menu_with(remote("db"), &Recent::default(), places());
+    fn why_a_host_failed_and_why_ssh_g_did_are_in_the_colors_of_errors() {
         let failed = |_: &str| HostState {
             status: HostStatus::Failed,
             reason: Some("Connection refused".to_owned()),
+            unresolved: Some("Bad configuration option".to_owned()),
             ..HostState::default()
         };
         let theme = Theme::mc_classic();
-        let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
-        terminal
-            .draw(|frame| {
-                let decor = Decor::new(false);
-                menu.render(frame, frame.area(), &theme, decor, &failed, &still());
-            })
-            .unwrap();
-        let buffer = terminal.backend().buffer();
-        let at = crate::tui::mouse::find(buffer, "Connection refused");
-        let fg = buffer[(at.x, at.y)].fg;
-        assert_eq!(Some(fg), theme.invalid(theme.dialog).fg);
-        assert_ne!(Some(fg), theme.dialog.fg, "apart from the dialog's");
+        for text in [
+            "Connection refused",
+            "ssh -G failed: Bad configuration option",
+        ] {
+            let mut menu = menu_with(remote("db"), &Recent::default(), places());
+            let mut terminal = Terminal::new(TestBackend::new(70, 30)).unwrap();
+            terminal
+                .draw(|frame| {
+                    let decor = Decor::new(false);
+                    menu.render(frame, frame.area(), &theme, decor, &failed, &still());
+                })
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let at = crate::tui::mouse::find(buffer, text);
+            let fg = buffer[(at.x, at.y)].fg;
+            assert_eq!(Some(fg), theme.invalid(theme.dialog).fg, "{text}");
+            assert_ne!(Some(fg), theme.dialog.fg, "apart from the dialog's: {text}");
+        }
+    }
+
+    #[test]
+    fn the_card_of_a_host_takes_its_address_from_ssh_g_and_waits_for_it_with_none() {
+        let mut menu = menu_with(remote("web"), &Recent::default(), places());
+        let fresh = |_: &str| HostState {
+            address: Some("deploy@10.0.0.9".to_owned()),
+            jump: Some("gate".to_owned()),
+            ..HostState::default()
+        };
+        let [_, reach, _] = card(&mut menu, &fresh);
+        let fresh = "║ web · deploy@10.0.0.9 via gate ";
+        assert!(reach.starts_with(fresh), "this session's: {reach}");
+        let [_, reach, _] = card(&mut menu, &idle);
+        let cached = "║ web · deploy@10.0.0.5 ";
+        assert!(
+            reach.starts_with(cached),
+            "the cached one meanwhile: {reach}"
+        );
+        assert!(
+            menu.address_wait(&|_| false).is_none(),
+            "no skeleton to shine over"
+        );
+
+        press(&mut menu, Action::Down);
+        let [_, reach, _] = card(&mut menu, &idle);
+        let skeleton = "from the start, before ssh -G runs: no text in between";
+        assert!(reach.starts_with("║ db · ------"), "{skeleton}: {reach}");
+        assert!(menu.address_wait(&|_| false).is_some());
+        assert!(
+            menu.address_wait(&|_| true).is_none(),
+            "once ssh -G told it"
+        );
+        let failed = |_: &str| HostState {
+            unresolved: Some("Bad configuration option".to_owned()),
+            ..HostState::default()
+        };
+        let [_, reach, _] = card(&mut menu, &failed);
+        let failed = "║ db · ssh -G failed: Bad configuration option ";
+        assert!(reach.starts_with(failed), "{reach}");
     }
 
     #[test]

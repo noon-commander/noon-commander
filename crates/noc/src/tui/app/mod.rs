@@ -1,6 +1,6 @@
 //! State and drawing of the whole screen.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -129,6 +129,11 @@ pub(crate) enum Effect {
     },
     /// Read the volumes and the hosts for the location menu and pass them to [`App::places`].
     ListPlaces { generation: u64 },
+    /// Run `ssh -G` for the host under the cursor of the location menu once the cursor has
+    /// rested on it a moment, and report to [`App::resolving`] and [`App::resolved`], or
+    /// [`App::not_resolved`]; `None` when no host needs it any more, which stops one that waits
+    /// to start.
+    Resolve(Option<String>),
     /// Read a part of a file for the viewer, and report to [`App::read_progress`] and
     /// [`App::read`].
     Read(ReadRequest),
@@ -370,6 +375,24 @@ impl Host {
             Self::Stalled { .. } => {}
         }
     }
+}
+
+/// What `ssh -G` told of hosts in this session, by host, and what it runs for.
+#[derive(Debug, Default)]
+struct SshG {
+    /// `user@hostname[:port]`.
+    addresses: HashMap<String, String>,
+    /// The users, terminal-safe.
+    users: HashMap<String, String>,
+    /// The `ProxyJump` of the hosts in `addresses` that have one, terminal-safe.
+    jumps: HashMap<String, String>,
+    /// Why it failed, terminal-safe and on one line, until `R` in the location menu lets it run
+    /// again.
+    unresolved: HashMap<String, String>,
+    /// The hosts it runs for, from the location menu.
+    resolving: HashSet<String>,
+    /// The host that the location menu asked it for last, which may still wait to start.
+    asked: Option<String>,
 }
 
 /// Most times a count repeats a motion, so that a long count cannot keep the app busy.
@@ -1039,10 +1062,8 @@ pub(crate) struct App {
     /// Hosts whose last attempt failed or whose connection was lost, with why, terminal-safe
     /// and on one line.
     failed: HashMap<String, String>,
-    /// Addresses from `ssh -G` in this session.
-    addresses: HashMap<String, String>,
-    /// The users `ssh -G` gave for hosts in this session, terminal-safe.
-    users: HashMap<String, String>,
+    /// What `ssh -G` told of hosts in this session, and what it runs for.
+    ssh_g: SshG,
     /// The machine Noon Commander runs on and who runs it; nothing until told.
     machine: Machine,
     /// The settings from `hosts.toml`.
@@ -1274,8 +1295,7 @@ impl App {
             color_depth: ColorDepth::TrueColor,
             epoch: Wait::default(),
             failed: HashMap::new(),
-            addresses: HashMap::new(),
-            users: HashMap::new(),
+            ssh_g: SshG::default(),
             machine: Machine::default(),
             host_settings: Arc::default(),
             last_dirs: HashMap::new(),

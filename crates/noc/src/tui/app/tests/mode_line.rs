@@ -148,9 +148,14 @@ fn the_cursor_is_on_red_in_the_panels_where_the_user_is_root() {
     assert!(shows_background(&mut app, root));
 
     let (mut app, _) = on_a_host();
-    app.resolved("web".to_owned(), "deploy@10.0.0.5".to_owned(), "deploy");
+    app.resolved(
+        "web".to_owned(),
+        "deploy@10.0.0.5".to_owned(),
+        "deploy",
+        None,
+    );
     assert!(!shows_background(&mut app, root), "not root there");
-    app.resolved("web".to_owned(), "root@10.0.0.5".to_owned(), "root");
+    app.resolved("web".to_owned(), "root@10.0.0.5".to_owned(), "root", None);
     assert!(shows_background(&mut app, root), "root on the host");
     assert_eq!(app.theme.root_cursor, root, "the theme stays");
 }
@@ -163,7 +168,12 @@ fn on_a_host_the_user_comes_from_ssh_and_a_local_root_still_shows() {
     let line = mode_line(&mut app, 100);
     assert!(line.ends_with(" web"), "{line:?}");
 
-    app.resolved("web".to_owned(), "deploy@10.0.0.5".to_owned(), "deploy");
+    app.resolved(
+        "web".to_owned(),
+        "deploy@10.0.0.5".to_owned(),
+        "deploy",
+        None,
+    );
     assert_eq!(prompt(&app), "deploy@web:/home/deploy $ ");
     app.set_machine(root_on_mac());
     assert_eq!(prompt(&app), "deploy@web:/home/deploy $ ");
@@ -177,7 +187,7 @@ fn on_a_host_the_user_comes_from_ssh_and_a_local_root_still_shows() {
     );
 
     app.set_machine(alice_on_mac());
-    app.resolved("web".to_owned(), "root@10.0.0.5".to_owned(), "root");
+    app.resolved("web".to_owned(), "root@10.0.0.5".to_owned(), "root", None);
     assert_eq!(prompt(&app), "root@web:/home/deploy # ");
     assert!(mode_line(&mut app, 100).ends_with(" root@web"));
     assert!(!mode_line(&mut app, 100).contains('#'));

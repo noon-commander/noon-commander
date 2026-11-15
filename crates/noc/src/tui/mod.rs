@@ -154,7 +154,10 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
             host,
             address,
             user,
-        } => app.resolved(host, address, &user),
+            jump,
+        } => app.resolved(host, address, &user, jump),
+        Done::Resolving { host } => app.resolving(host),
+        Done::NotResolved { host, reason } => app.not_resolved(host, &reason),
         Done::Ask(ask) => app.ask(ask),
         Done::Notice {
             id,
@@ -739,13 +742,17 @@ struct Asked {
 }
 
 /// Does what the app asks of the tasks between events: the work directory of the process, which
-/// follows the active panel, and the places used last, to save.
+/// follows the active panel, the places used last, to save, and `ssh -G` for the host under the
+/// cursor of the location menu, however the cursor got there.
 fn take_requests(app: &mut App, tasks: &mut Tasks) {
     if let Some(dir) = app.take_work_dir() {
         tasks.change_work_dir(dir);
     }
     if let Some(recent) = app.take_recent() {
         tasks.run(vec![app::Effect::Recent(app::RecentChange::Save(recent))]);
+    }
+    if let Some(resolve) = app.take_resolve() {
+        tasks.run(vec![resolve]);
     }
 }
 

@@ -395,7 +395,7 @@ impl App {
                 Some((self.machine.user.clone(), host))
             }
             Location::Remote { host, .. } => Some((
-                self.users.get(host).cloned(),
+                self.ssh_g.users.get(host).cloned(),
                 cells::sanitize(self.host_label(host).as_bytes()),
             )),
         }
@@ -412,6 +412,7 @@ impl App {
         match location {
             Location::Local(_) => self.machine.root,
             Location::Remote { host, .. } => self
+                .ssh_g
                 .users
                 .get(host)
                 .is_some_and(|user| user == machine::ROOT),

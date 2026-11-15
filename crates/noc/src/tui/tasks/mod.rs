@@ -57,6 +57,9 @@ use searching::{Batches, FIND_REPORTS, Named, Searched};
 
 /// How long quitting waits for connections to shut down.
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+/// How long the cursor of the location menu rests on a host before `ssh -G` runs for it, so
+/// that moving over hosts runs it for none of them.
+const RESOLVE_DELAY: Duration = Duration::from_millis(150);
 /// A finished piece of background work.
 #[derive(Debug)]
 pub(crate) enum Done {
@@ -107,12 +110,18 @@ pub(crate) enum Done {
     },
     /// ssh no longer waits for the prompt or notice `id`.
     PromptClosed { id: u64 },
-    /// `ssh -G` gave the address and the user of a host that [`Effect::Connect`] connects to.
+    /// `ssh -G` gave the address, the user, and the `ProxyJump`, if any, of a host that
+    /// [`Effect::Connect`] connects to, or of [`Effect::Resolve`].
     Resolved {
         host: String,
         address: String,
         user: String,
+        jump: Option<String>,
     },
+    /// `ssh -G` runs for the host of [`Effect::Resolve`], after its wait.
+    Resolving { host: String },
+    /// `ssh -G` failed for a host, for `reason`.
+    NotResolved { host: String, reason: String },
     /// The attempt or connection of [`Effect::Connect`] ended; `reason` is `None` if it was
     /// asked to stop.
     Closed {
@@ -310,6 +319,9 @@ pub(crate) struct Tasks {
     /// The listing of the places, until the volumes it listed without their answers have
     /// answered; a newer one replaces it.
     places: Option<AbortHandle>,
+    /// The `ssh -G` of [`Effect::Resolve`] while it waits to start; a newer one replaces it.
+    /// Once started, it runs to its end.
+    resolve: Option<AbortHandle>,
     /// Debug builds only: how long the answer of every volume is held back (`--slow-volumes`).
     #[cfg(debug_assertions)]
     slow_volumes: Option<Duration>,
@@ -346,6 +358,7 @@ impl Tasks {
             zoxide_query: None,
             work_dirs: change_work_dirs(),
             places: None,
+            resolve: None,
             #[cfg(debug_assertions)]
             slow_volumes: None,
         }
@@ -380,6 +393,7 @@ impl Tasks {
                     host: None,
                 } => self.list(panel, request),
                 Effect::ListPlaces { generation } => self.list_places(generation),
+                Effect::Resolve(host) => self.resolve(host),
                 Effect::CreateDir {
                     panel,
                     location,
@@ -545,6 +559,30 @@ impl Tasks {
             done: self.done.clone(),
         };
         self.hosts.spawn(task.run(askpass).instrument(span));
+    }
+
+    /// Runs `ssh -G` for `host` after [`RESOLVE_DELAY`], unless a newer request comes first;
+    /// `None` only stops the one that waits. One that has started runs to its end, and its
+    /// result goes to the cache, as a connection's does.
+    fn resolve(&mut self, host: Option<String>) {
+        if let Some(waiting) = self.resolve.take() {
+            waiting.abort();
+        }
+        let Some(host) = host else {
+            return;
+        };
+        let context = Arc::clone(&self.context);
+        let cache = Arc::clone(&self.cache);
+        let done = self.done.clone();
+        let waiting = tokio::spawn(async move {
+            tokio::time::sleep(RESOLVE_DELAY).await;
+            // From here on nothing awaits, so that an abort stops it before or not at all.
+            let _ = done.send(Done::Resolving { host: host.clone() });
+            let span = tracing::info_span!("resolve", %host);
+            let stop = CancellationToken::new();
+            tokio::spawn(resolve_address(context, host, stop, cache, done).instrument(span));
+        });
+        self.resolve = Some(waiting.abort_handle());
     }
 
     /// Uses `config` from now on, and writes to the config file the settings that differ

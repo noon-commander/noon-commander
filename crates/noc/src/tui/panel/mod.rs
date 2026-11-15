@@ -156,6 +156,10 @@ pub(crate) struct HostState {
     pub(crate) status: HostStatus,
     /// From `ssh -G` in this session, fresher than the cached address in the listing.
     pub(crate) address: Option<String>,
+    /// The `ProxyJump` that `ssh -G` gave with `address`, terminal-safe; `None` without one.
+    pub(crate) jump: Option<String>,
+    /// Why `ssh -G` failed for it in this session, terminal-safe, on one line.
+    pub(crate) unresolved: Option<String>,
     /// Why the last attempt failed, or the connection was lost, while it is `Failed` or
     /// `Stalled`: terminal-safe, on one line.
     pub(crate) reason: Option<String>,

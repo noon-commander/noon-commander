@@ -257,6 +257,72 @@ fn a_host_tells_where_it_opens_how_many_tabs_are_on_it_and_why_it_failed() {
     assert_eq!((state.status, state.tabs), (HostStatus::Connected, 1));
 }
 
+/// What the app asks of `ssh -G` now.
+#[derive(Debug, PartialEq, Eq)]
+enum Asked {
+    Nothing,
+    /// To run for this host, or for none.
+    For(Option<String>),
+}
+
+fn asked(app: &mut App) -> Asked {
+    match app.take_resolve() {
+        Some(Effect::Resolve(host)) => Asked::For(host),
+        Some(other) => panic!("expected ssh -G, got {other:?}"),
+        None => Asked::Nothing,
+    }
+}
+
+fn asked_for(host: &str) -> Asked {
+    Asked::For(Some(host.to_owned()))
+}
+
+#[test]
+fn ssh_g_runs_once_a_run_for_the_host_the_cursor_of_the_menu_rests_on() {
+    let mut app = at_slash();
+    menu_on(&mut app, Side::Left);
+    assert_eq!(
+        asked(&mut app),
+        Asked::Nothing,
+        "the home directory is no host"
+    );
+    app.handle(action(Action::Down));
+    assert_eq!(asked(&mut app), asked_for("web"));
+    assert_eq!(asked(&mut app), Asked::Nothing, "asked once");
+    app.handle(action(Action::Down));
+    assert_eq!(asked(&mut app), asked_for("db"), "in place of web");
+
+    app.resolving("db".to_owned());
+    assert!(app.ssh_g.resolving.contains("db"));
+    let runs = "it runs: nothing waits to start";
+    assert_eq!(asked(&mut app), Asked::For(None), "{runs}");
+    app.not_resolved("db".to_owned(), "line 3: Bad\nconfiguration option");
+    let state = app.host_state("db");
+    assert!(!app.ssh_g.resolving.contains("db"));
+    let reason = Some("line 3: Bad configuration option");
+    assert_eq!(state.unresolved.as_deref(), reason, "on one line");
+    assert_eq!(asked(&mut app), Asked::Nothing, "not again in this run");
+
+    app.handle(action(Action::Up));
+    assert_eq!(asked(&mut app), asked_for("web"));
+    let (address, jump) = ("deploy@10.0.0.5".to_owned(), Some("bastion".to_owned()));
+    app.resolved("web".to_owned(), address, "deploy", jump);
+    let state = app.host_state("web");
+    let reach = (state.address.as_deref(), state.jump.as_deref());
+    assert_eq!(reach, (Some("deploy@10.0.0.5"), Some("bastion")));
+    assert_eq!(asked(&mut app), Asked::For(None), "resolved in this run");
+
+    app.handle(action(Action::Down));
+    assert_eq!(asked(&mut app), Asked::Nothing);
+    app.handle(action(Action::Reload));
+    assert_eq!(app.host_state("db").unresolved, None);
+    assert_eq!(asked(&mut app), asked_for("db"), "R lets it run again");
+    app.handle(action(Action::Cancel));
+    assert!(app.menu.is_none());
+    let closed = "a closed menu stops the one that waits";
+    assert_eq!(asked(&mut app), Asked::For(None), "{closed}");
+}
+
 /// Opens the dialog of F4 on `web` from the location menu of the left panel.
 fn edit_web(app: &mut App) {
     if app.menu.is_none() {

@@ -228,8 +228,8 @@ menu-card-no-space = Tells no free space
 menu-card-defined = { $file }:{ $line }
 # The address of a host, and the host ssh jumps through to reach it.
 menu-card-via = { $address } via { $jump }
-# In place of the address of a host that no ssh -G has told yet.
-menu-card-no-address = address not known yet
+# In place of the address of a host, in the colors of errors, when ssh -G failed for it: why.
+menu-card-not-resolved = ssh -G failed: { $reason }
 # How a host is, after its marker: connected, with the tabs of both panels on it.
 menu-card-connected = Connected · { $tabs ->
         [0] no tabs

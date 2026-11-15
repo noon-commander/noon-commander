@@ -47,7 +47,12 @@ impl App {
         let mut at = |time: Instant| due = Some(due.map_or(time, |due| due.min(time)));
         // The shine over the sizes of volumes still to come stops once they are given up for.
         let sizes = self.menu.as_ref().and_then(|menu| menu.sizes_wait(drawn));
-        for wait in self.waits().into_iter().chain(sizes) {
+        // And the one over the address of the host under the cursor, until ssh -G tells it.
+        let told = |host: &str| {
+            self.ssh_g.addresses.contains_key(host) || self.ssh_g.unresolved.contains_key(host)
+        };
+        let address = (self.menu.as_ref()).and_then(|menu| menu.address_wait(&told));
+        for wait in self.waits().into_iter().chain(sizes).chain(address) {
             match wait.shows() {
                 Some(shows) if shows > drawn => at(shows),
                 Some(_) if turns => at(wait.moves_after(drawn)),
@@ -85,6 +90,20 @@ impl App {
             at(goes);
         }
         due
+    }
+
+    /// The state of every host whose state is not the default, which the others get.
+    fn host_states(&self) -> HashMap<String, HostState> {
+        let known = &self.ssh_g;
+        (self.hosts.keys())
+            .chain(self.failed.keys())
+            .chain(known.addresses.keys())
+            .chain(self.host_settings.hosts.keys())
+            .chain(self.last_dirs.keys())
+            .chain(&known.resolving)
+            .chain(known.unresolved.keys())
+            .map(|host| (host.clone(), self.host_state(host)))
+            .collect()
     }
 
     /// What waits on screen, each with a spinner.
@@ -154,16 +173,7 @@ impl App {
         let [(left_bar, left), (right_bar, right)] = self.panel_areas(panels);
         self.sync_connected();
         let active = self.active;
-        // Every host whose state is not the default, which the others get.
-        let states: HashMap<String, HostState> = self
-            .hosts
-            .keys()
-            .chain(self.failed.keys())
-            .chain(self.addresses.keys())
-            .chain(self.host_settings.hosts.keys())
-            .chain(self.last_dirs.keys())
-            .map(|host| (host.clone(), self.host_state(host)))
-            .collect();
+        let states = self.host_states();
         let hosts = |host: &str| states.get(host).cloned().unwrap_or_default();
         let formats = noc_locale::current();
         let spin = self.spin(at);

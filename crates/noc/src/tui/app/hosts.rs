@@ -15,6 +15,7 @@ use crate::tui::configuration::{run_of, run_text};
 use crate::tui::describe::Reason;
 use crate::tui::dialog::{Ask, Button, Dialog, DialogEvent, Problem, Reply};
 use crate::tui::keymap::Action;
+use crate::tui::menu::LocationMenu;
 use crate::tui::panel::{
     Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
 };
@@ -303,11 +304,60 @@ impl App {
         effects
     }
 
-    /// Takes the address and the user `ssh -G` gave for a host.
-    pub(crate) fn resolved(&mut self, host: String, address: String, user: &str) {
-        self.users
+    /// Takes the address, the user, and the `ProxyJump`, if any, that `ssh -G` gave for a host.
+    pub(crate) fn resolved(
+        &mut self,
+        host: String,
+        address: String,
+        user: &str,
+        jump: Option<String>,
+    ) {
+        let known = &mut self.ssh_g;
+        known
+            .users
             .insert(host.clone(), cells::sanitize(user.as_bytes()));
-        self.addresses.insert(host, address);
+        match jump {
+            Some(jump) => known
+                .jumps
+                .insert(host.clone(), cells::sanitize(jump.as_bytes())),
+            None => known.jumps.remove(&host),
+        };
+        known.resolving.remove(&host);
+        known.unresolved.remove(&host);
+        known.addresses.insert(host, address);
+    }
+
+    /// Takes that `ssh -G` runs for `host`, from the location menu.
+    pub(crate) fn resolving(&mut self, host: String) {
+        self.ssh_g.resolving.insert(host);
+    }
+
+    /// Takes why `ssh -G` failed for `host`; it does not run for it again until `R` in the
+    /// location menu.
+    pub(crate) fn not_resolved(&mut self, host: String, reason: &str) {
+        self.ssh_g.resolving.remove(&host);
+        let reason = reason.split_whitespace().collect::<Vec<_>>().join(" ");
+        (self.ssh_g.unresolved).insert(host, cells::sanitize(reason.as_bytes()));
+    }
+
+    /// The `ssh -G` that the location menu asks for, if that changed since the last call: for the
+    /// host under its cursor, unless this run resolved it, or tried and failed, or it runs for it
+    /// already; else for none, which stops one that waits to start.
+    pub(crate) fn take_resolve(&mut self) -> Option<Effect> {
+        let known = &self.ssh_g;
+        let wanted = (self.menu.as_ref())
+            .and_then(LocationMenu::chosen_host)
+            .filter(|host| {
+                !known.addresses.contains_key(*host)
+                    && !known.unresolved.contains_key(*host)
+                    && !known.resolving.contains(*host)
+            })
+            .map(str::to_owned);
+        if wanted == known.asked {
+            return None;
+        }
+        self.ssh_g.asked.clone_from(&wanted);
+        Some(Effect::Resolve(wanted))
     }
 
     /// What the location menu and the panels show for a host.
@@ -336,7 +386,9 @@ impl App {
             .map(|dir| cells::sanitize(dir.as_bytes()));
         HostState {
             status,
-            address: self.addresses.get(host).cloned(),
+            address: self.ssh_g.addresses.get(host).cloned(),
+            jump: self.ssh_g.jumps.get(host).cloned(),
+            unresolved: self.ssh_g.unresolved.get(host).cloned(),
             reason: self.failed.get(host).cloned(),
             tabs,
             opens: remembered.or(started),

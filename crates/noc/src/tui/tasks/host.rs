@@ -258,9 +258,9 @@ pub(super) async fn prepare_ssh(
     Ok(server)
 }
 
-/// Runs `ssh -G` for a host that is being connected to, as the location menu shows effective
-/// addresses only from there: reports the address and stores it in the cache. Failures only go to the
-/// log; the connection reports its own.
+/// Runs `ssh -G` for a host that is being connected to, or that the cursor of the location menu
+/// rests on: reports the address, or why there is none, and stores it in the cache. A stop
+/// reports nothing.
 pub(super) async fn resolve_address(
     context: Arc<Context>,
     host: String,
@@ -278,6 +278,9 @@ pub(super) async fn resolve_address(
         Ok(resolved) => CachedHost::from(&resolved),
         Err(error) => {
             tracing::debug!(%host, error = %describe::chain(&error), "ssh -G failed");
+            if let Some(reason) = describe::ssh_error(&error) {
+                let _ = done.send(Done::NotResolved { host, reason });
+            }
             return;
         }
     };
@@ -285,6 +288,7 @@ pub(super) async fn resolve_address(
         host: host.clone(),
         address: cached.address(),
         user: cached.user.clone(),
+        jump: cached.proxy_jump.clone(),
     });
     let _guard = cache.lock().await;
     let saved =

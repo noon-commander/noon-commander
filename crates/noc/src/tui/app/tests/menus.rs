@@ -524,7 +524,12 @@ fn the_menu_shows_failures_and_fresh_addresses() {
     let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 1)) else {
         panic!("expected a connection");
     };
-    app.resolved("web".to_owned(), "deploy@10.0.0.9".to_owned(), "deploy");
+    app.resolved(
+        "web".to_owned(),
+        "deploy@10.0.0.9".to_owned(),
+        "deploy",
+        None,
+    );
     app.closed("web", connection, Some("Connection refused"));
     app.handle(action(Action::Cancel));
     assert_eq!(

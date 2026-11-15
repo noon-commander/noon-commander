@@ -1,6 +1,7 @@
 # 0075. The location menu shows a card of the place under the cursor
 
-- Status: Accepted
+- Status: Accepted; amended by
+  [ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)
 - Date: 2026-11-15
 - Amends: [ADR 0041](0041-lists-always-show-the-whole-row.md),
   [ADR 0021](0021-location-menu-replaces-the-virtual-root.md)
@@ -38,8 +39,10 @@ was said once, in the dialog that asked to retry, and was gone after Cancel.
   so that it never reaches the screen.
 - **A host**: the file and the line of its `Host` line in the ssh config over the card, with `~`
   for the home directory; its alias and its address, with the host ssh jumps through,
-  `web · deploy@10.0.0.5 via bastion`, or `address not known yet`; then, after its marker in the
-  color of its status: `Connected` with the tabs of both panels on it; `Connecting`; why its last
+  `web · deploy@10.0.0.5 via bastion`, or a skeleton until `ssh -G` tells them
+  ([ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); then, after its
+  marker in the color of its status: `Connected` with the tabs of both panels on it; `Connecting`;
+  why its last
   attempt failed or its connection was lost, on one line, in the colors of errors, until a new
   attempt starts; or, not connected, where opening it goes: the last directory shown on it with
   `remember_dir`, else its `start_dir`, else the remote home, and the other panel's `other_dir`.

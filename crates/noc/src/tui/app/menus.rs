@@ -37,11 +37,13 @@ impl App {
         vec![Effect::ListPlaces { generation }]
     }
 
-    /// Reads the volumes and hosts of the location menu again, if it is open.
+    /// Reads the volumes and hosts of the location menu again, if it is open, and lets `ssh -G`
+    /// run again for the hosts it failed for.
     pub(super) fn reload_menu(&mut self) -> Vec<Effect> {
         let Some(menu) = &mut self.menu else {
             return Vec::new();
         };
+        self.ssh_g.unresolved.clear();
         self.menu_listings += 1;
         let generation = self.menu_listings;
         menu.reload(generation);

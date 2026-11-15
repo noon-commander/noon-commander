@@ -289,7 +289,11 @@ choose a volume or a host, grouped under headings:
   its file system over them; a volume what it mounts and where (`Volume::source`, without the
   password of a URL), then its free space, its size, and the share free, a skeleton while they are
   to come, `Did not answer in 5 s`, or `Tells no free space`; a host the file and line of its
-  `Host` line, its alias, address, and `ProxyJump` from the cache, then after its marker
+  `Host` line, its alias, address, and `ProxyJump`, from this run's `ssh -G`, which runs once the
+  cursor rests on the host, else from the cache, else a skeleton until `ssh -G` tells them, or
+  `ssh -G failed: reason` in the colors of errors
+  ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), then after
+  its marker
   `Connected` with the tabs on it, `Connecting`, why its last attempt failed in the colors of errors
   (`App::failed` keeps it until a new attempt), or where opening it goes, `Opens /srv/app · other
   panel ~/logs` or `Opens the remote home`; the row of the rest the names of the places it stands
@@ -907,8 +911,11 @@ predicates. So:
 2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
    expanded statically; they are skipped and logged.
 3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, which runs
-   when the TUI connects to a host (or for `noc debug hosts --resolve`, with bounded
-   parallelism), never for every host at startup. Results are cached in
+   when the TUI connects to a host, once a run for a host that the cursor of the location menu
+   rests on for 150 ms, which, once started, runs to its end
+   ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), or for
+   `noc debug hosts --resolve`, with bounded parallelism; never for every host at startup. A
+   failure shows in the card of the host until R in the menu. Results are cached in
    `~/.cache/noc/resolve.json`, valid while the ssh settings, the config files read
    (inode, mtime, size), and the names in their directories stay the same, so earlier
    addresses show at once. A cached entry only stands in until `ssh -G` runs again.

@@ -280,6 +280,9 @@
       what a volume mounts and how much of it is free, where a host is defined, how to reach it,
       and how it is: connected with its tabs, why it failed, or where it opens
       ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md))
+- [x] `ssh -G` for the host the cursor of the location menu rests on, once a run, with a
+      skeleton in its card meanwhile and its failure there
+      ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

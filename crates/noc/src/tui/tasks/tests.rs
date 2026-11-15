@@ -193,6 +193,53 @@ async fn names_to_complete_tell_directories_and_links_to_them() {
     assert_eq!(names_in(Some(remote), None).await, Ok(Vec::new()));
 }
 
+#[tokio::test]
+async fn ssh_g_reports_the_address_of_a_host_or_why_it_has_none() {
+    let tmp = tempfile::tempdir().unwrap();
+    let context = |program: &Path| {
+        let mut config = Config::default();
+        config.ssh.program = program.to_path_buf();
+        let paths = Paths::resolve(tmp.path(), 501, &|_| None);
+        let file = tmp.path().join("config.toml");
+        Arc::new(Context::new(paths, config, file, Hosts::default()))
+    };
+    let fake = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../noc-ssh/tests/support/fake-ssh"
+    ));
+    let (done, mut results) = mpsc::unbounded_channel();
+    let cache = Arc::new(Mutex::new(()));
+    let stop = CancellationToken::new;
+    let web = context(fake);
+    resolve_address(
+        web,
+        "web".to_owned(),
+        stop(),
+        Arc::clone(&cache),
+        done.clone(),
+    )
+    .await;
+    let Some(Done::Resolved {
+        host,
+        address,
+        user,
+        jump,
+    }) = results.recv().await
+    else {
+        panic!("expected an address");
+    };
+    let resolved = (host.as_str(), address.as_str(), user.as_str(), jump);
+    assert_eq!(resolved, ("web", "tester@web.example", "tester", None));
+
+    let missing = context(&tmp.path().join("no-ssh"));
+    resolve_address(missing, "db".to_owned(), stop(), cache, done).await;
+    let Some(Done::NotResolved { host, reason }) = results.recv().await else {
+        panic!("expected why there is none");
+    };
+    assert_eq!(host, "db");
+    assert!(reason.contains("no-ssh"), "{reason}");
+}
+
 #[cfg(debug_assertions)]
 #[tokio::test]
 async fn slow_volumes_hold_back_every_answer_as_if_none_came_in_time() {

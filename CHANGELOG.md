@@ -66,6 +66,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   attempt failed, in the colors of errors, or where opening it goes; for the row of the rest, the
   names it stands for. The menu keeps its height
   ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)).
+- Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
+  run, and its card shows the address and the `ProxyJump` it gives, the cached ones until then, a
+  faint bar with a shine where none is known, or why `ssh -G` failed, in the colors of errors. R in
+  the menu lets it run again for hosts it failed for. One that has started runs to its end, and its
+  result goes to the cache
+  ([ADR 0076](docs/adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)).
 
 - The Workspaces window and F9 → Workspace list the workspaces in the order of their names, as
   the panels order names, and the digits of F9 → Workspace follow that order.

@@ -1,8 +1,8 @@
 //! Text for the terminal: names made safe to show, widths in cells, and text fitted, wrapped,
-//! or split by cells.
+//! or split by cells; and whether the bytes of a file are text at all.
 //!
-//! Every crate that draws text shares these, so that what is safe to show and how wide a
-//! character is are decided in one place.
+//! Every crate that draws text shares these, so that what is safe to show, how wide a
+//! character is, and what counts as a binary file are decided in one place.
 
 use unicode_width::{UnicodeWidthChar as _, UnicodeWidthStr as _};
 
@@ -57,6 +57,15 @@ fn is_prepended(c: char) -> bool {
             | '\u{11d46}'
             | '\u{11f02}'
     )
+}
+
+/// The bytes at the start of a file that [`is_binary`] looks at: as many as git looks at.
+pub const BINARY_START: usize = 8000;
+
+/// Whether `start`, the first bytes of a file, are of a binary file, as git and diff tell one: a
+/// NUL among the first [`BINARY_START`]. Text in UTF-16 counts as binary too, as in git.
+pub fn is_binary(start: &[u8]) -> bool {
+    start.iter().take(BINARY_START).any(|&byte| byte == 0)
 }
 
 /// Width of `text` in terminal cells.
@@ -312,6 +321,19 @@ mod tests {
         before: "<",
         after: ">",
     };
+
+    #[test]
+    fn a_nul_near_the_start_makes_a_file_binary() {
+        assert!(!is_binary(b""));
+        assert!(!is_binary("text, ünïcode, \t\r\n\x1b[0m".as_bytes()));
+        assert!(is_binary(b"\x7fELF\x02\x01\x01\0"));
+        assert!(is_binary(&[b'h', 0, b'i', 0]), "UTF-16");
+        let mut late = vec![b'a'; BINARY_START];
+        late.push(0);
+        assert!(!is_binary(&late), "past what it looks at");
+        late[BINARY_START - 1] = 0;
+        assert!(is_binary(&late));
+    }
 
     #[test]
     fn sanitize_hides_what_could_drive_the_terminal() {

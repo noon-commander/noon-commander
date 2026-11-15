@@ -79,7 +79,7 @@ client; the system `ssh` is the single source of truth for connections and auth.
 | `crates/noc-vfs` | `Vfs` trait and backends (local, SFTP), mounted volumes |
 | `crates/noc-ops` | Job engine: copy, move, delete, mkdir, checksums; progress, cancellation, conflicts |
 | `crates/noc-tools` | External programs other than ssh: zoxide, ripgrep, fd, the editor, the opener, the shell of `!` |
-| `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping |
+| `crates/noc-text` | Terminal-safe text: sanitizing, widths in cells, fitting, wrapping; telling binary files |
 | `crates/noc-pattern` | Patterns typed to match names: regular expressions or text as it is, smart case |
 | `crates/noc-scroll` | Paging the help and the viewer: how far the page keys go, the scroll bar |
 | `crates/noc-vars` | Variables in text: `$NAME`, `${NAME}`, `$$`, read once, expanded where it runs (ADR 0054) |

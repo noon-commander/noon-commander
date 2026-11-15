@@ -31,6 +31,7 @@ impl App {
         let mut menu = LocationMenu::new(side, current, self.home.clone(), generation)
             .with_input(self.search_opens(Slot::LocationMenu))
             .recent(&self.recent)
+            .natural_sort(self.config.ui.natural_sort)
             .lines_like(self.sizes.menu);
         menu.set_connected(self.hosts.keys().cloned().collect());
         menu.set_addresses(self.ssh_g.addresses.clone());

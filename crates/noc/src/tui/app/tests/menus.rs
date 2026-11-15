@@ -374,10 +374,10 @@ fn the_menu_disconnects_hosts_and_reads_its_listing_again() {
     let effect = one(app.handle(action(Action::Confirm)));
     assert!(matches!(effect, Effect::Connect { .. }));
     open_menu(&mut app, Side::Left);
-    assert!(app.hosts.contains_key("db"));
+    assert!(app.hosts.contains_key("worker"));
     app.handle(action(Action::End));
     assert!(app.handle(action(Action::Disconnect)).is_empty());
-    assert!(!app.hosts.contains_key("db"), "stopped connecting");
+    assert!(!app.hosts.contains_key("worker"), "stopped connecting");
     // R asks again; the earlier listing no longer counts.
     let effects = app.handle(action(Action::Reload));
     assert!(matches!(
@@ -385,6 +385,32 @@ fn the_menu_disconnects_hosts_and_reads_its_listing_again() {
         [Effect::ListPlaces { generation: 3 }]
     ));
     assert!(app.menu.is_some());
+}
+
+#[test]
+fn the_menu_puts_hosts_in_the_order_of_names_that_ui_natural_sort_says() {
+    for (natural, first) in [(true, "h2"), (false, "h10")] {
+        let mut config = config();
+        config.ui.natural_sort = natural;
+        let (mut app, effects) = App::new(Path::new("/"), Path::new("/home/me"), &config);
+        answer(&mut app, effects, &Listing::Dir(Vec::new()));
+        let Effect::ListPlaces { generation } = one(app.handle(action(Action::LocationMenu)))
+        else {
+            panic!("expected the places");
+        };
+        let mut places = places();
+        for (host, alias) in places.hosts.iter_mut().zip(["h10", "h2"]) {
+            alias.clone_into(&mut host.alias);
+        }
+        app.places(generation, Ok(places));
+        app.handle(action(Action::Home));
+        app.handle(action(Action::Down));
+        assert_eq!(
+            app.chosen_host().as_deref(),
+            Some(first),
+            "natural: {natural}"
+        );
+    }
 }
 
 #[test]
@@ -396,31 +422,34 @@ fn hosts_and_volumes_used_last_come_first_and_go_to_recent_toml() {
     };
     assert_eq!(app.take_recent(), None, "not before it connects");
     let (handle, _requests) = HostHandle::channel();
-    app.connected("db", connection, handle);
+    app.connected("worker", connection, handle);
     let recent = app.take_recent().unwrap();
-    assert_eq!(recent.hosts, ["db"]);
+    assert_eq!(recent.hosts, ["worker"]);
     assert_eq!(app.take_recent(), None, "once");
 
     // `recent.toml` arrives late: what was used since comes first.
     let saved = Recent {
-        hosts: vec!["web".to_owned(), "db".to_owned()],
+        hosts: vec!["web".to_owned(), "worker".to_owned()],
         volumes: vec![PathBuf::from("/")],
     };
     app.recent_loaded(Ok(saved));
-    assert_eq!(app.recent.hosts, ["db", "web"]);
+    assert_eq!(app.recent.hosts, ["worker", "web"]);
     assert_eq!(
         app.take_recent().map(|recent| recent.hosts),
         Some(app.recent.hosts.clone())
     );
     app.recent_loaded(Err("unreadable".to_owned()));
-    assert_eq!(app.recent.hosts, ["db", "web"]);
+    assert_eq!(app.recent.hosts, ["worker", "web"]);
 
-    // db comes first in the menu, after the home directory.
+    // worker comes first in the menu, after the home directory.
     menu_on(&mut app, Side::Right);
     let Effect::List { request, host, .. } = one(choose(&mut app, 1)) else {
         panic!("expected a listing");
     };
-    assert_eq!((request.location, host.is_some()), (remote("db", ""), true));
+    assert_eq!(
+        (request.location, host.is_some()),
+        (remote("worker", ""), true)
+    );
 
     // A panel that arrives on a volume uses it.
     let volume = |path: &str| noc_vfs::Volume {
@@ -544,13 +573,13 @@ fn disconnect_stops_a_connection_attempt() {
     let Effect::Connect { stop, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
         panic!("expected a connection");
     };
-    assert_eq!(app.host_state("db").status, HostStatus::Connecting);
+    assert_eq!(app.host_state("worker").status, HostStatus::Connecting);
     menu_on(&mut app, Side::Left);
     app.handle(action(Action::End));
     assert!(app.handle(action(Action::Disconnect)).is_empty());
     assert!(stop.is_cancelled());
     assert_eq!(app.panel(Side::Left).pending_request(), None);
-    assert_eq!(app.host_state("db").status, HostStatus::Idle);
+    assert_eq!(app.host_state("worker").status, HostStatus::Idle);
 }
 
 #[test]

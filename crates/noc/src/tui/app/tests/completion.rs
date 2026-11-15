@@ -172,7 +172,7 @@ fn go_to_dir_completes_hosts_and_home() {
     app.names(
         generation,
         Ok(names_of(&[("left", true)])),
-        &["web".to_owned(), "db".to_owned()],
+        &["web".to_owned(), "worker".to_owned()],
     );
     assert_eq!(field(&app), "web:|");
     // On a host that is not connected, there is nothing to read.

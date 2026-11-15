@@ -161,7 +161,7 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   (`Done::VolumeAnswered`) replace their volumes in both; a newer listing stops waiting for those
   of the one before it, and waits for the answers still to come itself
   ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
-- Hosts come in config order, named by their alias, as everywhere
+- Hosts come from discovery in config order, named by their alias, as everywhere
   ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)); their address comes from this run's
   `ssh -G` alone. `[discovery] hide` leaves out hosts by pattern.
 - Opening a host connects in the background and opens, shown as an absolute path, the last
@@ -316,7 +316,9 @@ choose a volume or a host, grouped under headings:
   its height
   ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
-  system volume, then the others by mount point; the hosts in config order. Each group shows
+  system volume, then the others by mount point; the hosts by name, as the panels order names
+  (`panel::name_key`, `ui.natural_sort`), which the menu sorts once a listing comes
+  ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md)). Each group shows
   its first ten places (a constant, not a setting), and always the volume or host the panel is
   on and the hosts that are connected, connecting, or waiting for Retry. A last row,
   `24 more…`, after a chevron down in the column of the icons (`glyphs.more`), faint but under

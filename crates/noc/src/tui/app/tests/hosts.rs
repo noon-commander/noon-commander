@@ -279,15 +279,15 @@ fn ssh_g_runs_once_a_run_for_the_host_the_cursor_of_the_menu_rests_on() {
     assert_eq!(asked(&mut app), asked_for("web"));
     assert_eq!(asked(&mut app), Asked::Nothing, "asked once");
     app.handle(action(Action::Down));
-    assert_eq!(asked(&mut app), asked_for("db"), "in place of web");
+    assert_eq!(asked(&mut app), asked_for("worker"), "in place of web");
 
-    app.resolving("db".to_owned());
-    assert!(app.ssh_g.resolving.contains("db"));
+    app.resolving("worker".to_owned());
+    assert!(app.ssh_g.resolving.contains("worker"));
     let runs = "it runs: nothing waits to start";
     assert_eq!(asked(&mut app), Asked::For(None), "{runs}");
-    app.not_resolved("db".to_owned());
-    assert!(!app.ssh_g.resolving.contains("db"));
-    assert!(app.host_state("db").unresolved);
+    app.not_resolved("worker".to_owned());
+    assert!(!app.ssh_g.resolving.contains("worker"));
+    assert!(app.host_state("worker").unresolved);
     assert_eq!(asked(&mut app), Asked::Nothing, "not again in this run");
 
     app.handle(action(Action::Up));
@@ -302,8 +302,8 @@ fn ssh_g_runs_once_a_run_for_the_host_the_cursor_of_the_menu_rests_on() {
     app.handle(action(Action::Down));
     assert_eq!(asked(&mut app), Asked::Nothing);
     app.handle(action(Action::Reload));
-    assert!(!app.host_state("db").unresolved);
-    assert_eq!(asked(&mut app), asked_for("db"), "R lets it run again");
+    assert!(!app.host_state("worker").unresolved);
+    assert_eq!(asked(&mut app), asked_for("worker"), "R lets it run again");
     app.handle(action(Action::Cancel));
     assert!(app.menu.is_none());
     let closed = "a closed menu stops the one that waits";
@@ -317,13 +317,13 @@ fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
         panic!("expected the places");
     };
     let mut listed = places();
-    listed.hosts[1].file = PathBuf::from("/home/me/.ssh/conf.d/db");
+    listed.hosts[1].file = PathBuf::from("/home/me/.ssh/conf.d/worker");
     listed.hosts[1].line = 3;
     app.places(generation, Ok(listed));
     assert!(!screen_of(&mut app, 14).contains("3View"), "not on Home");
     app.handle(action(Action::Down));
     app.handle(action(Action::Down));
-    assert_eq!(app.chosen_host().as_deref(), Some("db"));
+    assert_eq!(app.chosen_host().as_deref(), Some("worker"));
     assert!(screen_of(&mut app, 14).contains("3View"));
     let Effect::Read(ReadRequest {
         id, location, host, ..
@@ -333,7 +333,7 @@ fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
     };
     assert_eq!(
         (location, host.is_none()),
-        (local("/home/me/.ssh/conf.d/db"), true)
+        (local("/home/me/.ssh/conf.d/worker"), true)
     );
     assert_eq!(app.place(), (Mode::Normal, Context::Viewer));
     let text = (1..=40)
@@ -352,7 +352,7 @@ fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
     assert!(matches!(
         app.take_handover(),
         Some(Handover::Edit { file, line: Some(3) })
-            if file == Path::new("/home/me/.ssh/conf.d/db")
+            if file == Path::new("/home/me/.ssh/conf.d/worker")
     ));
     app.handle(action(Action::Quit));
     assert_eq!(
@@ -360,7 +360,7 @@ fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
         Context::LocationMenu,
         "the menu is there again"
     );
-    assert_eq!(app.chosen_host().as_deref(), Some("db"));
+    assert_eq!(app.chosen_host().as_deref(), Some("worker"));
 }
 
 /// Opens the dialog of F4 on `web` from the location menu of the left panel.
@@ -497,13 +497,13 @@ fn a_failed_connection_asks_to_retry_while_the_panel_waits() {
     let Effect::Connect { connection, .. } = one(enter_host(&mut app, Side::Left, 2)) else {
         panic!("expected a connection");
     };
-    let refused = "deploy@db: Permission denied (publickey).";
-    assert!(app.closed("db", connection, Some(refused)).is_empty());
+    let refused = "deploy@worker: Permission denied (publickey).";
+    assert!(app.closed("worker", connection, Some(refused)).is_empty());
     assert!(
-        app.closed("db", connection, Some(refused)).is_empty(),
+        app.closed("worker", connection, Some(refused)).is_empty(),
         "reported once"
     );
-    assert_eq!(app.host_state("db").status, HostStatus::Stalled);
+    assert_eq!(app.host_state("worker").status, HostStatus::Stalled);
     assert_eq!(app.dialogs.len(), 1);
     let text = screen_of(&mut app, 20);
     assert_eq!(
@@ -514,9 +514,9 @@ fn a_failed_connection_asks_to_retry_while_the_panel_waits() {
     assert!(
         shows_problem(
             &text,
-            "Cannot connect to db",
+            "Cannot connect to worker",
             None,
-            "deploy@db: Permission denied (publickey)."
+            "deploy@worker: Permission denied (publickey)."
         ),
         "{text}"
     );
@@ -531,7 +531,7 @@ fn a_failed_connection_asks_to_retry_while_the_panel_waits() {
         panic!("expected a new connection");
     };
     assert_ne!(again, connection);
-    assert_eq!(app.host_state("db").status, HostStatus::Connecting);
+    assert_eq!(app.host_state("worker").status, HostStatus::Connecting);
     assert!(
         app.spin_due(Instant::now()).is_some(),
         "the dots turn again"
@@ -539,13 +539,13 @@ fn a_failed_connection_asks_to_retry_while_the_panel_waits() {
     let waiting = app.panel(Side::Left).pending_request();
     assert_eq!(
         waiting.map(|request| request.location),
-        Some(remote("db", ""))
+        Some(remote("worker", ""))
     );
 
     // Cancel: the panel stays where it was; the dialog said why, so no other one does.
-    assert!(app.closed("db", again, Some(refused)).is_empty());
+    assert!(app.closed("worker", again, Some(refused)).is_empty());
     assert!(app.handle(action(Action::Cancel)).is_empty());
-    assert_eq!(app.host_state("db").status, HostStatus::Failed);
+    assert_eq!(app.host_state("worker").status, HostStatus::Failed);
     assert_eq!(app.panel(Side::Left).location(), &local("/"));
     assert_eq!(app.panel(Side::Left).pending_request(), None);
     assert!(app.dialogs.is_empty());

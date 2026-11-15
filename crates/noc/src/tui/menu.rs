@@ -1,10 +1,10 @@
 //! The location menu of `g l`, and of Ctrl+x `g l` for the other panel, as Far Manager's menu to
 //! change drives, for one panel: groups of places under their headings, the home directory in
-//! Favorites, the volumes in Mounts, and the hosts of the ssh config in SFTP. Mounts and SFTP put
-//! those used last first and show the first ten, with a row that shows the rest; the filter finds
-//! them all. Typing filters the menu; while the filter is empty, `1` … `9` and `0` open the first
-//! ten places. The sizes of a volume that did not answer in time come later, a skeleton in their
-//! place until then.
+//! Favorites, the volumes in Mounts, and the hosts of the ssh config in SFTP, by name. Mounts and
+//! SFTP put those used last first and show the first ten, with a row that shows the rest; the
+//! filter finds them all. Typing filters the menu; while the filter is empty, `1` … `9` and `0`
+//! open the first ten places. The sizes of a volume that did not answer in time come later, a
+//! skeleton in their place until then.
 
 use std::collections::{HashMap, HashSet};
 use std::os::unix::ffi::OsStrExt as _;
@@ -25,7 +25,7 @@ use super::decor::Decor;
 use super::keymap::{Action, Mode, Resolved};
 use super::loading::Loading;
 use super::mouse::Pointer;
-use super::panel::{HostState, HostStatus, home_text};
+use super::panel::{HostState, HostStatus, home_text, name_key};
 use super::picker::{Body, MenuLine, Pick, Picker, ShownRow, Shows};
 use super::places::{KnownHost, Places, volume_name, volume_of};
 use super::search::{Input, Kind};
@@ -131,6 +131,9 @@ struct Contents {
     places: Places,
     /// The hosts and volumes used last, which come first in their groups.
     recent: Recent,
+    /// Whether the names of the hosts compare as `ui.natural_sort` has them: by their language,
+    /// with the numbers in them by value; else by their characters, ignoring case.
+    natural: bool,
     /// Hosts that are connected, connecting, or stalled, which always show.
     connected: HashSet<String>,
     /// Where `ssh -G` said hosts connect to in this run, which the filter finds them by.
@@ -150,6 +153,7 @@ impl LocationMenu {
                 home,
                 places: Places::default(),
                 recent: Recent::default(),
+                natural: true,
                 connected: HashSet::new(),
                 addresses: HashMap::new(),
                 expanded: HashSet::new(),
@@ -173,6 +177,14 @@ impl LocationMenu {
     /// The same menu, with the hosts and volumes in `recent` first in their groups.
     pub(crate) fn recent(mut self, recent: &Recent) -> Self {
         self.contents.recent = recent.clone();
+        self
+    }
+
+    /// The same menu, whose hosts are in the order of their names as the panels order names:
+    /// by their language, with the numbers in them by value, if `natural`, as `ui.natural_sort`
+    /// says; else by their characters, ignoring case.
+    pub(crate) fn natural_sort(mut self, natural: bool) -> Self {
+        self.contents.natural = natural;
         self
     }
 
@@ -273,14 +285,15 @@ impl LocationMenu {
         }
     }
 
-    /// Takes the places of the listing `generation`. The first one puts the cursor on where
-    /// the panel is.
+    /// Takes the places of the listing `generation`, the hosts in the order of their names. The
+    /// first one puts the cursor on where the panel is.
     pub(crate) fn listed(&mut self, generation: u64, result: Result<Places, String>) {
         if !self.loading.answers(generation) {
             return;
         }
         match result {
-            Ok(places) => {
+            Ok(mut places) => {
+                by_name(&mut places.hosts, self.contents.natural);
                 // A shine of its own for sizes that come again after the last had come.
                 if self.contents.places.waiting.is_empty() && !places.waiting.is_empty() {
                     self.sizes = Wait::default();
@@ -597,8 +610,8 @@ impl Contents {
     }
 
     /// Every row, shown or not, and when it shows: the home directory, then the volumes, then
-    /// the hosts, those used last first; past the first ten of a group that is not expanded,
-    /// only those always shown, then a row for the rest.
+    /// the hosts, those used last first, the others by name; past the first ten of a group that
+    /// is not expanded, only those always shown, then a row for the rest.
     fn rows(&self) -> Vec<(Item<'_>, Shows)> {
         let home = volume_of(&self.places.volumes, &self.home);
         let mut rows = vec![(Item::Home(&self.home, home), Shows::Always)];
@@ -663,6 +676,15 @@ impl Contents {
             rows.push((Item::More(group, more), Shows::Unfiltered));
         }
     }
+}
+
+/// Puts `hosts` in the order of their names, as the panels order names: by the language of the
+/// formats in use if `natural`, with the numbers in them by value; else by their characters,
+/// ignoring case. Names that compare the same go by their bytes.
+fn by_name(hosts: &mut [KnownHost], natural: bool) {
+    let formats = noc_locale::current();
+    let natural = natural.then_some(&*formats);
+    hosts.sort_by_cached_key(|host| (name_key(&host.alias, natural), host.alias.clone()));
 }
 
 /// `places` in their order, those with a `rank` (lower for used later) first, by it.
@@ -1437,7 +1459,8 @@ mod tests {
         press(&mut menu, Action::End);
         assert_eq!(
             press(&mut menu, Action::Confirm),
-            MenuEvent::Open(remote("proxy"))
+            MenuEvent::Open(remote("web")),
+            "the last host by name"
         );
         assert_eq!(press(&mut menu, Action::Cancel), MenuEvent::Closed);
         assert_eq!(press(&mut menu, Action::Reload), MenuEvent::Reload);
@@ -1586,6 +1609,35 @@ mod tests {
     }
 
     #[test]
+    fn hosts_come_by_name_after_those_used_last() {
+        let defined = Places {
+            hosts: ["web", "h10", "Db", "h2", "api"].map(host).to_vec(),
+            ..Places::default()
+        };
+        let recent = Recent {
+            hosts: vec!["web".to_owned()],
+            ..Recent::default()
+        };
+        let aliases = |natural: bool| {
+            let mut menu = LocationMenu::new(Side::Left, home(), PathBuf::from("/Users/me"), 1)
+                .recent(&recent)
+                .natural_sort(natural);
+            menu.listed(1, Ok(defined.clone()));
+            hosts_shown(&menu)
+        };
+        assert_eq!(
+            aliases(true),
+            ["web", "api", "Db", "h2", "h10"],
+            "numbers by value, as ui.natural_sort has them"
+        );
+        assert_eq!(
+            aliases(false),
+            ["web", "api", "Db", "h10", "h2"],
+            "by their characters, ignoring case"
+        );
+    }
+
+    #[test]
     fn past_ten_places_a_row_shows_the_rest_which_the_filter_finds_anyway() {
         let recent = Recent {
             hosts: vec!["h12".to_owned()],
@@ -1709,24 +1761,30 @@ mod tests {
             })
             .unwrap();
         let buffer = terminal.backend().buffer();
-        // The hosts follow web below their heading; their icons are in column 4.
-        let web = (0..buffer.area.height)
-            .find(|&y| {
-                let row: String = (0..buffer.area.width)
-                    .map(|x| buffer[(x, y)].symbol())
-                    .collect();
-                row.contains(" web ")
-            })
-            .unwrap();
+        // The icons of the hosts are in column 4.
+        let row_of = |alias: &str| {
+            (0..buffer.area.height)
+                .find(|&y| {
+                    let row: String = (0..buffer.area.width)
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect();
+                    row.contains(&format!(" {alias} "))
+                })
+                .unwrap()
+        };
         let colors = |y: u16| (buffer[(4, y)].fg, buffer[(4, y)].bg);
-        assert_eq!(colors(web), (Color::Green, Color::Gray), "connected");
         assert_eq!(
-            colors(web + 1),
+            colors(row_of("web")),
+            (Color::Green, Color::Gray),
+            "connected"
+        );
+        assert_eq!(
+            colors(row_of("db")),
             (Color::Black, Color::Gray),
             "idle: the dialog's own color"
         );
-        assert_eq!(colors(web + 2), (Color::Red, Color::Gray), "failed");
-        assert_eq!(buffer[(4, web + 1)].symbol(), "󰒋");
+        assert_eq!(colors(row_of("proxy")), (Color::Red, Color::Gray), "failed");
+        assert_eq!(buffer[(4, row_of("db"))].symbol(), "󰒋");
     }
 
     #[test]
@@ -2195,7 +2253,14 @@ mod tests {
         );
         assert_eq!(how.trim_end_matches(['║', ' ']), "║   Connected");
 
-        press(&mut menu, Action::Down);
+        // By name: db, proxy, web.
+        press(&mut menu, Action::Up);
+        let [_, reach, how] = card(&mut menu, &state);
+        assert!(reach.starts_with("║ ○ root@proxy.example.org "), "{reach}");
+        assert!(reach.ends_with(" ~/.ssh/config:1 ║"), "{reach}");
+        assert_eq!(how.trim_end_matches(['║', ' ']), "║   Not connected");
+
+        press(&mut menu, Action::Up);
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" sftp ─╢"), "{label}");
         let skeleton = format!("║ ✗ {} ", "-".repeat(SKELETON));
@@ -2205,12 +2270,6 @@ mod tests {
             how.starts_with("║   Permission denied (publickey). "),
             "{how}"
         );
-
-        press(&mut menu, Action::Down);
-        let [_, reach, how] = card(&mut menu, &state);
-        assert!(reach.starts_with("║ ○ root@proxy.example.org "), "{reach}");
-        assert!(reach.ends_with(" ~/.ssh/config:1 ║"), "{reach}");
-        assert_eq!(how.trim_end_matches(['║', ' ']), "║   Not connected");
     }
 
     #[test]
@@ -2384,7 +2443,7 @@ mod tests {
         assert!(menu.wait().is_some());
         let text = draw(&mut menu, 16);
         assert!(text.contains("═ … Location ═"), "{text}");
-        assert!(text.contains("● web"), "the rows stay: {text}");
+        assert!(text.contains("○ db"), "the rows stay: {text}");
 
         menu.listed(1, Ok(places()));
         assert!(menu.wait().is_some(), "an older listing changes nothing");
@@ -2397,7 +2456,7 @@ mod tests {
         assert!(menu.wait().is_none());
         let text = draw(&mut menu, 16);
         assert!(text.contains("Not listed again: no"), "{text}");
-        assert!(text.contains("● web"), "the rows stay: {text}");
+        assert!(text.contains("○ db"), "the rows stay: {text}");
 
         menu.reload(4);
         assert!(!draw(&mut menu, 16).contains("Not listed again"));

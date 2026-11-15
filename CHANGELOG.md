@@ -192,6 +192,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   last row of a group of the location menu, but under the cursor, the last line of a column of
   tabs in the workspaces, and the last cell of the key hints, which no longer says `… 24 more`.
   A chevron down goes in front of it, in the column of the icons of the location menu.
+- The location menu lists the hosts not used lately by name, after those used last, where it
+  listed them in the order of the ssh config. Names compare as in the panels, with the numbers in
+  them by value while `ui.natural_sort` is on
+  ([ADR 0085](docs/adr/0085-the-location-menu-lists-hosts-by-name.md)).
 
 ### Removed
 

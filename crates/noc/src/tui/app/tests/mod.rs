@@ -295,11 +295,12 @@ fn loaded() -> App {
     app
 }
 
-/// The places of the location menu: no volumes, and the hosts `web` and `db`.
+/// The places of the location menu: no volumes, and the hosts `web` and `worker`, in the order of
+/// their names, which the menu shows them in.
 fn places() -> Places {
     Places {
         volumes: Vec::new(),
-        hosts: ["web", "db"]
+        hosts: ["web", "worker"]
             .map(|alias| KnownHost {
                 alias: alias.to_owned(),
                 file: PathBuf::from("/home/me/.ssh/config"),
@@ -594,7 +595,7 @@ fn typed(app: &mut App, text: &str) {
 }
 
 /// Opens the location menu of the panel on `side`, `g l` or Ctrl+x `g l`, and answers its
-/// listing with the system volume, a USB stick, and the hosts `web` and `db`.
+/// listing with the system volume, a USB stick, and the hosts `web` and `worker`.
 fn open_menu(app: &mut App, side: Side) {
     let effects = if side == app.active {
         app.handle(action(Action::LocationMenu))

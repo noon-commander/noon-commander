@@ -10,15 +10,20 @@ use tokio_util::sync::CancellationToken;
 use crate::i18n::fl;
 use crate::tui::cells::{self};
 use crate::tui::describe::Reason;
-use crate::tui::dialog::Problem;
-use crate::tui::panel::{child, location_text};
+use crate::tui::dialog::{Button, Dialog, Problem};
+use crate::tui::panel::{child, location_text, short_size};
 use crate::tui::transfer::{self};
+use crate::tui::window::Tone;
 
-use super::{Again, App, Editing, Effect, Handover, Job, JobKind, Then, Way};
+use super::{
+    Again, App, Editing, Effect, Handover, Job, JobKind, Open, Purpose, Sniffed, Sniffing, Then,
+    Way,
+};
 
 impl App {
     /// Edits the file under the cursor of the active panel with F4: a local one where it is, a
-    /// remote one as a local copy, which goes back if it changes.
+    /// remote one as a local copy, which goes back if it changes; after a question if it looks
+    /// binary or is large.
     pub(super) fn edit(&mut self) -> Vec<Effect> {
         let panel = self.panel(self.active);
         let dir = panel.location().clone();
@@ -29,7 +34,89 @@ impl App {
         else {
             return Vec::new();
         };
-        self.edit_file(dir, &name, None)
+        self.ask_edit(dir, &name, None)
+    }
+
+    /// Edits the file `name` in `dir`, at `line` if there is one, once its first bytes and its
+    /// size are read, which tell whether it asks first. On a host that is not connected, it
+    /// says so at once.
+    pub(super) fn ask_edit(
+        &mut self,
+        dir: Location,
+        name: &[u8],
+        line: Option<u64>,
+    ) -> Vec<Effect> {
+        let location = child(&dir, name);
+        let Ok(host) = self.handle_for(&location) else {
+            return self.edit_file(dir, name, line);
+        };
+        self.last_job += 1;
+        let id = self.last_job;
+        self.sniffing = Some(Sniffing {
+            id,
+            dir,
+            name: name.to_vec(),
+            line,
+        });
+        vec![Effect::Sniff { id, location, host }]
+    }
+
+    /// Takes what [`Effect::Sniff`] `id` read of the file that F4 is to edit, and edits it,
+    /// after a question if that is to come first. A file that could not be read goes to the
+    /// editor, or to the copy for it, all the same, which tell why.
+    pub(crate) fn sniffed(&mut self, id: u64, result: Result<Sniffed, Reason>) -> Vec<Effect> {
+        let Some(Sniffing {
+            dir, name, line, ..
+        }) = self.sniffing.take_if(|sniffing| sniffing.id == id)
+        else {
+            return Vec::new();
+        };
+        match result {
+            Ok(sniffed) => self.edit_sniffed(dir, name, line, sniffed),
+            Err(reason) => {
+                let reason = reason.text;
+                tracing::info!(%reason, "cannot tell whether a file to edit is binary");
+                self.edit_file(dir, &name, line)
+            }
+        }
+    }
+
+    /// Edits the file `name` in `dir`, at `line`, as `sniffed` tells it is: one that looks
+    /// binary, or one larger than `edit.large_mib`, after a question whose default is Cancel.
+    pub(super) fn edit_sniffed(
+        &mut self,
+        dir: Location,
+        name: Vec<u8>,
+        line: Option<u64>,
+        sniffed: Sniffed,
+    ) -> Vec<Effect> {
+        let limit = self.config.edit.large_mib.saturating_mul(1 << 20);
+        let large = sniffed.size.filter(|&size| limit > 0 && size > limit);
+        let shown = cells::sanitize(&name);
+        let mut message = match (sniffed.binary, large) {
+            (false, None) => return self.edit_file(dir, &name, line),
+            (true, None) => fl!("edit-ask-binary", name = shown),
+            (false, Some(size)) => fl!("edit-ask-large", name = shown, size = short_size(size)),
+            (true, Some(size)) => {
+                fl!(
+                    "edit-ask-binary-large",
+                    name = shown,
+                    size = short_size(size)
+                )
+            }
+        };
+        if let Location::Remote { host, .. } = &dir {
+            let host = cells::sanitize(host.as_bytes());
+            message.push('\n');
+            message.push_str(&fl!("edit-ask-remote", host = host));
+        }
+        let buttons = vec![Button::Edit, Button::Cancel];
+        let dialog = Dialog::question(&fl!("edit-ask-title"), &message, buttons, 1, Tone::Warning);
+        self.dialogs.push_back(Open {
+            dialog,
+            purpose: Purpose::EditAnyway { dir, name, line },
+        });
+        Vec::new()
     }
 
     /// Edits the file `name` in `dir`, at `line` if there is one: a local one where it is, a
@@ -154,11 +241,16 @@ impl App {
         }
     }
 
-    /// Ends the edit of `editing`: panels on a local file's directory read it again; the copy of
-    /// a remote file goes back if it `changed`, and goes away if not.
+    /// Ends the edit of `editing`: panels on a local file's directory read it again, and so
+    /// does the viewer on the file if it `changed`; the copy of a remote file goes back if it
+    /// `changed`, and goes away if not.
     pub(super) fn finish_edit(&mut self, editing: Editing, changed: bool) -> Vec<Effect> {
         let Some(remote) = editing.remote else {
-            return self.reload(&editing.dir);
+            let mut effects = self.reload(&editing.dir);
+            if changed {
+                effects.extend(self.reread(&Location::Local(editing.file)));
+            }
+            return effects;
         };
         if !changed {
             return vec![Effect::Discard(editing.file)];

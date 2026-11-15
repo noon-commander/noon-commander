@@ -160,12 +160,74 @@ fn f3_views_a_file_found_at_its_line_and_f4_edits_it_there() {
     // The viewer goes, and the dialog is there again.
     keys(&mut app, &["q"]);
     assert_eq!(app.context(), Context::Find);
-    keys(&mut app, &["f4"]);
+    let effects = keys(&mut app, &["f4"]);
+    answer_sniff(&mut app, effects, TEXT);
     assert!(matches!(
         app.take_handover(),
         Some(Handover::Edit { file, line: Some(3) })
             if file == Path::new("/srv/src/run/main.rs")
     ));
+}
+
+#[test]
+#[allow(clippy::single_range_in_vec_init)]
+fn bracket_f_in_the_viewer_goes_through_the_files_found_with_the_cursor() {
+    let mut app = with_files(&["a1"]);
+    let effects = app.handle(action(Action::FindFile));
+    let generation = find_request(&effects).generation;
+    let line = |number| Hit::Line {
+        number,
+        text: b"fn run() {}".to_vec(),
+        matches: vec![3..6],
+    };
+    app.found(
+        generation,
+        findings(vec![
+            Hit::File(b"a.rs".to_vec()),
+            line(2),
+            line(4),
+            Hit::File(b"src/b.rs".to_vec()),
+            line(5),
+        ]),
+    );
+    app.find_ended(generation, Ok(FindSummary::default()));
+    keys(&mut app, &["tab", "tab", "down", "down"]);
+    let effects = keys(&mut app, &["f3"]);
+    let Some(Effect::Read(ReadRequest { id, location, .. })) = effects.first() else {
+        panic!("expected a read, got {effects:?}");
+    };
+    assert_eq!(*location, local("/srv/a.rs"));
+    app.read(*id, Ok(whole("text")));
+    assert!(keys(&mut app, &["[", "f"]).is_empty(), "the first");
+    let effects = keys(&mut app, &["]", "f"]);
+    let Some(Effect::Read(ReadRequest { id, location, .. })) = effects.first() else {
+        panic!("expected a read, got {effects:?}");
+    };
+    assert_eq!(*location, local("/srv/src/b.rs"));
+    let text = forty();
+    app.read(*id, Ok(whole(text)));
+    let screen = screen_of(&mut app, 12);
+    assert!(
+        screen.contains("line 5") && !screen.contains("line 4 "),
+        "from the line that matched: {screen}"
+    );
+    assert!(keys(&mut app, &["]", "f"]).is_empty(), "the last");
+    keys(&mut app, &["q"]);
+    assert_eq!(app.context(), Context::Find);
+    let effects = keys(&mut app, &["e"]);
+    answer_sniff(&mut app, effects, TEXT);
+    assert!(matches!(
+        app.take_handover(),
+        Some(Handover::Edit { file, line: Some(5) }) if file == Path::new("/srv/src/b.rs")
+    ));
+}
+
+/// Forty lines, `line 1` to `line 40`.
+fn forty() -> String {
+    (1..=40)
+        .map(|n| format!("line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[test]
@@ -181,7 +243,8 @@ fn g_f_and_e_view_and_edit_a_file_found_as_f3_and_f4_do() {
     assert_eq!(app.context(), Context::Viewer);
     keys(&mut app, &["q"]);
     assert_eq!(app.context(), Context::Find);
-    keys(&mut app, &["e"]);
+    let effects = keys(&mut app, &["e"]);
+    answer_sniff(&mut app, effects, TEXT);
     assert!(matches!(
         app.take_handover(),
         Some(Handover::Edit { file, line: Some(3) })

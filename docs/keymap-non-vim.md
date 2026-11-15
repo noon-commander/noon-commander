@@ -219,6 +219,10 @@ not:
 | --- | --- | --- | --- | --- | --- |
 | b<br>Space<br>f<br>u<br>d | `window_up`<br>`window_down`<br>`window_down`<br>`half_page_up`<br>`half_page_down` | less | b (less)<br>Space, f (less)<br>Space, f (less)<br>Ctrl+u (vim); u (less)<br>Ctrl+d (vim); d (less) | Same | As in the help. |
 | F2 | `toggle_wrap` | mc, Far | — | Same | Their key to wrap long lines, or cut them. |
+| e<br>F4 | `edit` | noc, mc | e (noc); v (less) | Same | Edit the file viewed, as e and F4 edit a file in the panels, at the line on top, as less's v does ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md)). less's and mc's e go a line down, as Ctrl+e does here; vim's e goes to the end of a word. mc's and Far's viewers switch to hex with F4, which noc has not. |
+| R | `reload` | less, ranger | R (less) | Same | Read the file again, as less's R, and as R reads a directory again in the panels. vim's R starts Replace mode, which the viewer has not. |
+| ] f<br>[ f | `next_file`<br>`prev_file` | vim-unimpaired | ] f (vim-unimpaired)<br>[ f (vim-unimpaired) | Same | The next file and the one before, as vim-unimpaired's; f says what to go to, as in vim's pairs of ] and [ and as ] t goes through the tabs. vim's own ] f and [ f are an old name of g f. mc goes there with Ctrl+f and Ctrl+b, which turn the page here, as in vim. |
+| F | `follow` | less | F (less) | Same | Follow the end of the file as it grows, as less's F and tail -f. vim's F finds a character back in the line, which the viewer has not. |
 | g ?<br>F1 | `help` | noc, mc | g ? (noc) | Same | As in the panels. |
 | q<br>F3<br>F10 | `quit` | less, mc | Esc, Ctrl+c (vim); q (less) | Same | q quits less, mc's viewer, and ranger's pager; vim's q records a macro. F3 and F10 close mc's viewer. |
 

@@ -1,10 +1,10 @@
 //! The F3 viewer and the reads it waits for.
 
 use noc_scroll::Motion;
-use noc_vfs::Location;
+use noc_vfs::{DirEntry, Location};
 use noc_viewer::{
-    Command as ViewerCommand, Part as ViewerPart, Progress as ReadProgress, Sizes as ViewerSizes,
-    Taken, Viewer, part_of,
+    Checked, Command as ViewerCommand, Part as ViewerPart, Progress as ReadProgress,
+    Sizes as ViewerSizes, Stamp, Taken, Viewer, part_of,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -12,14 +12,15 @@ use crate::i18n::fl;
 use crate::tui::cells::{self};
 use crate::tui::describe::Reason;
 use crate::tui::dialog::Problem;
+use crate::tui::find::FindEvent;
 use crate::tui::keymap::{Action, Resolved};
-use crate::tui::panel::{child, location_text};
+use crate::tui::panel::{self, child, location_text};
 use crate::tui::reading::Reading;
 use crate::tui::spinner::Wait;
 
 use super::{
-    Again, App, Effect, Open, ReadRequest, Results, Source, Viewing, Way, sums_file, sums_name,
-    viewer_command,
+    Again, App, Effect, Neighbours, Open, PollRequest, ReadRequest, Results, Source, Step, Viewing,
+    Way, file_name, sums_file, sums_name, viewer_command,
 };
 
 /// A file of no more bytes is read whole once its first part shows, and the end of a file no
@@ -45,15 +46,18 @@ impl App {
             return Vec::new();
         };
         let dir = self.panel(side).location().clone();
-        self.view_file(location, &dir, None)
+        let neighbours = Neighbours::Panel(self.shown(side));
+        self.view_file(location, &dir, None, neighbours)
     }
 
-    /// Views the file at `location`, in `dir`, from `line` if there is one.
+    /// Views the file at `location`, in `dir`, from `line` if there is one, among
+    /// `neighbours`.
     pub(super) fn view_file(
         &mut self,
         location: Location,
         dir: &Location,
         line: Option<u64>,
+        neighbours: Neighbours,
     ) -> Vec<Effect> {
         let host = self.handle_for(&location).ok().flatten();
         let sizes = self.viewer_sizes(Some(&location));
@@ -62,9 +66,32 @@ impl App {
             let line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
             viewer.handle(ViewerCommand::Top(line));
         }
-        self.open_viewer(viewer, Source::File { location, host });
+        self.open_viewer(viewer, Source::File { location, host }, neighbours);
         let mut effects = self.read_more();
         effects.extend(self.note(dir));
+        effects
+    }
+
+    /// Views the file at `location`, in `dir`, from `line`, in place of the one the viewer
+    /// shows, which is among the same `neighbours`: `] f` and `[ f`. Its lines wrap, or are cut,
+    /// as they were.
+    fn view_beside(
+        &mut self,
+        location: Location,
+        dir: &Location,
+        line: Option<u64>,
+        neighbours: Neighbours,
+    ) -> Vec<Effect> {
+        let wraps = self
+            .viewing
+            .as_ref()
+            .is_none_or(|viewing| viewing.viewer.wraps());
+        let effects = self.view_file(location, dir, line, neighbours);
+        if let Some(viewing) = &mut self.viewing
+            && viewing.viewer.wraps() != wraps
+        {
+            viewing.viewer.handle(ViewerCommand::ToggleWrap);
+        }
         effects
     }
 
@@ -74,7 +101,7 @@ impl App {
         let host = self.handle_for(&location).ok().flatten();
         let sizes = self.viewer_sizes(Some(&location));
         let viewer = Viewer::new(location_text(&location), sizes);
-        self.open_viewer(viewer, Source::File { location, host });
+        self.open_viewer(viewer, Source::File { location, host }, Neighbours::Alone);
         if let Some(viewing) = &mut self.viewing {
             viewing.question = Some(Box::new(question));
         }
@@ -95,7 +122,7 @@ impl App {
             bytes,
             results: None,
         };
-        self.open_viewer(viewer, source);
+        self.open_viewer(viewer, source, Neighbours::Alone);
         if let Some(viewing) = &mut self.viewing {
             viewing.question = Some(Box::new(question));
         }
@@ -126,6 +153,7 @@ impl App {
                 location,
                 host: None,
             },
+            Neighbours::Dir,
         );
         // A question that the viewer it replaces held is among the dialogs again by now.
         let under = self.dialogs.iter().map(|open| open.dialog.id()).collect();
@@ -171,6 +199,7 @@ impl App {
                 bytes,
                 results,
             },
+            Neighbours::Alone,
         );
         self.read_more()
     }
@@ -198,9 +227,9 @@ impl App {
         }
     }
 
-    /// Shows `viewer` on `source`, in place of the viewer on screen, if any; in front of the
-    /// location menu if that is open, which is not drawn under a viewer.
-    fn open_viewer(&mut self, viewer: Viewer, source: Source) {
+    /// Shows `viewer` on `source`, among `neighbours`, in place of the viewer on screen, if
+    /// any; in front of the location menu if that is open, which is not drawn under a viewer.
+    fn open_viewer(&mut self, viewer: Viewer, source: Source, neighbours: Neighbours) {
         self.close_viewer();
         self.last_job += 1;
         self.viewing = Some(Viewing {
@@ -214,11 +243,15 @@ impl App {
             question: None,
             log: None,
             menu: self.menu.is_some(),
+            neighbours,
+            stepping: None,
+            polling: false,
         });
     }
 
-    /// Reads the part the viewer wants next, unless it reads one already. Text that the app
-    /// holds gives every part it wants at once.
+    /// Reads the part the viewer wants next, unless it reads one already; while it follows the
+    /// file and wants none, looks at the file again a moment later. Text that the app holds
+    /// gives every part it wants at once.
     pub(super) fn read_more(&mut self) -> Vec<Effect> {
         let Some(viewing) = &mut self.viewing else {
             return Vec::new();
@@ -239,7 +272,16 @@ impl App {
             }
         };
         let Some(want) = viewing.viewer.want() else {
-            return Vec::new();
+            if !viewing.viewer.following() || viewing.polling {
+                return Vec::new();
+            }
+            viewing.polling = true;
+            return vec![Effect::Poll(PollRequest {
+                id: viewing.id,
+                location: location.clone(),
+                host: host.clone(),
+                cancel: viewing.cancel.clone(),
+            })];
         };
         let stop = CancellationToken::new();
         viewing.reading = Some(Reading::new(want, stop.clone()));
@@ -277,6 +319,7 @@ impl App {
                 if viewing.viewer.loading() {
                     let asked = viewing.question.is_some();
                     let log = viewing.log.is_some();
+                    let neighbours = viewing.neighbours;
                     let location = match &viewing.source {
                         Source::File { location, .. } => Some(location.clone()),
                         Source::Text { .. } => None,
@@ -291,7 +334,8 @@ impl App {
                             self.show_problem_way(&problem, Way::Again(Again::ViewLog));
                         }
                         (false, Some(location)) => {
-                            self.show_problem_way(&problem, Way::Again(Again::View(location)));
+                            let again = Again::View(location, neighbours);
+                            self.show_problem_way(&problem, Way::Again(again));
                         }
                         (false, None) => self.show_problem(&problem),
                     }
@@ -341,6 +385,13 @@ impl App {
                 self.help = Some(self.help_screen());
             }
             Action::Quit | Action::Cancel => self.close_viewer(),
+            Action::Edit => return self.edit_viewed(),
+            Action::SystemOpen => return self.open_viewed(),
+            Action::Reload => return self.reload_viewed(),
+            Action::NextFile | Action::PrevFile => {
+                return self.view_neighbour(action == Action::NextFile);
+            }
+            Action::Follow => return self.follow_viewed(),
             action => {
                 if let Some(viewing) = &mut self.viewing
                     && let Some(command) = viewer_command(action)
@@ -351,6 +402,199 @@ impl App {
             }
         }
         Vec::new()
+    }
+
+    /// Edits the file of the viewer with F4, at the line on top, once its start is read: after
+    /// a question if it looks binary or is large. The viewer stays, and reads the file again
+    /// once the editor changed it.
+    fn edit_viewed(&mut self) -> Vec<Effect> {
+        let Some((location, sniffed, line)) = self.viewing.as_ref().and_then(Viewing::to_edit)
+        else {
+            return Vec::new();
+        };
+        let (Some(dir), Some(name)) = (location.parent(), file_name(&location)) else {
+            return Vec::new();
+        };
+        self.edit_sniffed(dir, name, line, sniffed)
+    }
+
+    /// Opens the file of the viewer with the programs of the desktop, as `g x` does in the
+    /// panels; on a host, the line of the mode says that only local files open so.
+    fn open_viewed(&mut self) -> Vec<Effect> {
+        let Some(Viewing {
+            source: Source::File { location, .. },
+            ..
+        }) = &self.viewing
+        else {
+            return Vec::new();
+        };
+        match location {
+            Location::Local(path) => vec![Effect::Open(vec![path.clone()])],
+            Location::Remote { .. } => {
+                self.message = Some(fl!("message-open-remote"));
+                Vec::new()
+            }
+        }
+    }
+
+    /// Reads the file of the viewer again, up to the line on top, as `R` reads a directory
+    /// again in the panels.
+    fn reload_viewed(&mut self) -> Vec<Effect> {
+        if let Some(viewing) = &mut self.viewing
+            && matches!(viewing.source, Source::File { .. })
+        {
+            viewing.viewer.reload();
+        }
+        self.read_more()
+    }
+
+    /// Reads the file at `location` again in the viewer, if it shows it: the editor changed it.
+    pub(super) fn reread(&mut self, location: &Location) -> Vec<Effect> {
+        let shows = self.viewing.as_ref().is_some_and(|viewing| {
+            matches!(&viewing.source, Source::File { location: shown, .. } if shown == location)
+        });
+        if shows {
+            return self.reload_viewed();
+        }
+        Vec::new()
+    }
+
+    /// Follows the end of the file of the viewer as it grows, as `tail -f` and less's `F`; or
+    /// stops.
+    fn follow_viewed(&mut self) -> Vec<Effect> {
+        if let Some(viewing) = &mut self.viewing
+            && matches!(viewing.source, Source::File { .. })
+        {
+            let on = !viewing.viewer.following();
+            viewing.viewer.follow(on);
+        }
+        self.read_more()
+    }
+
+    /// Takes how the file of the viewer `id`, which it follows, is now: what was added to it is
+    /// read, and a file that changed otherwise is read again. A file that cannot be looked at
+    /// stops the following, and the line of the mode says why.
+    pub(crate) fn polled(&mut self, id: u64, result: Result<Stamp, Reason>) -> Vec<Effect> {
+        let Some(viewing) = self.viewing.as_mut().filter(|viewing| viewing.id == id) else {
+            return Vec::new();
+        };
+        viewing.polling = false;
+        if !viewing.viewer.following() {
+            return Vec::new();
+        }
+        let path = viewing.name();
+        match result {
+            Ok(stamp) => {
+                if viewing.viewer.check(stamp) == Checked::Changed {
+                    self.message = Some(fl!("viewer-changed", path = path));
+                }
+            }
+            Err(reason) => {
+                viewing.viewer.follow(false);
+                let reason = reason.sanitized().text;
+                self.message = Some(fl!("viewer-follow-stopped", path = path, reason = reason));
+                return Vec::new();
+            }
+        }
+        self.read_more()
+    }
+
+    /// Views the file a count of files after the one the viewer shows, or before it, among its
+    /// neighbours: the files of the panel it was viewed from, whose cursor goes along; those the
+    /// search of a tree found, likewise; or those of its directory, which it lists first. No
+    /// further than the last or the first.
+    fn view_neighbour(&mut self, forward: bool) -> Vec<Effect> {
+        let count = self.extra.times();
+        let Some(Viewing {
+            source: Source::File { location, .. },
+            neighbours,
+            ..
+        }) = &self.viewing
+        else {
+            return Vec::new();
+        };
+        let (location, neighbours) = (location.clone(), *neighbours);
+        match neighbours {
+            Neighbours::Panel(id) => {
+                let Some(name) = file_name(&location) else {
+                    return Vec::new();
+                };
+                let Some(panel) = self.panel_of_mut(id) else {
+                    return Vec::new();
+                };
+                let Some(next) = panel.file_beside(&name, forward, count) else {
+                    return Vec::new();
+                };
+                panel.put_cursor_on(&next);
+                let dir = panel.location().clone();
+                self.view_beside(child(&dir, &next), &dir, None, neighbours)
+            }
+            Neighbours::Found => {
+                let event = self
+                    .find
+                    .as_mut()
+                    .and_then(|find| find.step_file(forward, count));
+                let Some(FindEvent::View {
+                    location: dir,
+                    name,
+                    line,
+                }) = event
+                else {
+                    return Vec::new();
+                };
+                self.view_beside(child(&dir, &name), &dir, line, neighbours)
+            }
+            Neighbours::Dir => {
+                let Some(dir) = location.parent() else {
+                    return Vec::new();
+                };
+                let Ok(host) = self.handle_for(&dir) else {
+                    return Vec::new();
+                };
+                self.last_job += 1;
+                let id = self.last_job;
+                if let Some(viewing) = &mut self.viewing {
+                    viewing.stepping = Some(Step { id, forward, count });
+                }
+                vec![Effect::ListSiblings { id, dir, host }]
+            }
+            Neighbours::Alone => Vec::new(),
+        }
+    }
+
+    /// Takes the entries of the directory of the file of the viewer, listed for the step `id` of
+    /// `] f` or `[ f`, and views the file it goes to there, in the order of the active panel.
+    pub(crate) fn siblings(
+        &mut self,
+        id: u64,
+        result: Result<Vec<DirEntry>, Reason>,
+    ) -> Vec<Effect> {
+        let Some(viewing) = &mut self.viewing else {
+            return Vec::new();
+        };
+        let Some(step) = viewing.stepping.take_if(|step| step.id == id) else {
+            return Vec::new();
+        };
+        let Source::File { location, .. } = &viewing.source else {
+            return Vec::new();
+        };
+        let location = location.clone();
+        let (Some(dir), Some(name)) = (location.parent(), file_name(&location)) else {
+            return Vec::new();
+        };
+        let entries = match result {
+            Ok(entries) => entries,
+            Err(reason) => {
+                let (path, reason) = (location_text(&dir), reason.sanitized().text);
+                self.message = Some(fl!("viewer-list-error", path = path, reason = reason));
+                return Vec::new();
+            }
+        };
+        let files = panel::files_in_order(entries, self.panel(self.active));
+        let Some(next) = panel::beside(&files, &name, step.forward, step.count) else {
+            return Vec::new();
+        };
+        self.view_beside(child(&dir, &next), &dir, None, Neighbours::Dir)
     }
 
     /// Closes the viewer; the window of checksums whose lines it showed, or the question whose

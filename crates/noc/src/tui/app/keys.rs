@@ -487,6 +487,13 @@ impl App {
         if action == Action::CloseTab {
             return self.tab_menu_closes();
         }
+        // F4 in the viewer edits its file once its start is read, not text that the app holds.
+        if action == Action::Edit && self.context() == Context::Viewer {
+            return self
+                .viewing
+                .as_ref()
+                .is_some_and(|viewing| viewing.to_edit().is_some());
+        }
         // F3 in the location menu views the ssh_config of the host under the cursor.
         if action == Action::View && self.context() == Context::LocationMenu {
             return self

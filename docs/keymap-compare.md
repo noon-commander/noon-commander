@@ -243,7 +243,7 @@ section says: the commands of files act on the rows it selects, which become the
 | Go to a directory: type its path | `go_to_dir` | ✅ | g d | Alt+c | — | g Space | c d |
 | Change the location of this panel: its home, volumes, and hosts, in a menu; the keys stay with the active panel (Far: of the left or the right panel) | `location_menu` | ⏳ | g l | — | Alt+F1 (left panel)<br>Alt+F2 (right panel) | — | — |
 | View the file under the cursor | `view` | ✅ | g f<br>F3 | F3 | F3<br>Numpad5<br>Ctrl+Shift+F3 (always internal) | — | i<br>F3 |
-| Edit the file under the cursor in $VISUAL or $EDITOR | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
+| Edit the file under the cursor in $VISUAL or $EDITOR, after a question for one that looks binary or is large (mc: asks for a large one in its own editor) | `edit` | ✅ | e<br>F4 | F4 | F4<br>Ctrl+Shift+F4 (always internal) | — | F4<br>E |
 | Open the marked entries, or the one under the cursor, with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local ones only (Far: in a window of its own; yazi, ranger: through their openers) | `system_open` | ✅ | g x | — | Shift+Enter | o<br>Enter | l<br>Right<br>Enter |
 | Copy the marked entries, or the one under the cursor | `copy` | ✅ | Y<br>y y<br>F5 | F5 | F5 | y, then p | y y, then p p<br>F5, then p p |
 | Copy the entry under the cursor, not the marked ones: the dialog opens with its name, so that the copy goes beside it under a new one | `duplicate` | ⏳ | y p<br>Shift+F5 | Shift+F5 | Shift+F5 | — | — |
@@ -939,7 +939,9 @@ the same way. Lines cut show `«` and `»` where they go on past the screen, as 
 after the first with `»`, as vim's 'showbreak'. The keys down read the next part of a large file
 when they reach the end of what is held, and the keys up read a part dropped before; G and End
 read the last part of the file alone, however large it is, as mc's End shows its end at once; a
-read that takes long shows a dialog, whose keys are those of `dialog` (Esc stops it).
+read that takes long shows a dialog, whose keys are those of `dialog` (Esc stops it). e, F4, g x,
+and R do what they do in the panels, to the file viewed, in every viewer but one of text that noc
+holds, such as checksums ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md)).
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
@@ -962,6 +964,12 @@ read that takes long shows a dialog, whose keys are those of `dialog` (Esc stops
 | The start of the lines, when they are cut, as vim's zs | `scroll_start` | ⏳ | z s | — | — | — | — |
 | The end of the longest line on screen at the right edge, when lines are cut, as vim's ze | `scroll_end` | ⏳ | z e | — | — | — | — |
 | Wrap long lines, or cut them | `toggle_wrap` | ✅ | F2 | F2 | F2 | — | — |
+| Edit the file in $VISUAL or $EDITOR at the line on top, after a question for one that looks binary or is large, and view it again after, as less's v (Far: in its own editor) | `edit` | ⏳ | e<br>F4 | — | F6 | — | E |
+| Open the file with the programs of the desktop (`open`, `xdg-open`), as vim's gx; local files only | `system_open` | ⏳ | g x | — | — | — | — |
+| Read the file again, up to the line on top, as less's R | `reload` | ⏳ | R | — | — | — | — |
+| The next file, as vim-unimpaired's ] f: of the panel it was viewed from, whose cursor goes along, of the files the search of a tree found, or of the directory of the log; with a count, that many (mc, Far: of the panel) | `next_file` | ⏳ | ] f | Ctrl+f | Numpad+ | — | — |
+| The file before, likewise | `prev_file` | ⏳ | [ f | Ctrl+b | Numpad- | — | — |
+| Follow the end of the file as it grows, as tail -f and less's F; again, or a move up, stops | `follow` | ⏳ | F | — | — | — | — |
 | Help | `help` | ✅ | g ?<br>F1 | F1 | F1 | — | — |
 | Close the viewer | `quit` | ✅ | q<br>Esc<br>Ctrl+[<br>Ctrl+c<br>F3<br>F10 | F3<br>F10<br>q<br>Esc | F10<br>F3<br>Numpad5<br>Esc | — | Esc<br>q<br>Q<br>i<br>F3 |
 | F1…F10 on terminals without function keys | — | 🚫 | — | Esc, then 1…9, 0 | — | — | — |
@@ -969,7 +977,6 @@ read that takes long shows a dialog, whose keys are those of `dialog` (Esc stops
 | Hex/code mode | — | ⏳ | — | F4 | F4 | — | — |
 | Select mode (text/code/dump) | — | ⏳ | — | — | Shift+F4 | — | — |
 | Go to position | — | ⏳ | — | F5 | Alt+F8 | — | — |
-| Switch to editor | — | ⏳ | — | — | F6 | — | E |
 | Search | — | ⏳ | — | F7<br>/<br>? (backward) | F7 | — | — |
 | Continue search forward | — | ⏳ | — | Ctrl+s | Shift+F7<br>Space | — | — |
 | Continue search backward | — | ⏳ | — | Ctrl+r | Alt+F7 | — | — |
@@ -986,8 +993,6 @@ read that takes long shows a dialog, whose keys are those of `dialog` (Esc stops
 | Set bookmark | — | ⏳ | — | m<br>0…9, then m | RightCtrl+0…9<br>Ctrl+Shift+0…9 | — | — |
 | Go to bookmark | — | ⏳ | — | r<br>0…9, then r | LeftCtrl+0…9 | — | — |
 | Return to previous position | — | ⏳ | — | — | Alt+Backspace<br>Ctrl+z | — | — |
-| Next file | — | ⏳ | — | Ctrl+f | Numpad+ | — | — |
-| Previous file | — | ⏳ | — | Ctrl+b | Numpad- | — | — |
 | Ruler | — | ⏳ | — | Alt+r | — | — | — |
 | User screen | — | ⏳ | — | Ctrl+o | Ctrl+o<br>Ctrl+Alt+Shift (temporarily) | — | — |
 | Go to file in panel | — | ⏳ | — | — | Ctrl+F10 | — | — |

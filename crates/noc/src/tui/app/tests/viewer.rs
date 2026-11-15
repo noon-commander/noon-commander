@@ -186,7 +186,7 @@ fn f3_views_files_and_opens_directories() {
 #[test]
 fn a_file_viewed_from_a_line_shows_it_at_the_top() {
     let mut app = with_files(&["a1"]);
-    let effects = app.view_file(local("/srv/a1"), &local("/srv"), Some(3));
+    let effects = app.view_file(local("/srv/a1"), &local("/srv"), Some(3), Neighbours::Dir);
     let Some(Effect::Read(ReadRequest { id, .. })) = effects.first() else {
         panic!("expected a read, got {effects:?}");
     };
@@ -570,6 +570,332 @@ fn a_part_of_a_file_on_a_host_has_a_size_of_its_own() {
 
     let (_app, read) = view_big();
     assert_eq!(first(read), (0, 1 << 20), "a local file's");
+}
+
+/// Forty lines, `line 1` to `line 40`.
+fn forty_lines() -> String {
+    (1..=40)
+        .map(|n| format!("line {n}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// An app on `/srv`, which holds the files `names`, viewing the first of them, whose text is
+/// `text`.
+fn viewing(names: &[&str], text: impl Into<Vec<u8>>) -> App {
+    let mut app = with_files(names);
+    app.handle(action(Action::Down));
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
+        panic!("expected a read");
+    };
+    app.read(id, Ok(whole(text)));
+    screen_of(&mut app, 12);
+    app
+}
+
+/// The file the only effect of `effects` reads for the viewer, and from where.
+fn read_of(effects: Vec<Effect>) -> (Location, u64) {
+    let Effect::Read(ReadRequest { location, want, .. }) = one(effects) else {
+        panic!("expected a read");
+    };
+    (location, want.offset)
+}
+
+#[test]
+fn e_and_f4_in_the_viewer_edit_its_file_at_the_line_on_top_which_it_reads_again() {
+    let mut app = with_files(&["a1"]);
+    app.handle(action(Action::Down));
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
+        panic!("expected a read");
+    };
+    // Not before its start is read.
+    assert!(!app.supports(Action::Edit));
+    assert!(keys(&mut app, &["e"]).is_empty());
+    assert_eq!(app.take_edit(), None);
+    app.read(id, Ok(whole(forty_lines())));
+    assert!(
+        screen_of(&mut app, 12).contains("4Edit"),
+        "on the F-key bar"
+    );
+    keys(&mut app, &["j", "j"]);
+    assert!(keys(&mut app, &["e"]).is_empty(), "text, and small");
+    assert!(matches!(
+        app.take_handover(),
+        Some(Handover::Edit { file, line: Some(3) }) if file == Path::new("/srv/a1")
+    ));
+    assert_eq!(app.context(), Context::Viewer, "it stays");
+    // A file the editor changed is read again, from its start up to the line on top.
+    let effects = app.edited(Ok(true));
+    let reads: Vec<u64> = effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::Read(ReadRequest { location, want, .. }) if *location == local("/srv/a1") => {
+                Some(want.offset)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reads, [0], "{effects:?}");
+    let text: String = forty_lines().replace("line", "row");
+    let id = app.viewing.as_ref().unwrap().id;
+    app.read(id, Ok(whole(text)));
+    let screen = screen_of(&mut app, 12);
+    assert!(
+        screen.contains("row 3") && !screen.contains("row 2 "),
+        "{screen}"
+    );
+    // One it did not change is not.
+    keys(&mut app, &["f4"]);
+    assert!(app.take_edit().is_some());
+    let effects = app.edited(Ok(false));
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Read(_))),
+        "{effects:?}"
+    );
+}
+
+#[test]
+fn a_file_that_looks_binary_or_is_large_is_edited_after_a_question() {
+    let mut app = viewing(&["a1"], *b"\x7fELF\x02\x01\x01\0\0\0");
+    assert!(keys(&mut app, &["e"]).is_empty());
+    let text = screen_of(&mut app, 14);
+    assert!(text.contains("looks like a binary file"), "{text}");
+    assert!(
+        text.contains("[ Edit ] { Cancel }"),
+        "Cancel the default: {text}"
+    );
+    assert!(app.handle(action(Action::Confirm)).is_empty());
+    assert_eq!(app.take_edit(), None);
+    assert_eq!(app.context(), Context::Viewer);
+    keys(&mut app, &["e"]);
+    app.handle(action(Action::Left));
+    app.handle(action(Action::Confirm));
+    assert_eq!(app.take_edit(), Some(PathBuf::from("/srv/a1")));
+
+    // F4 in the panel asks for a file larger than edit.large_mib, as for a binary one.
+    let mut app = with_files(&["big"]);
+    app.handle(action(Action::Down));
+    let large = Sniffed {
+        binary: false,
+        size: Some(100 << 20),
+    };
+    let effects = app.handle(action(Action::Edit));
+    assert!(answer_sniff(&mut app, effects, large).is_empty());
+    let text = screen_of(&mut app, 14);
+    assert!(text.contains("\"big\" is 100M"), "{text}");
+    app.handle(action(Action::Cancel));
+    assert_eq!(app.take_edit(), None);
+    let both = Sniffed {
+        binary: true,
+        ..large
+    };
+    let effects = app.handle(action(Action::Edit));
+    answer_sniff(&mut app, effects, both);
+    let text = screen_of(&mut app, 14);
+    assert!(text.contains("binary file, and is 100M"), "{text}");
+    app.handle(action(Action::Cancel));
+    // 0 asks for no size.
+    app.config.edit.large_mib = 0;
+    let effects = app.handle(action(Action::Edit));
+    answer_sniff(&mut app, effects, large);
+    assert_eq!(app.take_edit(), Some(PathBuf::from("/srv/big")));
+    // A file it cannot look at goes to the editor all the same, which says why.
+    let Effect::Sniff { id, .. } = one(app.handle(action(Action::Edit))) else {
+        panic!("expected a look at the file");
+    };
+    app.sniffed(id, Err("permission denied".to_owned().into()));
+    assert_eq!(app.take_edit(), Some(PathBuf::from("/srv/big")));
+
+    // On a host, the file is looked at there, before it is copied, which the question says.
+    let (mut app, _) = on_a_host();
+    let Effect::Sniff { location, host, .. } = one(app.handle(action(Action::Edit))) else {
+        panic!("expected a look at the file");
+    };
+    assert_eq!(
+        (location, host.is_some()),
+        (remote("web", "/home/deploy/notes"), true)
+    );
+    let effects = app.handle(action(Action::Edit));
+    answer_sniff(&mut app, effects, both);
+    let text = screen_of(&mut app, 14);
+    assert!(text.contains("It is copied from web first."), "{text}");
+    app.handle(action(Action::Left));
+    let (_, sources, ..) = copy_job(app.handle(action(Action::Confirm)));
+    assert_eq!(sources, [remote("web", "/home/deploy/notes")]);
+}
+
+#[test]
+fn a_remote_file_edited_from_the_viewer_is_read_again_once_it_went_back() {
+    let (mut app, _) = on_a_host();
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
+        panic!("expected a read");
+    };
+    app.read(id, Ok(whole(forty_lines())));
+    screen_of(&mut app, 12);
+    let (id, ..) = copy_job(keys(&mut app, &["e"]));
+    app.job_event(id, JobEvent::Finished { complete: true });
+    app.take_edit().unwrap();
+    let (id, ..) = copy_job(app.edited(Ok(true)));
+    let effects = app.job_event(id, JobEvent::Finished { complete: true });
+    let read = effects.iter().any(|effect| {
+        matches!(effect, Effect::Read(ReadRequest { location, want, .. })
+            if *location == remote("web", "/home/deploy/notes") && want.offset == 0)
+    });
+    assert!(read, "{effects:?}");
+}
+
+#[test]
+fn g_x_in_the_viewer_opens_its_file_externally_and_r_reads_it_again() {
+    let mut app = viewing(&["a1"], forty_lines());
+    let effects = keys(&mut app, &["g", "x"]);
+    assert!(
+        matches!(&effects[..], [Effect::Open(paths)] if paths == &[PathBuf::from("/srv/a1")]),
+        "{effects:?}"
+    );
+    keys(&mut app, &["j", "j"]);
+    assert_eq!(read_of(keys(&mut app, &["shift-r"])), (local("/srv/a1"), 0));
+    assert_eq!(app.context(), Context::Viewer);
+
+    // On a host, the line of the mode says that only local files open so.
+    let (mut app, _) = on_a_host();
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
+        panic!("expected a read");
+    };
+    app.read(id, Ok(whole("text")));
+    assert!(keys(&mut app, &["g", "x"]).is_empty());
+    assert!(screen(&mut app).contains("Only local files open externally"));
+}
+
+#[test]
+fn bracket_f_goes_through_the_files_of_the_panel_with_its_cursor() {
+    let (mut app, effects) = App::new(Path::new("/srv"), Path::new("/home/me"), &config());
+    let entries = vec![file("a1", 1), dir("sub"), file("b2", 1), file("c3", 1)];
+    answer(&mut app, effects, &Listing::Dir(entries));
+    app.handle(action(Action::Down));
+    app.handle(action(Action::Down));
+    assert_eq!(cursor_name(&app, Side::Left), "a1");
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::View))) else {
+        panic!("expected a read");
+    };
+    app.read(id, Ok(whole("a")));
+    assert!(keys(&mut app, &["[", "f"]).is_empty(), "the first");
+    // Its lines stay cut, past the directory.
+    keys(&mut app, &["f2"]);
+    assert_eq!(read_of(keys(&mut app, &["]", "f"])), (local("/srv/b2"), 0));
+    assert_eq!(cursor_name(&app, Side::Left), "b2");
+    assert!(!app.viewing.as_ref().unwrap().viewer.wraps());
+    assert_eq!(read_of(keys(&mut app, &["]", "f"])), (local("/srv/c3"), 0));
+    assert!(keys(&mut app, &["]", "f"]).is_empty(), "the last");
+    // With a count, that many, no further than the first.
+    let typed = Typed {
+        resolved: action(Action::PrevFile),
+        extra: Extra {
+            count: Some(5),
+            ..Extra::default()
+        },
+    };
+    assert_eq!(read_of(app.typed(typed)), (local("/srv/a1"), 0));
+    keys(&mut app, &["q"]);
+    assert_eq!(cursor_name(&app, Side::Left), "a1", "where the viewer was");
+}
+
+#[test]
+fn bracket_f_in_the_log_goes_through_the_logs_of_its_directory() {
+    let mut app = with_files(&["a1"]);
+    app.about.files = Some(files(Ok(PathBuf::from(LOG))));
+    let Effect::Read(ReadRequest { id, .. }) = one(app.handle(action(Action::ViewLog))) else {
+        panic!("expected a read");
+    };
+    app.read(id, Ok(whole("the last line\n")));
+    let Effect::ListSiblings {
+        id,
+        dir: listed,
+        host,
+    } = one(keys(&mut app, &["]", "f"]))
+    else {
+        panic!("expected a listing");
+    };
+    assert_eq!(
+        (listed, host.is_none()),
+        (local("/home/me/.local/state/noc/logs"), true)
+    );
+    let logs = vec![
+        file("noc-20261106T090000Z-7.log", 1),
+        file("noc-20261104T080000Z-3.log", 1),
+        file("noc-20261105T120000Z-42.log", 1),
+        dir("old"),
+    ];
+    let next = local("/home/me/.local/state/noc/logs/noc-20261106T090000Z-7.log");
+    assert_eq!(read_of(app.siblings(id, Ok(logs.clone()))), (next, 0));
+    assert!(app.siblings(id, Ok(logs.clone())).is_empty(), "once");
+    let Effect::ListSiblings { id, .. } = one(keys(&mut app, &["[", "f"])) else {
+        panic!("expected a listing");
+    };
+    let before = local("/home/me/.local/state/noc/logs/noc-20261105T120000Z-42.log");
+    assert_eq!(read_of(app.siblings(id, Ok(logs))), (before, 0));
+    let Effect::ListSiblings { id, .. } = one(keys(&mut app, &["[", "f"])) else {
+        panic!("expected a listing");
+    };
+    app.siblings(id, Err("permission denied".to_owned().into()));
+    assert!(screen(&mut app).contains("Cannot list"));
+}
+
+#[test]
+fn f_follows_the_end_of_the_file_as_it_grows_until_it_scrolls_up() {
+    let text = format!("{}\n", forty_lines());
+    let mut app = viewing(&["a1"], text.clone());
+    let stamp = |size: usize| Stamp {
+        size: Some(size as u64),
+        modified: None,
+    };
+    let size = text.len();
+    let Effect::Poll(PollRequest { id, location, .. }) = one(keys(&mut app, &["shift-f"])) else {
+        panic!("expected a look at the file");
+    };
+    assert_eq!(location, local("/srv/a1"));
+    assert!(screen_of(&mut app, 12).contains("Follow"));
+    let Effect::Poll(PollRequest { id, .. }) = one(app.polled(id, Ok(stamp(size)))) else {
+        panic!("expected another look, the file as it was");
+    };
+    // What was added is read; the next look comes once it is.
+    let grown = format!("{text}line 41\n");
+    let Effect::Read(ReadRequest { id: read, want, .. }) =
+        one(app.polled(id, Ok(stamp(grown.len()))))
+    else {
+        panic!("expected a read");
+    };
+    assert_eq!(want.offset, size as u64);
+    let part = ViewerPart::new(
+        want,
+        &grown.as_bytes()[size..],
+        (true, false),
+        stamp(grown.len()),
+    );
+    let Effect::Poll(PollRequest { id, .. }) = one(app.read(read, Ok(part))) else {
+        panic!("expected another look");
+    };
+    let text = screen_of(&mut app, 12);
+    assert!(
+        text.contains("line 41") && text.contains("Follow"),
+        "{text}"
+    );
+    // A move up stops it; a look on its way changes nothing.
+    keys(&mut app, &["k"]);
+    assert!(app.polled(id, Ok(stamp(1 << 20))).is_empty());
+    assert!(!screen_of(&mut app, 12).contains("Follow"));
+    // F again stops it too; a file that cannot be looked at stops it, and says why.
+    let Effect::Poll(PollRequest { id, .. }) = one(keys(&mut app, &["shift-f"])) else {
+        panic!("expected a look at the file");
+    };
+    assert!(
+        app.polled(id, Err("no such file".to_owned().into()))
+            .is_empty()
+    );
+    assert!(screen(&mut app).contains("Stopped following /srv/a1: no such file"));
+    keys(&mut app, &["shift-f"]);
+    assert!(keys(&mut app, &["shift-f"]).is_empty(), "stopped");
 }
 
 #[test]

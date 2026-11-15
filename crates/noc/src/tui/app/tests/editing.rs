@@ -25,12 +25,17 @@ fn f4_edits_local_files_where_they_are() {
     );
     assert_eq!(app.take_edit(), None);
     app.handle(action(Action::End));
-    assert!(app.handle(action(Action::Edit)).is_empty());
+    let Effect::Sniff { location, host, .. } = one(app.handle(action(Action::Edit))) else {
+        panic!("expected a look at the file first");
+    };
+    assert_eq!((location, host.is_none()), (local("/srv/notes"), true));
+    assert_eq!(app.take_edit(), None, "not before");
+    assert!(f4(&mut app).is_empty());
     assert_eq!(app.take_edit(), Some(PathBuf::from("/srv/notes")));
     assert_eq!(app.take_edit(), None, "once");
     assert_eq!(app.edited(Ok(true)).len(), 2, "both panels read /srv again");
 
-    app.handle(action(Action::Edit));
+    f4(&mut app);
     app.take_edit();
     app.edited(Err("cannot run nano: not found".to_owned().into()));
     let text = screen_of(&mut app, 12);
@@ -104,7 +109,7 @@ fn g_x_on_a_host_says_that_only_local_files_open_externally() {
 #[test]
 fn f4_edits_a_copy_of_a_remote_file_and_sends_it_back() {
     let (mut app, _) = on_a_host();
-    let (id, sources, target, ends, options) = copy_job(app.handle(action(Action::Edit)));
+    let (id, sources, target, ends, options) = copy_job(f4(&mut app));
     assert_eq!(sources, [remote("web", "/home/deploy/notes")]);
     let Location::Local(copy) = target else {
         panic!("expected a local copy, got {target:?}");
@@ -147,7 +152,7 @@ fn f4_edits_a_copy_of_a_remote_file_and_sends_it_back() {
 #[test]
 fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
     let (mut app, connection) = on_a_host();
-    let (id, _, target, _, _) = copy_job(app.handle(action(Action::Edit)));
+    let (id, _, target, _, _) = copy_job(f4(&mut app));
     app.job_event(id, JobEvent::Finished { complete: true });
     let copy = app.take_edit().unwrap();
     assert_eq!(Location::Local(copy.clone()), target);
@@ -155,7 +160,7 @@ fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
     assert!(matches!(&effects[..], [Effect::Discard(path)] if *path == copy));
 
     // The upload fails: the copy stays, and the user hears where it is.
-    let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+    let (id, _, _, _, _) = copy_job(f4(&mut app));
     app.job_event(id, JobEvent::Finished { complete: true });
     let copy = app.take_edit().unwrap();
     let (id, _, _, _, _) = copy_job(app.edited(Ok(true)));
@@ -195,7 +200,7 @@ fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
     );
 
     // So does one whose host is gone by then.
-    let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+    let (id, _, _, _, _) = copy_job(f4(&mut app));
     app.job_event(id, JobEvent::Finished { complete: true });
     app.take_edit().unwrap();
     app.closed("web", connection, Some("Broken pipe"));
@@ -223,7 +228,7 @@ fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
 fn a_host_given_up_ends_the_jobs_of_f4() {
     // While the copy comes: the partial copy goes, and there is nothing to edit.
     let (mut app, connection) = on_a_host();
-    let (_, _, target, _, _) = copy_job(app.handle(action(Action::Edit)));
+    let (_, _, target, _, _) = copy_job(f4(&mut app));
     assert!(
         app.closed("web", connection, Some("Broken pipe"))
             .is_empty()
@@ -243,7 +248,7 @@ fn a_host_given_up_ends_the_jobs_of_f4() {
 
     // While the edited copy goes back: it stays, and the user hears where.
     let (mut app, connection) = on_a_host();
-    let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+    let (id, _, _, _, _) = copy_job(f4(&mut app));
     app.job_event(id, JobEvent::Finished { complete: true });
     let copy = app.take_edit().unwrap();
     copy_job(app.edited(Ok(true)));

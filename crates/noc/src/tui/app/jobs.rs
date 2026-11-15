@@ -386,8 +386,9 @@ impl App {
     }
 
     /// Does what follows a job of F4 once it ends, `complete` if it did all it was asked: opens
-    /// the editor on a copy that came, or removes a copy that went back. A partial copy goes;
-    /// an edited one that did not go back stays, and the user hears where.
+    /// the editor on a copy that came, or removes a copy that went back, and the viewer on the
+    /// file reads it again. A partial copy goes; an edited one that did not go back stays, and
+    /// the user hears where.
     fn follow_up(&mut self, then: Then, complete: bool) -> Vec<Effect> {
         match (then, complete) {
             (Then::Edit, true) => {
@@ -403,7 +404,11 @@ impl App {
                 .map(|editing| Effect::Discard(editing.file))
                 .into_iter()
                 .collect(),
-            (Then::Discard { copy, .. }, true) => vec![Effect::Discard(copy)],
+            (Then::Discard { copy, remote, .. }, true) => {
+                let mut effects = vec![Effect::Discard(copy)];
+                effects.extend(self.reread(&remote));
+                effects
+            }
             (Then::Discard { copy, remote, dir }, false) => {
                 let why = fl!("edit-kept-stopped");
                 self.keep_edit(copy, remote, dir, &why);

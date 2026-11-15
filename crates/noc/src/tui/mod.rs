@@ -140,6 +140,9 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
         }
         Done::Read { id, result } => tasks.run(app.read(id, result)),
         Done::ReadProgress { id, progress } => app.read_progress(id, progress),
+        Done::Polled { id, result } => tasks.run(app.polled(id, result)),
+        Done::Siblings { id, result } => tasks.run(app.siblings(id, result)),
+        Done::Sniffed { id, result } => tasks.run(app.sniffed(id, result)),
         Done::Detected(tool, detected) => app.detected(tool, detected),
         Done::Formats(formats) => {
             noc_locale::set_current(*formats);

@@ -547,7 +547,7 @@ config-max-results-invalid = "{ $text }" is not a number of results: it takes a 
 config-max-per-file = Most &lines in a file
 config-max-per-file-hint = The search finds no more lines in one file than so many, so that a large file leaves room for others; 1 or more.
 config-max-per-file-invalid = "{ $text }" is not a number of lines: it takes a whole number, 1 or more.
-config-viewer = Viewer
+config-viewer = View and edit
 config-viewer-part = Local &part, MiB
 config-viewer-part-hint = F3 reads a local file in parts of so many MiB, the next one at the end of what it holds; 1 or more. Takes effect at the next F3.
 config-viewer-part-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 1 or more.
@@ -557,6 +557,9 @@ config-viewer-host-part-invalid = "{ $text }" is not a number of KiB: it takes a
 config-viewer-window = &Window, MiB
 config-viewer-window-hint = F3 holds at most so many MiB of a file, and at least two parts; scrolled back past them, it reads them again. Takes effect at the next F3.
 config-viewer-window-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 1 or more.
+config-edit-large = &Edit asks above, MiB
+config-edit-large-hint = F4 and e ask first before they edit a larger file, as they do for one that looks binary; 0 never asks for the size.
+config-edit-large-invalid = "{ $text }" is not a number of MiB: it takes a whole number, 0 or more.
 config-log = Log
 config-log-level = &Level
 config-log-level-hint = The least severe events the log of this run gets, in a file of its own under ~/.local/state/noc/logs. Debug and Trace say much more, to find out what went wrong.
@@ -767,6 +770,12 @@ help-viewer-scroll-half-right = Half the screen right, when lines are cut
 help-viewer-scroll-start = The start of the lines, when they are cut
 help-viewer-scroll-end = The end of the longest line on screen, when lines are cut
 help-viewer-wrap = Wrap long lines, or cut them
+help-viewer-edit = Edit the file in $VISUAL or $EDITOR at the line on top, then view it again
+help-viewer-system-open = Open the file with the programs of the desktop; local files only
+help-viewer-reload = Read the file again, up to the line on top
+help-viewer-next-file = The next file: of the panel, of the files found, or of the directory of the log; with a count, that many on
+help-viewer-prev-file = The file before: of the panel, of the files found, or of the directory of the log; with a count, that many back
+help-viewer-follow = Follow the end of the file as it grows, as tail -f; again, or a move up, stops
 help-viewer-quit = Close the viewer
 help-row-up = One row up
 help-row-down = One row down
@@ -1322,6 +1331,10 @@ viewer-error = Cannot view
 viewer-read-error = Cannot read more of
 # The file changed between two parts the viewer read; it reads it again from the start.
 viewer-changed = { $path } changed; reading it again.
+# The viewer followed the end of the file, F, and could no longer look at it, for this reason.
+viewer-follow-stopped = Stopped following { $path }: { $reason }
+# ] f or [ f in the viewer of a file whose directory could not be listed, for this reason.
+viewer-list-error = Cannot list { $path }: { $reason }
 # The window over the viewer while it reads a part of the file that takes a while.
 viewer-reading = Reading
 # Where the part starts in the file, and the size of the file; sizes are short, as 32M.
@@ -1343,6 +1356,15 @@ edit-kept-copy = They are in { $copy }
 edit-kept-stopped = The copy back did not finish
 # Why the editor did not run.
 edit-cannot-run = Cannot run { $program }: { $reason }
+# Asked before the editor opens a file that looks binary, or a large one, with Edit and Cancel,
+# Cancel the default. A file looks binary with a NUL byte among its first 8000 bytes, as git
+# tells one; a large one is larger than edit.large_mib. Sizes are short, as 812M.
+edit-ask-title = Edit
+edit-ask-binary = "{ $name }" looks like a binary file: an editor may damage it as it saves it. Edit it anyway?
+edit-ask-large = "{ $name }" is { $size }: an editor may take long to open it. Edit it anyway?
+edit-ask-binary-large = "{ $name }" looks like a binary file, and is { $size }: an editor may damage it as it saves it. Edit it anyway?
+# On a line of its own under the question, for a file on a host, which is copied here first.
+edit-ask-remote = It is copied from { $host } first.
 
 ## Opening externally, g x (src/tui). Prefix: open-. The program the desktop has for the file:
 ## open on macOS, xdg-open on Linux.

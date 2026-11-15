@@ -19,15 +19,19 @@ use noc_ssh::askpass::AskpassServer;
 use noc_tools::opener::Opener;
 use noc_tools::zoxide::Scored;
 use noc_vfs::{
-    LocalFs, Location, Metadata, RemotePath, Space, Vfs, VfsError, VfsPath as _, Volume,
+    DirEntry, FileReader as _, LocalFs, Location, Metadata, RemotePath, Space, Vfs, VfsError,
+    VfsPath as _, Volume,
 };
-use noc_viewer::{Part, Progress, Want, read_part};
+use noc_viewer::{Part, Progress, Stamp, Want, read_part};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument as _;
 
-use super::app::{Effect, FindRequest, HistoryChange, ReadRequest, RecentChange, WorkspaceChange};
+use super::app::{
+    Effect, FindRequest, HistoryChange, PollRequest, ReadRequest, RecentChange, Sniffed,
+    WorkspaceChange,
+};
 use super::describe::{self, Reason};
 use super::dialog::Ask;
 use super::find::{FindQuery, FindSummary, Finding};
@@ -60,6 +64,9 @@ const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long the cursor of the location menu rests on a host before `ssh -G` runs for it, so
 /// that moving over hosts runs it for none of them.
 const RESOLVE_DELAY: Duration = Duration::from_millis(150);
+/// How long the viewer waits before it looks at a file it follows again: a second, as
+/// `tail -f` sleeps between its reads.
+const POLL_DELAY: Duration = Duration::from_secs(1);
 /// A finished piece of background work.
 #[derive(Debug)]
 pub(crate) enum Done {
@@ -88,6 +95,22 @@ pub(crate) enum Done {
     },
     /// How far [`Effect::Read`] is with its part.
     ReadProgress { id: u64, progress: Progress },
+    /// How the file of [`Effect::Poll`] is now, or why that could not be read.
+    Polled {
+        id: u64,
+        result: Result<Stamp, Reason>,
+    },
+    /// The entries of the directory of [`Effect::ListSiblings`], or why not.
+    Siblings {
+        id: u64,
+        result: Result<Vec<DirEntry>, Reason>,
+    },
+    /// What the start and the size of the file of [`Effect::Sniff`] tell, or why they could
+    /// not be read.
+    Sniffed {
+        id: u64,
+        result: Result<Sniffed, Reason>,
+    },
     /// The directory of [`Effect::CreateDir`] was made, or why not.
     Created {
         panel: PanelId,
@@ -405,6 +428,9 @@ impl Tasks {
                 } => self.rename(panel, from, to, replace, host),
                 Effect::Discard(path) => discard(path),
                 Effect::Read(request) => self.read(request),
+                Effect::Poll(request) => self.poll(request),
+                Effect::ListSiblings { id, dir, host } => self.list_siblings(id, dir, host),
+                Effect::Sniff { id, location, host } => self.sniff(id, location, host),
                 Effect::Delete {
                     id,
                     targets,
@@ -455,9 +481,7 @@ impl Tasks {
                 } => self.list_commands(generation, dirs, prefix, with_dirs),
                 Effect::Detect(tool) => self.detect(tool),
                 Effect::Formats(setting) => self.formats(setting),
-                Effect::Log(config) => {
-                    tokio::task::spawn_blocking(move || crate::logging::apply(&config));
-                }
+                Effect::Log(config) => apply_log(config),
                 Effect::ZoxideQuery {
                     generation,
                     keywords,
@@ -873,6 +897,47 @@ impl Tasks {
         });
     }
 
+    /// Reads how the file of the viewer that follows it is a moment from now; nothing once its
+    /// token stops it.
+    fn poll(&self, request: PollRequest) {
+        let PollRequest {
+            id,
+            location,
+            host,
+            cancel,
+        } = request;
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let stamp = async {
+                tokio::time::sleep(POLL_DELAY).await;
+                stamp(location, host).await
+            };
+            let result = tokio::select! {
+                result = stamp => result,
+                () = cancel.cancelled() => return,
+            };
+            let _ = done.send(Done::Polled { id, result });
+        });
+    }
+
+    /// Lists the directory at `dir` for the viewer, which goes to a file there.
+    fn list_siblings(&self, id: u64, dir: Location, host: Option<HostHandle>) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let result = entries_in(dir, host).await;
+            let _ = done.send(Done::Siblings { id, result });
+        });
+    }
+
+    /// Reads the first bytes and the size of the file at `location`, which F4 is to edit.
+    fn sniff(&self, id: u64, location: Location, host: Option<HostHandle>) {
+        let done = self.done.clone();
+        tokio::spawn(async move {
+            let result = sniff(location, host).await;
+            let _ = done.send(Done::Sniffed { id, result });
+        });
+    }
+
     /// Makes a local directory here, or passes a remote one to the task of its host.
     fn create_dir(&self, panel: PanelId, location: Location, host: Option<HostHandle>) {
         match (&location, host) {
@@ -1174,6 +1239,72 @@ async fn read(
         _ => return Err(fl!("error-connection-closed").into()),
     };
     result.map_err(|error| describe::vfs_reason(&error))
+}
+
+/// Logs as `config` says from now on, on a thread for blocking work.
+fn apply_log(config: noc_config::LogConfig) {
+    tokio::task::spawn_blocking(move || crate::logging::apply(&config));
+}
+
+/// How the file at `location` is now: its size and the time of its last change.
+async fn stamp(location: Location, host: Option<HostHandle>) -> Result<Stamp, Reason> {
+    let metadata = match (location, share(host).await) {
+        (Location::Local(path), _) => LocalFs.metadata(&path).await,
+        (Location::Remote { path, .. }, Some(Some(fs))) => fs.metadata(&path).await,
+        _ => return Err(fl!("error-connection-closed").into()),
+    };
+    metadata
+        .map(|metadata| Stamp {
+            size: metadata.size,
+            modified: metadata.modified,
+        })
+        .map_err(|error| describe::vfs_reason(&error))
+}
+
+/// The entries of the directory at `dir`, read through `host` if it is remote.
+async fn entries_in(dir: Location, host: Option<HostHandle>) -> Result<Vec<DirEntry>, Reason> {
+    let entries = match (dir, share(host).await) {
+        (Location::Local(path), _) => LocalFs.list_dir(&path).await,
+        (Location::Remote { path, .. }, Some(Some(fs))) => {
+            // The empty path is the home directory, where the session starts.
+            let path = if path.as_bytes().is_empty() {
+                RemotePath::from(".")
+            } else {
+                path
+            };
+            fs.list_dir(&path).await
+        }
+        _ => return Err(fl!("error-connection-closed").into()),
+    };
+    entries.map_err(|error| describe::vfs_reason(&error))
+}
+
+/// What the first bytes and the size of the file at `location` tell, read through `host` if it
+/// is remote: no byte past those that tell whether it is binary.
+async fn sniff(location: Location, host: Option<HostHandle>) -> Result<Sniffed, Reason> {
+    let result = match (location, share(host).await) {
+        (Location::Local(path), _) => sniff_in(&LocalFs, &path).await,
+        (Location::Remote { path, .. }, Some(Some(fs))) => sniff_in(&*fs, &path).await,
+        _ => return Err(fl!("error-connection-closed").into()),
+    };
+    result.map_err(|error| describe::vfs_reason(&error))
+}
+
+async fn sniff_in<V: Vfs>(vfs: &V, path: &V::Path) -> Result<Sniffed, VfsError> {
+    let length = u64::try_from(noc_text::BINARY_START).unwrap_or(u64::MAX);
+    let (metadata, mut reader) =
+        tokio::try_join!(vfs.metadata(path), vfs.open_file_range(path, 0, length))?;
+    let mut start = Vec::new();
+    while start.len() < noc_text::BINARY_START {
+        let Some(chunk) = reader.read().await? else {
+            break;
+        };
+        start.extend_from_slice(&chunk);
+    }
+    Ok(Sniffed {
+        binary: noc_text::is_binary(&start),
+        size: metadata.size,
+    })
 }
 
 /// Lists a local directory.

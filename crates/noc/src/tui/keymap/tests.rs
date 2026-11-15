@@ -1156,6 +1156,30 @@ fn z_scrolls_sideways_as_in_vim() {
 }
 
 #[test]
+fn the_viewer_edits_opens_reads_again_goes_to_other_files_and_follows() {
+    let viewer = (Mode::Normal, Context::Viewer);
+    for (keys, action) in [
+        (&["e"][..], Action::Edit),
+        (&["f4"], Action::Edit),
+        (&["g", "x"], Action::SystemOpen),
+        (&["shift-r"], Action::Reload),
+        (&["]", "f"], Action::NextFile),
+        (&["[", "f"], Action::PrevFile),
+        (&["shift-f"], Action::Follow),
+    ] {
+        assert_eq!(typed(viewer, keys), actions(&[action]), "{keys:?}");
+    }
+    let keymap = Keymap::default();
+    let mut fkeys = [None; 10];
+    fkeys[0] = Some(Action::Help);
+    fkeys[1] = Some(Action::ToggleWrap);
+    fkeys[2] = Some(Action::Quit);
+    fkeys[3] = Some(Action::Edit);
+    fkeys[9] = Some(Action::Quit);
+    assert_eq!(keymap.fkeys(Mode::Normal, Context::Viewer), fkeys);
+}
+
+#[test]
 fn a_key_that_cannot_go_on_with_a_sequence_gives_it_up_in_normal_and_visual_mode() {
     // As vim beeps at `g y` and Ctrl+w and a key that names no window, neither runs.
     for keys in [

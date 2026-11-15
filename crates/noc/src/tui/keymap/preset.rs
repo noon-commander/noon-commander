@@ -492,7 +492,9 @@ pub(super) const PRESET: Preset = &[
             (Action::Cancel, &["esc", "ctrl-[", "ctrl-c", "q", "f10"]),
         ],
     ),
-    // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less.
+    // The viewer of F3. Space, f, and b turn the page, and u and d half of it, as in less. e and
+    // F4 edit the file, g x opens it, and R reads it again, as in the panels; ] f and [ f go to
+    // the next file and the one before, as vim-unimpaired's; F follows the end, as less's.
     (
         Mode::Normal,
         Context::Viewer,
@@ -519,6 +521,12 @@ pub(super) const PRESET: Preset = &[
             (Action::ScrollStart, &["z s"]),
             (Action::ScrollEnd, &["z e"]),
             (Action::ToggleWrap, &["f2"]),
+            (Action::Edit, &["e", "f4"]),
+            (Action::SystemOpen, &["g x"]),
+            (Action::Reload, &["shift-r"]),
+            (Action::NextFile, &["] f"]),
+            (Action::PrevFile, &["[ f"]),
+            (Action::Follow, &["shift-f"]),
             (Action::Help, &["g ?", "f1"]),
             (Action::Quit, &["q", "esc", "ctrl-[", "ctrl-c", "f3", "f10"]),
         ],

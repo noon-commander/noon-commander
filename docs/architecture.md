@@ -21,12 +21,12 @@ crates/
 ├── noc-vfs/       Vfs trait: local and SFTP backends, mounted volumes
 ├── noc-ops/       job engine: copy, move, rename, delete, mkdir, checksums; progress, cancellation, conflicts
 ├── noc-tools/     external programs other than ssh: zoxide, ripgrep, fd, the editor, the opener, the shell
-├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping
+├── noc-text/      terminal-safe text: sanitizing, widths in cells, fitting, wrapping; binary files
 ├── noc-pattern/   patterns typed to match names: regular expressions or text, smart case,
 │                  one Unicode form, case folding
 ├── noc-scroll/    paging text that ends: how far the page keys go, the scroll bar
 ├── noc-vars/      variables in text: $NAME, ${NAME}, $$, read once, expanded where it runs
-└── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping; its own text
+└── noc-viewer/    the F3 viewer: reading through the Vfs, scrolling, wrapping, following; its own text
 ```
 
 Dependencies point one way, toward the binary:
@@ -1343,6 +1343,9 @@ part_mib = 1                     # F3 reads a local file in parts of so many MiB
 host_part_kib = 256              # and a file on a host in parts of so many KiB
 window_mib = 128                 # MiB of parts it holds; the farthest go, and are read again
 
+[edit]
+large_mib = 64                   # F4 asks first above so many MiB, as for a binary file; 0: never
+
 [log]
 level = "info"                   # "off", "error", "warn", "info", "debug", "trace"
 filter = ""                      # directives in place of level, such as "info,noc_ssh=trace"
@@ -1630,6 +1633,26 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G`
   and Home/End the ends, and F3, F10, `q`, or Esc to close; F1 or `g ?` shows the help over
   it.
+- **The viewer edits, opens, and goes on**
+  ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md)), in every viewer of a
+  file, but not of text that the app holds (the checksums, a file a save would write): `e` and
+  F4 edit it as F4 does in the panels, at the line on top where the lines have numbers, once its
+  start is read (F4 shows on its F-key bar only then); the viewer stays, and reads the file again
+  (`Viewer::reload`) once the editor changed it, or, on a host, once the copy went back
+  (`Then::Discard`). `g x` opens it externally, as in the panels; `R` reads it again, up to the
+  line on top, as less's `R`. `] f` and `[ f` view the next file and the one before, with a
+  count that many, no further than the last or the first, its lines wrapped or cut as they were
+  (`Viewing.neighbours`): those of the panel it was viewed from, as the panel shows them, whose
+  cursor goes along; those the search of a tree found, its cursor going along too, each from its
+  first line that matched; or those of the directory of the log, listed then
+  (`Effect::ListSiblings`) and sorted as the active panel sorts; the `ssh_config` of a host and
+  the file of a question about a taken name have none. `F` follows the end as it grows, as
+  `tail -f` and less's `F`: once a second (`Effect::Poll`) the app asks the size and the time of
+  the file (`Viewer::check`); one that only grew is read on from its end, or again where its last
+  line had no line feed yet (`Part::open`), as what was added goes on with that line; one that
+  shrank or changed otherwise is read again, to its end. `Follow` takes the place of `End` in the
+  position; a move up or `F` again stops it, and so does a file that can no longer be looked at,
+  which the line of the mode says.
 - **Ctrl+\\ views the log** of this run (Ctrl+4 without the kitty keyboard protocol, which sends
   the same byte), in every mode, and Command → View the log: the viewer on the file of the log,
   from its end (`App::view_log`). As the viewer of a question about a taken name, it stands in front
@@ -1648,7 +1671,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `overwrite` and as `transfer.atomic_upload` says, keeping the original's permissions. Both
   copies show the job's window. The local copy is removed once it went back, or at once if
   it did not change; one that did not go back (a failure, Abort, or the host gone) stays, and
-  a red dialog says where. Panels on the file's directory read it again.
+  a red dialog says where. Panels on the file's directory read it again. First, F4 reads the size
+  of the file and its first 8000 bytes, through the host's session for a remote one, before
+  anything is copied (`Effect::Sniff`): a file with a NUL among them looks binary, as git tells
+  one (`noc_text::is_binary`), and one larger than `edit.large_mib`, 64 MiB by default, as the
+  editor of mc's `filesize_threshold`, is large; for either, a question in the colors of warnings,
+  Cancel the default, comes before the editor, saying that a host's file is copied first
+  (`Purpose::EditAnyway`). One that cannot be read goes to the editor all the same, which says
+  why. The viewer knows both from the part it read first, and asks at once.
 - **`g x` opens externally** the marked entries, or the one under the cursor, as vim's `gx`
   opens what is under its cursor: each with the program the desktop has for it, as a double
   click would, through `open` on macOS and `xdg-open` on Linux, one after another

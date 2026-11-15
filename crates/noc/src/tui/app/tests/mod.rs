@@ -502,6 +502,27 @@ fn deletes(effects: &[Effect]) -> Vec<(u64, Vec<Location>)> {
         .collect()
 }
 
+/// What the look at a small text file tells.
+const TEXT: Sniffed = Sniffed {
+    binary: false,
+    size: Some(12),
+};
+
+/// Presses F4 and answers the look at the file it is to edit: [`TEXT`]. What F4 does then.
+fn f4(app: &mut App) -> Vec<Effect> {
+    let effects = app.handle(action(Action::Edit));
+    answer_sniff(app, effects, TEXT)
+}
+
+/// Answers the look at the file F4 is to edit, the only effect of `effects`, with `sniffed`.
+/// What F4 does then.
+fn answer_sniff(app: &mut App, effects: Vec<Effect>, sniffed: Sniffed) -> Vec<Effect> {
+    let Effect::Sniff { id, .. } = one(effects) else {
+        panic!("expected a look at the file to edit");
+    };
+    app.sniffed(id, Ok(sniffed))
+}
+
 /// The only effect, which must start copying: the job, its sources, its target, whether
 /// its ends are remote, and its options.
 fn copy_job(effects: Vec<Effect>) -> (u64, Vec<Location>, Location, (bool, bool), CopyOptions) {

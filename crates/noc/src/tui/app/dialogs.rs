@@ -254,7 +254,13 @@ impl App {
             }
             Purpose::NotConnected { panel } => return self.not_connected_closed(panel, event),
             Purpose::Quit => self.quit = event == DialogEvent::Pressed(Button::Yes),
-            Purpose::EditHost { .. }
+            Purpose::EditAnyway { dir, name, line }
+                if event == DialogEvent::Pressed(Button::Edit) =>
+            {
+                return self.edit_file(dir, &name, line);
+            }
+            Purpose::EditAnyway { .. }
+            | Purpose::EditHost { .. }
             | Purpose::GoToDir { .. }
             | Purpose::Checksum { .. }
             | Purpose::SaveFile { .. }
@@ -430,7 +436,7 @@ impl App {
                 expected,
                 compare,
             } => self.hash(dir, groups, (algorithm, expected), compare),
-            Again::EditFile { dir, name, line } => self.edit_file(dir, &name, line),
+            Again::EditFile { dir, name, line } => self.ask_edit(dir, &name, line),
             Again::RunIn {
                 dir,
                 command,
@@ -439,9 +445,9 @@ impl App {
             Again::CreateDir { panel, location } => self.create_dir(panel, location),
             Again::Rename { panel, from, to } => self.rename_entry(panel, from, to, false),
             Again::Write { location, bytes } => self.write_file(location, bytes, false),
-            Again::View(location) => {
+            Again::View(location, neighbours) => {
                 let dir = location.parent().unwrap_or_else(|| location.clone());
-                self.view_file(location, &dir, None)
+                self.view_file(location, &dir, None, neighbours)
             }
             Again::ViewLog => self.view_log(),
             Again::ReadMore => {

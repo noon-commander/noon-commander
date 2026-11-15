@@ -302,6 +302,12 @@
       goes on past a part stays whole up to 16 MiB; a local file of at most 16 MiB is read whole
       behind the screen, so that its lines are counted
       ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md))
+- [x] The viewer edits its file (`e`, F4) at the line on top and reads it again after, opens it
+      (`g x`), reads it again (`R`), goes to the next file and the one before (`] f`, `[ f`) of
+      the panel, of the search of a tree, or of the directory of the log, and follows its end as
+      it grows (`F`); F4 asks first for a file that looks binary or is larger than
+      `edit.large_mib`
+      ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md))
 - [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
       Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the
       numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))

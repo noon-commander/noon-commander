@@ -137,6 +137,24 @@ pub(crate) enum Effect {
     /// Read a part of a file for the viewer, and report to [`App::read_progress`] and
     /// [`App::read`].
     Read(ReadRequest),
+    /// A second from now, read how the file of the viewer is, and pass it to [`App::polled`]:
+    /// the viewer follows the file as it grows.
+    Poll(PollRequest),
+    /// List the directory at `dir`, through `host` if it is remote, and pass its entries to
+    /// [`App::siblings`]: the viewer goes from its file to another file there.
+    ListSiblings {
+        id: u64,
+        dir: Location,
+        host: Option<HostHandle>,
+    },
+    /// Read the first bytes and the size of the file at `location`, through `host` if it is
+    /// remote, and pass what they tell to [`App::sniffed`]: whether F4 asks before it edits
+    /// the file.
+    Sniff {
+        id: u64,
+        location: Location,
+        host: Option<HostHandle>,
+    },
     /// Remove a temporary file, if it is there.
     Discard(PathBuf),
     /// Make the directory at `location` and report to [`App::created`]. Remote ones go to the
@@ -286,6 +304,16 @@ pub(crate) struct ReadRequest {
     pub(crate) host: Option<HostHandle>,
     pub(crate) want: Want,
     pub(crate) stop: CancellationToken,
+    pub(crate) cancel: CancellationToken,
+}
+
+/// A look at how the file of the viewer `id` at `location` is now, through `host` if it is
+/// remote, which the viewer follows; `cancel` drops it.
+#[derive(Debug)]
+pub(crate) struct PollRequest {
+    pub(crate) id: u64,
+    pub(crate) location: Location,
+    pub(crate) host: Option<HostHandle>,
     pub(crate) cancel: CancellationToken,
 }
 
@@ -510,6 +538,12 @@ enum Purpose {
     NotConnected { panel: PanelId },
     /// F10: Yes quits, and stops the jobs that run.
     Quit,
+    /// F4 on the file `name` in `dir`, which looks binary or is large: Edit edits it, at `line`.
+    EditAnyway {
+        dir: Location,
+        name: Vec<u8>,
+        line: Option<u64>,
+    },
     /// An error, with a way on from it besides Cancel, which `way` says.
     Problem { way: Way },
     /// Something to read, such as an error.
@@ -599,8 +633,8 @@ enum Again {
         location: Location,
         bytes: Vec<u8>,
     },
-    /// F3 views the file at `location`.
-    View(Location),
+    /// F3 views the file at `location`, among `neighbours`.
+    View(Location, Neighbours),
     /// Ctrl+\ views the log of this run.
     ViewLog,
     /// The viewer reads the part it stopped at.
@@ -642,7 +676,7 @@ impl Again {
             }
             Self::CreateDir { location, .. }
             | Self::Write { location, .. }
-            | Self::View(location) => vec![location],
+            | Self::View(location, _) => vec![location],
             Self::Rename { from, .. } => vec![from],
             Self::Edit(editing) => editing.remote.iter().collect(),
             Self::SendBack { remote, .. } => vec![remote],
@@ -815,6 +849,25 @@ struct Results {
     lines: Vec<(Vec<u8>, Option<String>)>,
 }
 
+/// What the start and the size of a file tell before F4 edits it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Sniffed {
+    /// Its start is of a binary file ([`noc_text::is_binary`]).
+    pub(crate) binary: bool,
+    /// The size it reports, if any.
+    pub(crate) size: Option<u64>,
+}
+
+/// The file `name` in `dir` that F4 is to edit, at `line`, while [`Effect::Sniff`] `id` reads
+/// what it is.
+#[derive(Debug)]
+struct Sniffing {
+    id: u64,
+    dir: Location,
+    name: Vec<u8>,
+    line: Option<u64>,
+}
+
 /// A file in the editor of F4.
 #[derive(Debug)]
 struct Editing {
@@ -952,6 +1005,36 @@ struct Viewing {
     log: Option<Vec<u64>>,
     /// It opened over the location menu, which stays under it until it closes.
     menu: bool,
+    /// What `] f` and `[ f` go through.
+    neighbours: Neighbours,
+    /// The listing of the directory of the file in flight for `] f` or `[ f`, if any.
+    stepping: Option<Step>,
+    /// It waits for [`Effect::Poll`] while it follows the file.
+    polling: bool,
+}
+
+/// The files around the one the viewer shows, which `] f` and `[ f` go through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Neighbours {
+    /// The files of the panel it was viewed from, as the panel shows them; its cursor goes
+    /// along.
+    Panel(PanelId),
+    /// The files the search of a tree found, which it was viewed from; its cursor goes along.
+    Found,
+    /// The files of the directory of the file, in the order of the active panel, as of the log.
+    Dir,
+    /// None: the file of a question about a taken name, the `ssh_config` of a host, or text
+    /// that the app holds.
+    Alone,
+}
+
+/// A step of `] f` or `[ f` that waits for the listing `id` of the directory: `count` files on,
+/// `forward` or back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Step {
+    id: u64,
+    forward: bool,
+    count: usize,
 }
 
 impl Viewing {
@@ -961,6 +1044,24 @@ impl Viewing {
             Source::File { location, .. } => location_text(location),
             Source::Text { name, .. } => cells::sanitize(name.as_bytes()),
         }
+    }
+
+    /// The file as F4 edits it, once its start is read: where it is, what its start and its
+    /// size tell, and the line on top, from 1, if the lines have numbers. Not text that the app
+    /// holds.
+    fn to_edit(&self) -> Option<(Location, Sniffed, Option<u64>)> {
+        let Source::File { location, .. } = &self.source else {
+            return None;
+        };
+        let sniffed = Sniffed {
+            binary: self.viewer.binary()?,
+            size: self.viewer.size(),
+        };
+        let line = self
+            .viewer
+            .line()
+            .map(|line| u64::try_from(line).unwrap_or(u64::MAX).saturating_add(1));
+        Some((location.clone(), sniffed, line))
     }
 
     /// Draws the viewer over `area`, the icon of the file in front of its path: while the file
@@ -1101,6 +1202,9 @@ pub(crate) struct App {
     /// Instead of the panels.
     viewing: Option<Viewing>,
     editing: Option<Editing>,
+    /// The file F4 is to edit while its start and its size are read, which tell whether it
+    /// asks first.
+    sniffing: Option<Sniffing>,
     /// What the event loop is to hand the terminal to next.
     handover: Option<Handover>,
     /// The command line of `!` and `:`, above the F-key bar.
@@ -1319,6 +1423,7 @@ impl App {
             pending: Vec::new(),
             viewing: None,
             editing: None,
+            sniffing: None,
             handover: None,
             command_line: None,
             history: Vec::new(),

@@ -20,7 +20,7 @@ fn work_in_a_directory_counts_in_zoxide_once_a_visit() {
     let effects = app.handle(action(Action::View));
     assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
     app.handle(action(Action::Quit));
-    let effects = app.handle(action(Action::Edit));
+    let effects = f4(&mut app);
     assert_eq!(zoxide_adds(&effects), [] as [PathBuf; 0], "once a visit");
     app.edited(Ok(false));
     // Reading the directory again is the same visit.
@@ -46,7 +46,7 @@ fn work_in_a_directory_counts_in_zoxide_once_a_visit() {
         &Listing::Dir(vec![dir("sub"), file("notes", 12)]),
     );
     app.handle(action(Action::End));
-    let effects = app.handle(action(Action::Edit));
+    let effects = f4(&mut app);
     assert_eq!(zoxide_adds(&effects), [PathBuf::from("/srv")]);
 }
 

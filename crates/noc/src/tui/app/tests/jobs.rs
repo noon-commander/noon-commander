@@ -540,7 +540,7 @@ fn a_host_given_up_makes_room_and_f4_never_waits() {
     app.handle(action(Action::Delete));
     delete_job(app.handle(action(Action::Confirm)));
     app.handle(action(Action::Confirm));
-    let (id, _, _, _, _) = copy_job(app.handle(action(Action::Edit)));
+    let (id, _, _, _, _) = copy_job(f4(&mut app));
     app.job_event(id, JobEvent::Finished { complete: false });
 
     // A local job waits behind the one on the host, and starts when the host goes.

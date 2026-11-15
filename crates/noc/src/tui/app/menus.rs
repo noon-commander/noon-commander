@@ -20,7 +20,7 @@ use crate::tui::search::Slot;
 use crate::tui::theme::Theme;
 use crate::tui::workspaces::{self};
 
-use super::{Again, App, Effect, Side, Way, Whole, theme_of};
+use super::{Again, App, Effect, Neighbours, Side, Way, Whole, theme_of};
 
 impl App {
     /// Opens the location menu for the panel on `side`, and lists what it offers.
@@ -78,7 +78,7 @@ impl App {
                 let location = Location::Local(file);
                 let dir = location.parent().unwrap_or_else(|| location.clone());
                 let line = u64::try_from(line).unwrap_or(u64::MAX);
-                self.view_file(location, &dir, Some(line))
+                self.view_file(location, &dir, Some(line), Neighbours::Alone)
             }
             MenuEvent::Reload => self.reload_menu(),
         }

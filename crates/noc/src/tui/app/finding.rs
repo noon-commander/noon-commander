@@ -13,7 +13,7 @@ use crate::tui::keymap::{Resolved, Typed};
 use crate::tui::panel::{Destination, child, home_text, location_text};
 use crate::tui::search::Slot;
 
-use super::{App, Effect, FIND_DELAY, FindRequest, Side};
+use super::{App, Effect, FIND_DELAY, FindRequest, Neighbours, Side};
 
 impl App {
     /// Opens the zoxide window for the active panel, and asks zoxide for its best
@@ -179,12 +179,12 @@ impl App {
                 location,
                 name,
                 line,
-            } => self.view_file(child(&location, &name), &location, line),
+            } => self.view_file(child(&location, &name), &location, line, Neighbours::Found),
             FindEvent::Edit {
                 location,
                 name,
                 line,
-            } => self.edit_file(location, &name, line),
+            } => self.ask_edit(location, &name, line),
         }
     }
 

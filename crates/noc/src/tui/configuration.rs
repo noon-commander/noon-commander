@@ -78,6 +78,7 @@ enum Key {
     ViewerPart,
     ViewerHostPart,
     ViewerWindow,
+    EditLarge,
     LogLevel,
     LogFilter,
     LogKeep,
@@ -210,6 +211,7 @@ impl Setting {
             | Key::ViewerPart
             | Key::ViewerHostPart
             | Key::ViewerWindow
+            | Key::EditLarge
             | Key::LogKeep => self.apply_number(config)?,
             Key::MenuBar => {
                 ui.menu_bar = match text {
@@ -341,6 +343,10 @@ impl Setting {
                 config.viewer.window_mib = number(text, |text| {
                     fl!("config-viewer-window-invalid", text = text)
                 })?;
+            }
+            Key::EditLarge => {
+                config.edit.large_mib =
+                    number(text, |text| fl!("config-edit-large-invalid", text = text))?;
             }
             Key::LogKeep => {
                 config.log.keep_days = number(text, |text| {
@@ -1675,7 +1681,8 @@ fn log(config: &Config) -> Category {
     }
 }
 
-/// Viewer, `[viewer]`: how much of a file F3 reads at once, and how much it keeps.
+/// View and edit, `[viewer]` and `[edit]`: how much of a file F3 reads at once, and how much it
+/// keeps; and the files F4 asks about first.
 fn viewer(config: &Config) -> Category {
     let viewer = &config.viewer;
     Category {
@@ -1702,6 +1709,11 @@ fn viewer(config: &Config) -> Category {
                     fl!("config-viewer-window-hint"),
                 ),
                 text(&viewer.window_mib.to_string()),
+            ),
+            Setting::new(
+                Key::EditLarge,
+                (fl!("config-edit-large"), fl!("config-edit-large-hint")),
+                text(&config.edit.large_mib.to_string()),
             ),
         ],
     }
@@ -2000,6 +2012,9 @@ mod tests {
         category(&mut dialog, 8);
         dialog.handle(action(Action::Down));
         typed(&mut dialog, "64");
+        dialog.handle(action(Action::Down));
+        dialog.handle(action(Action::Down));
+        typed(&mut dialog, "0");
         category(&mut dialog, 9);
         dialog.handle(action(Action::Right));
         dialog.handle(action(Action::Down));
@@ -2034,6 +2049,7 @@ mod tests {
         expected.search.program = PathBuf::from("/opt/rg");
         expected.search.fd = PathBuf::from("fdfind");
         expected.viewer.host_part_kib = NonZeroUsize::new(64).unwrap();
+        expected.edit.large_mib = 0;
         expected.log.level = LogLevel::Debug;
         expected.log.filter = "info,noc_ssh=trace".to_owned();
         expected.log.keep_days = 3;
@@ -2046,7 +2062,7 @@ mod tests {
 
     #[test]
     fn an_invalid_text_keeps_the_cursor_and_says_why() {
-        let cases: [(usize, usize, &str, &str); 19] = [
+        let cases: [(usize, usize, &str, &str); 20] = [
             (0, 0, "?", "is not auto or a language tag"),
             (0, 1, "not a tag", "is not auto, iso, or a language tag"),
             (0, 9, "0", "is not a step of the wheel"),
@@ -2064,6 +2080,12 @@ mod tests {
             (7, 2, "0", "is not a number of results"),
             (8, 1, "0", "is not a number of KiB"),
             (8, 1, "many", "is not a number of KiB"),
+            (
+                8,
+                3,
+                "-1",
+                "is not a number of MiB: it takes a whole number, 0 or more",
+            ),
             (9, 1, "noc_ssh=loud", "is not a filter of the log"),
             (9, 2, "-1", "is not a number of days"),
         ];

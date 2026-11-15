@@ -614,6 +614,30 @@ impl FindWindow {
         }
     }
 
+    /// Puts the cursor on the file found `count` files after the one of the row under it, or
+    /// before it, passing over directories found by name, and views it from its first line that
+    /// matched, as F3 on its row does: `] f` and `[ f` in the viewer. No further than the last
+    /// file or the first; `None` from there.
+    pub(crate) fn step_file(&mut self, forward: bool, count: usize) -> Option<FindEvent> {
+        let items = self.items();
+        let &(file, _) = items.get(self.rows_cursor())?;
+        let files = self
+            .rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| !row.entry.as_ref().is_some_and(|entry| entry.dir))
+            .map(|(index, _)| index);
+        let to = if forward {
+            files.filter(|&index| index > file).take(count).last()
+        } else {
+            let before: Vec<usize> = files.filter(|&index| index < file).collect();
+            before.get(before.len().saturating_sub(count)).copied()
+        }?;
+        self.cursor = Some((self.rows[to].path.clone(), None));
+        self.put_cursor();
+        Some(self.press(Button::View))
+    }
+
     /// Takes a key as a dialog does: the fields edit, Tab and the motions move the focus, and
     /// over the rows they move their cursor; Enter presses Go to, the default, and Alt and a
     /// letter act on what has it. F3 and F4 view and edit the file of the row; in the field of

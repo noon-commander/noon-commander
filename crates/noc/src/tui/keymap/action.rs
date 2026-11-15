@@ -293,6 +293,13 @@ pub(crate) enum Action {
     View,
     /// Wraps long lines in the viewer, or cuts them.
     ToggleWrap,
+    /// Views the next file in the viewer: of the panel it was viewed from, of the files the
+    /// search of a tree found, or of the directory of the file; with a count, that many on.
+    NextFile,
+    /// Views the file before, likewise.
+    PrevFile,
+    /// Follows the end of the file in the viewer as it grows, as `tail -f`; again: stops.
+    Follow,
     /// The names of a panel, or the lines of the viewer that are cut, a column left, as vim's
     /// `zh`; with a count, that many.
     ScrollLeft,
@@ -676,6 +683,9 @@ impl Action {
         Self::InvertMarks,
         Self::View,
         Self::ToggleWrap,
+        Self::NextFile,
+        Self::PrevFile,
+        Self::Follow,
         Self::ScrollLeft,
         Self::ScrollRight,
         Self::ScrollHalfLeft,

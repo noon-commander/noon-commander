@@ -948,6 +948,33 @@ impl Panel {
         }
     }
 
+    /// The names of the files shown, in their order: not the directories.
+    fn files(&self) -> Vec<Vec<u8>> {
+        let Listing::Dir(entries) = &self.listing;
+        self.shown
+            .iter()
+            .map(|&index| &entries[index])
+            .filter(|entry| !entry.is_dir_like())
+            .map(|entry| entry.name.clone())
+            .collect()
+    }
+
+    /// The name of the file shown `count` files after the file `name`, or before it, as
+    /// [`beside`] finds it.
+    pub(crate) fn file_beside(&self, name: &[u8], forward: bool, count: usize) -> Option<Vec<u8>> {
+        beside(&self.files(), name, forward, count)
+    }
+
+    /// Puts the cursor on the entry `name`, if it is shown.
+    pub(crate) fn put_cursor_on(&mut self, name: &[u8]) {
+        let focus = Focus::Name(name.to_vec());
+        if let Some(row) =
+            (0..self.rows()).find(|&row| self.row(row).is_some_and(|row| focus.matches(row)))
+        {
+            self.cursor = row;
+        }
+    }
+
     /// Reads the directory again with the cursor on `name`, such as a directory just made.
     pub(crate) fn reload_onto(&mut self, name: Vec<u8>) -> ListRequest {
         self.open(self.location.clone(), Focus::Name(name))
@@ -1224,6 +1251,38 @@ fn sort(entries: &mut Vec<DirEntry>, sort: Sort, natural: Option<&Formats>) {
         })
     });
     *entries = keyed.into_iter().map(|(.., entry)| entry).collect();
+}
+
+/// The names of the files among `entries`, a directory, in the order `panel` shows its own:
+/// sorted as it sorts, without the names that start with a dot unless it shows them, and
+/// without the directories.
+pub(crate) fn files_in_order(mut entries: Vec<DirEntry>, panel: &Panel) -> Vec<Vec<u8>> {
+    let formats = noc_locale::current();
+    let natural = (panel.names_by == NameOrder::Natural).then_some(&*formats);
+    sort(&mut entries, panel.sort, natural);
+    entries
+        .into_iter()
+        .filter(|entry| panel.show_hidden || !entry.name.starts_with(b"."))
+        .filter(|entry| !entry.is_dir_like())
+        .map(|entry| entry.name)
+        .collect()
+}
+
+/// The name `count` names after `name` among `names`, or before it: no further than the last or
+/// the first, and `None` from there, or if `name` is not among them.
+pub(crate) fn beside(
+    names: &[Vec<u8>],
+    name: &[u8],
+    forward: bool,
+    count: usize,
+) -> Option<Vec<u8>> {
+    let at = names.iter().position(|each| each == name)?;
+    let to = if forward {
+        at.saturating_add(count).min(names.len() - 1)
+    } else {
+        at.saturating_sub(count)
+    };
+    (to != at).then(|| names[to].clone())
 }
 
 /// The bytes that order `text` as names order: as the language of `natural` orders them, with

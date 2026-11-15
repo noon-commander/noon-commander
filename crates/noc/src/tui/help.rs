@@ -1045,6 +1045,12 @@ pub(crate) fn describe(context: Context, action: Action) -> Option<String> {
         (Context::Viewer, Action::ScrollStart) => fl!("help-viewer-scroll-start"),
         (Context::Viewer, Action::ScrollEnd) => fl!("help-viewer-scroll-end"),
         (Context::Viewer, Action::ToggleWrap) => fl!("help-viewer-wrap"),
+        (Context::Viewer, Action::Edit) => fl!("help-viewer-edit"),
+        (Context::Viewer, Action::SystemOpen) => fl!("help-viewer-system-open"),
+        (Context::Viewer, Action::Reload) => fl!("help-viewer-reload"),
+        (Context::Viewer, Action::NextFile) => fl!("help-viewer-next-file"),
+        (Context::Viewer, Action::PrevFile) => fl!("help-viewer-prev-file"),
+        (Context::Viewer, Action::Follow) => fl!("help-viewer-follow"),
         (Context::Viewer, Action::Quit) => fl!("help-viewer-quit"),
         (Context::QuickSearch, Action::NextMatch) => fl!("help-search-next-match"),
         // The F-keys of quick search do what they do in the panel.

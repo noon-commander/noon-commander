@@ -10,8 +10,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - A setting of the viewer, `viewer.host_part_kib`, 256 by default, in Options → Configuration…
-  under Viewer: how much of a file on a host F3 reads at once. A smaller part shows sooner on a
-  slow connection.
+  under View and edit: how much of a file on a host F3 reads at once. A smaller part shows sooner
+  on a slow connection.
 - Go to directory (`g d`) leaves a host for a local directory with `:`: `:` alone goes back to
   the last local directory of the panel, `:path` starts there, and `:/…` and `:~/…` are local,
   with Tab completing them. A name that starts with a colon is `./:name`
@@ -39,6 +39,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   under the cursor, after a question, No by default, or Yes over the workspace restored or saved
   last; F7 adds a new workspace, as `a` does. F2 and F7 work while the filter takes text too
   ([ADR 0070](docs/adr/0070-workspaces-by-name-and-saved-in-place.md)).
+- The viewer edits its file with `e` and F4, at the line on top, and reads it again once the
+  editor changed it, a file on a host once the copy went back; `g x` opens it externally, and `R`
+  reads it again, as in the panels. `] f` and `[ f` view the next file and the one before: of
+  the panel, whose cursor goes along, of the files the search of a tree found, or of the
+  directory of the log. `F` follows the end of the file as it grows, as `tail -f` and less's `F`
+  ([ADR 0080](docs/adr/0080-the-viewer-edits-opens-and-follows-its-file.md)).
+- F4 asks first, Cancel by default, before it edits a file that looks binary (a NUL in its first
+  8,000 bytes, as git tells one), or one larger than `edit.large_mib`, 64 MiB by default; 0 never
+  asks for the size. The setting is in Options → Configuration… under View and edit, which was
+  Viewer.
 
 ### Changed
 

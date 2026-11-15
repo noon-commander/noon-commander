@@ -359,6 +359,14 @@ fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
         screen.contains("line 3") && !screen.contains("line 2 "),
         "from its Host line: {screen}"
     );
+    // It has no files around it to go to; e edits it, at the line on top.
+    assert!(keys(&mut app, &["]", "f"]).is_empty());
+    assert!(keys(&mut app, &["e"]).is_empty());
+    assert!(matches!(
+        app.take_handover(),
+        Some(Handover::Edit { file, line: Some(3) })
+            if file == Path::new("/home/me/.ssh/conf.d/db")
+    ));
     app.handle(action(Action::Quit));
     assert_eq!(
         app.context(),

@@ -138,7 +138,8 @@ jobs:
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
-          cp .github/markdownlint/package.json .github/markdownlint/package-lock.json "$RUNNER_TEMP"
+          cp .github-deps/markdownlint/package.json .github-deps/markdownlint/package-lock.json \
+            "$RUNNER_TEMP"
           npm ci --prefix "$RUNNER_TEMP" --ignore-scripts
           echo "$RUNNER_TEMP/node_modules/.bin" >>"$GITHUB_PATH"
       - run: just lint

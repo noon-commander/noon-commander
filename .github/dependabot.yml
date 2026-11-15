@@ -13,8 +13,10 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+  # Not under .github/: Dependabot may change files there only for github-actions, and GitHub
+  # refuses its pull requests for npm with a 400 (dependabot/dependabot-core#15237).
   - package-ecosystem: npm
-    directory: /.github/markdownlint
+    directory: /.github-deps/markdownlint
     schedule:
       interval: weekly
     cooldown:

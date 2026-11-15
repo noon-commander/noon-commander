@@ -42,8 +42,9 @@ renderer: a library in an `xtask` crate, or a command-line program.
   (`clippy-with` and `test-with`, with `--locked`), the release build, MSRV, cargo-deny, and
   lint. The tools are built with `cargo install` at versions pinned in `ci.yml`, and
   rust-cache keeps them; actionlint comes from `go install`, and markdownlint-cli2 from
-  `npm ci` with its own `package-lock.json` in `.github/markdownlint/`, which Dependabot
-  updates. ShellCheck comes with the runner. cargo-deny-action is gone.
+  `npm ci` with its own `package-lock.json` in `.github-deps/markdownlint/`, which Dependabot
+  updates. It is not under `.github/`, where Dependabot may change files only for
+  github-actions. ShellCheck comes with the runner. cargo-deny-action is gone.
 - The logo is rendered by the `resvg` program. The workspace gets no new crate and no new
   dependencies, so `deny.toml` and the MSRV are untouched.
 - The PNGs are defined in the `justfile`, each with a name and a size, and `just logo` renders

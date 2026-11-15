@@ -1,8 +1,8 @@
 //! The key hints with the keys, after Ctrl+k while they show, as `K K` in nvim gives its hover
 //! window the keys: every key sequence of what is under them, whole, with what it does, in a
 //! list that `/` filters, under the names of their groups of keys, or of the contexts that bind
-//! them. Enter closes it and runs the command under the cursor where the keys went before; Esc
-//! closes it.
+//! them, in a large window. Enter closes it and runs the command under the cursor where the keys
+//! went before; Esc closes it.
 
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
@@ -18,11 +18,11 @@ use super::picker::{Body, MenuLine, Pick, Picker};
 use super::search::{Input, Kind};
 use super::theme::Theme;
 use super::which_key;
-use super::window::{self, Colors};
+use super::window::Colors;
 use crate::i18n::fl;
 
-/// Widest the column of keys gets; longer lists of keys are cut.
-const MAX_KEYS_WIDTH: usize = 24;
+/// The column of keys takes at most this part of a row; longer lists of keys are cut.
+const KEYS_SHARE: usize = 3;
 
 /// What a key did in the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,7 +170,8 @@ impl KeyHintsWindow {
     }
 
     /// Draws the window centered over `area`: the filter, then the commands under their
-    /// headings, scrolled to the cursor, those that take a character dimmed.
+    /// headings, scrolled to the cursor, those that take a character dimmed, and under them what
+    /// the command under the cursor does, whole.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let shown = self.picker.shown(&self.rows);
         let lines = Self::lines(&shown, self.picker.ranked());
@@ -178,14 +179,11 @@ impl KeyHintsWindow {
             .iter()
             .map(|row| cells::width(&row.keys))
             .max()
-            .unwrap_or(0)
-            .min(MAX_KEYS_WIDTH);
-        let full = shown
-            .get(self.picker.cursor())
-            .map(|row| format!("{}  {}", row.keys, row.text));
+            .unwrap_or(0);
+        let full = shown.get(self.picker.cursor()).map(|row| row.text.clone());
         let body = Body {
             title: &self.title,
-            width: window::WIDTH,
+            large: true,
             lines: &lines,
             full,
             ..Body::default()
@@ -207,7 +205,7 @@ impl KeyHintsWindow {
                     )
                 };
                 let marks = theme.glyphs.marks;
-                let keys_width = keys_width.min(shown_row.width / 2);
+                let keys_width = keys_width.min(shown_row.width / KEYS_SHARE);
                 // A cell on either side, and two between the columns.
                 let text_width = shown_row.width.saturating_sub(keys_width + 4);
                 let mut spans = vec![Span::styled(" ", text_style)];
@@ -239,6 +237,7 @@ mod tests {
 
     use super::*;
     use crate::tui::keymap::{Context, KeyState};
+    use crate::tui::window::frame_size;
 
     /// The window over every key of `place`, as Ctrl+k twice opens it.
     fn window(place: (Mode, Context), extra: Extra) -> KeyHintsWindow {
@@ -368,12 +367,58 @@ mod tests {
             })
             .collect();
         let keys = theme.keys.fg.unwrap();
-        // The last is the whole row under the cursor, under the rows, in the dialog's color.
-        let (full, rows) = colors.split_last().unwrap();
-        assert!(rows.len() > 1, "{}", terminal.backend());
-        assert_ne!(rows[0], keys, "the row under the cursor");
-        assert!(rows[1..].iter().all(|fg| *fg == keys), "{colors:?}");
-        assert_eq!(Some(*full), theme.dialog.fg, "{}", terminal.backend());
+        assert!(colors.len() > 1, "{}", terminal.backend());
+        assert_ne!(colors[0], keys, "the row under the cursor");
+        assert!(colors[1..].iter().all(|fg| *fg == keys), "{colors:?}");
+    }
+
+    #[test]
+    fn under_the_rows_shows_what_the_command_under_the_cursor_does_whole() {
+        let place = (Mode::Normal, Context::Panel);
+        let mut window = window_after(place, &[], SearchMode::Plain, Extra::default());
+        filter(&mut window, "under the cursor in the other");
+        let mut terminal = Terminal::new(TestBackend::new(50, 12)).unwrap();
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
+            .unwrap();
+        let screen = terminal.backend().to_string();
+        let lines: Vec<&str> = screen.lines().collect();
+        let bottom = lines.iter().position(|line| line.contains('╚')).unwrap();
+        // Without the keys, in two lines broken between words, where the row cuts it short.
+        let row = lines.iter().find(|line| line.contains("Ctrl+w f")).unwrap();
+        assert!(row.contains('»'), "{screen}");
+        assert!(lines[bottom - 2].contains("║ Open the directory under the cursor in "));
+        assert!(lines[bottom - 1].contains("║ the other panel "), "{screen}");
+    }
+
+    #[test]
+    fn is_a_large_window_whatever_the_filter_shows() {
+        let mut window = window((Mode::Normal, Context::Panel), Extra::default());
+        filter(&mut window, "'swap");
+        let mut terminal = Terminal::new(TestBackend::new(160, 40)).unwrap();
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
+            .unwrap();
+        let screen = terminal.backend().to_string();
+        // 80% of 160 columns and of 40 rows.
+        assert_eq!(frame_size(&screen), (128, 32), "{screen}");
+    }
+
+    #[test]
+    fn the_keys_take_up_to_a_third_of_a_row() {
+        let mut window = window((Mode::Normal, Context::Panel), Extra::default());
+        filter(&mut window, "'ctrl+w");
+        let mut terminal = Terminal::new(TestBackend::new(160, 16)).unwrap();
+        terminal
+            .draw(|frame| window.render(frame, frame.area(), &Theme::terminal()))
+            .unwrap();
+        let screen = terminal.backend().to_string();
+        // Cut in a window as wide as any other, whole in a large one.
+        assert!(
+            screen.contains("Ctrl+w w, Ctrl+w Ctrl+w, Ctrl+w p"),
+            "{screen}"
+        );
+        assert!(!draw(&mut window).contains("Ctrl+w p"));
     }
 
     #[test]

@@ -306,6 +306,10 @@
 - [x] The keys of the panels, the text fields, and the viewer in groups, which the list of the
       key hints (Ctrl+k twice) and the help show under their names
       ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md))
+- [x] Large windows, 80% of the screen across and down, never narrower than 76 cells: the
+      help, the list of the key hints, which shows what the command under the cursor does under
+      its rows, the Configuration dialog, and the search of a tree
+      ([ADR 0087](adr/0087-large-windows.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

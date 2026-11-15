@@ -1,7 +1,8 @@
 ---
 source: crates/noc/src/tui/configuration.rs
-expression: "draw(&mut dialog, 72, 16)"
+expression: "draw(&mut dialog, 72, 18)"
 ---
+"                                                                        "
 "                                                                        "
 "  ╔═════════════════════════ Configuration ══════════════════════════╗  "
 "  ║  1 Interface     │ Language             auto                     ▲  "
@@ -17,4 +18,5 @@ expression: "draw(&mut dialog, 72, 16)"
 "  ║ Colors: mc-classic, as mc; terminal, the terminal's own; noon,   ║  "
 "  ║ from the logo, and catppuccin, each dark or light.               ║  "
 "  ╚══════════════════════════════════════════════════════════════════╝  "
+"                                                                        "
 "                                                                        "

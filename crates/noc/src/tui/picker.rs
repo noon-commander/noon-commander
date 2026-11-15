@@ -24,8 +24,8 @@ use super::search::{Case, GlyphSpots, Input, Kind, Prompt, Switch, Way};
 use super::spinner::{Shine, Spin};
 use super::theme::Theme;
 use super::window::{
-    Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around, inner_width,
-    right_frame,
+    self, Colors, draw_box, draw_separator, draw_skeleton, draw_title_dots, frame_around,
+    inner_width, right_frame,
 };
 use crate::i18n::fl;
 
@@ -78,6 +78,9 @@ pub(crate) struct Body<'a> {
     pub(crate) title: &'a str,
     /// Widest the box gets, in cells, borders included.
     pub(crate) width: u16,
+    /// The box is a large window, of a size that its lines do not change, and `width` goes
+    /// unused.
+    pub(crate) large: bool,
     pub(crate) lines: &'a [MenuLine],
     /// Lines the box shows at most; as many as fit without.
     pub(crate) max_lines: Option<u16>,
@@ -101,8 +104,8 @@ pub(crate) struct Body<'a> {
     /// On the line over the footer, at its right end, as a title on the frame: such as when the
     /// command under the cursor ran.
     pub(crate) footer_label: Option<Line<'static>>,
-    /// The whole text of the row under the cursor, which always shows under the rows while
-    /// there are rows, unless the window has a footer.
+    /// The whole text of the row under the cursor, which always shows under the rows, broken
+    /// between words, while there are rows, unless the window has a footer.
     pub(crate) full: Option<String>,
     /// The window shows `full`, or a footer of as many lines, once its rows come from
     /// `loading`: until then the skeleton takes those lines too.
@@ -661,10 +664,14 @@ impl Picker {
         row: &mut dyn FnMut(ShownRow) -> Line<'static>,
     ) {
         let colors = Colors::plain(theme);
-        // Borders, and what is inside them.
-        let width = inner_width(body.width, area);
-        let height = self.height(&body, width).saturating_add(2);
-        let boxed = draw_box(frame, area, (body.width, height), body.title, colors, theme);
+        let size = if body.large {
+            window::large(area)
+        } else {
+            // Borders, and what is inside them.
+            let width = inner_width(body.width, area);
+            (body.width, self.height(&body, width).saturating_add(2))
+        };
+        let boxed = draw_box(frame, area, size, body.title, colors, theme);
         if let Some(dots) = body.dots() {
             draw_title_dots(frame, boxed, body.title, (dots, theme.busy_dialog), colors);
         }
@@ -934,7 +941,7 @@ fn draw_below(frame: &mut Frame<'_>, inner: Rect, below: u16, parts: Below<'_>, 
             let lines = cells::whole(
                 full,
                 (usize::from(inner.width), usize::from(FULL_ROWS)),
-                Some('/'),
+                Some(' '),
                 (theme.dialog, theme.truncated_dialog),
                 theme.glyphs.marks,
             );

@@ -31,8 +31,6 @@ use super::theme::Theme;
 use super::window::{self, Colors, draw_box, draw_separator, right_frame};
 use crate::i18n::fl;
 
-/// Tallest the dialog gets, in cells, borders included.
-const HEIGHT: u16 = 20;
 /// Cells between a setting's name and its value.
 const LABEL_GAP: usize = 2;
 /// Lines of the hint of the setting under the cursor.
@@ -1078,10 +1076,11 @@ impl Configuration {
         event
     }
 
-    /// Draws the dialog centered in `area`, with the terminal cursor in a focused text field.
+    /// Draws the dialog centered in `area`, a large window, with the terminal cursor in a focused
+    /// text field.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
         let colors = Colors::plain(theme);
-        let size = (window::WIDTH, HEIGHT.min(area.height.saturating_sub(2)));
+        let size = window::large(area);
         let inner = draw_box(frame, area, size, &fl!("config-title"), colors, theme);
         self.drawn = Drawn::default();
         // The body, a line, and two lines of hint.
@@ -1939,7 +1938,15 @@ mod tests {
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Down));
         dialog.handle(action(Action::Toggle));
-        insta::assert_snapshot!(draw(&mut dialog, 72, 16));
+        insta::assert_snapshot!(draw(&mut dialog, 72, 18));
+    }
+
+    #[test]
+    fn is_a_large_window() {
+        let mut dialog = dialog();
+        let screen = draw(&mut dialog, 160, 40);
+        // 80% of 160 columns and of 40 rows.
+        assert_eq!(window::frame_size(&screen), (128, 32), "{screen}");
     }
 
     #[test]
@@ -2247,7 +2254,7 @@ mod tests {
     fn draws_the_categories_and_the_settings() {
         let mut dialog = Configuration::new(&Config::default(), Path::new(HOME), PRESETS, true);
         dialog.handle(action(Action::Down));
-        insta::assert_snapshot!(draw(&mut dialog, 72, 16));
+        insta::assert_snapshot!(draw(&mut dialog, 72, 18));
     }
 
     #[test]
@@ -2283,7 +2290,8 @@ mod tests {
     fn draws_the_letters_apart() {
         let mut dialog = dialog();
         let mut underlined = |width| {
-            let mut terminal = Terminal::new(TestBackend::new(width, 24)).unwrap();
+            // Tall enough for every setting of the first category.
+            let mut terminal = Terminal::new(TestBackend::new(width, 26)).unwrap();
             terminal
                 .draw(|frame| dialog.render(frame, frame.area(), &Theme::terminal()))
                 .unwrap();

@@ -13,8 +13,8 @@ use crate::tui::picker::{Body, ShownRow};
 use crate::tui::spinner::{Shine, Spin};
 use crate::tui::theme::Theme;
 use crate::tui::window::{
-    Colors, button_line, button_spots, draw_box, draw_separator, draw_title_dots, gauge, ratio,
-    right_frame, unknown_gauge,
+    self, Colors, button_line, button_spots, draw_box, draw_separator, draw_title_dots, gauge,
+    ratio, right_frame, unknown_gauge,
 };
 
 use super::{
@@ -166,8 +166,11 @@ impl Dialog {
             height.saturating_add(self.part_rows(part, text_width, picker_rows))
         });
         let colors = Colors::of(theme, self.tone);
-        // Rows that fill the room make the dialog as tall as the screen.
-        let size = if fill {
+        // A large dialog keeps its size; rows that fill the room make another as tall as the
+        // screen.
+        let size = if self.large {
+            (width, window::large(area).1)
+        } else if fill {
             (width, u16::MAX)
         } else {
             (width, height + 4)

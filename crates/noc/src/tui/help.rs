@@ -23,9 +23,6 @@ use super::window::{self, Colors, draw_box, right_frame};
 use crate::about::{Build, Fact, Report, Topic, Value};
 use crate::i18n::fl;
 
-/// How much of the screen the help takes, in percent of its width and of its height.
-const WIDTH_PERCENT: u16 = 70;
-const HEIGHT_PERCENT: u16 = 70;
 /// Widest the key column gets; longer lists of keys go on to the next lines.
 const MAX_KEYS_WIDTH: usize = 16;
 /// How far the groups of keys are indented under Keys in the sidebar.
@@ -750,14 +747,11 @@ impl Help {
         (texts, width)
     }
 
-    /// Draws the help centered in `area`, over [`WIDTH_PERCENT`] of its width and
-    /// [`HEIGHT_PERCENT`] of its height, with the scroll bar of its text on the right of the
-    /// frame.
+    /// Draws the help centered in `area`, a large window, with the scroll bar of its text on the
+    /// right of the frame.
     pub(crate) fn render(&mut self, frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
-        let width = percent(area.width, WIDTH_PERCENT).max(window::MIN_WIDTH);
-        let height = percent(area.height, HEIGHT_PERCENT).max(window::MIN_HEIGHT);
         let colors = Colors::plain(theme);
-        let size = (width, height);
+        let size = window::large(area);
         let inner = draw_box(frame, area, size, &fl!("help-title"), colors, theme);
         let rows = self.sidebar_rows();
         let (texts, sidebar_width) = self.sidebar_texts(theme);
@@ -932,11 +926,6 @@ fn heading_line(title: &str, width: usize, theme: &Theme) -> Line<'static> {
         theme.dialog,
     ));
     Line::from(spans)
-}
-
-/// `percent` of `cells`, rounded down.
-fn percent(cells: u16, percent: u16) -> u16 {
-    u16::try_from(u32::from(cells) * u32::from(percent) / 100).unwrap_or(cells)
 }
 
 /// `keys`, a list such as `Space, Shift+Down`, in lines of at most `width` cells, broken after
@@ -2088,17 +2077,8 @@ mod tests {
     fn takes_a_share_of_the_screen() {
         let mut help = on(1);
         let screen = draw(&mut help, 160, 40);
-        let rows: Vec<Vec<char>> = screen
-            .lines()
-            .map(|row| row.trim_matches('"').chars().collect())
-            .collect();
-        let top = rows.iter().position(|row| row.contains(&'╔')).unwrap();
-        let bottom = rows.iter().position(|row| row.contains(&'╚')).unwrap();
-        let left = rows[top].iter().position(|c| *c == '╔').unwrap();
-        let right = rows[top].iter().position(|c| *c == '╗').unwrap();
-        // 70% of 160 columns and of 40 rows.
-        assert_eq!(right - left + 1, 112, "{screen}");
-        assert_eq!(bottom - top + 1, 28, "{screen}");
+        // 80% of 160 columns and of 40 rows.
+        assert_eq!(window::frame_size(&screen), (128, 32), "{screen}");
         assert!(
             screen.contains("Open the directory under the cursor"),
             "{screen}"

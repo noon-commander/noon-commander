@@ -314,9 +314,9 @@ fn the_wheel_scrolls_the_rows_of_the_search_wherever_the_focus_is() {
         .collect();
     app.found(generation, hits);
     app.find_ended(generation, Ok(FindSummary::default()));
-    assert!(screen_of(&mut app, 24).contains("f00"));
-    press(&mut app, Press::WheelDown, 40, 12);
-    let text = screen_of(&mut app, 24);
+    assert!(screen_of(&mut app, 30).contains("f00"));
+    press(&mut app, Press::WheelDown, 40, 15);
+    let text = screen_of(&mut app, 30);
     assert!(!text.contains("f00") && text.contains("f10"), "{text}");
     assert_eq!(app.context(), Context::FindInput, "the focus stays");
 }

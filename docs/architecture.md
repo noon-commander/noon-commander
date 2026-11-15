@@ -643,7 +643,8 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
   as it is in the plain one, with smart case; the keys after Ctrl+s in its field switch both, and
   the glyphs at the end of the field say which (`Dialog::with_search`). The globs are shell
   patterns, their field's one way, whose case the keys after Ctrl+s switch too. Both fields open
-  as they were last. With no text it lists the files. The picker keeps
+  as they were last. With no text it lists the files. The dialog is a large window
+  (`Dialog::large`, [ADR 0087](adr/0087-large-windows.md)). The picker keeps
   the cursor of the rows and scrolls them, its rows filling the room the dialog leaves them
   (`Body.fill`); `FindWindow` (`tui/find.rs`) keeps what was found, gives the picker as many
   rows, and draws each row.
@@ -733,9 +734,12 @@ goes to the filter, in Insert mode. There are no digit hotkeys.
   `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front
   of the title, at first and while they ask again; the skeleton, as tall as the last list without
   a filter; and why no rows came, in their place.
-- The key hints show the whole row under the cursor in two lines under the rows, while they have
-  rows (`Body.full`; [ADR 0041](adr/0041-lists-always-show-the-whole-row.md)): a key hint with all
-  its keys. The tab menu and the zoxide window, whose rows are paths that nearly always fit, show
+- The list of the key hints shows what the command under the cursor does, whole, in two lines
+  under the rows, broken between words, without its keys, while it has rows (`Body.full`;
+  [ADR 0041](adr/0041-lists-always-show-the-whole-row.md),
+  [ADR 0087](adr/0087-large-windows.md)). It is a large window, whose column of keys takes as many
+  cells as the longest keys shown, up to a third of a row. The tab menu and the zoxide window,
+  whose rows are paths that nearly always fit, show
   none ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
   history shows where the command ran there instead
   ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)), the location menu a
@@ -886,6 +890,8 @@ modern settings window: there is no OK or Cancel, and every change takes effect 
   Interface (`[ui]`), Animations (`[animations]`), Transfers (`[transfer]`), SSH (`[ssh]` and
   the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line
   (`[shell]`), and Search (`[search]`).
+- The dialog is a large window, 80% of the width and of the height of the screen
+  ([ADR 0087](adr/0087-large-windows.md)).
 - Paths under the home directory show from `~`, and are written as typed. Lists, such as
   `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
   reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
@@ -2036,16 +2042,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   written with `crokey` names. User overrides of the keymap are planned. The F-key
   bar is generated from the keymap in the mode and context of the next key, and so is the help
   screen (F1): the keys of each mode and context, with what they do, for what the app can do
-  already; a prompt from ssh shows over it. It takes 70% of the width and of the height of the
-  screen, and, as the Configuration dialog, lists its sections on the left (`tui/sidebar.rs`, which
-  both draw): About, with the license and the report of `crate::about` that `noc debug version`
-  prints too (the build; the system, read once at start; the terminal, from its variables and the
-  keyboard protocol the TUI found, without asking for its name; and the external tools, the editor,
-  zoxide, ripgrep, and fd, which are asked in the background at start and again when `[zoxide]
-  program`, `[search] program`, or `[search] fd` changes, `Effect::Detect`), and the files the app
-  keeps; and Keys, which folds, with a group for each part of the app (panels, text fields, search
-  and renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each
-  under its title in points after a bullet (`•`, `-` without icons). It opens at the top of About
+  already; a prompt from ssh shows over it. It is a large window, 80% of the width and of the
+  height of the screen, and, as the Configuration dialog, lists its sections on the left
+  (`tui/sidebar.rs`, which both draw): About, with the license and the report of `crate::about`
+  that `noc debug version` prints too (the build; the system, read once at start; the terminal,
+  from its variables and the keyboard protocol the TUI found, without asking for its name; and the
+  external tools, the editor, zoxide, ripgrep, and fd, which are asked in the background at start
+  and again when `[zoxide] program`, `[search] program`, or `[search] fd` changes,
+  `Effect::Detect`), and the files the app keeps; and Keys, which folds, with a group for each part
+  of the app (panels, text fields, search and renaming, the command line, lists and menus, menus
+  and dialogs, the viewer) and tips, each under its title in points after a bullet (`•`, `-`
+  without icons). It opens at the top of About
   first, and then where it was when it closed last (`help::Spot`, which the app keeps): the section,
   Keys open or folded, what had the keys, and how far down the text was. The titles of the parts of
   a section are bold on a line across (`── Panels ──`), the names of the groups of keys of a
@@ -2215,9 +2222,14 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   search of a tree, the window of checksums): the app gives it the count with the key, as the
   editor of a field reads it; elsewhere, in the lists, the app repeats a motion as many times,
   and gives a list the count before Ctrl+f or Ctrl+b, which scrolls as many pages at once.
-- **Width of a window.** Dialogs, lists, and the windows of jobs, progress, and reading are 76
-  cells wide, borders included (`window::WIDTH`); the help takes a share of the screen.
-  `tui/window/` holds what they share: the width, the colors by tone (`Colors`, `Tone`), the
+- **Size of a window.** Dialogs, lists, and the windows of jobs, progress, and reading, windows
+  to choose from and close, are 76 cells wide, borders included (`window::WIDTH`), and as tall as
+  what they show. Windows to read and scroll through are large: 80% of the width and of the height
+  of the screen, whatever they show, but never narrower than 76 cells where the screen has room
+  (`window::large`): the help, the list of the key hints, the Configuration dialog, and the
+  search of a tree; a list is large by `Body.large`, a dialog by `Dialog::large`
+  ([ADR 0087](adr/0087-large-windows.md)).
+  `tui/window/` holds what they share: the sizes, the colors by tone (`Colors`, `Tone`), the
   frame, the buttons, and the skeleton with its shine.
   `window::draw_box` draws the frame of every window, as wide as the
   window asks but leaving two cells free on either side of the screen, for the margin and the

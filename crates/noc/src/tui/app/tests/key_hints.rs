@@ -73,7 +73,7 @@ fn ctrl_k_twice_lists_the_keys_to_filter_and_run_where_they_went() {
     assert!(app.hints.is_none(), "the list takes the place of the hints");
     let text = screen_of(&mut app, 30);
     assert!(
-        text.contains("Ctrl+w h") && text.contains(&prompt("Filter", "")),
+        text.contains("g g, Home") && text.contains(&prompt("Filter", "")),
         "{text}"
     );
     // What is typed filters, and Enter runs the command in the panel, with the count.

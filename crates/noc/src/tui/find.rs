@@ -240,6 +240,7 @@ impl FindWindow {
             .with_field(&fl!("find-text"), "")
             .with_field(&fl!("find-files"), "")
             .with_picker(Picker::without_filter())
+            .large()
             .with_search(TEXT, text)
             .with_search(FILES, files_in(chosen, files));
         Self {
@@ -1533,6 +1534,18 @@ mod tests {
             }),
         );
         insta::assert_snapshot!(draw(&mut window, 70));
+    }
+
+    #[test]
+    fn is_a_large_window() {
+        let mut window = window();
+        let screen = draw(&mut window, 160);
+        // 80% of 160 columns and of 24 rows, before it found anything.
+        assert_eq!(
+            crate::tui::window::frame_size(&screen),
+            (128, 19),
+            "{screen}"
+        );
     }
 
     #[test]

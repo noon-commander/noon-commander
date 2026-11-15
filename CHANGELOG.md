@@ -52,6 +52,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The help (F1), the list of the key hints (Ctrl+k twice), the Configuration dialog, and the
+  search of a tree (`f /`, `f f`) are large windows: 80% of the width and of the height of the
+  screen, whatever they show, but never narrower than the other windows, 76 cells. The help took
+  70% of the screen, the Configuration dialog 76 cells by 20 rows, the search of a tree 76 cells
+  and the whole height, and the list of the key hints 76 cells and as many rows as it showed
+  ([ADR 0087](docs/adr/0087-large-windows.md)).
+- Under its rows the list of the key hints shows what the command under the cursor does, whole,
+  broken between words, without its keys. Its column of keys is as wide as the longest keys, up to
+  a third of a row, where it was 24 cells at most.
 - F4 on a host edits a copy that keeps the file's own name, in a directory of its own that names
   the host, as `edit-4242-17-web1/nginx.conf`, where it was `edit-4242-17-nginx.conf`: the editor
   shows the name, and knows the kind of a file by its whole name too, as `Makefile` or `.bashrc`.

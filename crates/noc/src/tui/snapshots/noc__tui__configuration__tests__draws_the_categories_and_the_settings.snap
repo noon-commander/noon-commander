@@ -1,7 +1,8 @@
 ---
 source: crates/noc/src/tui/configuration.rs
-expression: "draw(&mut dialog, 72, 16)"
+expression: "draw(&mut dialog, 72, 18)"
 ---
+"                                                                        "
 "                                                                        "
 "  ╔═════════════════════════ Configuration ══════════════════════════╗  "
 "  ║  󰍹 1 Interface     │ Language             auto                   ▲  "
@@ -17,4 +18,5 @@ expression: "draw(&mut dialog, 72, 16)"
 "  ║ Dates, numbers, and the order of names: auto as the system has   ║  "
 "  ║ them, iso for neutral ones, or a language tag for a region's.    ║  "
 "  ╚══════════════════════════════════════════════════════════════════╝  "
+"                                                                        "
 "                                                                        "

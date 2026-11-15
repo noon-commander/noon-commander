@@ -311,6 +311,8 @@ pub(crate) struct Dialog {
     focus: Focus,
     /// Widest the dialog gets, in cells, borders included.
     width: u16,
+    /// A large window, of a size that what it shows does not change, and `width` goes unused.
+    large: bool,
     tone: Tone,
     /// No answers `no` rather than declining: a server asking through ssh gets an empty answer
     /// when the prompt is declined, which it need not take for `no`.
@@ -570,7 +572,12 @@ impl Dialog {
 
     /// The width of the box drawn in `area`, borders included.
     fn box_width(&self, area: Rect) -> u16 {
-        box_width(self.width.max(window::MIN_WIDTH), area)
+        let width = if self.large {
+            window::large(area).0
+        } else {
+            self.width
+        };
+        box_width(width.max(window::MIN_WIDTH), area)
     }
 
     /// The same dialog with the focus on its default button.
@@ -594,6 +601,7 @@ impl Dialog {
             default: 0,
             focus: Focus::Button(0),
             width: window::WIDTH,
+            large: false,
             tone: Tone::Plain,
             answers_no: false,
             completes: false,
@@ -643,6 +651,12 @@ impl Dialog {
     #[cfg(test)]
     pub(crate) fn with_width(mut self, width: u16) -> Self {
         self.width = width;
+        self
+    }
+
+    /// The same dialog, a large window.
+    pub(crate) fn large(mut self) -> Self {
+        self.large = true;
         self
     }
 

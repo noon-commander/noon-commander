@@ -1,5 +1,6 @@
 //! The file viewer of Noon Commander, F3: a file read in parts through any
-//! [`Vfs`](noc_vfs::Vfs), shown as text that scrolls, with long lines wrapped or cut.
+//! [`Vfs`](noc_vfs::Vfs), shown as text that scrolls, with long lines wrapped or cut, and
+//! followed as it grows.
 //!
 //! Unlike the other library crates, this one is a piece of the UI and has text of its own, in
 //! `i18n/`. It knows nothing of the app's keymap, theme, or tasks: the app maps its keys to
@@ -16,4 +17,4 @@ mod view;
 
 pub use i18n::select_language;
 pub use read::{Part, Progress, Stamp, Want, part_of, read_part};
-pub use view::{Command, Sizes, Styles, Taken, Viewer};
+pub use view::{Checked, Command, Sizes, Styles, Taken, Viewer};

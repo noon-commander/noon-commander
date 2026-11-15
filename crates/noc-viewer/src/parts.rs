@@ -11,6 +11,8 @@ pub(crate) struct Known {
     pub(crate) len: u64,
     /// The lines the viewer makes of it.
     pub(crate) lines: usize,
+    /// Whether its last line has no line feed after it.
+    pub(crate) open: bool,
 }
 
 impl Known {
@@ -92,6 +94,12 @@ impl Parts {
     /// Notes that the file grew: it goes on after the last known part.
     pub(crate) fn grew(&mut self) {
         self.end = false;
+    }
+
+    /// Whether the file ends with the last known part, and its last line has no line feed
+    /// after it: bytes added to the file go on with that line.
+    pub(crate) fn ends_open(&self) -> bool {
+        self.end && self.known.last().is_some_and(|part| part.open)
     }
 
     /// Adds the part read for `want` where it belongs, and gives its index: after the last
@@ -355,7 +363,12 @@ mod tests {
     const BEFORE: Want = Want { new: false, ..JUMP };
 
     fn known(offset: u64, len: u64, lines: usize) -> Known {
-        Known { offset, len, lines }
+        Known {
+            offset,
+            len,
+            lines,
+            open: false,
+        }
     }
 
     fn parts() -> Parts {

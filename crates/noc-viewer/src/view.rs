@@ -128,6 +128,18 @@ pub enum Taken {
     Changed,
 }
 
+/// What the viewer found of the file as it is now, while it follows it
+/// ([`Viewer::check`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Checked {
+    /// As it was when it was read last.
+    Same,
+    /// It only grew: the viewer reads on from its end.
+    Grew,
+    /// It changed otherwise: the viewer forgot it, and reads it again, to its end.
+    Changed,
+}
+
 #[derive(Debug)]
 enum State {
     Loading,
@@ -173,6 +185,10 @@ pub struct Viewer {
     parts: Parts,
     /// The file as it was when its first part was read.
     stamp: Option<Stamp>,
+    /// Whether the file is binary, as its start tells, once that is read.
+    binary: Option<bool>,
+    /// It follows the end of the file as the file grows, as `tail -f`.
+    following: bool,
     goal: Option<Goal>,
     pull: Option<Pull>,
     /// What it wanted when it stopped, which [`resume`](Self::resume) wants again.
@@ -209,6 +225,8 @@ impl Viewer {
             state: State::Loading,
             parts: Parts::default(),
             stamp: None,
+            binary: None,
+            following: false,
             goal: None,
             pull: None,
             stopped: None,
@@ -370,6 +388,9 @@ impl Viewer {
         }
         self.stamp = Some(part.stamp);
         self.parts.set_size(part.stamp.size);
+        if part.offset == 0 {
+            self.binary = Some(part.binary);
+        }
         if !again {
             self.take_new(part, wanted);
         } else if let Some(index) = known
@@ -419,6 +440,7 @@ impl Viewer {
             offset: part.offset,
             len: part.len,
             lines: part.lines.len(),
+            open: part.open,
         };
         let Some(index) = self.parts.add(known, part.want, part.end) else {
             return;
@@ -442,10 +464,84 @@ impl Viewer {
         }
     }
 
+    /// Reads the file again from its start, up to the line on top, as when it changed; to its
+    /// end while it follows the file.
+    pub fn reload(&mut self) {
+        self.reset();
+    }
+
+    /// Whether the file is binary, as its start tells ([`noc_text::is_binary`]); `None` until
+    /// its start is read.
+    pub fn binary(&self) -> Option<bool> {
+        self.binary
+    }
+
+    /// The size the file reported when a part of it was read last, if it reports one.
+    pub fn size(&self) -> Option<u64> {
+        self.stamp.and_then(|stamp| stamp.size)
+    }
+
+    /// The line of the file at the top of the screen, from 0; `None` while it loads, and where
+    /// the lines on screen have no numbers, after a jump.
+    pub fn line(&self) -> Option<usize> {
+        if self.loading() {
+            return None;
+        }
+        self.parts.first_line().map(|first| first + self.top.0)
+    }
+
+    /// Whether it follows the end of the file as the file grows.
+    pub fn following(&self) -> bool {
+        self.following
+    }
+
+    /// Whether it wraps long lines, rather than cutting them.
+    pub fn wraps(&self) -> bool {
+        self.wrap
+    }
+
+    /// Follows the end of the file as it grows, as `tail -f` and less's `F` do, from there; or
+    /// stops. A move away from the end stops it too. The app tells it how the file is now with
+    /// [`check`](Self::check).
+    pub fn follow(&mut self, on: bool) {
+        self.following = on;
+        if on {
+            self.stopped = None;
+            self.scroll(Motion::End);
+        }
+    }
+
+    /// Takes the file as it is now, `stamp`, while it follows it: one that only grew is read on
+    /// from what was its end, or read again where its last line had no line feed, as what was
+    /// added goes on with that line; one that changed otherwise is read again. Either way to
+    /// its end.
+    pub fn check(&mut self, stamp: Stamp) -> Checked {
+        let Some(known) = self.stamp.filter(|_| self.following && !self.loading()) else {
+            return Checked::Same;
+        };
+        if known == stamp {
+            return Checked::Same;
+        }
+        let grew = matches!((known.size, stamp.size), (Some(old), Some(new)) if new > old);
+        if !grew {
+            self.reset();
+            return Checked::Changed;
+        }
+        if self.parts.ends_open() {
+            self.reset();
+        } else {
+            self.parts.grew();
+            self.go_to(Goal::End);
+        }
+        Checked::Grew
+    }
+
     /// Forgets the parts of the file, which changed, to read it again up to the line on top,
-    /// or to its byte where the lines have no numbers.
+    /// or to its byte where the lines have no numbers; to its end while it follows the file.
     fn reset(&mut self) {
-        if self.goal.is_none() && !self.loading() {
+        if self.following {
+            self.goal = Some(Goal::End);
+        } else if self.goal.is_none() && !self.loading() {
             self.goal = Some(match self.parts.first_line() {
                 Some(first) => Goal::Line(first + self.top.0),
                 None => Goal::Byte(self.parts.byte_at(self.top.0)),
@@ -453,6 +549,7 @@ impl Viewer {
         }
         self.parts = Parts::default();
         self.stamp = None;
+        self.binary = None;
         self.state = State::Loading;
         self.pull = None;
         self.top = (0, 0);
@@ -621,9 +718,19 @@ impl Viewer {
         }
     }
 
-    /// Scrolls, or switches wrapping.
+    /// Scrolls, or switches wrapping. A move away from the end stops following the file.
     pub fn handle(&mut self, command: Command) {
         self.stopped = None;
+        let leaves = match command {
+            Command::Scroll(motion) => {
+                matches!(motion.step(self.page), Step::Back(_) | Step::Start)
+            }
+            Command::Top(_) | Command::Bar(_) => true,
+            _ => false,
+        };
+        if leaves {
+            self.following = false;
+        }
         match command {
             Command::Scroll(motion) => self.scroll(motion),
             Command::Top(line) => self.go_to(Goal::Line(line)),
@@ -1036,6 +1143,9 @@ impl Viewer {
             let at_end = bottom == self.end() && self.at_file_end();
             let line = |first: usize| first + (self.top.0 + 1).min(held);
             position = match (self.parts.first_line(), self.parts.lines()) {
+                (Some(first), Some(lines)) if at_end && self.following => {
+                    fl!("viewer-position-follow", line = line(first), lines = lines)
+                }
                 (Some(first), Some(lines)) if at_end => {
                     fl!("viewer-position-end", line = line(first), lines = lines)
                 }
@@ -1055,7 +1165,9 @@ impl Viewer {
                 (None, _) => {
                     let at = size(self.parts.byte_at(self.top.0));
                     let size = size(self.parts.extent());
-                    if at_end {
+                    if at_end && self.following {
+                        fl!("viewer-position-bytes-follow", at = at, size = size)
+                    } else if at_end {
                         fl!("viewer-position-bytes-end", at = at, size = size)
                     } else {
                         fl!(
@@ -2300,5 +2412,121 @@ mod tests {
             screen.contains("200B/240B") && screen.contains("l041"),
             "{screen}"
         );
+    }
+
+    #[test]
+    fn reloads_the_file_up_to_the_line_on_top_and_tells_what_it_is() {
+        let mut viewer = Viewer::new("f".to_owned(), SMALL);
+        assert_eq!(
+            (viewer.binary(), viewer.size(), viewer.line()),
+            (None, None, None)
+        );
+        feed(&mut viewer, &short_lines(1..=24));
+        draw(&mut viewer, 20, 6);
+        viewer.handle(Command::Scroll(Motion::WindowDown));
+        feed(&mut viewer, &short_lines(1..=24));
+        let before = draw(&mut viewer, 20, 6);
+        let line = viewer.line().expect("a line on top");
+        assert!(before.contains(&format!(" {}/? ", line + 1)), "{before}");
+        assert_eq!((viewer.binary(), viewer.size()), (Some(false), Some(120)));
+        viewer.reload();
+        assert!(viewer.loading());
+        assert_eq!((viewer.binary(), viewer.line()), (None, None));
+        let text: Vec<u8> = short_lines(1..=24)
+            .iter()
+            .map(|&byte| if byte == b'l' { b'm' } else { byte })
+            .collect();
+        feed(&mut viewer, &text);
+        let after = draw(&mut viewer, 20, 6);
+        assert_eq!(viewer.line(), Some(line), "where it was: {after}");
+        assert!(after.contains(&format!("m{:03}", line + 1)), "{after}");
+
+        let mut viewer = Viewer::new("f".to_owned(), SMALL);
+        feed(&mut viewer, b"\x7fELF\x02\x01\x01\0\n");
+        assert_eq!(viewer.binary(), Some(true));
+        // After a jump, the lines on screen have no numbers.
+        let text = short_lines(1..=48);
+        let mut viewer = Viewer::new("f".to_owned(), SMALL);
+        feed(&mut viewer, &text);
+        draw(&mut viewer, 20, 6);
+        viewer.handle(Command::Scroll(Motion::End));
+        feed(&mut viewer, &text);
+        assert_eq!(viewer.line(), None);
+        assert_eq!(viewer.binary(), Some(false), "from the start it read first");
+    }
+
+    #[test]
+    fn follows_the_end_of_a_file_as_it_grows_until_it_scrolls_away() {
+        let stamp = |text: &[u8]| Stamp {
+            size: Some(text.len() as u64),
+            modified: None,
+        };
+        let text = short_lines(1..=24);
+        // Read whole, so that the lines have numbers.
+        let sizes = Sizes {
+            ahead: 1 << 10,
+            window: 1 << 10,
+            ..SMALL
+        };
+        let mut viewer = Viewer::new("f".to_owned(), sizes);
+        feed(&mut viewer, &text);
+        draw(&mut viewer, 20, 6);
+        assert_eq!(viewer.check(stamp(b"")), Checked::Same, "not following");
+        viewer.follow(true);
+        feed(&mut viewer, &text);
+        let end = draw(&mut viewer, 20, 6);
+        assert!(end.contains("21/24 Follow"), "{end}");
+        assert_eq!(viewer.check(stamp(&text)), Checked::Same);
+        assert_eq!(viewer.want(), None);
+        let grown = short_lines(1..=26);
+        assert_eq!(viewer.check(stamp(&grown)), Checked::Grew);
+        assert_eq!(
+            viewer.want().map(|want| want.offset),
+            Some(120),
+            "on from the end"
+        );
+        feed(&mut viewer, &grown);
+        let end = draw(&mut viewer, 20, 6);
+        assert!(
+            end.contains("23/26 Follow") && end.contains("l026"),
+            "{end}"
+        );
+
+        // What goes on with a last line that had no line feed has it read again.
+        let mut open = grown.clone();
+        open.extend_from_slice(b"l0");
+        assert_eq!(viewer.check(stamp(&open)), Checked::Grew);
+        feed(&mut viewer, &open);
+        draw(&mut viewer, 20, 6);
+        let mut closed = open.clone();
+        closed.extend_from_slice(b"27\n");
+        assert_eq!(viewer.check(stamp(&closed)), Checked::Grew);
+        assert!(viewer.loading(), "read again");
+        feed(&mut viewer, &closed);
+        let end = draw(&mut viewer, 20, 6);
+        let rows: Vec<&str> = end
+            .lines()
+            .filter_map(|row| row.trim_matches('"').split_whitespace().next())
+            .collect();
+        assert!(rows.contains(&"l026") && rows.contains(&"l027"), "{end}");
+        assert!(!rows.contains(&"l0"), "one line: {end}");
+        assert!(end.contains("Follow"), "{end}");
+
+        // A file cut short, as a log emptied, is read again, to its end.
+        let short = short_lines(1..=3);
+        assert_eq!(viewer.check(stamp(&short)), Checked::Changed);
+        feed(&mut viewer, &short);
+        let end = draw(&mut viewer, 20, 6);
+        assert!(end.contains("1/3 Follow") && end.contains("l003"), "{end}");
+        viewer.handle(Command::Scroll(Motion::Down));
+        assert!(viewer.following(), "the end stays on screen");
+        viewer.handle(Command::Scroll(Motion::Up));
+        assert!(!viewer.following());
+        assert_eq!(
+            viewer.check(stamp(&text)),
+            Checked::Same,
+            "no longer follows"
+        );
+        assert!(draw(&mut viewer, 20, 6).contains("1/3 End"));
     }
 }

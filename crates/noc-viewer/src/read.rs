@@ -53,6 +53,8 @@ pub struct Progress {
 
 /// A part of a file, read, and its lines made for the screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
+// Each bool tells a thing of its own about the bytes read, not a state.
+#[allow(clippy::struct_excessive_bools)]
 pub struct Part {
     /// What was asked for.
     pub want: Want,
@@ -61,6 +63,12 @@ pub struct Part {
     /// The bytes read.
     pub(crate) len: u64,
     pub(crate) lines: Vec<String>,
+    /// Whether it starts the file, and its start is of a binary file
+    /// ([`noc_text::is_binary`]).
+    pub(crate) binary: bool,
+    /// Whether its last line has no line feed after it, as the last line of a file being
+    /// written may not have yet.
+    pub(crate) open: bool,
     /// Whether the file ends with the part.
     pub end: bool,
     /// Whether the reading stopped before the part was whole.
@@ -89,6 +97,8 @@ impl Part {
             offset,
             len: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
             lines: lines_of(bytes),
+            binary: offset == 0 && noc_text::is_binary(bytes),
+            open: bytes.last().is_some_and(|&byte| byte != b'\n'),
             end,
             stopped,
             stamp,

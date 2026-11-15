@@ -14,6 +14,10 @@ viewer-position-part = { $line }/? { $percent }%
 viewer-position-bytes = { $at }/{ $size } { $percent }%
 # The same, once the end of the text shows.
 viewer-position-bytes-end = { $at }/{ $size } End
+# The ends of both, while the viewer follows the end of the file as it grows, as tail -f and
+# less's F do.
+viewer-position-follow = { $line }/{ $lines } Follow
+viewer-position-bytes-follow = { $at }/{ $size } Follow
 # In the middle of the dimmed line across the screen after the last line of the text.
 viewer-end = EOF
 # The same, where the file goes on past the parts read: scrolling on reads the next one.

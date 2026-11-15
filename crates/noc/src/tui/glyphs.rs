@@ -32,8 +32,7 @@ pub(crate) struct Hosts {
 }
 
 /// In the command history, in front of where the command under the cursor ran: on a host, on
-/// this machine, and in which directory; the last also in the card of the location menu, in
-/// front of where opening a host goes.
+/// this machine, and in which directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Ran {
     pub(crate) host: char,

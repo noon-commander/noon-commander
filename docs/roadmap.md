@@ -296,6 +296,8 @@
 - [x] Hosts are named by their alias alone: no `label` in `hosts.toml`; the card of a host shows
       `sftp` over its address and where it is defined, the home directory's the kind of its
       volume ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md))
+- [x] A host not connected says `Not connected` in its card, which no longer shows where it
+      opens ([ADR 0083](adr/0083-a-host-not-connected-says-so.md))
 - [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
       and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
       back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file

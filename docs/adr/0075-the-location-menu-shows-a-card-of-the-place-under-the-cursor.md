@@ -4,7 +4,8 @@
   [ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md),
   [ADR 0079](0079-ssh-g-results-are-not-cached.md),
   [ADR 0081](0081-words-for-sizes-not-known-and-cards-with-two-ends.md),
-  [ADR 0082](0082-hosts-are-named-by-their-alias.md)
+  [ADR 0082](0082-hosts-are-named-by-their-alias.md),
+  [ADR 0083](0083-a-host-not-connected-says-so.md)
 - Date: 2026-11-15
 - Amends: [ADR 0041](0041-lists-always-show-the-whole-row.md),
   [ADR 0021](0021-location-menu-replaces-the-virtual-root.md)

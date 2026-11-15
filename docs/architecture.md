@@ -288,12 +288,11 @@ choose a volume or a host, grouped under headings:
   ```text
   ╟───────────────── apfs · local ─╢   ╟────────────────────────────────────────── sftp ─╢
   ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ○ deploy@10.0.0.5 via bastion  ~/.ssh/config:12 ║
-  ║   12.0G free of 64.0G (18%)    ║   ║ › /srv/app                             › ~/logs ║
+  ║   12.0G free of 64.0G (18%)    ║   ║   Not connected                                 ║
   ```
 
   The first line starts with the icon of the row, a host's in the color of its status; the second
-  stands under its text, or starts with a folder (`glyphs.ran.dir`, as in the history) where it
-  says where opening a host goes. The home directory shows its path and the space of its volume,
+  stands under its text. The home directory shows its path and the space of its volume,
   with the type of the file system of the volume and its kind over them, as the card of the
   volume; a volume what it mounts and where
   (`Volume::source`, without the password of a URL), then its free space, its size, and the share
@@ -305,12 +304,12 @@ choose a volume or a host, grouped under headings:
   ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); against the
   right end the file and line of its `Host` line, which takes what the address leaves, but at
   least half the line (`menu::ends`), and loses its start where it is too long
-  ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). Then
-  `Connected`, `Connecting…`, why its last attempt failed in the colors of errors (`App::failed`
-  keeps it until a new attempt), or, not connected, where opening it goes, after folders: the
-  remote directory, `~` for its home, on the side of the panel of the menu, and the local
-  `other_dir` on the other side. The row of the rest names the places it stands for over both
-  lines, whole names first. Every card has two lines, so the box keeps its height
+  ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). Then `Not connected`, `Connected`,
+  `Connecting…`, or why its last attempt failed in the colors of errors (`App::failed` keeps it
+  until a new attempt); where opening it goes shows in the dialog of F4 alone
+  ([ADR 0083](adr/0083-a-host-not-connected-says-so.md)). The row of the rest names the places
+  it stands for over both lines, whole names first. Every card has two lines, so the box keeps
+  its height
   ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
 - Mounts and SFTP put the places used last first, then the others in their usual order: the
   system volume, then the others by mount point; the hosts in config order. Each group shows

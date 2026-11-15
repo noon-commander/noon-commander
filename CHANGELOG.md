@@ -102,13 +102,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `/dev/disk4s1 on /Volumes/USB`, and its free space, size, and the share free; for the home
   directory the same of its volume, its path, and the space of its volume; for a host: `sftp`, its
   address and `ProxyJump`, and at the right end the file and line of its `Host` line; then how it
-  is, `Connected` or `Connecting…`, why its last attempt failed, in the colors of errors, or, not
-  connected, the directories opening it goes to, after folders, each on the side of its panel; for
-  the row of the rest, the names it stands for, over two lines. Its first line starts with the
-  icon of the row, a host's in the color of its status. The menu keeps its height
+  is, `Not connected`, `Connected`, `Connecting…`, or why its last attempt failed, in the colors of
+  errors; for the row of the rest, the names it stands for, over two lines. Its first line starts
+  with the icon of the row, a host's in the color of its status. The menu keeps its height
   ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md),
   [ADR 0081](docs/adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md),
-  [ADR 0082](docs/adr/0082-hosts-are-named-by-their-alias.md)).
+  [ADR 0082](docs/adr/0082-hosts-are-named-by-their-alias.md),
+  [ADR 0083](docs/adr/0083-a-host-not-connected-says-so.md)).
 - Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
   run, and its card shows the address and the `ProxyJump` it gives, a faint bar with a shine
   until then, or `ssh -G failed`, in the colors of errors, why going to the log. R in the menu

@@ -498,7 +498,6 @@ impl LocationMenu {
         let look = Look {
             theme,
             decor,
-            side: self.side,
             hosts,
             dots: spin.dots(),
             shine: spin.shine(&self.sizes),
@@ -683,8 +682,6 @@ fn after(lead: Span<'static>, line: Line<'static>) -> Line<'static> {
 struct Look<'a> {
     theme: &'a Theme,
     decor: Decor,
-    /// The side of the panel of the menu.
-    side: Side,
     hosts: &'a dyn Fn(&str) -> HostState,
     /// The frame of the spinner of hosts that connect.
     dots: char,
@@ -941,13 +938,12 @@ impl Look<'_> {
         cells::fitted(&text, width, fit, styles, self.theme.glyphs.marks)
     }
 
-    /// How a host is, in `width` cells, after `indent`: connected; connecting; why its last
-    /// attempt failed, in the colors of errors; or, when it is not connected, where opening it
-    /// goes, each directory after a folder, in place of `indent`: the remote one on the side of
-    /// the panel of the menu, and the one the other panel goes to, if any, on the other side.
+    /// How a host is, in `width` cells, after `indent`: not connected; connected; connecting; or
+    /// why its last attempt failed, in the colors of errors.
     fn status_line(&self, state: &HostState, indent: Span<'static>, width: usize) -> Line<'static> {
         let dialog = self.theme.dialog;
         let (text, style) = match state.status {
+            HostStatus::Idle => (fl!("menu-card-not-connected"), dialog),
             HostStatus::Connected => (fl!("menu-card-connected"), dialog),
             HostStatus::Connecting => (fl!("menu-card-connecting"), dialog),
             HostStatus::Failed | HostStatus::Stalled => {
@@ -957,54 +953,12 @@ impl Look<'_> {
                     dialog.patch(self.theme.dialog_error_text),
                 )
             }
-            HostStatus::Idle => return self.opens_line(state, width),
         };
         let room = width.saturating_sub(cells::width(&indent.content));
         let mut spans = vec![indent];
         let fitted = cells::fit_cut(&text, room, Align::Left, Cut::End);
         let styles = (style, self.theme.truncated_dialog);
         spans.extend(cells::spans(fitted, styles, self.theme.glyphs.marks));
-        Line::from(spans)
-    }
-
-    /// Where opening a host as `state` has it goes, in `width` cells: the remote directory, `~`
-    /// for its home, on the side of the panel of the menu, and the local one the other panel
-    /// goes to, if any, on the other side, each after a folder, as in the history; the one on
-    /// the left in the column of the icons. A directory too long loses its start.
-    fn opens_line(&self, state: &HostState, width: usize) -> Line<'static> {
-        let dialog = self.theme.dialog;
-        let opens = Some(state.opens.as_deref().unwrap_or("~"));
-        let other = state.other.as_deref();
-        let (start, end) = match self.side {
-            Side::Left => (opens, other),
-            Side::Right => (other, opens),
-        };
-        let lead = format!("{} ", self.decor.opens());
-        let wanted =
-            |dir: Option<&str>| dir.map_or(0, |dir| cells::width(&lead) + cells::width(dir));
-        let (start_width, end_width) = ends(width, wanted(start), wanted(end));
-        let dir = |dir: Option<&str>, width: usize, align: Align| {
-            let Some(dir) = dir else {
-                return vec![Span::styled(" ".repeat(width), dialog)];
-            };
-            let room = width.saturating_sub(cells::width(&lead));
-            let path = cells::fit_cut(dir, room.min(cells::width(dir)), Align::Left, Cut::Start);
-            let styles = (dialog, self.theme.truncated_dialog);
-            let mut spans = vec![Span::styled(lead.clone(), dialog)];
-            spans.extend(cells::spans(path, styles, self.theme.glyphs.marks));
-            let pad = Span::styled(" ".repeat(room.saturating_sub(cells::width(dir))), dialog);
-            match align {
-                Align::Right => spans.insert(0, pad),
-                Align::Left | Align::Center => spans.push(pad),
-            }
-            spans
-        };
-        let mut spans = dir(start, start_width, Align::Left);
-        spans.push(Span::styled(
-            " ".repeat(width - start_width - end_width),
-            dialog,
-        ));
-        spans.extend(dir(end, end_width, Align::Right));
         Line::from(spans)
     }
 }
@@ -2027,7 +1981,7 @@ mod tests {
     }
 
     #[test]
-    fn a_card_starts_with_the_icon_of_its_row_and_a_folder_tells_where_a_host_opens() {
+    fn a_card_starts_with_the_icon_of_its_row_and_its_second_line_stands_under_its_text() {
         use ratatui::style::Color;
 
         let mut menu = menu_with(remote("web"), &Recent::default(), places());
@@ -2048,8 +2002,7 @@ mod tests {
         );
 
         let ([_, _, how], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
-        let home = format!("║ {} ~ ", Glyphs::NERD.ran.dir);
-        assert!(how.starts_with(&home), "{how}");
+        assert!(how.starts_with("║   Not connected "), "{how}");
 
         press(&mut menu, Action::Home);
         let ([_, path, space], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
@@ -2154,8 +2107,6 @@ mod tests {
             },
             _ => HostState {
                 address: Some("root@proxy.example.org".to_owned()),
-                opens: Some("/srv/app".to_owned()),
-                other: Some("~/logs".to_owned()),
                 ..HostState::default()
             },
         };
@@ -2190,25 +2141,7 @@ mod tests {
         let [_, reach, how] = card(&mut menu, &state);
         assert!(reach.starts_with("║ ○ root@proxy.example.org "), "{reach}");
         assert!(reach.ends_with(" ~/.ssh/config:1 ║"), "{reach}");
-        let panel = "where the host opens on the side of the panel, the other panel's on the other";
-        assert!(how.starts_with("║ › /srv/app "), "{panel}: {how}");
-        assert!(how.ends_with(" › ~/logs ║"), "{panel}: {how}");
-        let [_, _, how] = card(&mut menu, &idle);
-        assert_eq!(how.trim_end_matches(['║', ' ']), "║ › ~", "its home");
-
-        let mut right = LocationMenu::new(Side::Right, home(), PathBuf::from("/Users/me"), 1)
-            .recent(&Recent::default());
-        right.listed(1, Ok(places()));
-        press(&mut right, Action::End);
-        let [_, _, how] = card(&mut right, &state);
-        assert!(how.starts_with("║ › ~/logs "), "{panel}: {how}");
-        assert!(how.ends_with(" › /srv/app ║"), "{panel}: {how}");
-        let [_, _, how] = card(&mut right, &idle);
-        let alone = "against the right end alone";
-        assert!(
-            how.starts_with("║   ") && how.ends_with(" › ~ ║"),
-            "{alone}: {how}"
-        );
+        assert_eq!(how.trim_end_matches(['║', ' ']), "║   Not connected");
     }
 
     #[test]

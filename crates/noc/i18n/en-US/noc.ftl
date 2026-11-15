@@ -238,8 +238,8 @@ menu-card-via = { $address } via { $jump }
 # In place of the address of a host, in the colors of errors, when ssh -G failed for it; why goes
 # to the log.
 menu-card-not-resolved = ssh -G failed
-# How a host is, under its address: connected, or connecting. One that is not connected shows
-# where opening it goes instead, as directories.
+# How a host is, under its address: not connected, connected, or connecting.
+menu-card-not-connected = Not connected
 menu-card-connected = Connected
 menu-card-connecting = Connecting…
 # Under the address of a host whose last attempt failed, where ssh told no reason.

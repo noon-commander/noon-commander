@@ -163,11 +163,6 @@ pub(crate) struct HostState {
     /// Why the last attempt failed, or the connection was lost, while it is `Failed` or
     /// `Stalled`: terminal-safe, on one line.
     pub(crate) reason: Option<String>,
-    /// The remote directory that opening it goes to, terminal-safe: the last one shown on it,
-    /// with `remember_dir`, else its `start_dir`; `None` for the remote home.
-    pub(crate) opens: Option<String>,
-    /// The local directory that the other panel goes to as it opens, its `other_dir`.
-    pub(crate) other: Option<String>,
 }
 
 /// The connection state of a host.

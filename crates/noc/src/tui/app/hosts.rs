@@ -370,23 +370,12 @@ impl App {
             None if self.failed.contains_key(host) => HostStatus::Failed,
             None => HostStatus::Idle,
         };
-        let settings = self.host_settings.get(host);
-        let remembered = (settings.is_some_and(HostConfig::remember_dir))
-            .then(|| self.last_dirs.get(host))
-            .flatten()
-            .map(|dir| cells::sanitize(dir.as_bytes()));
-        let started = settings
-            .and_then(HostConfig::start_dir)
-            .map(|dir| cells::sanitize(dir.as_bytes()));
         HostState {
             status,
             address: self.ssh_g.addresses.get(host).cloned(),
             jump: self.ssh_g.jumps.get(host).cloned(),
             unresolved: self.ssh_g.unresolved.contains(host),
             reason: self.failed.get(host).cloned(),
-            opens: remembered.or(started),
-            other: (settings.and_then(HostConfig::other_dir))
-                .map(|dir| cells::sanitize(dir.as_bytes())),
         }
     }
 

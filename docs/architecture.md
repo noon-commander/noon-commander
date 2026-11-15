@@ -283,20 +283,22 @@ choose a volume or a host, grouped under headings:
   ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)):
 
   ```text
-  ╟──────────────── apfs · local ─╢   ╟──────────── ~/.ssh/config:12 ─╢
-  ║ /dev/disk4s1 on /Volumes/USB  ║   ║ web · deploy@10.0.0.5 via jump ║
-  ║ 12.0G free of 64.0G (18%)     ║   ║ ● Connected · 2 tabs           ║
+  ╟───────────────── apfs · local ─╢   ╟─────────────── ~/.ssh/config:12 ─╢
+  ║ + /dev/disk4s1 on /Volumes/USB ║   ║ ● web · deploy@10.0.0.5 via jump ║
+  ║   12.0G free of 64.0G (18%)    ║   ║   Connected · 2 tabs             ║
   ```
 
-  The home directory shows its path and the space of its volume, with the volume and the type of
+  The first line starts with the icon of the row, a host's in the color of its status; the second
+  stands under its text, or after a folder (`glyphs.ran.dir`, as in the history) where it says
+  where opening a host goes. The home directory shows its path and the space of its volume, with
+  the volume and the type of
   its file system over them; a volume what it mounts and where (`Volume::source`, without the
   password of a URL), then its free space, its size, and the share free, a skeleton while they are
   to come, `Did not answer in 5 s`, or `Tells no free space`; a host the file and line of its
   `Host` line, its alias, address, and `ProxyJump`, from this run's `ssh -G`, which runs once the
   cursor rests on the host, else from the cache, else a skeleton until `ssh -G` tells them, or
   `ssh -G failed: reason` in the colors of errors
-  ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), then after
-  its marker
+  ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), then
   `Connected` with the tabs on it, `Connecting`, why its last attempt failed in the colors of errors
   (`App::failed` keeps it until a new attempt), or where opening it goes, `Opens /srv/app · other
   panel ~/logs` or `Opens the remote home`; the row of the rest the names of the places it stands

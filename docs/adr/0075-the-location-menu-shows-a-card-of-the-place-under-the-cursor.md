@@ -25,6 +25,13 @@ was said once, in the dialog that asked to retry, and was gone after Cancel.
   it is, then how it is. Every card has two lines, so the box keeps its height as the cursor
   moves, and the skeleton of the rows takes them while the rows are to come, as it took those of
   the whole row (`Body.has_full`).
+- **The icon of the row in front of the first line**, in the row's colors: the home, the disk or
+  the network drive of a volume, the server of a host in the color of its status, its spinner while
+  it connects, the chevron of the row of the rest; mc's markers without icons. The second line
+  stands under the text of the first, as the history's second stands under its first, or, where it
+  says where opening a host goes, after a folder, the history's (`glyphs.ran.dir`). A first version
+  put the host's marker in front of its second line and none in front of the first: the server
+  stood in front of a directory, and the host had no icon.
 - **The home directory**: the volume that holds it and the type of its file system over the card;
   its path, which loses its start where it is too long; then its space.
 - **A volume**: the type of its file system and its kind, `system`, `local`, or `network`, over
@@ -40,11 +47,10 @@ was said once, in the dialog that asked to retry, and was gone after Cancel.
 - **A host**: the file and the line of its `Host` line in the ssh config over the card, with `~`
   for the home directory; its alias and its address, with the host ssh jumps through,
   `web · deploy@10.0.0.5 via bastion`, or a skeleton until `ssh -G` tells them
-  ([ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); then, after its
-  marker in the color of its status: `Connected` with the tabs of both panels on it; `Connecting`;
-  why its last
-  attempt failed or its connection was lost, on one line, in the colors of errors, until a new
-  attempt starts; or, not connected, where opening it goes: the last directory shown on it with
+  ([ADR 0076](0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); then
+  `Connected` with the tabs of both panels on it; `Connecting`; why its last attempt failed or its
+  connection was lost, on one line, in the colors of errors, until a new attempt starts; or, not
+  connected, after a folder, where opening it goes: the last directory shown on it with
   `remember_dir`, else its `start_dir`, else the remote home, and the other panel's `other_dir`.
 - **The row of the rest of a group**: the names of the places it stands for.
 - Since when a host is connected, and when it was last, do not show: a time shows with its whole

@@ -76,6 +76,13 @@ impl Decor {
         }
     }
 
+    /// The cell in front of where opening a host goes, in the card of the location menu: a
+    /// folder, or an angle quote without icons, as in front of the directory of a command in the
+    /// history.
+    pub(crate) fn opens(self) -> char {
+        self.glyphs().ran.dir
+    }
+
     /// The prefix of the row of the location menu that stands for the places a group does not
     /// show: a chevron down and a space.
     pub(crate) fn more(self) -> String {

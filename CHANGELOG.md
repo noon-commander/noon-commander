@@ -84,7 +84,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directory its path and the space of its volume; for a host: the file and line of its `Host` line,
   its alias, address, and `ProxyJump`, and how it is: connected with the tabs on it, why its last
   attempt failed, in the colors of errors, or where opening it goes; for the row of the rest, the
-  names it stands for. The menu keeps its height
+  names it stands for. Its first line starts with the icon of the row, a host's in the color of its
+  status, and where a host opens comes after a folder. The menu keeps its height
   ([ADR 0075](docs/adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)).
 - Once the cursor of the location menu rests on a host for 150 ms, `ssh -G` runs for it, once a
   run, and its card shows the address and the `ProxyJump` it gives, the cached ones until then, a

@@ -623,6 +623,13 @@ fn by_recent<T>(places: &[T], rank: impl Fn(&T) -> Option<usize>) -> Vec<&T> {
     places
 }
 
+/// `line` after `lead`.
+fn after(lead: Span<'static>, line: Line<'static>) -> Line<'static> {
+    let mut spans = vec![lead];
+    spans.extend(line.spans);
+    Line::from(spans)
+}
+
 /// How rows are drawn.
 struct Look<'a> {
     theme: &'a Theme,
@@ -704,7 +711,8 @@ impl Look<'_> {
     /// The card of `item` under the rows, in `width` cells: its two lines, what it is and how
     /// it is, and what goes on the line over them. `sizes` are those of the volume of a volume
     /// or of the home directory, `hidden` the names of the places a row of the rest stands for;
-    /// `home` shortens the path of the ssh config.
+    /// `home` shortens the path of the ssh config. The first line starts with the icon of the
+    /// row, in its colors; the second stands under its text.
     fn card(
         &self,
         item: Item<'_>,
@@ -712,8 +720,9 @@ impl Look<'_> {
         hidden: &[String],
         (width, home): (usize, &Path),
     ) -> (Vec<Line<'static>>, Option<String>) {
-        let text = |text: &str, cut: Cut| {
-            let styles = (self.theme.dialog, self.theme.truncated_dialog);
+        let dialog = self.theme.dialog;
+        let text = |text: &str, cut: Cut, width: usize| {
+            let styles = (dialog, self.theme.truncated_dialog);
             cells::fitted(
                 text,
                 width,
@@ -724,6 +733,12 @@ impl Look<'_> {
         };
         let both =
             |first: &str, second: &str| fl!("menu-card-both", first = first, second = second);
+        // The icon in `style`, as many blanks for the line under it, and the cells after them.
+        let lead = |icon: String, style: Style| {
+            let room = width.saturating_sub(cells::width(&icon));
+            let indent = Span::styled(" ".repeat(width - room), dialog);
+            (Span::styled(icon, style), indent, room)
+        };
         match item {
             Item::Home(path, volume) => {
                 let label = volume.map(|volume| match &volume.fs_type {
@@ -733,10 +748,12 @@ impl Look<'_> {
                     None => volume_name(volume),
                 });
                 let path = cells::sanitize(path.as_os_str().as_bytes());
-                (
-                    vec![text(&path, Cut::Start), self.sizes_line(sizes, width)],
-                    label,
-                )
+                let (icon, indent, room) = lead(self.decor.home().to_owned(), dialog);
+                let lines = vec![
+                    after(icon, text(&path, Cut::Start, room)),
+                    after(indent, self.sizes_line(sizes, room)),
+                ];
+                (lines, label)
             }
             Item::Volume(volume) => {
                 let kind = match volume.kind {
@@ -757,22 +774,31 @@ impl Look<'_> {
                     ),
                     None => mount_point,
                 };
-                let lines = vec![text(&mounted, Cut::Middle), self.sizes_line(sizes, width)];
+                let icon = self.decor.volume(volume.kind).to_owned();
+                let (icon, indent, room) = lead(icon, dialog);
+                let lines = vec![
+                    after(icon, text(&mounted, Cut::Middle, room)),
+                    after(indent, self.sizes_line(sizes, room)),
+                ];
                 (lines, Some(label))
             }
             Item::Host(host) => {
                 let state = (self.hosts)(&host.alias);
                 let file = home_text(&host.file, home);
                 let label = fl!("menu-card-defined", file = file, line = host.line);
+                let status = dialog.patch(self.theme.dialog_host_status(state.status));
+                let (icon, indent, room) = lead(self.decor.host(state.status, self.dots), status);
                 let lines = vec![
-                    self.reach_line(host, &state, width),
-                    self.status_line(&state, width),
+                    after(icon, self.reach_line(host, &state, room)),
+                    self.status_line(&state, indent, width),
                 ];
                 (lines, Some(label))
             }
             Item::More(..) => {
                 let names = hidden.join(&fl!("menu-card-separator"));
-                (vec![text(&names, Cut::End), Line::default()], None)
+                let (icon, _, room) = lead(self.decor.more(), dialog);
+                let first = after(icon, text(&names, Cut::End, room));
+                (vec![first, Line::default()], None)
             }
         }
     }
@@ -856,10 +882,10 @@ impl Look<'_> {
         cells::fitted(&text, width, fit, styles, self.theme.glyphs.marks)
     }
 
-    /// How a host is, in `width` cells, after its marker in the color of its status: connected,
-    /// with the tabs on it; connecting; why its last attempt failed, in the colors of errors; or
-    /// where opening it goes.
-    fn status_line(&self, state: &HostState, width: usize) -> Line<'static> {
+    /// How a host is, in `width` cells, after `indent`: connected, with the tabs on it;
+    /// connecting; why its last attempt failed, in the colors of errors; or, after a folder in
+    /// place of `indent`, where opening it goes.
+    fn status_line(&self, state: &HostState, indent: Span<'static>, width: usize) -> Line<'static> {
         let dialog = self.theme.dialog;
         let (text, style) = match state.status {
             HostStatus::Connected => (fl!("menu-card-connected", tabs = state.tabs), dialog),
@@ -883,10 +909,15 @@ impl Look<'_> {
                 (text, dialog)
             }
         };
-        let marker = self.decor.host(state.status, self.dots);
-        let room = width.saturating_sub(cells::width(&marker));
-        let status = dialog.patch(self.theme.dialog_host_status(state.status));
-        let mut spans = vec![Span::styled(marker, status)];
+        let lead = match state.status {
+            HostStatus::Idle => Span::styled(format!("{} ", self.decor.opens()), dialog),
+            HostStatus::Connected
+            | HostStatus::Connecting
+            | HostStatus::Failed
+            | HostStatus::Stalled => indent,
+        };
+        let room = width.saturating_sub(cells::width(&lead.content));
+        let mut spans = vec![lead];
         let fitted = cells::fit_cut(&text, room, Align::Left, Cut::End);
         let styles = (style, self.theme.truncated_dialog);
         spans.extend(cells::spans(fitted, styles, self.theme.glyphs.marks));
@@ -1751,14 +1782,21 @@ mod tests {
 
     /// The line over the card and its two lines, drawn 60 cells wide with `hosts`, trimmed.
     fn card(menu: &mut LocationMenu, hosts: &dyn Fn(&str) -> HostState) -> [String; 3] {
+        card_in(menu, hosts, &Theme::terminal(), Decor::new(false)).0
+    }
+
+    /// [`card`], drawn in `theme` with `decor`, and the buffer it was drawn in.
+    fn card_in(
+        menu: &mut LocationMenu,
+        hosts: &dyn Fn(&str) -> HostState,
+        theme: &Theme,
+        decor: Decor,
+    ) -> ([String; 3], ratatui::buffer::Buffer) {
         let mut terminal = Terminal::new(TestBackend::new(60, 30)).unwrap();
         terminal
-            .draw(|frame| {
-                let (theme, decor) = (Theme::terminal(), Decor::new(false));
-                menu.render(frame, frame.area(), &theme, decor, hosts, &still());
-            })
+            .draw(|frame| menu.render(frame, frame.area(), theme, decor, hosts, &still()))
             .unwrap();
-        let buffer = terminal.backend().buffer();
+        let buffer = terminal.backend().buffer().clone();
         let lines: Vec<String> = (0..buffer.area.height)
             .map(|y| {
                 let line: String = (0..buffer.area.width)
@@ -1768,11 +1806,45 @@ mod tests {
             })
             .collect();
         let bottom = (lines.iter().rposition(|line| line.starts_with('╚'))).unwrap_or(3);
-        [3, 2, 1].map(|above| lines[bottom - above].clone())
+        let card = [3, 2, 1].map(|above| lines[bottom - above].clone());
+        (card, buffer)
     }
 
     fn idle(_: &str) -> HostState {
         HostState::default()
+    }
+
+    #[test]
+    fn a_card_starts_with_the_icon_of_its_row_and_a_folder_tells_where_a_host_opens() {
+        use ratatui::style::Color;
+
+        let mut menu = menu_with(remote("web"), &Recent::default(), places());
+        let theme = Theme::mc_classic().with_glyphs(&Glyphs::NERD);
+        let connected = |_: &str| HostState {
+            status: HostStatus::Connected,
+            tabs: 1,
+            ..HostState::default()
+        };
+        let ([_, reach, how], buffer) = card_in(&mut menu, &connected, &theme, Decor::new(true));
+        assert!(reach.starts_with("║ 󰒋 web · deploy@10.0.0.5 "), "{reach}");
+        assert!(how.starts_with("║   Connected · 1 tab "), "{how}");
+        let at = crate::tui::mouse::find(&buffer, "󰒋 web");
+        assert_eq!(
+            buffer[(at.x, at.y)].fg,
+            Color::Green,
+            "in the color of its status"
+        );
+
+        let ([_, _, how], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
+        assert!(how.starts_with("║  Opens the remote home "), "{how}");
+
+        press(&mut menu, Action::Home);
+        let ([_, path, space], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
+        assert!(path.starts_with("║ 󰋜 /Users/me "), "{path}");
+        assert!(space.starts_with("║   212G free of 994G "), "{space}");
+        press(&mut menu, Action::Down);
+        let ([_, mounted, _], _) = card_in(&mut menu, &idle, &theme, Decor::new(true));
+        assert!(mounted.starts_with("║ 󰋊 / "), "{mounted}");
     }
 
     #[test]
@@ -1801,19 +1873,22 @@ mod tests {
         let [label, mounted, space] = card(&mut menu, &idle);
         assert!(label.ends_with(" apfs · local ─╢"), "{label}");
         assert!(
-            mounted.starts_with("║ /dev/disk4s1 on /Volumes/USB "),
+            mounted.starts_with("║ + /dev/disk4s1 on /Volumes/USB "),
             "{mounted}"
         );
-        assert!(space.starts_with("║ 12.0G free of 64.0G (18%) "), "{space}");
+        assert!(
+            space.starts_with("║   12.0G free of 64.0G (18%) "),
+            "{space}"
+        );
 
         press(&mut menu, Action::Down);
         let [label, mounted, space] = card(&mut menu, &idle);
         assert!(label.ends_with(" smbfs · network ─╢"), "{label}");
         assert!(
-            mounted.starts_with("║ //me@nas/share on /Volumes/share "),
+            mounted.starts_with("║ + //me@nas/share on /Volumes/share "),
             "{mounted}"
         );
-        assert!(space.starts_with("║ Tells no free space "), "{space}");
+        assert!(space.starts_with("║   Tells no free space "), "{space}");
 
         press(&mut menu, Action::Home);
         let [label, path, space] = card(&mut menu, &idle);
@@ -1821,8 +1896,8 @@ mod tests {
             label.ends_with(" Macintosh HD · apfs ─╢"),
             "the volume of home: {label}"
         );
-        assert!(path.starts_with("║ /Users/me "), "{path}");
-        assert!(space.starts_with("║ 212G free of 994G (21%) "), "{space}");
+        assert!(path.starts_with("║ ~ /Users/me "), "{path}");
+        assert!(space.starts_with("║   212G free of 994G (21%) "), "{space}");
     }
 
     #[test]
@@ -1836,13 +1911,13 @@ mod tests {
             label.ends_with(" network ─╢"),
             "its type is still to come: {label}"
         );
-        assert!(mounted.starts_with("║ /Volumes/NAS "), "{mounted}");
-        assert!(space.starts_with("║ ------"), "a skeleton: {space}");
+        assert!(mounted.starts_with("║ + /Volumes/NAS "), "{mounted}");
+        assert!(space.starts_with("║   ------"), "a skeleton: {space}");
 
         let mut menu = menu_with(home(), &Recent::default(), waiting(NO_ANSWER));
         press(&mut menu, Action::End);
         let [_, _, space] = card(&mut menu, &idle);
-        assert!(space.starts_with("║ Did not answer in 5 s "), "{space}");
+        assert!(space.starts_with("║   Did not answer in 5 s "), "{space}");
     }
 
     #[test]
@@ -1873,32 +1948,32 @@ mod tests {
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" ~/.ssh/config:12 ─╢"), "{label}");
         assert!(
-            reach.starts_with("║ web · deploy@10.0.0.5 via bastion "),
+            reach.starts_with("║ ● web · deploy@10.0.0.5 via bastion "),
             "{reach}"
         );
-        assert!(how.starts_with("║ ● Connected · 1 tab "), "{how}");
+        assert!(how.starts_with("║   Connected · 1 tab "), "{how}");
 
         press(&mut menu, Action::Down);
         let [label, reach, how] = card(&mut menu, &state);
         assert!(label.ends_with(" /etc/ssh/ssh_config:40 ─╢"), "{label}");
-        assert!(reach.starts_with("║ db · ------"), "{reach}");
+        assert!(reach.starts_with("║ ✗ db · ------"), "{reach}");
         assert!(
-            how.starts_with("║ ✗ Permission denied (publickey). "),
+            how.starts_with("║   Permission denied (publickey). "),
             "{how}"
         );
 
         press(&mut menu, Action::Down);
         let [_, reach, how] = card(&mut menu, &state);
         assert!(
-            reach.starts_with("║ proxy · root@proxy.example.org "),
+            reach.starts_with("║ ○ proxy · root@proxy.example.org "),
             "{reach}"
         );
         assert!(
-            how.starts_with("║ ○ Opens /srv/app · other panel ~/logs "),
+            how.starts_with("║ › Opens /srv/app · other panel ~/logs "),
             "{how}"
         );
         let [_, _, how] = card(&mut menu, &idle);
-        assert!(how.starts_with("║ ○ Opens the remote home "), "{how}");
+        assert!(how.starts_with("║ › Opens the remote home "), "{how}");
     }
 
     #[test]
@@ -1939,10 +2014,10 @@ mod tests {
             ..HostState::default()
         };
         let [_, reach, _] = card(&mut menu, &fresh);
-        let fresh = "║ web · deploy@10.0.0.9 via gate ";
+        let fresh = "║ ○ web · deploy@10.0.0.9 via gate ";
         assert!(reach.starts_with(fresh), "this session's: {reach}");
         let [_, reach, _] = card(&mut menu, &idle);
-        let cached = "║ web · deploy@10.0.0.5 ";
+        let cached = "║ ○ web · deploy@10.0.0.5 ";
         assert!(
             reach.starts_with(cached),
             "the cached one meanwhile: {reach}"
@@ -1955,7 +2030,7 @@ mod tests {
         press(&mut menu, Action::Down);
         let [_, reach, _] = card(&mut menu, &idle);
         let skeleton = "from the start, before ssh -G runs: no text in between";
-        assert!(reach.starts_with("║ db · ------"), "{skeleton}: {reach}");
+        assert!(reach.starts_with("║ ○ db · ------"), "{skeleton}: {reach}");
         assert!(menu.address_wait(&|_| false).is_some());
         assert!(
             menu.address_wait(&|_| true).is_none(),
@@ -1966,7 +2041,7 @@ mod tests {
             ..HostState::default()
         };
         let [_, reach, _] = card(&mut menu, &failed);
-        let failed = "║ db · ssh -G failed: Bad configuration option ";
+        let failed = "║ ○ db · ssh -G failed: Bad configuration option ";
         assert!(reach.starts_with(failed), "{reach}");
     }
 
@@ -1976,7 +2051,7 @@ mod tests {
         press(&mut menu, Action::End);
         let [label, names, empty] = card(&mut menu, &idle);
         assert!(label.ends_with("──╢") && !label.contains(':'), "{label}");
-        assert!(names.starts_with("║ h11, h12, h13, h14 "), "{names}");
+        assert!(names.starts_with("║ ▾ h11, h12, h13, h14 "), "{names}");
         assert_eq!(empty.trim_matches(['║', ' ']), "");
     }
 

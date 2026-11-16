@@ -347,6 +347,8 @@
       release build, and MSRV
 - [x] Static Linux binaries for x86-64 and 64-bit ARM in each release, linked with musl
       ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md))
+- [x] AUR packages `noon-commander`, `noon-commander-bin`, and `noon-commander-git`, updated by
+      each release ([ADR 0090](adr/0090-aur-packages.md))
 - [ ] Combo boxes that take typed text, filtering their list or giving a value of their own
 - [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the
       kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads
@@ -364,7 +366,7 @@
 ## Backlog
 
 - Commands of Noon Commander after `:` (`:!` runs a shell command already).
-- Linux packages (AUR, deb).
+- A deb package.
 - Translations.
 - Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a
   desktop helper (`pbcopy`, `wl-copy`, `xclip`) when Noon Commander runs on the desktop,

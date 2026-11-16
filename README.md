@@ -73,7 +73,7 @@ Non-goals: forwarding of any kind, a built-in SSH implementation, a password man
 
 ## Requirements
 
-- macOS (Linux support is planned).
+- macOS, or Linux on x86-64 or 64-bit ARM.
 - OpenSSH 8.7 or newer: check with `ssh -V`.
 - Optional: [ripgrep](https://github.com/BurntSushi/ripgrep) and [fd](https://github.com/sharkdp/fd)
   for `f /` and `f f`, locally and on the hosts searched;
@@ -86,6 +86,14 @@ On macOS, with [Homebrew](https://brew.sh):
 
 ```sh
 brew install noon-commander/tap/noon-commander
+```
+
+On Arch Linux, from the AUR, with an AUR helper such as [paru](https://github.com/Morganamilo/paru):
+`noon-commander` builds the release from its sources, `noon-commander-bin` installs its binary,
+and `noon-commander-git` builds the latest commit:
+
+```sh
+paru -S noon-commander
 ```
 
 The [releases](https://github.com/noon-commander/noon-commander/releases) also have tarballs

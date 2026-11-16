@@ -152,6 +152,9 @@ jobs:
     outputs:
       sha256-arm: ${{ steps.verify.outputs.sha256-arm }}
       sha256-intel: ${{ steps.verify.outputs.sha256-intel }}
+      sha256-linux-x86_64: ${{ steps.verify.outputs.sha256-linux-x86_64 }}
+      sha256-linux-aarch64: ${{ steps.verify.outputs.sha256-linux-aarch64 }}
+      sha256-source: ${{ steps.verify.outputs.sha256-source }}
     steps:
       - name: Verify the tarballs and their attestations
         id: verify
@@ -167,8 +170,15 @@ jobs:
             case $target in
               aarch64-apple-darwin) echo "sha256-arm=$sha256" >>"$GITHUB_OUTPUT" ;;
               x86_64-apple-darwin) echo "sha256-intel=$sha256" >>"$GITHUB_OUTPUT" ;;
+              x86_64-unknown-linux-musl) echo "sha256-linux-x86_64=$sha256" >>"$GITHUB_OUTPUT" ;;
+              aarch64-unknown-linux-musl) echo "sha256-linux-aarch64=$sha256" >>"$GITHUB_OUTPUT" ;;
             esac
           done
+          # The archive of the tag's sources that GitHub makes, which the AUR package builds; the
+          # API's (gh release download --archive) has other names in it.
+          curl --fail --silent --show-error --location --output source.tar.gz \
+            "https://github.com/$GH_REPO/archive/refs/tags/$TAG.tar.gz"
+          echo "sha256-source=$(sha256sum source.tar.gz | cut -d ' ' -f 1)" >>"$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
       - run: gh release edit "$TAG" --draft=false
@@ -221,3 +231,56 @@ jobs:
           gh api "$@" --silent
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  aur:
+    name: update the AUR (${{ matrix.package }})
+    needs: publish
+    runs-on: ubuntu-latest
+    # makepkg runs on Arch Linux. The image is base-devel-20261108.0.623074, pinned by digest and
+    # raised by hand; pacman brings its packages up to date before anything else.
+    container: archlinux:base-devel@sha256:fa2d4ce3310ddd90a4208e5168be8ad367da5129af1245f38fd2d803bcbe3239
+    # The AUR key lives only in this environment.
+    environment: release
+    permissions:
+      contents: read # read the templates
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [noon-commander, noon-commander-bin, noon-commander-git]
+    env:
+      AUR_PACKAGE: ${{ matrix.package }}
+      AUR_CLONE: /home/builder/aur
+    steps:
+      # pacman's sandbox for its downloads (Landlock, seccomp) cannot always be set up in a
+      # container; the packages it installs are still checked against their signatures.
+      - name: Update Arch Linux and install what the packages need
+        run: |
+          pacman -Sy --disable-sandbox --noconfirm archlinux-keyring
+          pacman -Su --disable-sandbox --noconfirm --needed git openssh rust
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # makepkg refuses to run as root. The key is not there yet.
+      - name: Build the package and commit it to a clone of its AUR repository
+        run: |
+          useradd --create-home builder
+          runuser -u builder -- env HOME=/home/builder VERSION="${TAG#v}" REPOSITORY="$GH_REPO" \
+            SHA256_SOURCE="$SHA256_SOURCE" SHA256_X86_64="$SHA256_X86_64" \
+            SHA256_AARCH64="$SHA256_AARCH64" packaging/aur/update.sh "$AUR_PACKAGE" "$AUR_CLONE"
+        env:
+          SHA256_SOURCE: ${{ needs.publish.outputs.sha256-source }}
+          SHA256_X86_64: ${{ needs.publish.outputs.sha256-linux-x86_64 }}
+          SHA256_AARCH64: ${{ needs.publish.outputs.sha256-linux-aarch64 }}
+      # Pushing what is already there does nothing, as when the PKGBUILD of -git is unchanged.
+      - name: Push the commit to the AUR
+        run: |
+          key="$RUNNER_TEMP/aur-key"
+          (umask 077 && printf '%s\n' "$AUR_SSH_PRIVATE_KEY" >"$key")
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          GIT_SSH_COMMAND="$GIT_SSH_COMMAND -o UserKnownHostsFile=$PWD/packaging/aur/known_hosts"
+          export GIT_SSH_COMMAND
+          git -C "$AUR_CLONE" -c safe.directory="$AUR_CLONE" push \
+            "ssh://aur@aur.archlinux.org/$AUR_PACKAGE.git" HEAD:refs/heads/master
+          rm -f "$key"
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}

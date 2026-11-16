@@ -2429,8 +2429,9 @@ A signed tag `vX.Y.Z` starts `.github/workflows/release.yml`, the only place whe
 are built ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md)):
 
 ```text
-ci (ci.yml on the tag) ──────────────────────────┐
-draft ──► build (aarch64, x86_64; macOS, Linux) ─┴──► publish ──► homebrew
+ci (ci.yml on the tag) ──────────────────────────┐            ┌──► homebrew
+draft ──► build (aarch64, x86_64; macOS, Linux) ─┴──► publish ─┤
+                                                               └──► aur (one per package)
 ```
 
 - `draft` checks the tag against `Cargo.toml` and its signature, takes the notes from
@@ -2442,6 +2443,11 @@ draft ──► build (aarch64, x86_64; macOS, Linux) ─┴──► publish �
   statically, which a step checks
   ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md)).
 - `publish` verifies the tarballs' attestations and publishes the draft once CI and every
-  build passed.
+  build passed. It hands on their checksums, and that of GitHub's archive of the tag.
 - `homebrew` renders `packaging/homebrew/noon-commander.rb.in` and commits it to
   `noon-commander/homebrew-tap` through the API as a GitHub App, so GitHub signs the commit.
+- `aur` updates `noon-commander`, `noon-commander-bin`, and `noon-commander-git` in the AUR, in
+  an Arch Linux container: `packaging/aur/update.sh` renders the `PKGBUILD`, builds it with
+  `makepkg`, and commits it to a clone of the package's repository, and a last step pushes the
+  commit with the key of the `release` environment, against `packaging/aur/known_hosts`
+  ([ADR 0090](adr/0090-aur-packages.md)).

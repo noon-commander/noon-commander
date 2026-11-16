@@ -7,6 +7,10 @@ named `noon-commander`; `noc` is the binary inside them.
 | Path | What it is |
 | --- | --- |
 | `homebrew/noon-commander.rb.in` | The Homebrew formula, rendered into `Formula/noon-commander.rb` of the tap |
+| `aur/<package>/PKGBUILD.in` | The `PKGBUILD` of each AUR package: `noon-commander`, `-bin`, and `-git` ([ADR 0090](../docs/adr/0090-aur-packages.md)) |
+| `aur/update.sh` | Renders a `PKGBUILD`, builds it with `makepkg`, and commits it to a clone of its AUR repository |
+| `aur/LICENSE` | The 0BSD license of the `PKGBUILD`s, which goes into each AUR repository: Arch's own, from devtools, byte for byte |
+| `aur/known_hosts` | The host keys of `aur.archlinux.org`, which the push checks |
 | `tarball/README.md` | The README of the release tarball, for users rather than contributors |
 | `release-notes.sh` | Prints a version's section of `CHANGELOG.md` as the notes of its release |
 
@@ -44,8 +48,35 @@ workflow stops before it builds anything.
    matching `v*`:
    - variable `TAP_APP_CLIENT_ID`: the app's client ID;
    - secret `TAP_APP_PRIVATE_KEY`: the whole `.pem` file, which can then be deleted.
-4. **Tags** (optional): a ruleset on `v*` tags that lets only maintainers create, update, or
+4. **The AUR key.** An AUR account with a verified email; the packages are created by the first
+   release that pushes them. A key of its own for the workflow, added to the account (My Account
+   → SSH Public Key), whose private half goes into the `release` environment and nowhere else:
+
+   ```sh
+   dir=$(mktemp -d)
+   ssh-keygen -t ed25519 -N '' -C 'noon-commander release.yml' -f "$dir/aur"
+   cat "$dir/aur.pub"   # into the AUR account
+   gh secret set AUR_SSH_PRIVATE_KEY --env release < "$dir/aur"
+   rm -rf "$dir"
+   ```
+
+   `aur/known_hosts` holds the AUR's host keys; if they change, take them with
+   `ssh-keyscan aur.archlinux.org` and compare `ssh-keygen -lf` with the fingerprints on
+   <https://aur.archlinux.org>.
+5. **Tags** (optional): a ruleset on `v*` tags that lets only maintainers create, update, or
    delete them.
+
+## Checking an AUR package
+
+`aur/update.sh` builds a package as the workflow does and commits it to a new clone, without
+pushing, on Arch Linux and as a user other than root. For the package built from a version:
+
+```sh
+url=https://github.com/noon-commander/noon-commander/archive/refs/tags/vX.Y.Z.tar.gz
+VERSION=X.Y.Z REPOSITORY=noon-commander/noon-commander \
+  SHA256_SOURCE=$(curl -sL "$url" | sha256sum | cut -d ' ' -f 1) \
+  packaging/aur/update.sh noon-commander /tmp/aur-noon-commander
+```
 
 ## Checking a download
 

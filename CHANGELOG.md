@@ -12,6 +12,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Releases have Linux binaries for x86-64 and 64-bit ARM, linked statically with musl, so that
   they run on any distribution
   ([ADR 0089](docs/adr/0089-static-linux-binaries-with-musl.md)).
+- Packages for Arch Linux in the AUR: `noon-commander` builds a release from its sources,
+  `noon-commander-bin` installs its binary, and `noon-commander-git` builds the latest commit
+  ([ADR 0090](docs/adr/0090-aur-packages.md)).
 
 ## [0.3.2] - 2026-11-16
 

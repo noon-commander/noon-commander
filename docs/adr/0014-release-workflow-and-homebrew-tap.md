@@ -1,7 +1,7 @@
 # 0014. Releases built by GitHub Actions, a Homebrew tap
 
 - Status: Accepted; amended by [ADR 0089](0089-static-linux-binaries-with-musl.md): static
-  Linux binaries too
+  Linux binaries too; and by [ADR 0090](0090-aur-packages.md): AUR packages
 - Date: 2026-10-03
 
 ## Context

@@ -1,0 +1,33 @@
+# Maintainer: 0ldkettle <packages at noon-commander dot app>
+
+# Rendered by packaging/aur/update.sh for release.yml (ADR 0090); edit this template, never the
+# PKGBUILD in the AUR.
+
+pkgname=noon-commander-bin
+_pkgname=noon-commander
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Terminal file manager focused on seamless local and SFTP file operations (static binary of the release)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/@REPOSITORY@'
+license=('GPL-3.0-or-later')
+depends=('openssh')
+optdepends=(
+  'fd: find files by name (f f)'
+  'ripgrep: search the text of files (f /)'
+  'xdg-utils: open files in their applications (g x)'
+  'zoxide: jump to frequent directories (g z)'
+)
+provides=("$_pkgname=$pkgver")
+conflicts=("$_pkgname")
+# The binary is static and already stripped (ADR 0089).
+options=('!debug' '!strip')
+source_x86_64=("$_pkgname-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-$pkgver-x86_64-unknown-linux-musl.tar.gz")
+source_aarch64=("$_pkgname-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/$_pkgname-$pkgver-aarch64-unknown-linux-musl.tar.gz")
+sha256sums_x86_64=('@SHA256_X86_64@')
+sha256sums_aarch64=('@SHA256_AARCH64@')
+
+package() {
+  cd "$_pkgname-$pkgver-$CARCH-unknown-linux-musl"
+  install -Dm755 noc -t "$pkgdir/usr/bin/"
+}

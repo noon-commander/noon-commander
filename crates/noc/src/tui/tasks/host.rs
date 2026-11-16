@@ -370,7 +370,7 @@ impl HostTask {
         match fs {
             Ok(fs) => {
                 // Without multiplexing the channel connected; with it, the master did.
-                process.stderr().forget();
+                process.stderr().forget().await;
                 Ok(Connection {
                     session,
                     fs,

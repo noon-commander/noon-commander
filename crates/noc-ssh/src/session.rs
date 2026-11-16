@@ -11,6 +11,7 @@ use noc_vars::Template;
 use rustix::process::{Pid, Signal, kill_process, kill_process_group};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument as _;
@@ -35,12 +36,16 @@ const STDERR_LINE_MAX: usize = 1024;
 
 /// The last lines a process wrote to stderr.
 #[derive(Debug, Clone, Default)]
-pub struct StderrTail(Arc<Mutex<VecDeque<String>>>);
+pub struct StderrTail {
+    lines: Arc<Mutex<VecDeque<String>>>,
+    /// To the task that reads the pipe, which forgets what is in it on request.
+    reader: Option<mpsc::UnboundedSender<oneshot::Sender<()>>>,
+}
 
 impl StderrTail {
     /// The collected lines, oldest first.
     pub fn text(&self) -> String {
-        let lines = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let lines = self.lines.lock().unwrap_or_else(PoisonError::into_inner);
         lines
             .iter()
             .map(String::as_str)
@@ -48,10 +53,23 @@ impl StderrTail {
             .join("\n")
     }
 
-    /// Drops the lines so far. Once connected, what ssh said while it connected, such as the
-    /// picture of `VisualHostKey`, is not why the connection ends.
-    pub fn forget(&self) {
-        self.0
+    /// Drops what the process has written so far: the lines, and what is still in the pipe,
+    /// which the task that reads it may not have had its turn to read. Once connected, what ssh
+    /// said while it connected, such as the picture of `VisualHostKey`, is not why the
+    /// connection ends.
+    pub async fn forget(&self) {
+        if let Some(reader) = &self.reader {
+            let (done, forgotten) = oneshot::channel();
+            if reader.send(done).is_ok() && forgotten.await.is_ok() {
+                return;
+            }
+        }
+        // The pipe has ended, or there is none: the lines are all there is.
+        self.clear();
+    }
+
+    fn clear(&self) {
+        self.lines
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clear();
@@ -65,33 +83,87 @@ impl StderrTail {
         }
         let mut line = line.to_owned();
         truncate(&mut line, STDERR_LINE_MAX);
-        let mut lines = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut lines = self.lines.lock().unwrap_or_else(PoisonError::into_inner);
         if lines.len() == STDERR_LINES {
             lines.pop_front();
         }
         lines.push_back(line);
     }
 
-    fn drain(&self, pipe: ChildStderr, process: &'static str) -> JoinHandle<()> {
-        let tail = self.clone();
-        tokio::spawn(
+    /// A tail of `pipe`, which a task of its own reads line by line until it ends.
+    fn read(pipe: ChildStderr, process: &'static str) -> (Self, JoinHandle<()>) {
+        let tail = Self::default();
+        let lines = tail.clone();
+        let (ask, mut asked) = mpsc::unbounded_channel::<oneshot::Sender<()>>();
+        let task = tokio::spawn(
             async move {
                 let mut reader = BufReader::new(pipe);
                 let mut line = Vec::new();
                 loop {
-                    line.clear();
-                    match reader.read_until(b'\n', &mut line).await {
-                        Ok(0) | Err(_) => break,
-                        Ok(_) => {
-                            let text = String::from_utf8_lossy(&line);
-                            tracing::debug!(process, "ssh: {}", text.trim_end());
-                            tail.push(&line);
+                    tokio::select! {
+                        biased;
+                        Some(done) = asked.recv() => {
+                            let ended = forget_written(&mut reader, &mut line, process);
+                            lines.clear();
+                            let _ = done.send(());
+                            if ended {
+                                break;
+                            }
                         }
+                        read = reader.read_until(b'\n', &mut line) => match read {
+                            Ok(0) | Err(_) => break,
+                            Ok(_) => {
+                                log_line(process, &line);
+                                lines.push(&line);
+                                line.clear();
+                            }
+                        },
                     }
                 }
             }
             .in_current_span(),
-        )
+        );
+        let tail = Self {
+            reader: Some(ask),
+            ..tail
+        };
+        (tail, task)
+    }
+}
+
+/// Logs, and leaves out of the tail, what the process has written and was not taken yet: the
+/// line begun, what `reader` has read ahead, and what is in the pipe now, read without
+/// waiting, as tokio made the pipe non-blocking. Whether the pipe has ended.
+fn forget_written(
+    reader: &mut BufReader<ChildStderr>,
+    line: &mut Vec<u8>,
+    process: &'static str,
+) -> bool {
+    let mut written = std::mem::take(line);
+    let ahead = reader.buffer();
+    written.extend_from_slice(ahead);
+    let ahead = ahead.len();
+    reader.consume(ahead);
+    let mut chunk = [0; 4096];
+    let ended = loop {
+        match rustix::io::read(reader.get_ref(), &mut chunk[..]) {
+            Ok(0) => break true,
+            Ok(read) => written.extend_from_slice(&chunk[..read]),
+            Err(rustix::io::Errno::INTR) => {}
+            Err(_) => break false,
+        }
+    };
+    for line in written.split(|&byte| byte == b'\n') {
+        log_line(process, line);
+    }
+    ended
+}
+
+fn log_line(process: &'static str, line: &[u8]) {
+    let text = String::from_utf8_lossy(line);
+    let text = text.trim_end();
+    if !text.is_empty() {
+        tracing::debug!(process, "ssh: {text}");
     }
 }
 
@@ -220,10 +292,10 @@ impl Session {
             })?;
         let stdin = child.stdin.take().ok_or_else(missing_pipe)?;
         let stdout = child.stdout.take().ok_or_else(missing_pipe)?;
-        let stderr = StderrTail::default();
-        if let Some(pipe) = child.stderr.take() {
-            stderr.drain(pipe, "sftp");
-        }
+        let stderr = match child.stderr.take() {
+            Some(pipe) => StderrTail::read(pipe, "sftp").0,
+            None => StderrTail::default(),
+        };
         Ok(SftpChannel {
             stdin,
             stdout,
@@ -363,8 +435,13 @@ async fn wait_for_master(
     control_path: PathBuf,
     cancel: &CancellationToken,
 ) -> Result<Master, SshError> {
-    let stderr = StderrTail::default();
-    let drain = child.stderr.take().map(|pipe| stderr.drain(pipe, "master"));
+    let (stderr, drain) = match child.stderr.take() {
+        Some(pipe) => {
+            let (stderr, drain) = StderrTail::read(pipe, "master");
+            (stderr, Some(drain))
+        }
+        None => (StderrTail::default(), None),
+    };
     let mut poll = tokio::time::interval(READY_POLL);
     loop {
         tokio::select! {
@@ -388,7 +465,8 @@ async fn wait_for_master(
         }
     }
     tracing::debug!("ssh master is ready");
-    stderr.forget();
+    // ssh wrote it before it made the socket, so all of it is in the pipe by now.
+    stderr.forget().await;
     let shutdown = CancellationToken::new();
     let exited = CancellationToken::new();
     let status = Arc::new(Mutex::new(None));
@@ -511,14 +589,51 @@ mod tests {
         assert!(text.ends_with("line 29"));
     }
 
-    #[test]
-    fn stderr_tail_forgets_what_came_before() {
+    #[tokio::test]
+    async fn stderr_tail_forgets_what_came_before() {
         let tail = StderrTail::default();
         tail.push(b"+----[SHA256]-----+\n");
-        tail.forget();
+        tail.forget().await;
         assert_eq!(tail.text(), "");
         tail.push(b"Connection closed by remote host\n");
         assert_eq!(tail.text(), "Connection closed by remote host");
+    }
+
+    #[tokio::test]
+    async fn stderr_tail_forgets_what_is_still_in_the_pipe() {
+        let mut child = Command::new("/bin/sh")
+            .args([
+                "-c",
+                "echo '+----[SHA256]-----+' >&2; echo '|   .o.   |' >&2",
+            ])
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let (tail, task) = StderrTail::read(child.stderr.take().unwrap(), "test");
+        // All written, and none of it read: this waits without yielding, so that the task that
+        // reads gets no turn.
+        while child.try_wait().unwrap().is_none() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        tail.forget().await;
+        task.await.unwrap();
+        assert_eq!(tail.text(), "");
+    }
+
+    #[tokio::test]
+    async fn stderr_tail_keeps_what_comes_after_it_forgot() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "read line; echo 'closed by remote host' >&2"])
+            .stdin(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let (tail, task) = StderrTail::read(child.stderr.take().unwrap(), "test");
+        tail.forget().await;
+        drop(child.stdin.take());
+        task.await.unwrap();
+        assert!(child.wait().await.unwrap().success());
+        assert_eq!(tail.text(), "closed by remote host");
     }
 
     #[test]

@@ -2429,15 +2429,18 @@ A signed tag `vX.Y.Z` starts `.github/workflows/release.yml`, the only place whe
 are built ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md)):
 
 ```text
-ci (ci.yml on the tag) ─────────────────────┐
-draft ──► build (aarch64, x86_64 macOS) ────┴──► publish ──► homebrew
+ci (ci.yml on the tag) ──────────────────────────┐
+draft ──► build (aarch64, x86_64; macOS, Linux) ─┴──► publish ──► homebrew
 ```
 
 - `draft` checks the tag against `Cargo.toml` and its signature, takes the notes from
   `CHANGELOG.md` with `packaging/release-notes.sh`, which joins its wrapped lines, and creates
   a draft release.
 - `build` compiles `noc` for each target without a cache, packs
-  `noon-commander-X.Y.Z-<target>.tar.gz`, attests its build provenance, and uploads it.
+  `noon-commander-X.Y.Z-<target>.tar.gz`, attests its build provenance, and uploads it. The
+  Linux targets are `*-unknown-linux-musl`, built on a runner of their architecture and linked
+  statically, which a step checks
+  ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md)).
 - `publish` verifies the tarballs' attestations and publishes the draft once CI and every
   build passed.
 - `homebrew` renders `packaging/homebrew/noon-commander.rb.in` and commits it to

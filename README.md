@@ -89,10 +89,12 @@ brew install noon-commander/tap/noon-commander
 ```
 
 The [releases](https://github.com/noon-commander/noon-commander/releases) also have tarballs
-for Apple Silicon and Intel Macs, each with a build provenance attestation that
-`gh attestation verify` checks ([packaging/README.md](packaging/README.md#checking-a-download)).
-The binaries are not notarized, so macOS blocks `noc` from a tarball downloaded with a browser
-until `xattr -d com.apple.quarantine noc` removes the mark; Homebrew sets none.
+for Apple Silicon and Intel Macs and for Linux on x86-64 and 64-bit ARM, each with a build
+provenance attestation that `gh attestation verify` checks
+([packaging/README.md](packaging/README.md#checking-a-download)). The Linux `noc` is static, so
+it runs on any distribution. The macOS binaries are not notarized, so macOS blocks `noc` from a
+tarball downloaded with a browser until `xattr -d com.apple.quarantine noc` removes the mark;
+Homebrew sets none.
 
 ## Building
 

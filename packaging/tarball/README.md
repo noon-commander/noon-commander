@@ -9,14 +9,18 @@ operations. The command is `noc`.
 
 ## Requirements
 
-- macOS on Apple Silicon or Intel, matching the name of this archive.
-- OpenSSH 8.7 or newer, which macOS has: check with `ssh -V`.
+- The system and processor in the name of this archive: macOS on Apple Silicon
+  (`aarch64-apple-darwin`) or Intel (`x86_64-apple-darwin`), or Linux on x86-64
+  (`x86_64-unknown-linux-musl`) or 64-bit ARM (`aarch64-unknown-linux-musl`). The Linux `noc` is
+  static: it needs no libraries and runs on any distribution.
+- OpenSSH 8.7 or newer: check with `ssh -V`. macOS has it; on Linux it comes with the
+  distribution's `openssh` or `openssh-client` package.
 - A [Nerd Font](https://www.nerdfonts.com) in the terminal for the icons. Without one, turn
   them off in Options → Configuration (F9), or set `icons = false` under `[ui]`.
 
 ## Installing
 
-Homebrew installs and updates `noc` for you:
+On macOS, Homebrew installs and updates `noc` for you:
 
 ```sh
 brew install noon-commander/tap/noon-commander
@@ -29,8 +33,8 @@ mkdir -p ~/.local/bin
 install -m 755 noc ~/.local/bin/noc
 ```
 
-The binary is not notarized. If the archive was downloaded with a browser, macOS refuses to
-run it; remove the quarantine mark first:
+The macOS binary is not notarized. If the archive was downloaded with a browser, macOS refuses
+to run it; remove the quarantine mark first:
 
 ```sh
 xattr -d com.apple.quarantine noc

@@ -79,14 +79,24 @@ jobs:
   build:
     name: build (${{ matrix.target }})
     needs: draft
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write # upload the tarball to the draft release
       id-token: write # a Sigstore certificate for the attestation
       attestations: write # store the attestation
+    # Linux binaries are linked statically with musl, so that one runs on any distribution
+    # (ADR 0089); each is built on a runner of its own architecture.
     strategy:
       matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
     env:
       TARGET: ${{ matrix.target }}
     steps:
@@ -97,16 +107,33 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --target "$TARGET" --no-self-update
           rustup default stable
+      # blake3 compiles C and assembly, which for musl takes musl's gcc wrapper.
+      - if: runner.os == 'Linux'
+        name: Install musl-tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
       - run: cargo build --release --locked -p noc --target "$TARGET"
-      # COPYFILE_DISABLE and --no-mac-metadata keep macOS extended attributes out of the tarball.
+      - if: runner.os == 'Linux'
+        name: Check that noc is static
+        run: |
+          if readelf --program-headers "target/$TARGET/release/noc" | grep -q INTERP; then
+            echo "::error::noc for $TARGET is linked dynamically"
+            exit 1
+          fi
+      # On macOS, COPYFILE_DISABLE and --no-mac-metadata keep extended attributes out of the
+      # tarball.
       - name: Pack the tarball
         run: |
           name="$PACKAGE-${TAG#v}-$TARGET"
           mkdir -p "dist/$name"
           cp "target/$TARGET/release/noc" LICENSE CHANGELOG.md packaging/tarball/README.md \
             "dist/$name/"
-          COPYFILE_DISABLE=1 tar -C dist --no-mac-metadata --uid 0 --gid 0 --uname root \
-            --gname wheel -czf "dist/$name.tar.gz" "$name"
+          case $RUNNER_OS in
+            macOS) set -- --no-mac-metadata --uid 0 --gid 0 --uname root --gname wheel ;;
+            Linux) set -- --owner 0 --group 0 --numeric-owner ;;
+          esac
+          COPYFILE_DISABLE=1 tar -C dist "$@" -czf "dist/$name.tar.gz" "$name"
           (cd dist && shasum -a 256 "$name.tar.gz" >"$name.tar.gz.sha256")
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -131,14 +158,15 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           gh release download "$TAG" --pattern '*.tar.gz'
-          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+          for target in aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-musl \
+            aarch64-unknown-linux-musl; do
             file="$PACKAGE-${TAG#v}-$target.tar.gz"
             gh attestation verify "$file" --repo "$GH_REPO" --source-ref "$GITHUB_REF" \
               --signer-workflow "$GH_REPO/.github/workflows/release.yml"
             sha256=$(sha256sum "$file" | cut -d ' ' -f 1)
             case $target in
-              aarch64-*) echo "sha256-arm=$sha256" >>"$GITHUB_OUTPUT" ;;
-              x86_64-*) echo "sha256-intel=$sha256" >>"$GITHUB_OUTPUT" ;;
+              aarch64-apple-darwin) echo "sha256-arm=$sha256" >>"$GITHUB_OUTPUT" ;;
+              x86_64-apple-darwin) echo "sha256-intel=$sha256" >>"$GITHUB_OUTPUT" ;;
             esac
           done
         env:

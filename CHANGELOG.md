@@ -7,6 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Releases have Linux binaries for x86-64 and 64-bit ARM, linked statically with musl, so that
+  they run on any distribution
+  ([ADR 0089](docs/adr/0089-static-linux-binaries-with-musl.md)).
+
 ## [0.3.2] - 2026-11-16
 
 ### Added

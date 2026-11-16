@@ -15,7 +15,7 @@
 #   FAKE_SSH_SFTP_SERVER  sftp-server binary (default: /usr/libexec/sftp-server)
 #
 # Like a real master, `ssh -M` creates its control socket only after authentication; here it
-# is a regular file holding the master's pid.
+# is a regular file holding the master's pid, renamed into place with the pid in it.
 #
 # Every invocation must come without a controlling terminal (ADR 0003), except a remote command
 # without `-o RequestTTY=no`: a command of the command line, which gets the terminal (ADR 0019).
@@ -126,8 +126,10 @@ case $mode in
         ;;
     master)
         authenticate
-        trap 'rm -f "$sock"; [ -z "${FAKE_SSH_LAST_WORDS:-}" ] || printf "%s\n" "$FAKE_SSH_LAST_WORDS" >&2; exit 0' TERM INT
-        echo $$ >"$sock"
+        trap 'rm -f "$sock" "$sock.new"; [ -z "${FAKE_SSH_LAST_WORDS:-}" ] || printf "%s\n" "$FAKE_SSH_LAST_WORDS" >&2; exit 0' TERM INT
+        # Whole once it is there, as a socket ssh binds: whoever sees it can read the pid.
+        echo $$ >"$sock.new"
+        mv -f "$sock.new" "$sock"
         while :; do
             sleep 1 &
             wait $! || true

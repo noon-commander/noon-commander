@@ -343,6 +343,8 @@
       box and has the keys, context `combo_box` ([ADR 0057](adr/0057-combo-boxes.md))
 - [x] Ctrl+\\ (Ctrl+4 without the kitty keyboard protocol) views the log of this run from its end,
       in every mode, in front of the menus, windows, and dialogs, which come back once it closes
+- [x] CI on Linux as well as macOS: clippy, tests (SFTP against the system's `sftp-server`), the
+      release build, and MSRV
 - [ ] Combo boxes that take typed text, filtering their list or giving a value of their own
 - [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the
       kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads
@@ -360,7 +362,7 @@
 ## Backlog
 
 - Commands of Noon Commander after `:` (`:!` runs a shell command already).
-- Linux: CI job, release binaries, and packages (AUR, deb).
+- Linux: release binaries and packages (AUR, deb).
 - Translations.
 - Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a
   desktop helper (`pbcopy`, `wl-copy`, `xclip`) when Noon Commander runs on the desktop,

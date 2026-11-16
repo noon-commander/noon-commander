@@ -231,8 +231,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Unit tests next to the code in `#[cfg(test)] mod tests`.
 - UI: `insta` snapshots on ratatui's `TestBackend`. Review with `just snap`. After renaming or
   removing a snapshot test, `just snap-stale` finds orphaned files.
-- SFTP backends: local `sftp-server` (`/usr/libexec/sftp-server` on macOS) over pipes, no
-  network.
+- SFTP backends: local `sftp-server` over pipes, no network: `$SFTP_SERVER`, else the usual
+  paths of macOS and Linux. CI sets it, so that the tests fail rather than skip without one.
 - ssh orchestration: set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`. It emulates
   `-V`, `-G`, `-M`, `-O`, `-s … sftp`, and remote commands, and logs its command lines. Keep it
   in sync with the flags we pass.
@@ -242,9 +242,9 @@ Paths come from `crates/noc-config/src/paths.rs`.
 
 ## Workflow
 
-- Platforms: macOS first (development and CI Rust jobs). Linux is a target: Unix APIs via
-  `rustix` (`nix` only for the signal mask, which `rustix` lacks; ADR 0054), macOS-only code
-  under `cfg(target_os = "macos")`. Windows is out of scope.
+- Platforms: macOS first for development; CI runs the Rust jobs on macOS and Linux. Linux is a
+  target: Unix APIs via `rustix` (`nix` only for the signal mask, which `rustix` lacks;
+  ADR 0054), macOS-only code under `cfg(target_os = "macos")`. Windows is out of scope.
 - Git: never commit, push, tag, branch, or rewrite history unless explicitly asked. Commits use
   Conventional Commits, one logical change each.
 - ADRs: significant decisions go in `docs/adr/NNNN-title.md` (Status, Context, Decision,

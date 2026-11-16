@@ -40,8 +40,16 @@ jobs:
       - run: just fmt-check
 
   clippy:
-    name: clippy
-    runs-on: macos-latest
+    name: clippy (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,8 +63,18 @@ jobs:
       - run: just clippy --locked
 
   test:
-    name: test
-    runs-on: macos-latest
+    name: test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            sftp-server: /usr/libexec/sftp-server
+          - name: Linux
+            os: ubuntu-latest
+            sftp-server: /usr/lib/openssh/sftp-server
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,12 +85,25 @@ jobs:
           rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo install --locked "just@$JUST_VERSION" cargo-insta@1.49.0
+      # Named rather than looked for, so that the SFTP tests fail instead of skipping without it.
       - run: just test --locked
-      - run: just snap-stale
+        env:
+          SFTP_SERVER: ${{ matrix.sftp-server }}
+      # The tests above check the snapshots on both systems; which files they use is the same.
+      - if: runner.os == 'macOS'
+        run: just snap-stale
 
   release:
-    name: release build
-    runs-on: macos-latest
+    name: release build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,8 +117,16 @@ jobs:
       - run: just release
 
   msrv:
-    name: MSRV
-    runs-on: macos-latest
+    name: MSRV (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+          - name: Linux
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

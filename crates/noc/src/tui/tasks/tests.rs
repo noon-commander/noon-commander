@@ -18,10 +18,15 @@ async fn local_sftp(dir: &Path) -> Option<(tokio::process::Child, SftpFs)> {
         .filter(|program| !program.is_empty())
         .map(PathBuf::from)
         .or_else(|| {
-            ["/usr/libexec/sftp-server", "/usr/lib/openssh/sftp-server"]
-                .into_iter()
-                .map(PathBuf::from)
-                .find(|path| path.exists())
+            [
+                "/usr/libexec/sftp-server",
+                "/usr/lib/openssh/sftp-server",
+                "/usr/libexec/openssh/sftp-server",
+                "/usr/lib/ssh/sftp-server",
+            ]
+            .into_iter()
+            .map(PathBuf::from)
+            .find(|path| path.exists())
         })?;
     let mut child = Command::new(program)
         .arg("-e")

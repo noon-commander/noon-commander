@@ -1,6 +1,6 @@
 //! What the tests of jobs share.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use noc_vfs::SftpFs;
@@ -31,11 +31,20 @@ pub(crate) async fn sftp_server_with_file_limit(
     Some(connect(command).await)
 }
 
-fn program() -> Option<&'static Path> {
-    ["/usr/libexec/sftp-server", "/usr/lib/openssh/sftp-server"]
-        .into_iter()
-        .map(Path::new)
-        .find(|path| path.exists())
+/// `$SFTP_SERVER`, or the first `sftp-server` found in the usual places.
+fn program() -> Option<PathBuf> {
+    if let Some(program) = std::env::var_os("SFTP_SERVER").filter(|p| !p.is_empty()) {
+        return Some(program.into());
+    }
+    [
+        "/usr/libexec/sftp-server",
+        "/usr/lib/openssh/sftp-server",
+        "/usr/libexec/openssh/sftp-server",
+        "/usr/lib/ssh/sftp-server",
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .find(|path| path.exists())
 }
 
 async fn connect(mut command: tokio::process::Command) -> (tokio::process::Child, SftpFs) {

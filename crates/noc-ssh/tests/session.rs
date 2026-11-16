@@ -5,6 +5,7 @@
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::ExitStatusExt as _;
 use std::path::{Path, PathBuf};
@@ -46,6 +47,22 @@ fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+/// Writes `script` to `path` as a program, through a child: this process never has the file
+/// open for writing, which a test in another thread could pass on to its child until that
+/// child's exec, and Linux runs no file open for writing (ETXTBSY).
+fn write_program(path: &Path, script: &str) {
+    let mut writer = std::process::Command::new("/bin/sh")
+        .args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = writer.stdin.take().unwrap();
+    stdin.write_all(script.as_bytes()).unwrap();
+    drop(stdin);
+    assert!(writer.wait().unwrap().success());
+}
+
 /// A wrapper around the fake ssh with its environment baked in, plus scratch directories.
 struct Fake {
     dir: tempfile::TempDir,
@@ -79,8 +96,7 @@ impl Fake {
         }
         writeln!(script, "exec {} \"$@\"", quote(FAKE_SSH)).unwrap();
         let program = dir.path().join("ssh");
-        std::fs::write(&program, script).unwrap();
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_program(&program, &script);
         let settings = SshSettings {
             program,
             ..SshSettings::default()
@@ -583,8 +599,7 @@ async fn passes_prompts_to_the_askpass_program() {
     ));
 
     let askpass = fake.dir.path().join("askpass");
-    std::fs::write(&askpass, "#!/bin/sh\nprintf '%s\\n' hunter2\n").unwrap();
-    std::fs::set_permissions(&askpass, std::fs::Permissions::from_mode(0o755)).unwrap();
+    write_program(&askpass, "#!/bin/sh\nprintf '%s\\n' hunter2\n");
     let (server, _events) = AskpassServer::bind(fake.runtime.path(), askpass).unwrap();
     let session = Session::connect(
         &fake.settings,

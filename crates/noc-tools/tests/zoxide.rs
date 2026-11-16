@@ -4,8 +4,9 @@
 #![allow(clippy::unwrap_used)]
 
 use std::fmt::Write as _;
-use std::os::unix::fs::PermissionsExt;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use noc_tools::ToolError;
 use noc_tools::zoxide::{Scored, Zoxide};
@@ -14,6 +15,22 @@ const FAKE_ZOXIDE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/support/fa
 
 fn quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
+}
+
+/// Writes `script` to `path` as a program, through a child: this process never has the file
+/// open for writing, which a test in another thread could pass on to its child until that
+/// child's exec, and Linux runs no file open for writing (ETXTBSY).
+fn write_program(path: &Path, script: &str) {
+    let mut writer = Command::new("/bin/sh")
+        .args(["-c", r#"cat > "$1" && chmod 755 "$1""#, "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = writer.stdin.take().unwrap();
+    stdin.write_all(script.as_bytes()).unwrap();
+    drop(stdin);
+    assert!(writer.wait().unwrap().success());
 }
 
 /// A wrapper around the fake zoxide with its environment baked in.
@@ -33,8 +50,7 @@ impl Fake {
         }
         writeln!(script, "exec {} \"$@\"", quote(FAKE_ZOXIDE)).unwrap();
         let program = dir.path().join("zoxide");
-        std::fs::write(&program, script).unwrap();
-        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        write_program(&program, &script);
         Self {
             zoxide: Zoxide::new(program),
             dir,

@@ -247,11 +247,15 @@ struct Job {
 }
 
 impl Job {
-    /// Sends `signal`, then SIGCONT, to its group, with the terminal.
+    /// Sends `signal`, then SIGCONT, to its group, with the terminal. Once `signal` went,
+    /// SIGCONT may find nothing left to continue: on macOS a signal that ends a program without
+    /// a handler for it ends a stopped one at once, and a group of zombies alone takes no
+    /// signal (EPERM).
     fn tell(&self, signal: ProcessSignal) -> io::Result<()> {
         let _ = set_foreground(self.pid);
         kill_process_group(self.pid, signal)?;
-        Ok(kill_process_group(self.pid, ProcessSignal::CONT)?)
+        let _ = kill_process_group(self.pid, ProcessSignal::CONT);
+        Ok(())
     }
 
     /// Gives its group the terminal and continues it, if it was stopped.

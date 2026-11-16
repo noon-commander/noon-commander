@@ -739,16 +739,27 @@ async fn a_cancelled_copy_leaves_no_part_of_a_file() {
             remove_sources: false,
             overwrite: false,
         };
-        let sources = vec![root.path().join("big")];
-        let (outcome, _) = run(
-            (&LocalFs, sources),
+        // Cancelled as the second part is read, with the first written. A listener in the
+        // job's task, as `run` has, may get its turn only once a local copy is done: its reads
+        // and writes can all be ready at once on a busy machine.
+        let cancel = CancellationToken::new();
+        let source = OtherDevice {
+            stall: Some(Stall {
+                at: Stage::Read,
+                cancel: cancel.clone(),
+            }),
+        };
+        let outcome = cancelled_copy(
+            (&source, root.path().join("big")),
             (&LocalFs, dst.clone()),
             options,
-            &[],
-            true,
+            &cancel,
         )
         .await;
-        assert!(outcome.aborted, "atomic: {atomic}");
+        assert!(
+            outcome.is_some_and(|outcome| outcome.aborted),
+            "atomic: {atomic}: {outcome:?}"
+        );
         let left: Vec<_> = fs::read_dir(&dst).unwrap().collect();
         assert!(left.is_empty(), "atomic: {atomic}: {left:?}");
     }
@@ -1381,10 +1392,12 @@ async fn the_total_follows_files_that_changed_since_they_were_counted() {
     assert_eq!(fs::read(dst.join("grows")).unwrap().len(), 300_000);
 }
 
-/// Copies `source` to `target` with `cancel`, within the while a cancelled job has.
+/// Copies `source` to `target` with `options` and `cancel`, within the while a cancelled job
+/// has.
 async fn cancelled_copy<A, B>(
     (from, source): (&A, PathBuf),
     (to, target): (&B, PathBuf),
+    options: CopyOptions,
     cancel: &CancellationToken,
 ) -> Option<Outcome>
 where
@@ -1402,7 +1415,7 @@ where
             vfs: to,
             report: &report::<PathBuf>,
         };
-        let outcome = copy(from, vec![source], to, target, BOTH, &mut reporter).await;
+        let outcome = copy(from, vec![source], to, target, options, &mut reporter).await;
         drop(reporter);
         outcome
     };
@@ -1429,9 +1442,9 @@ async fn a_cancel_stops_each_wait_on_a_host_and_takes_away_the_copy() {
         });
         let host = OtherDevice { stall };
         let ended = if at == Read {
-            cancelled_copy((&host, src), (&LocalFs, dst.clone()), &cancel).await
+            cancelled_copy((&host, src), (&LocalFs, dst.clone()), BOTH, &cancel).await
         } else {
-            cancelled_copy((&LocalFs, src), (&host, dst.clone()), &cancel).await
+            cancelled_copy((&LocalFs, src), (&host, dst.clone()), BOTH, &cancel).await
         };
         assert!(
             ended.is_some_and(|outcome| outcome.aborted),

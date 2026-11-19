@@ -28,6 +28,10 @@ Three windows were also absent from the menu: the command history (`q :`), the o
 ([ADR 0017](0017-workspaces.md)): a copy of their window (`t w`), one entry below, without its
 filter, its tabs, or its commands, and with a `Command::Workspace` of its own.
 
+The ellipsis followed no rule: Select group… and Go to directory… had one, Copy, Rename/Move, and
+Mkdir, which ask just as much, had none, and of the windows Tab list… and Background jobs… had
+one, Help and Command output none.
+
 ## Decision
 
 - **Seven menus by task, without `Left` and `Right`:** `File`, `View`, `Go`, `Search`, `Tools`,
@@ -35,18 +39,22 @@ filter, its tabs, or its commands, and with a `Command::Workspace` of its own.
   and `Ctrl+x F9` (or `Ctrl+x g m`) runs any menu command in the other panel and returns the keys
   once it ends.
 - **Contents:**
-  - **File:** View, Edit, Open externally, Checksums; Copy, Duplicate, Rename/Move, Rename in
-    place, Mkdir, Delete; Select group…, Unselect group…, Invert selection; Exit.
+  - **File:** View, Edit, Open externally, Checksums…; Copy…, Duplicate…, Rename/Move…, Rename
+    in place…, Mkdir…, Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
     whole names; Swap panels, Open in the other panel, This directory in the other panel; Rescan,
     Redraw screen.
   - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)….
-  - **Search:** Quick search, Find file…, Find files and dirs….
-  - **Tools:** Background jobs…; Command history…, Command output; Edit host settings…, Disconnect
+  - **Search:** Quick search…, Find file…, Find files and dirs….
+  - **Tools:** Background jobs; Command history…, Command output; Edit host settings…, Disconnect
     host; Configuration….
   - **Workspace:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…. The saved
     workspaces are not listed: Workspace list… opens their window.
   - **Help:** Help, Key hints; View the log.
+- **`…` ends a command that asks for something before it acts:** text, a choice from a list, or
+  settings, in a dialog, a field, or a window. A question that only confirms does not count
+  (Delete, Exit), nor does a window that is the result itself (View, Help, Background jobs, View
+  the log).
 - **F9 opens the bar on `File`**, with no menu open yet, regardless of which panel is active.
   Shift+F9 still opens on the command that ran last.
 - `Command` is removed with its side-addressed variants (`On`, `Location`, `Tabs`,

@@ -176,6 +176,10 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - No code for one language or region: no tables of a layout, no special cases, no tags but in
   settings. Formats come from the system or CLDR; tests use `iso` and patterns of their own.
 - clap `--help` and logs stay English, outside Fluent.
+- A command of the F9 menu ends in `…` when it asks for something before it acts: text, a choice
+  from a list, or settings, in a dialog, a field, or a window (Copy…, Quick search…, Tab list…). A
+  question that only confirms does not count (Delete, Exit), nor does a window that is the result
+  itself (View, Help, Background jobs, View the log).
 
 ### Look
 

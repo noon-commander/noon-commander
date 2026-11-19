@@ -20,7 +20,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The F9 pull-down menu is reorganized into `File`, `View`, `Go`, `Search`, `Tools`, `Workspace`,
   and `Help`, without `Left` and `Right`: every command acts on the active panel (Ctrl+x F9 acts on
-  the other), and Tools and Help add Command history…, Command output, and Key hints
+  the other), and Tools and Help add Command history…, Command output, and Key hints; a command
+  ends in `…` when it asks for something before it acts
   ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
 
 ### Removed

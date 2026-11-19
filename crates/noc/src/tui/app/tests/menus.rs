@@ -192,7 +192,8 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('s'));
     let text = screen_of(&mut app, 20);
-    assert!(line_with(&text, "Quick search").contains('/'), "{text}");
+    // Between blanks: the panel's `/..` shares the line.
+    assert!(line_with(&text, "Quick search").contains(" / "), "{text}");
     assert!(line_with(&text, "Find file…").contains("f /"), "{text}");
     assert!(
         line_with(&text, "Find files and dirs…").contains("f f"),

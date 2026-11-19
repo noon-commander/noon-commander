@@ -1,6 +1,6 @@
 # 0070. Workspaces by name, saved in place of one, the last marked, and columns that name no side
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0091](0091-pull-down-menu-without-left-and-right.md)
 - Date: 2026-11-06
 - Amends: [ADR 0017](0017-workspaces.md)
 

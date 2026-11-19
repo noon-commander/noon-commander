@@ -421,9 +421,7 @@ pulldown-user-screen = Command &output
 pulldown-edit-host = &Edit host settings…
 pulldown-disconnect-host = &Disconnect host
 pulldown-configuration = &Configuration…
-# Workspace. Tabs of the active panel, then workspaces; below these come the saved workspaces,
-# which restore; the first ten have the digits 1 … 9 and 0 as their letters, so the commands
-# above them must not use a digit.
+# Workspace. Tabs of the active panel, then workspaces.
 pulldown-new-tab = Ne&w tab
 pulldown-close-tab = &Close tab
 pulldown-tab-list = &Tab list…
@@ -1040,7 +1038,7 @@ help-tip-search-regex = Regular expression: a glyph crossed out says it is none.
 help-tip-search-glob = Shell pattern, in g + and g - and the Files field of f /: *, ?, [a-z], and { "{" }a,b{ "}" }, which the whole name must match.
 help-tip-workspaces = Workspaces
 help-tip-workspaces-what = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor.
-help-tip-workspaces-list = t w and F9 → Workspace list them; restoring one replaces every tab.
+help-tip-workspaces-list = t w and F9 → Workspace → Workspace list… list them; restoring one replaces every tab.
 help-tip-command = Command line
 help-tip-command-open = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far.
 help-tip-command-run = A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command. Ctrl+z stops it and asks whether it goes on.

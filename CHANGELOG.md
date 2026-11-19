@@ -23,6 +23,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the other), and Tools and Help add Command history…, Command output, and Key hints
   ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
 
+### Removed
+
+- F9 → Workspace no longer lists the saved workspaces: Workspace list… (`t w`) opens their window,
+  which restores them by name
+  ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
+
 ## [0.3.2] - 2026-11-16
 
 ### Added

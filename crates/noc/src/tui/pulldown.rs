@@ -2,8 +2,8 @@
 //! the commands of the one that is open. Every command acts on the active panel, as its key does;
 //! Ctrl+x F9 acts on the other panel. Each command shows the key that does the same, from the
 //! keymap, and has a letter that, typed with Alt, runs it while its menu is open; the plain
-//! letters move, as `h`, `j`, `k`, and `l`. The Workspace menu lists the saved workspaces too,
-//! the first ten with a digit; a menu taller than the screen scrolls with the cursor.
+//! letters move, as `h`, `j`, `k`, and `l`. A menu taller than the screen scrolls with the
+//! cursor.
 //!
 //! As in Far Manager, F9 opens the bar alone, at File, where Alt and each menu's letter open it,
 //! and Esc in an open menu goes back to the bar; Shift+F9 opens it on the command that ran last.
@@ -17,10 +17,10 @@ use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 
-use super::cells::{self, Align, Cut, Marks};
+use super::cells::{self, Align};
 use super::glyphs;
 use super::keymap::{Action, Resolved};
-use super::label::{self, Label};
+use super::label::Label;
 use super::mouse::{Pointer, Press, Scroll};
 use super::theme::Theme;
 use super::window;
@@ -28,15 +28,6 @@ use crate::i18n::fl;
 
 /// Cells between a command's name and its key.
 const KEY_GAP: usize = 2;
-
-/// What a command does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Command {
-    /// What the action does in the active panel, as its key does.
-    Do(Action),
-    /// Restores the saved workspace at this index in the Workspace menu.
-    Workspace(usize),
-}
 
 /// What the app says about a command now.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -54,8 +45,8 @@ pub(crate) struct Status {
 pub(crate) enum PullDownEvent {
     Pending,
     Closed,
-    /// Close the menu and run this.
-    Run(Command),
+    /// Close the menu and do this in the active panel, as its key does.
+    Run(Action),
 }
 
 /// The mark in front of a command that has one.
@@ -71,7 +62,7 @@ enum Mark {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Item {
     label: Label,
-    command: Command,
+    command: Action,
     mark: Mark,
 }
 
@@ -141,48 +132,6 @@ fn titles() -> [Label; 7] {
     .map(|title| Label::parse(&title))
 }
 
-/// Cells a workspace's name takes at most in the Workspace menu.
-const WORKSPACE_NAME_WIDTH: usize = 40;
-
-/// Workspace: tabs of the active panel, save the tabs of both panels, open the list of the saved
-/// workspaces, then the saved `workspaces`, which restore; the first ten have the digits
-/// `1` … `9` and `0`, typed with Alt, and the one restored or saved last a mark.
-fn workspace_menu(title: Label, workspaces: &[String], marks: Marks) -> Menu {
-    let mut menu = plain_menu(
-        title,
-        vec![
-            Some((fl!("pulldown-new-tab"), Action::NewTab)),
-            Some((fl!("pulldown-close-tab"), Action::CloseTab)),
-            Some((fl!("pulldown-tab-list"), Action::TabList)),
-            None,
-            Some((fl!("pulldown-save-workspace"), Action::SaveWorkspace)),
-            Some((fl!("pulldown-workspace-list"), Action::Workspaces)),
-        ],
-    );
-    if !workspaces.is_empty() {
-        menu.entries.push(Entry::Separator);
-    }
-    for (index, name) in workspaces.iter().enumerate() {
-        let name = cells::sanitize(name.as_bytes());
-        let width = cells::width(&name).min(WORKSPACE_NAME_WIDTH);
-        let fitted = cells::fit_cut(&name, width, Align::Left, Cut::Middle);
-        let name = label::escape(&fitted.text(marks));
-        let text = match index {
-            0..=9 => format!("&{} {name}", (index + 1) % 10),
-            _ => format!("  {name}"),
-        };
-        let mut label = Label::parse(&text);
-        // After the digit and a blank, or two blanks.
-        label.cut = fitted.cut.map(|_| 2 + fitted.head.chars().count());
-        menu.entries.push(Entry::Item(Item {
-            label,
-            command: Command::Workspace(index),
-            mark: Mark::Choice,
-        }));
-    }
-    menu
-}
-
 /// A menu of commands that act as their keys do; `None` is a separator.
 fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
     let entries = items
@@ -190,7 +139,7 @@ fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
         .map(|item| match item {
             Some((text, action)) => Entry::Item(Item {
                 label: Label::parse(&text),
-                command: Command::Do(action),
+                command: action,
                 mark: match action {
                     Action::SortByName
                     | Action::SortByExtension
@@ -206,8 +155,8 @@ fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
     Menu { title, entries }
 }
 
-/// The seven menus on the bar, in order, with the saved `workspaces` in Workspace.
-fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
+/// The seven menus on the bar, in order.
+fn menus() -> Vec<Menu> {
     let [file, view, go, search, tools, workspace, help] = titles();
     vec![
         plain_menu(
@@ -281,7 +230,17 @@ fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
                 Some((fl!("pulldown-configuration"), Action::Configuration)),
             ],
         ),
-        workspace_menu(workspace, workspaces, marks),
+        plain_menu(
+            workspace,
+            vec![
+                Some((fl!("pulldown-new-tab"), Action::NewTab)),
+                Some((fl!("pulldown-close-tab"), Action::CloseTab)),
+                Some((fl!("pulldown-tab-list"), Action::TabList)),
+                None,
+                Some((fl!("pulldown-save-workspace"), Action::SaveWorkspace)),
+                Some((fl!("pulldown-workspace-list"), Action::Workspaces)),
+            ],
+        ),
         plain_menu(
             help,
             vec![
@@ -296,14 +255,9 @@ fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
 
 impl PullDown {
     /// The menu bar at File with none open; or, given the command that ran `last`, its menu open
-    /// on it, if the menus still have it. The Workspace menu lists the saved `workspaces`.
-    pub(crate) fn new(
-        last: Option<Command>,
-        workspaces: &[String],
-        marks: Marks,
-        status: &dyn Fn(Command) -> Status,
-    ) -> Self {
-        let menus = menus(workspaces, marks);
+    /// on it.
+    pub(crate) fn new(last: Option<Action>, status: &dyn Fn(Action) -> Status) -> Self {
+        let menus = menus();
         let found = last.and_then(|last| {
             menus.iter().enumerate().find_map(|(index, menu)| {
                 let entry = menu
@@ -338,7 +292,7 @@ impl PullDown {
         &self,
         start: usize,
         forward: bool,
-        status: &dyn Fn(Command) -> Status,
+        status: &dyn Fn(Action) -> Status,
     ) -> Option<usize> {
         let menu = self.menu();
         let runs = |&index: &usize| {
@@ -355,7 +309,7 @@ impl PullDown {
     }
 
     /// The command that runs now above the cursor, or below it.
-    fn step(&self, forward: bool, status: &dyn Fn(Command) -> Status) -> Option<usize> {
+    fn step(&self, forward: bool, status: &dyn Fn(Action) -> Status) -> Option<usize> {
         let cursor = self.cursor;
         if forward {
             self.next_enabled(cursor + 1, true, status)
@@ -366,7 +320,7 @@ impl PullDown {
 
     /// The command that runs now above the cursor, or below it, round the menu: past the last
     /// to the first, and back.
-    fn step_round(&self, forward: bool, status: &dyn Fn(Command) -> Status) -> Option<usize> {
+    fn step_round(&self, forward: bool, status: &dyn Fn(Action) -> Status) -> Option<usize> {
         self.step(forward, status).or_else(|| {
             if forward {
                 self.next_enabled(0, true, status)
@@ -379,7 +333,7 @@ impl PullDown {
 
     /// Opens the menu `index` below its title, with the cursor on its `entry`, or on the
     /// nearest command that runs now, below it first.
-    fn open_at(&mut self, index: usize, entry: usize, status: &dyn Fn(Command) -> Status) {
+    fn open_at(&mut self, index: usize, entry: usize, status: &dyn Fn(Action) -> Status) {
         self.selected = index;
         self.open = true;
         let nearest = self
@@ -390,7 +344,7 @@ impl PullDown {
 
     /// Opens the menu `index` below its title, as a click on the title of an idle menu bar
     /// does.
-    pub(crate) fn open_menu(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
+    pub(crate) fn open_menu(&mut self, index: usize, status: &dyn Fn(Action) -> Status) {
         if index < self.menus.len() {
             self.open_at(index, 0, status);
         }
@@ -402,7 +356,7 @@ impl PullDown {
     pub(crate) fn pointer(
         &mut self,
         pointer: Pointer,
-        status: &dyn Fn(Command) -> Status,
+        status: &dyn Fn(Action) -> Status,
     ) -> PullDownEvent {
         let Pointer { press, at } = pointer;
         let (title, in_menu, row) = {
@@ -460,7 +414,7 @@ impl PullDown {
     /// Moves the cursor in the open menu as a press on its scroll bar asks: an arrow to the
     /// next command that runs now, as the wheel, stopping at the ends; the track a page; the
     /// thumb onto the screen scrolled to where it was dragged.
-    pub(crate) fn scroll(&mut self, scroll: Scroll, status: &dyn Fn(Command) -> Status) {
+    pub(crate) fn scroll(&mut self, scroll: Scroll, status: &dyn Fn(Action) -> Status) {
         if !self.open {
             return;
         }
@@ -493,7 +447,7 @@ impl PullDown {
     }
 
     /// Selects the menu `index` on the bar, and opens it if a menu is open.
-    fn select(&mut self, index: usize, status: &dyn Fn(Command) -> Status) {
+    fn select(&mut self, index: usize, status: &dyn Fn(Action) -> Status) {
         if self.open {
             self.open_at(index, 0, status);
         } else {
@@ -510,7 +464,7 @@ impl PullDown {
     pub(crate) fn handle(
         &mut self,
         input: Resolved,
-        status: &dyn Fn(Command) -> Status,
+        status: &dyn Fn(Action) -> Status,
     ) -> PullDownEvent {
         let count = self.menus.len();
         let entries = self.menu().entries.len();
@@ -587,7 +541,7 @@ impl PullDown {
         frame: &mut Frame<'_>,
         (bar, screen): (Rect, Rect),
         theme: &Theme,
-        status: &dyn Fn(Command) -> Status,
+        status: &dyn Fn(Action) -> Status,
     ) {
         let titles: Vec<&Label> = self.menus.iter().map(|menu| &menu.title).collect();
         let spots = render_bar(frame, bar, theme, &titles, Some(self.selected));
@@ -615,7 +569,7 @@ impl PullDown {
         x: u16,
         area: Rect,
         theme: &Theme,
-        status: &dyn Fn(Command) -> Status,
+        status: &dyn Fn(Action) -> Status,
     ) {
         let menu = self.menu();
         let statuses: Vec<Option<Status>> = menu
@@ -856,7 +810,6 @@ mod tests {
 
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
-    use ratatui::style::Style;
 
     use super::*;
     use crate::tui::glyphs::Glyphs;
@@ -864,14 +817,12 @@ mod tests {
 
     /// Every command runs but Delete, the panel sorts by name, and only View and Select group
     /// show a key, the keymap's.
-    fn status(command: Command) -> Status {
+    fn status(command: Action) -> Status {
         Status {
-            enabled: command != Command::Do(Action::Delete),
-            checked: command == Command::Do(Action::SortByName),
+            enabled: command != Action::Delete,
+            checked: command == Action::SortByName,
             key: match command {
-                Command::Do(action @ (Action::View | Action::Select)) => {
-                    Keymap::default().key(Context::Panel, action)
-                }
+                Action::View | Action::Select => Keymap::default().key(Context::Panel, command),
                 _ => None,
             },
         }
@@ -883,20 +834,19 @@ mod tests {
 
     /// The menu bar at File, opened.
     fn open() -> PullDown {
-        let mut menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let mut menu = PullDown::new(None, &status);
         assert!(!menu.open, "the bar alone");
         menu.handle(action(Action::Down), &status);
         menu
     }
 
-    fn chosen(menu: &PullDown) -> Option<Command> {
+    fn chosen(menu: &PullDown) -> Option<Action> {
         menu.menu().item(menu.cursor).map(|item| item.command)
     }
 
     #[test]
     fn every_command_has_a_letter_of_its_own_in_its_menu() {
-        let names: Vec<String> = (1..=10).map(|index| format!("w{index}")).collect();
-        let menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
+        let menu = PullDown::new(None, &status);
         let titles: HashSet<_> = menu
             .menus
             .iter()
@@ -925,7 +875,7 @@ mod tests {
         let menu = open();
         assert_eq!(menu.selected, 0);
         assert_eq!(menu.menu().title.text, "File");
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
+        assert_eq!(chosen(&menu), Some(Action::View));
     }
 
     #[test]
@@ -941,23 +891,23 @@ mod tests {
         menu.handle(action(Action::Right), &status);
         assert_eq!(menu.selected, 0, "round the bar");
         assert_eq!(menu.menu().title.text, "File");
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
+        assert_eq!(chosen(&menu), Some(Action::View));
         for _ in 0..9 {
             menu.handle(action(Action::Down), &status);
         }
         assert_eq!(
             chosen(&menu),
-            Some(Command::Do(Action::Select)),
+            Some(Action::Select),
             "past Delete and the separator"
         );
         menu.handle(action(Action::Up), &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));
+        assert_eq!(chosen(&menu), Some(Action::Mkdir));
         menu.handle(action(Action::End), &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Quit)));
+        assert_eq!(chosen(&menu), Some(Action::Quit));
         menu.handle(action(Action::Down), &status);
         assert_eq!(
             chosen(&menu),
-            Some(Command::Do(Action::View)),
+            Some(Action::View),
             "Down on the last command goes round to the first"
         );
         assert_eq!(
@@ -966,7 +916,7 @@ mod tests {
         );
         assert_eq!(
             chosen(&menu),
-            Some(Command::Do(Action::Quit)),
+            Some(Action::Quit),
             "Up on the first command goes round to the last"
         );
         assert!(menu.open);
@@ -976,20 +926,16 @@ mod tests {
         menu.handle(action(Action::Home), &status);
         assert!(!menu.open, "Up and Home on the bar open nothing");
         menu.handle(action(Action::Down), &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
+        assert_eq!(chosen(&menu), Some(Action::View));
         menu.handle(action(Action::End), &status);
         menu.handle(action(Action::Home), &status);
-        assert_eq!(
-            chosen(&menu),
-            Some(Command::Do(Action::View)),
-            "Home goes up"
-        );
+        assert_eq!(chosen(&menu), Some(Action::View), "Home goes up");
         menu.handle(action(Action::Home), &status);
         assert!(menu.open, "Home on the first command stays, as vim's g g");
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
+        assert_eq!(chosen(&menu), Some(Action::View));
         assert_eq!(
             menu.handle(action(Action::Confirm), &status),
-            PullDownEvent::Run(Command::Do(Action::View))
+            PullDownEvent::Run(Action::View)
         );
         assert_eq!(
             menu.handle(action(Action::Cancel), &status),
@@ -1005,7 +951,7 @@ mod tests {
 
     #[test]
     fn on_the_bar_keys_select_menus_and_letters_open_them() {
-        let mut menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let mut menu = PullDown::new(None, &status);
         menu.handle(action(Action::Right), &status);
         assert_eq!((menu.selected, menu.open), (1, false));
         menu.handle(action(Action::Left), &status);
@@ -1022,7 +968,7 @@ mod tests {
         );
         assert_eq!(menu.menu().title.text, "Tools");
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Jobs)));
+        assert_eq!(chosen(&menu), Some(Action::Jobs));
         menu.handle(action(Action::Cancel), &status);
         menu.handle(action(Action::Confirm), &status);
         assert!(menu.open, "Enter opens the menu");
@@ -1030,37 +976,30 @@ mod tests {
 
     #[test]
     fn opens_on_the_command_that_ran_last() {
-        let swap = Some(Command::Do(Action::SwapPanels));
-        let mut menu = PullDown::new(swap, &[], Glyphs::PLAIN.marks, &status);
+        let swap = Some(Action::SwapPanels);
+        let mut menu = PullDown::new(swap, &status);
         assert_eq!(menu.menu().title.text, "View");
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::SwapPanels)));
+        assert_eq!(chosen(&menu), Some(Action::SwapPanels));
         menu.handle(action(Action::Left), &status);
         assert_eq!(
             chosen(&menu),
-            Some(Command::Do(Action::View)),
+            Some(Action::View),
             "another menu opens at its first command"
         );
         // One that cannot run now is passed by.
-        let delete = Some(Command::Do(Action::Delete));
-        let menu = PullDown::new(delete, &[], Glyphs::PLAIN.marks, &status);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Select)));
-        // Without it, the bar alone at File: a workspace no longer saved.
-        let gone = Some(Command::Workspace(3));
-        let names = ["w1".to_owned()];
-        let menu = PullDown::new(gone, &names, Glyphs::PLAIN.marks, &status);
-        assert_eq!((menu.selected, menu.open), (0, false));
-        let menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
-        assert_eq!((menu.selected, menu.open), (0, false));
+        let delete = Some(Action::Delete);
+        let menu = PullDown::new(delete, &status);
+        assert_eq!(chosen(&menu), Some(Action::Select));
     }
 
     #[test]
     fn end_on_the_bar_opens_the_menu_at_its_last_command() {
-        let mut menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let mut menu = PullDown::new(None, &status);
         menu.handle(action(Action::Left), &status);
         menu.handle(action(Action::End), &status);
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::ViewLog)));
+        assert_eq!(chosen(&menu), Some(Action::ViewLog));
     }
 
     #[test]
@@ -1078,17 +1017,22 @@ mod tests {
         );
         assert_eq!(
             menu.handle(Resolved::Hotkey('x'), &status),
-            PullDownEvent::Run(Command::Do(Action::Quit))
+            PullDownEvent::Run(Action::Quit)
         );
         menu.handle(action(Action::Right), &status);
         assert_eq!(
             menu.handle(Resolved::Hotkey('Z'), &status),
-            PullDownEvent::Run(Command::Do(Action::SortBySize))
+            PullDownEvent::Run(Action::SortBySize)
         );
     }
 
     fn draw(menu: &PullDown, theme: &Theme) -> String {
-        let mut terminal = Terminal::new(TestBackend::new(72, 20)).unwrap();
+        draw_in(menu, theme, 20)
+    }
+
+    /// On a screen `height` lines tall.
+    fn draw_in(menu: &PullDown, theme: &Theme, height: u16) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(72, height)).unwrap();
         terminal
             .draw(|frame| {
                 let screen = frame.area();
@@ -1109,7 +1053,7 @@ mod tests {
     fn the_mouse_opens_menus_and_runs_commands() {
         // On the 72 columns of `draw`: ` File ` takes columns 1 … 6, ` View ` 10 … 15, and File's
         // rows start on line 2, View first.
-        let mut menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let mut menu = PullDown::new(None, &status);
         assert_eq!(press(&mut menu, Press::Click, 3, 0), PullDownEvent::Pending);
         assert_eq!(menu.menu().title.text, "File");
         assert!(menu.open);
@@ -1120,14 +1064,14 @@ mod tests {
         );
         press(&mut menu, Press::WheelUp, 5, 12);
         assert!(menu.open, "the wheel stops at the first command");
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
+        assert_eq!(chosen(&menu), Some(Action::View));
         press(&mut menu, Press::WheelDown, 5, 12);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Edit)));
+        assert_eq!(chosen(&menu), Some(Action::Edit));
         assert_eq!(
             press(&mut menu, Press::Click, 5, 11),
-            PullDownEvent::Run(Command::Do(Action::Mkdir))
+            PullDownEvent::Run(Action::Mkdir)
         );
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));
+        assert_eq!(chosen(&menu), Some(Action::Mkdir));
         // The title of the open menu closes it, and another title opens its own.
         press(&mut menu, Press::Click, 3, 0);
         assert!(!menu.open);
@@ -1149,7 +1093,7 @@ mod tests {
 
     #[test]
     fn draws_the_bar_alone_with_the_letters_of_the_menus() {
-        let menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let menu = PullDown::new(None, &status);
         let theme = Theme::mc_classic();
         let text = draw(&menu, &theme);
         assert!(!text.contains('╔'), "{text}");
@@ -1172,7 +1116,7 @@ mod tests {
 
     #[test]
     fn marks_the_sort_order_and_stays_on_screen() {
-        let mut menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let mut menu = PullDown::new(None, &status);
         menu.handle(Resolved::Hotkey('v'), &status);
         let text = draw(&menu, &Theme::mc_classic());
         let chosen = format!("{} Sort by name", Glyphs::PLAIN.choice);
@@ -1187,68 +1131,27 @@ mod tests {
         );
     }
 
-    /// The Workspace menu, open, with `count` workspaces named `w1`, `w2`, ….
-    fn workspace_menu(count: usize) -> PullDown {
-        let names: Vec<String> = (1..=count).map(|index| format!("w{index}")).collect();
-        let mut menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
-        menu.handle(Resolved::Hotkey('w'), &status);
-        assert_eq!(menu.menu().title.text, "Workspace");
-        menu
+    /// File on a screen 10 lines tall: 7 of its 17 rows show.
+    fn draw_short(menu: &PullDown) -> String {
+        draw_in(menu, &Theme::terminal(), 10)
     }
 
     #[test]
-    fn the_workspace_menu_saves_lists_and_restores_by_digit() {
-        let mut menu = workspace_menu(12);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::NewTab)));
-        assert_eq!(
-            menu.handle(Resolved::Hotkey('2'), &status),
-            PullDownEvent::Run(Command::Workspace(1))
-        );
-        assert_eq!(
-            menu.handle(Resolved::Hotkey('0'), &status),
-            PullDownEvent::Run(Command::Workspace(9)),
-            "0 for the tenth"
-        );
-        assert_eq!(
-            menu.handle(Resolved::Hotkey('l'), &status),
-            PullDownEvent::Run(Command::Do(Action::Workspaces))
-        );
-        let labels: Vec<&str> = menu
-            .menu()
-            .entries
-            .iter()
-            .filter_map(|entry| match entry {
-                Entry::Item(item) => Some(item.label.text.as_str()),
-                Entry::Separator => None,
-            })
-            .collect();
-        assert_eq!(labels[5], "1 w1");
-        assert_eq!(labels[14], "0 w10");
-        assert_eq!(labels[15], "  w11", "no digit left");
-        let empty = workspace_menu(0);
-        assert_eq!(
-            empty.menu().entries.len(),
-            6,
-            "no trailing separator without any"
-        );
-    }
-
-    #[test]
-    fn a_workspace_menu_taller_than_the_screen_scrolls_to_the_cursor() {
-        let mut menu = workspace_menu(30);
+    fn a_menu_taller_than_the_screen_scrolls_to_the_cursor() {
+        let mut menu = open();
         menu.handle(action(Action::End), &status);
-        assert_eq!(chosen(&menu), Some(Command::Workspace(29)));
-        let text = draw(&menu, &Theme::terminal());
+        assert_eq!(chosen(&menu), Some(Action::Quit));
+        let text = draw_short(&menu);
         assert!(
-            text.contains("w30") && !text.contains("Save workspace"),
+            text.contains("Exit") && !text.contains("Open externally"),
             "{text}"
         );
     }
 
     #[test]
     fn the_scroll_bar_of_a_tall_menu_moves_the_cursor_onto_the_screen() {
-        let mut menu = workspace_menu(30);
-        draw(&menu, &Theme::terminal());
+        let mut menu = open();
+        draw_short(&menu);
         let bar = menu.bar().unwrap();
         let first = menu.cursor;
         menu.scroll(Scroll::By(Motion::Up), &status);
@@ -1259,35 +1162,27 @@ mod tests {
         menu.scroll(Scroll::By(Motion::Down), &status);
         assert!(menu.cursor > first);
         menu.scroll(Scroll::To(bar.dragged(0, u16::MAX)), &status);
-        let end = draw(&menu, &Theme::terminal());
+        let end = draw_short(&menu);
         assert!(
-            end.contains("w30") && !end.contains("Save workspace"),
+            end.contains("Exit") && !end.contains("Open externally"),
             "{end}"
         );
         assert!(menu.cursor >= menu.offset.get(), "on the screen");
-        assert!(matches!(chosen(&menu), Some(Command::Workspace(_))));
+        assert_eq!(
+            chosen(&menu),
+            Some(Action::Select),
+            "past Delete, which cannot run"
+        );
         menu.scroll(Scroll::To(0), &status);
-        assert!(draw(&menu, &Theme::terminal()).contains("New tab"));
+        assert!(draw_short(&menu).contains("Open externally"));
         let cursor = menu.cursor;
         menu.scroll(Scroll::By(Motion::PageDown), &status);
         assert!(menu.cursor >= cursor + menu.page.get() - 1, "a page on");
     }
 
     #[test]
-    fn names_with_ampersands_keep_them_and_no_letter() {
-        let names = ["R&D".to_owned()];
-        let menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
-        let menu = &menu.menus[5];
-        let Some(Entry::Item(item)) = menu.entries.last() else {
-            panic!("{menu:?}");
-        };
-        assert_eq!(item.label.text, "1 R&D");
-        assert_eq!(item.label.hotkey, Some((0, '1')));
-    }
-
-    #[test]
     fn keys_take_the_color_of_keys_but_on_the_cursor_and_where_disabled() {
-        let menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let menu = PullDown::new(None, &status);
         let Some(Entry::Item(item)) = menu.menus[0].entries.first() else {
             panic!("{menu:?}");
         };
@@ -1312,7 +1207,7 @@ mod tests {
 
     #[test]
     fn marks_take_the_color_of_titles_but_on_the_cursor_and_where_disabled() {
-        let menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
+        let menu = PullDown::new(None, &status);
         let item = |menu_index: usize, index: usize| {
             let Some(Entry::Item(item)) = menu.menus[menu_index].entries.get(index) else {
                 panic!("{menu:?}");
@@ -1348,28 +1243,5 @@ mod tests {
             );
             assert_eq!(mark(false, true, false).0, " ", "neither taken nor on");
         }
-    }
-
-    #[test]
-    fn a_long_name_marks_where_it_is_cut_in_its_own_style() {
-        let names = [format!("R&D {}", "x".repeat(60))];
-        let menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
-        let menu = &menu.menus[5];
-        let Some(Entry::Item(item)) = menu.entries.last() else {
-            panic!("{menu:?}");
-        };
-        let (style, hotkey, mark) = (Style::new(), Style::new().bold(), Style::new().italic());
-        let spans = item.label.spans(style, Some(hotkey), mark);
-        let styled: Vec<(&str, Style)> = spans
-            .iter()
-            .filter(|span| !span.content.is_empty())
-            .map(|span| (span.content.as_ref(), span.style))
-            .collect();
-        assert_eq!(styled[0], ("1", hotkey));
-        let head = format!(" R&D {}", "x".repeat(16));
-        assert_eq!(styled[1], (head.as_str(), style));
-        assert_eq!(styled[2], ("»", mark));
-        assert_eq!(styled[3].1, style);
-        assert_eq!(cells::width(&item.label.text), 2 + WORKSPACE_NAME_WIDTH);
     }
 }

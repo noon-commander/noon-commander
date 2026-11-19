@@ -398,8 +398,7 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   settings and Disconnect host for the active panel's host, and
   [Configuration…](#configuration-dialog) (`o o`).
 - **Workspace** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
-  workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
-  letters, typed with Alt, `•` on the one restored or saved last.
+  workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
 - **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).
 - `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
   boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles
@@ -838,10 +837,10 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   last, `r` or F6 renames, and `d d` or F8 deletes after a question. F2, F6, F7, and F8 work while
   the filter takes text too. A workspace
   just saved or renamed there gets the cursor. The window opens with the cursor on the workspace
-  restored or saved last, which `•` marks, as in F9 → Workspace, in the color of titles
+  restored or saved last, which `•` marks in the color of titles
   (`dialog_symbol`), in a room of two cells in front of every name; that one is the app's
   (`App::workspace`), of this run only.
-- The window and F9 → Workspace show the workspaces in the order of their names, as the panels
+- The window shows the workspaces in the order of their names, as the panels
   order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order
   they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row
   counts the tabs of the left panel, then those of the right; the count of the side with the keys
@@ -866,8 +865,6 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   ╚════════════════════════════╧═════════════════════════════╝
   ```
 
-- F9 → Workspace lists the saved workspaces below its tab and workspace commands, the first ten with
-  Alt+1 … Alt+9 and Alt+0, and marks the one restored or saved last; choosing one restores it.
 - Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the
   old tabs are dropped). The tab that shows on each side lists its location at once, connecting
   to its host if needed; a hidden one keeps its first request and sends it when it shows, so

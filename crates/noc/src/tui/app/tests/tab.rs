@@ -278,13 +278,13 @@ fn tabs_in_the_frame_keep_the_column_lines_joined_to_it() {
 #[test]
 fn the_workspace_menu_opens_and_closes_tabs_in_the_active_panel() {
     let mut app = loaded();
-    let status = app.command_status(Command::Do(Action::CloseTab));
+    let status = app.command_status(Action::CloseTab);
     assert!(!status.enabled, "one tab on the active panel");
     assert_eq!(status.key.as_deref(), Some("t c"));
-    assert!(app.run(Command::Do(Action::NewTab)).is_empty());
+    keys(&mut app, &["f9", "alt-w", "alt-w"]);
     assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
-    assert!(app.command_status(Command::Do(Action::CloseTab)).enabled);
-    app.run(Command::Do(Action::CloseTab));
+    assert!(app.command_status(Action::CloseTab).enabled);
+    keys(&mut app, &["f9", "alt-w", "alt-c"]);
     assert_eq!(tab_numbers(&app, Side::Left), (vec![1], 1));
     // Ctrl+x F9 opens and closes tabs in the other panel, then returns.
     keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-w"]);

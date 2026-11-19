@@ -192,29 +192,6 @@ fn a_workspace_gone_meanwhile_says_so() {
 }
 
 #[test]
-fn f9_lists_the_workspaces_by_name_and_restores_one_by_its_digit() {
-    let mut app = loaded();
-    let mut other = noon();
-    other.name = "photos".to_owned();
-    holds(&mut app, &[other, noon()]);
-    app.handle(action(Action::PullDown));
-    app.handle(Resolved::Hotkey('w'));
-    let text = screen_of(&mut app, 16);
-    assert!(
-        text.contains("Save workspace…") && text.contains("1 noon") && text.contains("2 photos"),
-        "by name, not as saved: {text}"
-    );
-    let effects = app.handle(Resolved::Hotkey('2'));
-    assert!(!effects.is_empty());
-    assert_eq!(app.workspace.as_deref(), Some("photos"));
-    app.handle(action(Action::PullDownLast));
-    assert!(
-        screen_of(&mut app, 16).contains(&format!("{} 2 photos", app.theme.glyphs.choice)),
-        "the one restored last"
-    );
-}
-
-#[test]
 fn the_workspaces_window_saves_restores_renames_and_deletes() {
     let mut app = loaded();
     let mut photos = noon();
@@ -439,7 +416,10 @@ fn the_order_of_names_in_the_configuration_sorts_the_workspaces_again() {
     let mut app = loaded();
     assert!(app.config.ui.natural_sort);
     holds(&mut app, &[named("ws10"), named("ws2")]);
-    let names = |app: &App| crate::tui::workspaces::names(&app.workspaces);
+    let names = |app: &App| -> Vec<String> {
+        let workspaces = &app.workspaces.workspaces;
+        workspaces.iter().map(|each| each.name.clone()).collect()
+    };
     assert_eq!(names(&app), ["ws2", "ws10"], "numbers by value");
     let old = app.config.clone();
     let mut new = old.clone();

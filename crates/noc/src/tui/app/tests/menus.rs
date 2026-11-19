@@ -266,7 +266,7 @@ fn command_history_in_tools_follows_the_host_connection() {
         }),
     );
     app.restore_workspace("remote");
-    let history = Command::Do(Action::CommandHistory);
+    let history = Action::CommandHistory;
     assert!(
         !app.command_status(history).enabled,
         "connecting to the host"

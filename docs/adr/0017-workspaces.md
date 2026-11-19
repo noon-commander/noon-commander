@@ -1,7 +1,8 @@
 # 0017. Workspaces: saved tabs of both panels in `workspaces.toml`
 
 - Status: Accepted; amended by
-  [ADR 0070](0070-workspaces-by-name-and-saved-in-place.md)
+  [ADR 0070](0070-workspaces-by-name-and-saved-in-place.md),
+  [ADR 0091](0091-pull-down-menu-without-left-and-right.md)
 - Date: 2026-10-04
 
 ## Context

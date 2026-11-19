@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use noc_config::{PanelSide, Place, SavedTab, SortBy, Workspace, Workspaces};
+use noc_config::{PanelSide, Place, SavedTab, SortBy, Workspaces};
 use noc_locale::Formats;
 use noc_scroll::scrollbar::Bar;
 use noc_vfs::{Location, RemotePath};
@@ -235,7 +235,7 @@ impl WorkspacesWindow {
     /// Draws the window centered over `area`, the panels: the filter, then the workspaces,
     /// scrolled to the cursor, each with how many tabs each panel has, the count of the side
     /// with the keys standing out, and the dot of a radio button in front of `last`, the one
-    /// restored or saved last, as F9 → Workspace marks it; under them, a column for each panel
+    /// restored or saved last; under them, a column for each panel
     /// with where the tabs of the one under the cursor are.
     pub(crate) fn render(
         &mut self,
@@ -509,7 +509,7 @@ pub(crate) fn current_of(tabs: &[SavedTab]) -> usize {
 }
 
 /// Puts `workspaces` in the order of their names, as the panels order names, by the language of
-/// `natural` if any: the window and the pull-down menu show them so, and `workspaces.toml` keeps
+/// `natural` if any: the window shows them so, and `workspaces.toml` keeps
 /// them in the order they were saved.
 pub(crate) fn sort(workspaces: &mut Workspaces, natural: Option<&Formats>) {
     workspaces.workspaces.sort_by_cached_key(|workspace| {
@@ -517,18 +517,9 @@ pub(crate) fn sort(workspaces: &mut Workspaces, natural: Option<&Formats>) {
     });
 }
 
-/// The rows of the pull-down menu's Workspace menu: the names of `workspaces`, in order.
-pub(crate) fn names(workspaces: &Workspaces) -> Vec<String> {
-    workspaces
-        .workspaces
-        .iter()
-        .map(|workspace: &Workspace| workspace.name.clone())
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
-    use noc_config::SearchMode;
+    use noc_config::{SearchMode, Workspace};
     use std::os::unix::ffi::OsStrExt;
     use std::path::PathBuf;
 
@@ -536,6 +527,11 @@ mod tests {
     use ratatui::backend::TestBackend;
 
     use super::*;
+
+    fn names(workspaces: &Workspaces) -> Vec<&str> {
+        let workspaces = &workspaces.workspaces;
+        workspaces.iter().map(|each| each.name.as_str()).collect()
+    }
 
     /// A workspace with `left` tabs on the left, the last of them showing, and `right` on the
     /// right, the first showing; the right panel has the keys.

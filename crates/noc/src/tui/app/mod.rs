@@ -39,7 +39,7 @@ use super::machine::Machine;
 use super::menu::LocationMenu;
 use super::panel::{Failure, ListRequest, Panel, location_text, short_size};
 use super::progress::{JobView, Look, RowLook};
-use super::pulldown::{Command, PullDown};
+use super::pulldown::PullDown;
 use super::reading::Reading;
 use super::search::{self, Input};
 use super::spinner::{Spin, Wait};
@@ -1262,7 +1262,7 @@ pub(crate) struct App {
     /// The pull-down menu of F9, over the panels and under the windows and dialogs.
     pulldown: Option<PullDown>,
     /// The command of the pull-down menu that ran last, for Shift+F9 to open the menu on it.
-    pulldown_last: Option<Command>,
+    pulldown_last: Option<Action>,
     /// The Configuration dialog, over the panels and the menus, under the other windows and
     /// the dialogs.
     configuration: Option<Configuration>,

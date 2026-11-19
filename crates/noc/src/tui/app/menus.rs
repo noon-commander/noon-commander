@@ -15,10 +15,9 @@ use crate::tui::keymap::{Action, Context, Resolved, Typed};
 use crate::tui::menu::{LocationMenu, MenuEvent};
 use crate::tui::panel::Destination;
 use crate::tui::places::Places;
-use crate::tui::pulldown::{Command, PullDown, PullDownEvent, Status};
+use crate::tui::pulldown::{PullDown, PullDownEvent, Status};
 use crate::tui::search::Slot;
 use crate::tui::theme::Theme;
-use crate::tui::workspaces::{self};
 
 use super::{Again, App, Effect, Neighbours, Side, Way, Whole, theme_of};
 
@@ -87,12 +86,9 @@ impl App {
 
     /// Opens the pull-down menu: the bar at File, or with `last`, on the command that ran last.
     pub(super) fn open_pulldown(&mut self, last: bool) {
-        let pulldown = PullDown::new(
-            self.pulldown_last.filter(|_| last),
-            &workspaces::names(&self.workspaces),
-            self.theme.glyphs.marks,
-            &|command| self.command_status(command),
-        );
+        let pulldown = PullDown::new(self.pulldown_last.filter(|_| last), &|command| {
+            self.command_status(command)
+        });
         self.pulldown = Some(pulldown);
     }
 
@@ -117,24 +113,10 @@ impl App {
                 Vec::new()
             }
             PullDownEvent::Closed => Vec::new(),
-            PullDownEvent::Run(command) => {
-                self.pulldown_last = Some(command);
-                self.run(command)
+            PullDownEvent::Run(action) => {
+                self.pulldown_last = Some(action);
+                self.handle(Resolved::Action(action))
             }
-        }
-    }
-
-    /// Runs a command of the pull-down menu.
-    pub(super) fn run(&mut self, command: Command) -> Vec<Effect> {
-        match command {
-            Command::Do(action) => self.handle(Resolved::Action(action)),
-            Command::Workspace(index) => match self.workspaces.workspaces.get(index) {
-                Some(workspace) => {
-                    let name = workspace.name.clone();
-                    self.restore_workspace(&name)
-                }
-                None => Vec::new(),
-            },
         }
     }
 
@@ -250,56 +232,43 @@ impl App {
     }
 
     /// Whether a command of the pull-down menu runs now, its mark, and its key.
-    pub(super) fn command_status(&self, command: Command) -> Status {
-        let context = Context::Panel;
+    pub(super) fn command_status(&self, action: Action) -> Status {
         let active = self.panel(self.active);
-        match command {
-            Command::Do(action) => Status {
-                enabled: match action {
-                    Action::Checksum => !active.chosen().is_empty(),
-                    Action::SystemOpen => {
-                        matches!(active.location(), Location::Local(_))
-                            && !active.chosen().is_empty()
+        Status {
+            enabled: match action {
+                Action::Checksum => !active.chosen().is_empty(),
+                Action::SystemOpen => {
+                    matches!(active.location(), Location::Local(_)) && !active.chosen().is_empty()
+                }
+                Action::CloseTab => self.tabs(self.active).len() > 1,
+                Action::CommandHistory => match active.location() {
+                    Location::Local(_) => true,
+                    Location::Remote { host, .. } => {
+                        matches!(self.hosts.get(host), Some(super::Host::Connected { .. }))
+                            || active.not_connected().is_some()
                     }
-                    Action::CloseTab => self.tabs(self.active).len() > 1,
-                    Action::CommandHistory => match active.location() {
-                        Location::Local(_) => true,
-                        Location::Remote { host, .. } => {
-                            matches!(self.hosts.get(host), Some(super::Host::Connected { .. }))
-                                || active.not_connected().is_some()
-                        }
-                    },
-                    Action::EditHost => self.chosen_host().is_some(),
-                    Action::Disconnect => self
-                        .chosen_host()
-                        .is_some_and(|host| self.hosts.contains_key(&host)),
-                    Action::ViewLog => self
-                        .about
-                        .files
-                        .as_ref()
-                        .is_some_and(|files| files.log.is_ok()),
-                    _ => true,
                 },
-                checked: match action {
-                    Action::ToggleHidden => self.config.ui.show_hidden,
-                    Action::ShowFull => self.whole == Whole::Shown,
-                    Action::SortByName
-                    | Action::SortByExtension
-                    | Action::SortByTime
-                    | Action::SortBySize => active.sort_action() == action,
-                    _ => false,
-                },
-                key: self.keymap.key(context, action),
+                Action::EditHost => self.chosen_host().is_some(),
+                Action::Disconnect => self
+                    .chosen_host()
+                    .is_some_and(|host| self.hosts.contains_key(&host)),
+                Action::ViewLog => self
+                    .about
+                    .files
+                    .as_ref()
+                    .is_some_and(|files| files.log.is_ok()),
+                _ => true,
             },
-            Command::Workspace(index) => Status {
-                enabled: true,
-                checked: self
-                    .workspaces
-                    .workspaces
-                    .get(index)
-                    .is_some_and(|workspace| self.workspace.as_ref() == Some(&workspace.name)),
-                key: None,
+            checked: match action {
+                Action::ToggleHidden => self.config.ui.show_hidden,
+                Action::ShowFull => self.whole == Whole::Shown,
+                Action::SortByName
+                | Action::SortByExtension
+                | Action::SortByTime
+                | Action::SortBySize => active.sort_action() == action,
+                _ => false,
             },
+            key: self.keymap.key(Context::Panel, action),
         }
     }
 

@@ -51,7 +51,7 @@ one, Help and Command output none.
   - **File:** View, Edit, Open externally, Checksums…; Copy…, Duplicate…, Rename/Move…, Rename
     in place…, Mkdir…, Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
-    whole names; Swap panels; Rescan, Redraw screen.
+    whole names; Rescan, Redraw screen: how the listing shows.
   - **Go:** Change location…, Edit host settings…, Disconnect host; Go to directory…, Jump to a
     directory (zoxide)…; Jump back, Jump forward; Open in the other panel, This directory in the
     other panel, which say where the other panel goes, not what shows. The host commands act on
@@ -60,9 +60,10 @@ one, Help and Command output none.
     named after the modes of the dialog they open.
   - **Tools:** Shell command…, Command history…, Command output; Background jobs; Configuration…,
     last, where the settings usually are.
-  - **Window:** New tab, Close tab, Next tab, Previous tab, Tab list…; Save workspace…, Workspace
-    list…, as the Window menu of macOS and of editors holds the tabs. The saved workspaces are not
-    listed: Workspace list… opens their window.
+  - **Window:** Swap panels; New tab, Close tab, Next tab, Previous tab, Tab list…; Save
+    workspace…, Workspace list…, as the Window menu of macOS and of editors arranges the windows
+    and holds the tabs; the key of Swap panels, `Ctrl+w x`, is a command of vim's windows too. The
+    saved workspaces are not listed: Workspace list… opens their window.
   - **Help:** Help, Key hints; View the log.
 - **`…` ends a command that asks for something before it acts:** text, a choice from a list, or
   settings, in a dialog, a field, or a window. A question that only confirms does not count

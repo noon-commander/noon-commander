@@ -197,8 +197,6 @@ fn menus() -> Vec<Menu> {
                 Some((fl!("pulldown-hidden"), Action::ToggleHidden)),
                 Some((fl!("pulldown-full"), Action::ShowFull)),
                 None,
-                Some((fl!("pulldown-swap"), Action::SwapPanels)),
-                None,
                 Some((fl!("pulldown-rescan"), Action::Reload)),
                 Some((fl!("pulldown-redraw"), Action::Redraw)),
             ],
@@ -246,6 +244,8 @@ fn menus() -> Vec<Menu> {
         plain_menu(
             window,
             vec![
+                Some((fl!("pulldown-swap"), Action::SwapPanels)),
+                None,
                 Some((fl!("pulldown-new-tab"), Action::NewTab)),
                 Some((fl!("pulldown-close-tab"), Action::CloseTab)),
                 Some((fl!("pulldown-next-tab"), Action::NextTab)),
@@ -998,11 +998,11 @@ mod tests {
 
     #[test]
     fn opens_on_the_command_that_ran_last() {
-        let swap = Some(Action::SwapPanels);
-        let mut menu = PullDown::new(swap, &status);
+        let hidden = Some(Action::ToggleHidden);
+        let mut menu = PullDown::new(hidden, &status);
         assert_eq!(menu.menu().title.text, "View");
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Action::SwapPanels));
+        assert_eq!(chosen(&menu), Some(Action::ToggleHidden));
         menu.handle(action(Action::Left), &status);
         assert_eq!(
             chosen(&menu),

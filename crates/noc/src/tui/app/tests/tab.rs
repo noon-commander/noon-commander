@@ -291,6 +291,10 @@ fn the_window_menu_opens_and_closes_tabs_in_the_active_panel() {
     let text = screen_of(&mut app, 20);
     assert!(line_with(&text, "Next tab").contains("g t"), "{text}");
     assert!(line_with(&text, "Previous tab").contains("g T"), "{text}");
+    assert!(
+        line_with(&text, "Swap panels").contains("Ctrl+w x"),
+        "{text}"
+    );
     keys(&mut app, &["alt-x"]);
     assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 1));
     keys(&mut app, &["f9", "alt-w", "alt-p"]);
@@ -304,6 +308,8 @@ fn the_window_menu_opens_and_closes_tabs_in_the_active_panel() {
     keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-c"]);
     assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
     assert_eq!(app.active, Side::Left);
+    keys(&mut app, &["f9", "alt-w", "alt-w"]);
+    assert!(app.swapped, "Swap panels");
 }
 
 #[test]

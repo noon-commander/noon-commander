@@ -402,7 +402,6 @@ pulldown-sort-time = Sort by &time
 pulldown-sort-size = Sort by &size
 pulldown-hidden = Show &hidden files
 pulldown-full = Show &whole names
-pulldown-swap = Swa&p panels
 pulldown-rescan = &Rescan
 pulldown-redraw = Redraw s&creen
 # Go.
@@ -437,7 +436,9 @@ pulldown-command-history = Command &history…
 pulldown-user-screen = Command &output
 pulldown-jobs = &Background jobs
 pulldown-configuration = &Configuration…
-# Window. Tabs of the active panel, then the workspaces, which save and restore them.
+# Window. The panels, the tabs of the active panel, then the workspaces, which save and restore
+# them. Swap panels has w, as Previous tab has p.
+pulldown-swap = S&wap panels
 pulldown-new-tab = &New tab
 pulldown-close-tab = &Close tab
 # g t and g T: round the tabs of the active panel.

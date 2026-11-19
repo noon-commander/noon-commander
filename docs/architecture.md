@@ -389,7 +389,7 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
 - **File** has F3, F4, Open externally (`g x`), Checksums… (`f #`), F5 … F8, `g +`, `g -`, `g *`,
   and Exit.
 - **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names
-  (`✓` while on), Swap panels, Rescan, and Redraw screen.
+  (`✓` while on), Rescan, and Redraw screen.
 - **Go** has Change location… (`g l`) with Edit host settings… and Disconnect host for the active
   panel's host, which the panels have no keys for, [Go to directory](#go-to-directory) (`g d`), the
   [zoxide](#zoxide) window (`g z`), Jump back (`Ctrl+o`) and Jump forward (`Ctrl+i`) through the
@@ -399,9 +399,9 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   quick search ends, Find text… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Shell command… (`!`), Command history… (`q :`), Command output (`g <`),
   Background jobs (`f j`), and [Configuration…](#configuration-dialog) (`o o`).
-- **Window** has the active panel's [tabs](#tabs) (New tab, Close tab, Next tab, Previous tab,
-  Tab list…; all but the first and the last dimmed with one tab), Save workspace…, and Workspace
-  list…, the window of the saved [workspaces](#workspaces).
+- **Window** has Swap panels (`Ctrl+w x`), the active panel's [tabs](#tabs) (New tab, Close tab,
+  Next tab, Previous tab, Tab list…; all but the first and the last dimmed with one tab), Save
+  workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
 - **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).
 - `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
   boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles

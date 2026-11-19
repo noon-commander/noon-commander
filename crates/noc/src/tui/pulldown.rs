@@ -1033,7 +1033,7 @@ mod tests {
         );
         menu.handle(action(Action::Right), &status);
         assert_eq!(
-            menu.handle(Resolved::Hotkey('Z'), &status),
+            menu.handle(Resolved::Hotkey('S'), &status),
             PullDownEvent::Run(Action::SortBySize)
         );
     }

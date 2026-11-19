@@ -281,13 +281,13 @@ fn the_window_menu_opens_and_closes_tabs_in_the_active_panel() {
     let status = app.command_status(Action::CloseTab);
     assert!(!status.enabled, "one tab on the active panel");
     assert_eq!(status.key.as_deref(), Some("t c"));
-    keys(&mut app, &["f9", "alt-w", "alt-w"]);
+    keys(&mut app, &["f9", "alt-w", "alt-n"]);
     assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
     assert!(app.command_status(Action::CloseTab).enabled);
     keys(&mut app, &["f9", "alt-w", "alt-c"]);
     assert_eq!(tab_numbers(&app, Side::Left), (vec![1], 1));
     // Ctrl+x F9 opens and closes tabs in the other panel, then returns.
-    keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-w"]);
+    keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-n"]);
     assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 4], 4));
     assert_eq!(app.active, Side::Left, "the keys come back");
     keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-c"]);

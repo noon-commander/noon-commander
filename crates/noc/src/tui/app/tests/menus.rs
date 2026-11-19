@@ -117,7 +117,7 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
     );
     let checked = format!("{} Show hidden files", app.theme.glyphs.check);
     assert!(text.contains(&checked), "{text}");
-    assert!(app.handle(Resolved::Hotkey('z')).is_empty());
+    assert!(app.handle(Resolved::Hotkey('s')).is_empty());
     assert!(app.pulldown.is_none(), "a command closes the menu");
     assert_eq!(app.panel(Side::Right).sort_action(), Action::SortBySize);
     assert_eq!(app.panel(Side::Left).sort_action(), Action::SortByName);
@@ -193,7 +193,7 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     keys(&mut app, &["ctrl-x", "f9"]);
     assert_eq!(app.context(), Context::PullDown);
     assert_eq!(app.active, Side::Left);
-    keys(&mut app, &["alt-v", "alt-z"]);
+    keys(&mut app, &["alt-v", "alt-s"]);
     assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
     assert_eq!(app.active, Side::Right, "the keys come back");
 

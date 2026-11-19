@@ -399,7 +399,7 @@ pulldown-exit = E&xit
 pulldown-sort-name = Sort by &name
 pulldown-sort-extension = Sort by &extension
 pulldown-sort-time = Sort by &time
-pulldown-sort-size = Sort by si&ze
+pulldown-sort-size = Sort by &size
 pulldown-hidden = Show &hidden files
 pulldown-full = Show &whole names
 pulldown-swap = Swa&p panels
@@ -435,7 +435,7 @@ pulldown-user-screen = Command &output
 pulldown-jobs = &Background jobs
 pulldown-configuration = &Configuration…
 # Window. Tabs of the active panel, then the workspaces, which save and restore them.
-pulldown-new-tab = Ne&w tab
+pulldown-new-tab = &New tab
 pulldown-close-tab = &Close tab
 pulldown-tab-list = &Tab list…
 pulldown-save-workspace = &Save workspace…

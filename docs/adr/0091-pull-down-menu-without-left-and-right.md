@@ -84,6 +84,8 @@ one, Help and Command output none.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`
   move from `Options` to `View`; `o o`, `o h`, and `K` are unchanged.
 - In File, Alt+r runs Rename in place…, as `r` does in the panels, and Alt+n runs Rename/Move….
+  Alt+s runs Sort by size, as `o s` sorts, and Alt+n New tab, as `t n` opens one, where Alt+z and
+  Alt+w were left from the menus of each panel.
 - `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`, and
   `Jump forward` are reachable from F9.
 - `Workspace` is named `Window`; Alt+W still opens it.

@@ -29,7 +29,8 @@ named `noon-commander`; `noc` is the binary inside them.
    It checks the version in `Cargo.toml`, the section in `CHANGELOG.md`, and that the branch
    is `main`, then commits `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md` as
    `chore(release): bump version to X.Y.Z`, signs the tag `vX.Y.Z`, and pushes the branch and
-   the tag together.
+   the tag together. The tag's message holds the release notes: until the draft is published,
+   the releases feed shows the tag with its message, and feed readers keep that entry.
 
 The tag must be annotated and signed with a key added to GitHub as a signing key, or the
 workflow stops before it builds anything.

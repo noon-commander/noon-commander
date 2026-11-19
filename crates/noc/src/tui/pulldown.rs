@@ -226,11 +226,11 @@ fn menus() -> Vec<Menu> {
         plain_menu(
             tools,
             vec![
-                Some((fl!("pulldown-jobs"), Action::Jobs)),
-                None,
                 Some((fl!("pulldown-shell"), Action::Shell)),
                 Some((fl!("pulldown-command-history"), Action::CommandHistory)),
                 Some((fl!("pulldown-user-screen"), Action::UserScreen)),
+                None,
+                Some((fl!("pulldown-jobs"), Action::Jobs)),
                 None,
                 Some((fl!("pulldown-configuration"), Action::Configuration)),
             ],
@@ -980,7 +980,7 @@ mod tests {
         );
         assert_eq!(menu.menu().title.text, "Tools");
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Action::Jobs));
+        assert_eq!(chosen(&menu), Some(Action::Shell));
         menu.handle(action(Action::Cancel), &status);
         menu.handle(action(Action::Confirm), &status);
         assert!(menu.open, "Enter opens the menu");

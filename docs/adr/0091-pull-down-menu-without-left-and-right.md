@@ -57,8 +57,8 @@ one, Help and Command output none.
     the active panel's host, which Change location… lists; the panels have no keys for them.
   - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
     dialog they open.
-  - **Tools:** Background jobs; Shell command…, Command history…, Command output;
-    Configuration….
+  - **Tools:** Shell command…, Command history…, Command output; Background jobs; Configuration…,
+    last, where the settings usually are.
   - **Window:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…, as the Window menu
     of macOS and of editors holds the tabs. The saved workspaces are not listed: Workspace list…
     opens their window.

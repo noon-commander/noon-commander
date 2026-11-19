@@ -389,10 +389,10 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
 - **File** has F3, F4, Open externally (`g x`), Checksums… (`f #`), F5 … F8, `g +`, `g -`, `g *`,
   and Exit.
 - **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names
-  (`✓` while on), the other-panel commands (Swap panels, Open in the other panel, This directory in
-  the other panel), Rescan, and Redraw screen.
-- **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), and the
-  [zoxide](#zoxide) window (`g z`).
+  (`✓` while on), Swap panels, Rescan, and Redraw screen.
+- **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), the
+  [zoxide](#zoxide) window (`g z`), and where the other panel goes: Open in the other panel
+  (`Ctrl+w f`) and This directory in the other panel (`Ctrl+w v`).
 - **Search** has Quick search… (`/`), Find text… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Background jobs (`f j`), Command history (`q :`), Command output (`g <`), Edit host
   settings and Disconnect host for the active panel's host, and

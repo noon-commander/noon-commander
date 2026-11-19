@@ -402,8 +402,6 @@ pulldown-sort-size = Sort by si&ze
 pulldown-hidden = Show &hidden files
 pulldown-full = Show &whole names
 pulldown-swap = Swa&p panels
-pulldown-other-open = &Open in the other panel
-pulldown-other-sync = This &directory in the other panel
 pulldown-rescan = &Rescan
 pulldown-redraw = Redraw s&creen
 # Go.
@@ -411,6 +409,9 @@ pulldown-location = Change &location…
 pulldown-goto = &Go to directory…
 # Opens the zoxide window.
 pulldown-jump = &Jump to a directory (zoxide)…
+# Where the other panel goes: the directory under the cursor, or this panel's.
+pulldown-other-open = &Open in the other panel
+pulldown-other-sync = This &directory in the other panel
 # Search.
 pulldown-quick-search = &Quick search…
 # Searches the files of the whole tree under the panel's directory for text, as f / does, in the

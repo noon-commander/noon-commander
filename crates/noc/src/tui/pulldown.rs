@@ -193,8 +193,6 @@ fn menus() -> Vec<Menu> {
                 Some((fl!("pulldown-full"), Action::ShowFull)),
                 None,
                 Some((fl!("pulldown-swap"), Action::SwapPanels)),
-                Some((fl!("pulldown-other-open"), Action::OtherPanelOpen)),
-                Some((fl!("pulldown-other-sync"), Action::OtherPanelSync)),
                 None,
                 Some((fl!("pulldown-rescan"), Action::Reload)),
                 Some((fl!("pulldown-redraw"), Action::Redraw)),
@@ -206,6 +204,9 @@ fn menus() -> Vec<Menu> {
                 Some((fl!("pulldown-location"), Action::LocationMenu)),
                 Some((fl!("pulldown-goto"), Action::GoToDir)),
                 Some((fl!("pulldown-jump"), Action::Jump)),
+                None,
+                Some((fl!("pulldown-other-open"), Action::OtherPanelOpen)),
+                Some((fl!("pulldown-other-sync"), Action::OtherPanelSync)),
             ],
         ),
         plain_menu(

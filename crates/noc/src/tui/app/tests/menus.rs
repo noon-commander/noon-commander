@@ -162,12 +162,17 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
     app.handle(action(Action::Cancel));
     assert!(app.pulldown.is_none());
 
-    // Go → Change location… opens the location menu of the active panel.
+    // Go → Change location… opens the location menu of the active panel; the other panel goes
+    // where Go says too.
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('g'));
     let text = screen_of(&mut app, 20);
     assert!(
         line_with(&text, "Change location…").contains("g l"),
+        "{text}"
+    );
+    assert!(
+        line_with(&text, "This directory in the other panel").contains("Ctrl+w v"),
         "{text}"
     );
     let effects = app.handle(Resolved::Hotkey('l'));

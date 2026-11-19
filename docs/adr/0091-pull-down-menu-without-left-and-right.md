@@ -45,9 +45,10 @@ one, Help and Command output none.
   - **File:** View, Edit, Open externally, Checksums…; Copy…, Duplicate…, Rename/Move…, Rename
     in place…, Mkdir…, Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
-    whole names; Swap panels, Open in the other panel, This directory in the other panel; Rescan,
-    Redraw screen.
-  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)….
+    whole names; Swap panels; Rescan, Redraw screen.
+  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)…; Open in the other
+    panel, This directory in the other panel, which say where the other panel goes, not what
+    shows.
   - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
     dialog they open.
   - **Tools:** Background jobs; Command history…, Command output; Edit host settings…, Disconnect

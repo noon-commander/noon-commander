@@ -151,7 +151,7 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
 
     // Commands that cannot run do nothing; Esc goes back to the bar, then closes it.
     app.handle(action(Action::PullDown));
-    app.handle(Resolved::Hotkey('t'));
+    app.handle(Resolved::Hotkey('f'));
     assert!(
         app.handle(Resolved::Hotkey('k')).is_empty(),
         "nothing chosen for checksums"

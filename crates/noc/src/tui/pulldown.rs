@@ -216,6 +216,7 @@ fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
                 Some((fl!("pulldown-view-file"), Action::View)),
                 Some((fl!("pulldown-edit"), Action::Edit)),
                 Some((fl!("pulldown-system-open"), Action::SystemOpen)),
+                Some((fl!("pulldown-checksum"), Action::Checksum)),
                 None,
                 Some((fl!("pulldown-copy"), Action::Copy)),
                 Some((fl!("pulldown-duplicate"), Action::Duplicate)),
@@ -269,7 +270,6 @@ fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
         plain_menu(
             tools,
             vec![
-                Some((fl!("pulldown-checksum"), Action::Checksum)),
                 Some((fl!("pulldown-jobs"), Action::Jobs)),
                 None,
                 Some((fl!("pulldown-command-history"), Action::CommandHistory)),
@@ -942,7 +942,7 @@ mod tests {
         assert_eq!(menu.selected, 0, "round the bar");
         assert_eq!(menu.menu().title.text, "File");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
-        for _ in 0..8 {
+        for _ in 0..9 {
             menu.handle(action(Action::Down), &status);
         }
         assert_eq!(
@@ -1022,7 +1022,7 @@ mod tests {
         );
         assert_eq!(menu.menu().title.text, "Tools");
         assert!(menu.open);
-        assert_eq!(chosen(&menu), Some(Command::Do(Action::Checksum)));
+        assert_eq!(chosen(&menu), Some(Command::Do(Action::Jobs)));
         menu.handle(action(Action::Cancel), &status);
         menu.handle(action(Action::Confirm), &status);
         assert!(menu.open, "Enter opens the menu");
@@ -1114,17 +1114,17 @@ mod tests {
         assert_eq!(menu.menu().title.text, "File");
         assert!(menu.open);
         assert_eq!(
-            press(&mut menu, Press::Click, 5, 11),
+            press(&mut menu, Press::Click, 5, 12),
             PullDownEvent::Pending,
             "Delete cannot run"
         );
-        press(&mut menu, Press::WheelUp, 5, 11);
+        press(&mut menu, Press::WheelUp, 5, 12);
         assert!(menu.open, "the wheel stops at the first command");
         assert_eq!(chosen(&menu), Some(Command::Do(Action::View)));
-        press(&mut menu, Press::WheelDown, 5, 11);
+        press(&mut menu, Press::WheelDown, 5, 12);
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Edit)));
         assert_eq!(
-            press(&mut menu, Press::Click, 5, 10),
+            press(&mut menu, Press::Click, 5, 11),
             PullDownEvent::Run(Command::Do(Action::Mkdir))
         );
         assert_eq!(chosen(&menu), Some(Command::Do(Action::Mkdir)));

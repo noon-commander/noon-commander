@@ -30,15 +30,15 @@ Three windows were also absent from the menu: the command history (`q :`), the o
   (`Command::Do(Action)`), and `Ctrl+x F9` (or `Ctrl+x g m`) runs any menu command in the other
   panel and returns the keys once it ends.
 - **Contents:**
-  - **File:** View, Edit, Open externally; Copy, Duplicate, Rename/Move, Rename in place, Mkdir,
-    Delete; Select group…, Unselect group…, Invert selection; Exit.
+  - **File:** View, Edit, Open externally, Checksums; Copy, Duplicate, Rename/Move, Rename in
+    place, Mkdir, Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
     whole names; Swap panels, Open in the other panel, This directory in the other panel; Rescan,
     Redraw screen.
   - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)….
   - **Search:** Quick search, Find file…, Find files and dirs….
-  - **Tools:** Checksums…, Background jobs…; Command history…, Command output; Edit host settings…,
-    Disconnect host; Configuration….
+  - **Tools:** Background jobs…; Command history…, Command output; Edit host settings…, Disconnect
+    host; Configuration….
   - **Workspace:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…; the saved
     workspaces (`1` … `9`, `0`).
   - **Help:** Help, Key hints; View the log.

@@ -630,10 +630,10 @@ fn line_with<'a>(text: &'a str, needle: &str) -> &'a str {
         .unwrap_or("")
 }
 
-/// Opens Options → Configuration… through F9.
+/// Opens Tools → Configuration… through F9.
 fn open_configuration(app: &mut App) {
     app.handle(action(Action::PullDown));
-    app.handle(Resolved::Hotkey('o'));
+    app.handle(Resolved::Hotkey('t'));
     assert!(app.handle(Resolved::Hotkey('c')).is_empty());
     assert!(app.configuration.is_some());
 }

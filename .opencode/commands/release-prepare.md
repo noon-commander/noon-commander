@@ -49,7 +49,7 @@ Rewrite the section so that a user reads it in a minute:
   feature such as a keymap. No details that the help, the docs, or an ADR already give: link
   the ADR instead.
 - Name keys and settings, not every key: a few examples and "the help lists them all".
-- Settings new in the release go in one Added entry: "Settings, all in Options →
+- Settings new in the release go in one Added entry: "Settings, all in Tools →
   Configuration: …".
 - Breaking changes stay in Removed or Changed with what the user has to do (for example, a
   config key that is now an error).

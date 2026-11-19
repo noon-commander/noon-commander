@@ -276,22 +276,23 @@ fn tabs_in_the_frame_keep_the_column_lines_joined_to_it() {
 }
 
 #[test]
-fn the_panel_menus_open_and_close_tabs_on_their_side() {
+fn the_workspace_menu_opens_and_closes_tabs_in_the_active_panel() {
     let mut app = loaded();
-    assert!(app.run(Command::On(Side::Right, Action::NewTab)).is_empty());
-    assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 3], 3));
-    assert_eq!(app.active, Side::Left, "the keys stay");
-    let status = app.command_status(Command::On(Side::Left, Action::CloseTab));
-    assert!(!status.enabled, "one tab on the left");
-    let status = app.command_status(Command::On(Side::Right, Action::CloseTab));
-    assert!(status.enabled);
-    assert_eq!(
-        status.key.as_deref(),
-        Some("Ctrl+x t c"),
-        "keys act on the active panel, and after Ctrl+x on the other"
-    );
-    app.run(Command::On(Side::Right, Action::CloseTab));
+    let status = app.command_status(Command::Do(Action::CloseTab));
+    assert!(!status.enabled, "one tab on the active panel");
+    assert_eq!(status.key.as_deref(), Some("t c"));
+    assert!(app.run(Command::Do(Action::NewTab)).is_empty());
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1, 3], 3));
+    assert!(app.command_status(Command::Do(Action::CloseTab)).enabled);
+    app.run(Command::Do(Action::CloseTab));
+    assert_eq!(tab_numbers(&app, Side::Left), (vec![1], 1));
+    // Ctrl+x F9 opens and closes tabs in the other panel, then returns.
+    keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-w"]);
+    assert_eq!(tab_numbers(&app, Side::Right), (vec![2, 4], 4));
+    assert_eq!(app.active, Side::Left, "the keys come back");
+    keys(&mut app, &["ctrl-x", "f9", "alt-w", "alt-c"]);
     assert_eq!(tab_numbers(&app, Side::Right), (vec![2], 2));
+    assert_eq!(app.active, Side::Left);
 }
 
 #[test]

@@ -260,9 +260,9 @@ jump-keywords = Jump to: { $text }
 # When zoxide lists no directory.
 jump-nothing = zoxide knows no directory that matches. It learns the directories you work in.
 # The zoxide program is not there.
-jump-not-installed = zoxide is not installed: cannot run { $program }. Get it from https://github.com/ajeetdsouza/zoxide, or set its path in Options → Configuration.
+jump-not-installed = zoxide is not installed: cannot run { $program }. Get it from https://github.com/ajeetdsouza/zoxide, or set its path in Tools → Configuration.
 
-## The search of a whole tree (src/tui/find): f / in a panel, or F9 → Command → Find file…; f f
+## The search of a whole tree (src/tui/find): f / in a panel, or F9 → Go → Find file…; f f
 ## and Find files and dirs… open it in its Files and dirs mode.
 ## ripgrep finds the lines that match the text in the files under the panel's directory. Prefix:
 ## find-. As in every dialog, an & marks the letter that Alt and it act on, and && stands for &;
@@ -307,9 +307,9 @@ find-none = Nothing found.
 # It cannot search: no ripgrep, or a host that is not connected.
 find-failed = Cannot search here: { $reason }
 # ripgrep is not installed where it searches.
-find-not-installed = ripgrep is not installed: cannot run { $program }. Get it from https://github.com/BurntSushi/ripgrep, or set its path in Options → Configuration.
+find-not-installed = ripgrep is not installed: cannot run { $program }. Get it from https://github.com/BurntSushi/ripgrep, or set its path in Tools → Configuration.
 # fd is not installed where it searches; on a host, neither fd nor fdfind.
-find-fd-not-installed = fd is not installed: cannot run { $program }. Get it from https://github.com/sharkdp/fd, or set its path in Options → Configuration.
+find-fd-not-installed = fd is not installed: cannot run { $program }. Get it from https://github.com/sharkdp/fd, or set its path in Tools → Configuration.
 # Under the rows: it stopped at [search] max_results.
 find-limit = { $count ->
         [one] Stopped after { $count } result: Configuration → Search.
@@ -361,32 +361,19 @@ workspaces-gone = Workspace "{ $name }" is not saved any more.
 workspaces-save-error = Cannot save the workspaces
 workspaces-load-error = Cannot read the workspaces
 
-## The pull-down menu of F9 (src/tui/pulldown), as mc's. Prefix: pulldown-. An & marks the
+## The pull-down menu of F9 (src/tui/pulldown). Prefix: pulldown-. An & marks the
 ## letter that, typed with Alt, opens a menu from the bar, or runs a command while its menu is
 ## open; letters must differ on the bar and within a menu, and && stands for &.
 
-# The menu bar. Left and Right act on the panel drawn on that side.
-pulldown-left = &Left
+# The menu bar. Every command acts on the active panel; Ctrl+x F9 acts on the other.
 pulldown-file = &File
-pulldown-command = &Command
-pulldown-options = &Options
-pulldown-workspace = &Workspace
-pulldown-right = &Right
-# Left and Right.
-pulldown-location = Change &location…
-pulldown-sort-name = Sort by &name
-pulldown-sort-extension = Sort by &extension
-pulldown-sort-time = Sort by &time
-pulldown-sort-size = Sort by si&ze
-pulldown-rescan = &Rescan
-# Closes the connection of the host the panel shows.
-pulldown-disconnect-panel = &Disconnect
-# Tabs of the panel.
-pulldown-new-tab = Ne&w tab
-pulldown-close-tab = &Close tab
-pulldown-tab-list = Tab l&ist…
-# File.
 pulldown-view = &View
+pulldown-go = &Go
+pulldown-tools = &Tools
+pulldown-workspace = &Workspace
+pulldown-help-menu = &Help
+# File.
+pulldown-view-file = &View
 pulldown-edit = &Edit
 # g x: with the program the desktop has for the file, as a double click (open, xdg-open).
 pulldown-system-open = &Open externally
@@ -401,37 +388,52 @@ pulldown-delete = &Delete
 pulldown-select = &Select group…
 pulldown-unselect = &Unselect group…
 pulldown-invert = &Invert selection
-pulldown-checksum = Chec&ksums…
 pulldown-exit = E&xit
-# Command.
+# View.
+pulldown-sort-name = Sort by &name
+pulldown-sort-extension = Sort by &extension
+pulldown-sort-time = Sort by &time
+pulldown-sort-size = Sort by si&ze
+pulldown-hidden = Show &hidden files
+pulldown-full = Show &whole names
+pulldown-swap = Swa&p panels
+pulldown-other-open = &Open in the other panel
+pulldown-other-sync = This &directory in the other panel
+pulldown-rescan = &Rescan
+pulldown-redraw = Redraw s&creen
+# Go.
+pulldown-location = Change &location…
+pulldown-goto = &Go to directory…
+# Opens the zoxide window.
+pulldown-jump = &Jump to a directory (zoxide)…
 pulldown-quick-search = &Quick search
 # Searches the whole tree under the panel's directory, as f / does.
 pulldown-find = &Find file…
 # The same search in its Files and dirs mode, by name, as f f opens it.
 pulldown-find-names = Find f&iles and dirs…
-pulldown-swap = S&wap panels
-pulldown-other-open = &Open in the other panel
-pulldown-other-sync = &This directory in the other panel
-pulldown-goto = &Go to directory…
-# Opens the zoxide window.
-pulldown-jump = &Jump to a directory (zoxide)…
+# Tools.
+pulldown-checksum = Chec&ksums…
 pulldown-jobs = &Background jobs…
-pulldown-edit-host = Edit &host settings…
+pulldown-command-history = Command &history…
+pulldown-user-screen = Command &output
+pulldown-edit-host = &Edit host settings…
 pulldown-disconnect-host = &Disconnect host
-pulldown-help = He&lp
-pulldown-redraw = Red&raw screen
-pulldown-view-log = &View the log
-# Options.
 pulldown-configuration = &Configuration…
-pulldown-hidden = Show &hidden files
-pulldown-full = Show &whole names
-# Workspace. Below these come the saved workspaces, which restore; the first ten have the
-# digits 1 … 9 and 0 as their letters, so these two must not use a digit.
+# Workspace. Tabs of the active panel, then workspaces; below these come the saved workspaces,
+# which restore; the first ten have the digits 1 … 9 and 0 as their letters, so the commands
+# above them must not use a digit.
+pulldown-new-tab = Ne&w tab
+pulldown-close-tab = &Close tab
+pulldown-tab-list = &Tab list…
 pulldown-save-workspace = &Save workspace…
 # Opens the window of the saved workspaces, to restore, rename, or delete them.
 pulldown-workspace-list = Workspace &list…
+# Help.
+pulldown-help = &Help
+pulldown-key-hints = &Key hints
+pulldown-view-log = &View the log
 
-## The Configuration dialog, Options → Configuration… (src/tui/configuration): the settings of
+## The Configuration dialog, Tools → Configuration… (src/tui/configuration): the settings of
 ## config.toml by category. Prefix: config-. Each setting has a name and a hint, a line shown
 ## below the settings while it has the cursor. As in every dialog, an & in a setting's name marks
 ## the letter that Alt and it act on, and && stands for &; letters must differ within a category.
@@ -850,7 +852,7 @@ help-other-open = Open the directory under the cursor in the other panel
 help-other-sync = Show this directory in the other panel
 help-reload = Read the directory again
 help-stop = Stop loading or connecting
-help-configuration = The settings, as Options → Configuration…
+help-configuration = The settings, as Tools → Configuration…
 help-toggle-hidden = Show or hide names that start with a dot
 help-sort-name = Sort by name; again: reverse
 help-sort-extension = Sort by extension; again: reverse
@@ -910,7 +912,7 @@ help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
 help-tab-menu-show = Show the tab in the panel
 help-tab-menu-close = Close the tab under the cursor; the last one stays
-help-pulldown-open = The pull-down menu: Left, File, Command, Options, Workspace, Right
+help-pulldown-open = The pull-down menu: File, View, Go, Tools, Workspace, Help
 help-pulldown-last = The pull-down menu, on the command of it that ran last
 help-pulldown-up = The command above
 help-pulldown-down = The command below

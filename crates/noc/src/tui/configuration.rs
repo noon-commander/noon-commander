@@ -1,4 +1,4 @@
-//! The Configuration dialog (Options → Configuration…): the settings of `config.toml`, by
+//! The Configuration dialog (Tools → Configuration…): the settings of `config.toml`, by
 //! category. Categories are listed on the left, each with an icon and a digit, 1 for the first,
 //! that Alt and it show; the settings of the chosen one are on the right, each with a letter
 //! that Alt and it act on, and scroll, with a scroll bar, when they do not fit. There is no OK:

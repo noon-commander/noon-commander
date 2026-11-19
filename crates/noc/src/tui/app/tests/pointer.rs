@@ -149,11 +149,11 @@ fn the_mouse_runs_commands_of_the_pull_down_menu() {
     let (x, y) = find(&mut app, "PullDn");
     press(&mut app, Press::Click, x, y);
     assert_eq!(app.context(), Context::PullDown);
-    let (x, y) = find(&mut app, "Command");
+    let (x, y) = find(&mut app, "View");
     press(&mut app, Press::Click, x, y);
-    let (x, y) = find(&mut app, "Swap panels");
+    let (x, y) = find(&mut app, "Show hidden files");
     assert!(press(&mut app, Press::Click, x, y).is_empty());
-    assert!(app.swapped);
+    assert!(!app.config.ui.show_hidden);
     assert!(app.pulldown.is_none());
     // The second click of a double click lands on a directory, which it does not open.
     assert!(press(&mut app, Press::DoubleClick, x, y).is_empty());
@@ -161,11 +161,11 @@ fn the_mouse_runs_commands_of_the_pull_down_menu() {
 
     // A menu bar that stays opens a menu at a click on its title.
     app.config.ui.menu_bar = MenuBar::Always;
-    let (x, y) = find(&mut app, "Options");
+    let (x, y) = find(&mut app, "Tools");
     press(&mut app, Press::Click, x, y);
-    let (x, y) = find(&mut app, "Configuration");
+    let (x, y) = find(&mut app, "Background jobs");
     press(&mut app, Press::Click, x, y);
-    assert!(app.configuration.is_some());
+    assert!(app.jobs_list.is_some());
 }
 
 #[test]

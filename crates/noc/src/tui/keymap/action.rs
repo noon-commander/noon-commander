@@ -432,7 +432,7 @@ pub(crate) enum Action {
     Workspaces,
     /// Reads the directory, or the volumes and hosts, again.
     Reload,
-    /// Opens the Configuration dialog, as Options → Configuration… does.
+    /// Opens the Configuration dialog, as Tools → Configuration… does.
     Configuration,
     /// Shows or hides files whose names start with a dot, in both panels.
     ToggleHidden,

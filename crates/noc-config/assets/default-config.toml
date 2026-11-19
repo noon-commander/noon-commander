@@ -5,7 +5,7 @@
 # hiding); it never duplicates them.
 #
 # Every setting is optional. Uncommented values are the defaults; commented lines are examples.
-# Options → Configuration… (F9) changes settings too; it rewrites only the keys it changes and
+# Tools → Configuration… (F9) changes settings too; it rewrites only the keys it changes and
 # keeps these comments.
 
 [ssh]
@@ -71,7 +71,7 @@ show_hidden = true
 # smart at first: only once what is typed has a capital letter. Each field keeps the way and the
 # case it had last until Noon Commander quits.
 default_search_mode = "fzf"
-# The menu bar of F9 (Left, File, Command, Options, Right): "on-demand" shows it only while a
+# The menu bar of F9 (File, View, Go, Tools, Workspace, Help): "on-demand" shows it only while a
 # menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
 # Midnight Commander does.
 menu_bar = "on-demand"

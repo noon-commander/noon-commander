@@ -94,44 +94,33 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
     app.handle(action(Action::PullDown));
     assert_eq!(app.context(), Context::PullDown);
     let text = screen_of(&mut app, 20);
-    assert!(text.contains("Left     File"), "{text}");
-    assert!(!text.contains("Change location…"), "the bar alone: {text}");
+    assert!(text.contains("File     View     Go"), "{text}");
+    assert!(!text.contains("Open externally"), "the bar alone: {text}");
     app.handle(action(Action::Down));
     let text = screen_of(&mut app, 20);
-    let location = line_with(&text, "Change location…");
     assert!(
-        location.contains("g l") && !location.contains("Ctrl+x"),
+        text.contains("9Cancel") && text.contains("10Cancel"),
         "{text}"
     );
+    assert!(
+        line_with(&text, "Open externally").contains("g x"),
+        "File opens first: {text}"
+    );
+
+    // View acts on the active panel: sorting and hidden files.
+    app.handle(action(Action::Right));
+    let text = screen_of(&mut app, 20);
     let sort = line_with(&text, "Sort by size");
     assert!(
         sort.contains("o s") && !sort.contains("Ctrl+x"),
         "the keys of the active panel: {text}"
     );
-    assert!(
-        text.contains("9Cancel") && text.contains("10Cancel"),
-        "{text}"
-    );
-
-    // Right goes round to Left, which acts on the panel on its side: Ctrl+x and its keys.
-    app.handle(action(Action::Right));
-    let text = screen_of(&mut app, 20);
-    assert!(
-        line_with(&text, "Sort by size").contains("Ctrl+x o s"),
-        "{text}"
-    );
-    assert!(
-        line_with(&text, "Change location…").contains("Ctrl+x g l"),
-        "{text}"
-    );
-    assert!(
-        line_with(&text, "Tab list…").contains("Ctrl+x t t"),
-        "{text}"
-    );
+    let checked = format!("{} Show hidden files", app.theme.glyphs.check);
+    assert!(text.contains(&checked), "{text}");
     assert!(app.handle(Resolved::Hotkey('z')).is_empty());
     assert!(app.pulldown.is_none(), "a command closes the menu");
-    assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
-    assert_eq!(app.panel(Side::Right).sort_action(), Action::SortByName);
+    assert_eq!(app.panel(Side::Right).sort_action(), Action::SortBySize);
+    assert_eq!(app.panel(Side::Left).sort_action(), Action::SortByName);
     assert_eq!(app.active, Side::Right);
 
     // F9 opens the bar alone again; Shift+F9, the menu on the command that ran last, even
@@ -149,25 +138,23 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
     assert!(text.contains(&chosen), "{text}");
     app.handle(action(Action::Confirm));
     assert_eq!(
-        app.panel(Side::Left).sort_action(),
+        app.panel(Side::Right).sort_action(),
         Action::SortBySize,
         "reversed"
     );
 
-    // Options: the hidden files, in both panels.
+    // Show hidden files toggles in both panels.
     app.handle(action(Action::PullDown));
-    assert!(app.handle(Resolved::Hotkey('o')).is_empty());
-    let checked = format!("{} Show hidden files", app.theme.glyphs.check);
-    assert!(screen_of(&mut app, 20).contains(&checked));
+    assert!(app.handle(Resolved::Hotkey('v')).is_empty());
     app.handle(Resolved::Hotkey('h'));
     assert!(!app.config.ui.show_hidden);
 
     // Commands that cannot run do nothing; Esc goes back to the bar, then closes it.
     app.handle(action(Action::PullDown));
-    app.handle(Resolved::Hotkey('f'));
+    app.handle(Resolved::Hotkey('t'));
     assert!(
         app.handle(Resolved::Hotkey('k')).is_empty(),
-        "nothing chosen"
+        "nothing chosen for checksums"
     );
     assert!(app.pulldown.is_some());
     app.handle(action(Action::Cancel));
@@ -175,19 +162,135 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
     app.handle(action(Action::Cancel));
     assert!(app.pulldown.is_none());
 
-    // A command that opens something: the location menu of the panel on its side.
+    // Go → Change location… opens the location menu of the active panel.
     app.handle(action(Action::PullDown));
-    app.handle(Resolved::Hotkey('l'));
+    app.handle(Resolved::Hotkey('g'));
+    let text = screen_of(&mut app, 20);
+    assert!(
+        line_with(&text, "Change location…").contains("g l"),
+        "{text}"
+    );
     let effects = app.handle(Resolved::Hotkey('l'));
     assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
-    assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Left));
+    assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Right));
+}
+
+#[test]
+fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
+    let mut app = loaded();
+    app.active = Side::Right;
+
+    // Ctrl+x F9 runs a menu command in the other panel and gives the keys back.
+    keys(&mut app, &["ctrl-x", "f9"]);
+    assert_eq!(app.context(), Context::PullDown);
+    assert_eq!(app.active, Side::Left);
+    keys(&mut app, &["alt-v", "alt-z"]);
+    assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
+    assert_eq!(app.active, Side::Right, "the keys come back");
+
+    // Tools → Command history…, Command output; Help → Key hints.
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('t'));
+    let text = screen_of(&mut app, 20);
+    assert!(
+        line_with(&text, "Command history…").contains("q :"),
+        "{text}"
+    );
+    assert!(line_with(&text, "Command output").contains("g <"), "{text}");
+    app.handle(Resolved::Hotkey('h'));
+    assert_eq!(app.context(), Context::CommandHistory);
+    app.handle(action(Action::Cancel));
+    app.handle(action(Action::Cancel));
+
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('t'));
+    app.handle(Resolved::Hotkey('o'));
+    assert!(matches!(app.take_handover(), Some(Handover::UserScreen)));
+
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('h'));
+    let text = screen_of(&mut app, 20);
+    assert!(line_with(&text, "Key hints").contains("Ctrl+k"), "{text}");
+    app.handle(Resolved::Hotkey('k'));
+    assert_eq!(
+        app.take_hints_asked(),
+        Some((Mode::Normal, Context::Panel).into())
+    );
+}
+
+#[test]
+fn command_history_in_tools_follows_the_host_connection() {
+    use noc_config::{Place, SavedTab, SortBy};
+
+    let mut app = loaded();
+    let workspace = Workspace {
+        name: "remote".to_owned(),
+        active: PanelSide::Left,
+        left: vec![SavedTab {
+            place: Place::Remote {
+                host: "web".to_owned(),
+                path: "/var/www".to_owned(),
+            },
+            sort: SortBy::Name,
+            descending: false,
+            cursor: None,
+            current: true,
+        }],
+        right: vec![SavedTab {
+            place: Place::Local("/".to_owned()),
+            sort: SortBy::Name,
+            descending: false,
+            cursor: None,
+            current: true,
+        }],
+    };
+    app.workspaces_changed(
+        WorkspaceChange::Load,
+        Ok(Workspaces {
+            workspaces: vec![workspace],
+        }),
+    );
+    app.restore_workspace("remote");
+    let history = Command::Do(Action::CommandHistory);
+    assert!(
+        !app.command_status(history).enabled,
+        "connecting to the host"
+    );
+
+    // Cancelling before the host connects leaves nothing that opens or asks to connect.
+    app.handle(action(Action::Cancel));
+    assert!(
+        !app.command_status(history).enabled,
+        "never connected, so it would do nothing"
+    );
+
+    // Once connected, Tools → Command history… opens the history window.
+    let Effect::Connect { connection, .. } = one(app.handle(action(Action::Reload))) else {
+        panic!("expected a connection");
+    };
+    connect_web(&mut app, Side::Left, connection, "/var/www");
+    assert!(app.command_status(history).enabled);
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('t'));
+    app.handle(Resolved::Hotkey('h'));
+    assert_eq!(app.context(), Context::CommandHistory);
+    app.handle(action(Action::Cancel));
+    app.handle(action(Action::Cancel));
+
+    // After disconnecting, it stays enabled because it asks to connect.
+    app.disconnect("web");
+    assert!(app.command_status(history).enabled);
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('t'));
+    app.handle(Resolved::Hotkey('h'));
+    assert!(screen_of(&mut app, 12).contains("Not connected to web"));
 }
 
 #[test]
 fn o_o_opens_the_configuration_dialog_and_the_menu_shows_it() {
     let mut app = loaded();
     app.handle(action(Action::PullDown));
-    app.handle(Resolved::Hotkey('o'));
+    app.handle(Resolved::Hotkey('t'));
     let text = screen_of(&mut app, 20);
     assert!(line_with(&text, "Configuration…").contains("o o"), "{text}");
     app.handle(action(Action::Cancel));
@@ -350,15 +453,15 @@ fn the_settings_of_the_log_apply_at_once() {
 fn the_menu_bar_stays_above_the_panels_with_ui_menu_bar() {
     let mut app = loaded();
     let top = |app: &mut App| screen_of(app, 10).lines().next().unwrap_or("").to_owned();
-    assert!(!top(&mut app).contains("Left"), "on demand");
+    assert!(!top(&mut app).contains("File"), "on demand");
     app.config.ui.menu_bar = MenuBar::Always;
     let text = screen_of(&mut app, 10);
     let lines: Vec<&str> = text.lines().collect();
-    assert!(lines[0].contains("Left     File"), "{text}");
+    assert!(lines[0].contains("File     View"), "{text}");
     assert!(lines[1].contains('╔'), "the panels start below it: {text}");
     app.handle(action(Action::PullDown));
     app.handle(action(Action::Down));
-    assert!(screen_of(&mut app, 20).contains("Change location…"));
+    assert!(screen_of(&mut app, 20).contains("Open externally"));
 }
 
 #[test]

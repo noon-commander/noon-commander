@@ -1,6 +1,6 @@
 # 0051. Ctrl+x runs a command in the other panel
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0091](0091-pull-down-menu-without-left-and-right.md)
 - Date: 2026-10-28
 - Amends: [ADR 0011](0011-tabs-per-panel.md),
   [ADR 0021](0021-location-menu-replaces-the-virtual-root.md), [ADR 0022](0022-vim-modes.md),

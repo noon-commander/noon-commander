@@ -85,12 +85,9 @@ impl App {
         }
     }
 
-    /// Opens the pull-down menu: the bar at the menu of the active panel, or with `last`, on
-    /// the command that ran last.
+    /// Opens the pull-down menu: the bar at File, or with `last`, on the command that ran last.
     pub(super) fn open_pulldown(&mut self, last: bool) {
         let pulldown = PullDown::new(
-            self.active,
-            self.swapped,
             self.pulldown_last.filter(|_| last),
             &workspaces::names(&self.workspaces),
             self.theme.glyphs.marks,
@@ -131,28 +128,6 @@ impl App {
     pub(super) fn run(&mut self, command: Command) -> Vec<Effect> {
         match command {
             Command::Do(action) => self.handle(Resolved::Action(action)),
-            Command::On(
-                side,
-                action @ (Action::NewTab | Action::CloseTab | Action::NextTab | Action::PrevTab),
-            ) => self.tab_action(side, action),
-            Command::On(side, action)
-                if self.holds_back(side, action) || self.ask_connect(side, action) =>
-            {
-                Vec::new()
-            }
-            Command::On(side, action) => match self.panel_mut(side).handle(action) {
-                Some(request) => self.open(self.shown(side), request),
-                None => Vec::new(),
-            },
-            Command::Location(side) => self.open_menu(side),
-            Command::Tabs(side) => {
-                self.open_tab_menu(side);
-                Vec::new()
-            }
-            Command::DisconnectPanel(side) => match self.host_of(side) {
-                Some(host) => self.disconnect(&host),
-                None => Vec::new(),
-            },
             Command::Workspace(index) => match self.workspaces.workspaces.get(index) {
                 Some(workspace) => {
                     let name = workspace.name.clone();
@@ -274,24 +249,6 @@ impl App {
         }
     }
 
-    /// The host that the panel on `side` shows, if it is connected or connecting.
-    fn host_of(&self, side: Side) -> Option<String> {
-        match self.panel(side).location() {
-            Location::Remote { host, .. } if self.hosts.contains_key(host) => Some(host.clone()),
-            _ => None,
-        }
-    }
-
-    /// The key that does `action` in the panel on `side`, for the pull-down menu: its own in the
-    /// active panel, and Ctrl+x and it in the other.
-    fn key_on(&self, side: Side, action: Action) -> Option<String> {
-        if side == self.active {
-            self.keymap.key(Context::Panel, action)
-        } else {
-            self.keymap.other_key(Context::Panel, action)
-        }
-    }
-
     /// Whether a command of the pull-down menu runs now, its mark, and its key.
     pub(super) fn command_status(&self, command: Command) -> Status {
         let context = Context::Panel;
@@ -304,6 +261,14 @@ impl App {
                         matches!(active.location(), Location::Local(_))
                             && !active.chosen().is_empty()
                     }
+                    Action::CloseTab => self.tabs(self.active).len() > 1,
+                    Action::CommandHistory => match active.location() {
+                        Location::Local(_) => true,
+                        Location::Remote { host, .. } => {
+                            matches!(self.hosts.get(host), Some(super::Host::Connected { .. }))
+                                || active.not_connected().is_some()
+                        }
+                    },
                     Action::Disconnect => self
                         .chosen_host()
                         .is_some_and(|host| self.hosts.contains_key(&host)),
@@ -315,52 +280,42 @@ impl App {
                     Action::Select
                     | Action::Unselect
                     | Action::InvertMarks
-                    | Action::QuickSearch
-                    | Action::FindFile
-                    | Action::FindNames
-                    | Action::Jump
-                    | Action::GoToDir
+                    | Action::SortByName
+                    | Action::SortByExtension
+                    | Action::SortByTime
+                    | Action::SortBySize
+                    | Action::ToggleHidden
+                    | Action::ShowFull
                     | Action::SwapPanels
                     | Action::OtherPanelOpen
                     | Action::OtherPanelSync
+                    | Action::Reload
+                    | Action::LocationMenu
+                    | Action::GoToDir
+                    | Action::Jump
+                    | Action::QuickSearch
+                    | Action::FindFile
+                    | Action::FindNames
                     | Action::Jobs
+                    | Action::UserScreen
+                    | Action::Configuration
+                    | Action::NewTab
+                    | Action::TabList
                     | Action::SaveWorkspace
                     | Action::Workspaces
-                    | Action::Configuration
-                    | Action::ToggleHidden
-                    | Action::ShowFull => true,
+                    | Action::KeyHints => true,
                     _ => self.supports(action),
                 },
                 checked: match action {
                     Action::ToggleHidden => self.config.ui.show_hidden,
                     Action::ShowFull => self.whole == Whole::Shown,
+                    Action::SortByName
+                    | Action::SortByExtension
+                    | Action::SortByTime
+                    | Action::SortBySize => active.sort_action() == action,
                     _ => false,
                 },
                 key: self.keymap.key(context, action),
-            },
-            Command::On(side, action) => Status {
-                enabled: match action {
-                    Action::CloseTab | Action::NextTab | Action::PrevTab => {
-                        self.tabs(side).len() > 1
-                    }
-                    _ => true,
-                },
-                checked: self.panel(side).sort_action() == action,
-                key: self.key_on(side, action),
-            },
-            Command::Location(side) => Status {
-                enabled: true,
-                checked: false,
-                key: self.key_on(side, Action::LocationMenu),
-            },
-            Command::Tabs(side) => Status {
-                enabled: true,
-                checked: false,
-                key: self.key_on(side, Action::TabList),
-            },
-            Command::DisconnectPanel(side) => Status {
-                enabled: self.host_of(side).is_some(),
-                ..Status::default()
             },
             Command::Workspace(index) => Status {
                 enabled: true,

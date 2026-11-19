@@ -230,8 +230,8 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 ### Location menu
 
 `g l` opens a menu for the active panel, and Ctrl+x `g l` for the other one, as Far Manager's
-Alt+F1 and Alt+F2 open its menus to change the drive of the left or the right panel (F9 → Left or
-Right → Change location too). noc binds no Alt+F1 and Alt+F2, which desktops take
+Alt+F1 and Alt+F2 open its menus to change the drive of the left or the right panel (F9 → Go →
+Change location… too). noc binds no Alt+F1 and Alt+F2, which desktops take
 ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)), and names the panel as active or
 other, not by its side ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). The
 menu is centered over both panels, as every window is, and its title, Location, names no side:
@@ -358,44 +358,54 @@ choose a volume or a host, grouped under headings:
 
 ### Pull-down menu
 
-F9 (or `g m`) opens mc's menu bar, as Far does: the bar alone with the menu of the active panel
-selected. Shift+F9 opens it on the command that ran last, as Far's Shift+F10. An open
-menu:
+F9 (or `g m`) opens the menu bar, as Far does: the bar alone with `File` selected. Shift+F9 opens
+it on the command that ran last, as Far's Shift+F10. Every command acts on the active panel, and
+Ctrl+x F9 (or Ctrl+x `g m`) opens the bar for the other panel and gives the keys back once the
+command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An open menu:
 
 ```text
-  Left     File     Command     Options     Workspace     Right         2 jobs 37%
- ╔══════════════════════════╗
- ║   Change location…   g l ║
- ╟──────────────────────────╢
- ║ • Sort by name       o n ║
- ║   Sort by extension  o e ║
- ║   Sort by time       o m ║
- ║   Sort by size       o s ║
- ╟──────────────────────────╢
- ║   Rescan               R ║
- ║   Disconnect             ║
- ╚══════════════════════════╝
+  File     View     Go     Tools     Workspace     Help                 2 jobs 37%
+ ╔═════════════════════════╗
+ ║   View              g f ║
+ ║   Edit                e ║
+ ║   Open externally   g x ║
+ ╟─────────────────────────╢
+ ║   Copy                Y ║
+ ║   Duplicate         y p ║
+ ║   Rename/Move         x ║
+ ║   Rename in place     r ║
+ ║   Mkdir               A ║
+ ║   Delete            d D ║
+ ╟─────────────────────────╢
+ ║   Select group…     g + ║
+ ║   Unselect group…   g - ║
+ ║   Invert selection  g * ║
+ ╟─────────────────────────╢
+ ║   Exit              Z Z ║
+ ╚═════════════════════════╝
 ```
 
-- Left and Right act on the panel drawn on that side, after Ctrl+w x too: its location menu, sort
-  order (`•` marks the current one), Rescan, Disconnect while it shows a host, and its
-  [tabs](#tabs): New tab, Close tab, and Tab list…. File has F3, F4, Open externally (`g x`), F5 …
-  F8, `g +`, `g -`, `g *`, Checksums, and Exit; Command has quick search, Find file… (the [search of
-  a whole tree](#search-of-a-whole-tree)), [Go to directory](#go-to-directory), the
-  [zoxide](#zoxide) window, the other-panel commands, the jobs, host settings and disconnect for the
-  host the active panel shows, help, and redraw; Options has Configuration… and Show hidden files
-  (`✓` while on); Workspace has Save workspace…, Workspace list…, and the saved
-  [workspaces](#workspaces), with digits as their letters, typed with Alt, `•` on the one restored
-  or saved last. `•` is the dot of the lists of combo boxes, for one among others, and
-  `✓` the check of check boxes, for a setting that is on; Nerd Font ones with icons, in the color
-  of titles (`dialog_symbol`) but on the cursor and on a command that cannot run now. A menu
-  taller than the screen scrolls with the cursor.
+- **File** has F3, F4, Open externally (`g x`), F5 … F8, `g +`, `g -`, `g *`, and Exit.
+- **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names
+  (`✓` while on), the other-panel commands (Swap panels, Open in the other panel, This directory in
+  the other panel), Rescan, and Redraw screen.
+- **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), the
+  [zoxide](#zoxide) window (`g z`), quick search (`/`), Find file… (`f /`), and Find files and
+  dirs… (`f f`).
+- **Tools** has Checksums (`f #`), Background jobs (`f j`), Command history (`q :`), Command output
+  (`g <`), Edit host settings and Disconnect host for the active panel's host, and
+  [Configuration…](#configuration-dialog) (`o o`).
+- **Workspace** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
+  workspace…, Workspace list…, and the saved [workspaces](#workspaces), with digits as their
+  letters, typed with Alt, `•` on the one restored or saved last.
+- **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).
+- `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
+  boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles
+  (`dialog_symbol`) but on the cursor and on a command that cannot run now. A menu taller than the
+  screen scrolls with the cursor.
 - Commands do what their keys do, through the same `Action`s. Each shows the key that does
-  it in the active panel's context (`Keymap::key`). Left and Right show the keys of the active
-  panel's menu as they are, `g l` for Change location… and `t t` for Tab list…, and those of the
-  other panel's after Ctrl+x, `Ctrl+x g l` and `Ctrl+x t t`; the sort orders, Rescan, New tab,
-  and Close tab too. Commands that cannot run now are dimmed, in the theme's `disabled`, and the
-  cursor skips them.
+  it in the active panel's context (`Keymap::key`). Commands that cannot run now are dimmed, in the
+  theme's `disabled`, and the cursor skips them.
 - On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the bar;
   Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages, which
   `Label` in `tui/label.rs` reads, for the menus and the [dialogs](#ui) alike) opens it,
@@ -406,10 +416,9 @@ menu:
   it. Esc, `q`, F9, or F10 goes back to the bar, and closes the bar from there. Running a command
   closes it first.
 - The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
-  only the `Command` that ran last, so Shift+F9 Enter repeats it. A command on a panel stays
-  with that panel after Ctrl+w x, under the other title. A command that cannot run now passes the
-  cursor on to the next one; one that is gone, such as a deleted workspace, leaves the bar as F9
-  opens it.
+  only the `Command` that ran last, so Shift+F9 Enter repeats it. A command that cannot run now
+  passes the cursor on to the next one; one that is gone, such as a deleted workspace, leaves the
+  bar as F9 opens it.
 - `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
@@ -430,7 +439,7 @@ last local directory, with the cursor where it was, and `:path` starts there
 the panel's directory too.
 `cd ..` puts the cursor on the directory left, as `h` does; a
 path that is not there leaves the panel where it is, with the reason below the listing. The Go to
-button of a listing that failed opens it for the panel that failed. It is in F9 → Command.
+button of a listing that failed opens it for the panel that failed. It is in F9 → Go.
 
 ### Completion
 
@@ -609,8 +618,8 @@ The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
 
 ### Search of a whole tree
 
-`f /` in a panel, or F9 → Command → Find file…, opens a dialog over both panels that searches the
-files below the active panel's directory with ripgrep; `f f`, or F9 → Command → Find files and
+`f /` in a panel, or F9 → Go → Find file…, opens a dialog over both panels that searches the
+files below the active panel's directory with ripgrep; `f f`, or F9 → Go → Find files and
 dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
 [ADR 0029](adr/0029-files-and-directories-with-fd.md)):
@@ -783,8 +792,8 @@ row and names the tab that shows by its whole location:
   before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count after
   Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under
   the cursor there as `t c`
-  closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. Left and
-  Right in F9 do the same for the panel on that side.
+  closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. F9 →
+  Workspace has New tab, Close tab, and Tab list… for the active panel.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
@@ -855,7 +864,7 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   ╚════════════════════════════╧═════════════════════════════╝
   ```
 
-- F9 → Workspace lists the saved workspaces below its two commands, the first ten with
+- F9 → Workspace lists the saved workspaces below its tab and workspace commands, the first ten with
   Alt+1 … Alt+9 and Alt+0, and marks the one restored or saved last; choosing one restores it.
 - Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the
   old tabs are dropped). The tab that shows on each side lists its location at once, connecting
@@ -867,7 +876,7 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
 
 ### Configuration dialog
 
-Options → Configuration…, or `o o`, shows the settings of `config.toml` by category, as a
+Tools → Configuration…, or `o o`, shows the settings of `config.toml` by category, as a
 modern settings window: there is no OK or Cancel, and every change takes effect as it is made
 ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)):
 
@@ -1675,7 +1684,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   position; a move up or `F` again stops it, and so does a file that can no longer be looked at,
   which the line of the mode says.
 - **Ctrl+\\ views the log** of this run (Ctrl+4 without the kitty keyboard protocol, which sends
-  the same byte), in every mode, and Command → View the log: the viewer on the file of the log,
+  the same byte), in every mode, and Help → View the log: the viewer on the file of the log,
   from its end (`App::view_log`). As the viewer of a question about a taken name, it stands in front
   of every window, the menus, the help, Configuration, the pull-down menu, and find among them
   (`App::viewer_over`), and in front of the dialogs open when it opened too, whose ids it keeps

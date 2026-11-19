@@ -16,6 +16,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `noon-commander-bin` installs its binary, and `noon-commander-git` builds the latest commit
   ([ADR 0090](docs/adr/0090-aur-packages.md)).
 
+### Changed
+
+- The F9 pull-down menu is reorganized into `File`, `View`, `Go`, `Tools`, `Workspace`, and `Help`,
+  without `Left` and `Right`: every command acts on the active panel (Ctrl+x F9 acts on the other),
+  and Tools and Help add Command history…, Command output, and Key hints
+  ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
+
 ## [0.3.2] - 2026-11-16
 
 ### Added

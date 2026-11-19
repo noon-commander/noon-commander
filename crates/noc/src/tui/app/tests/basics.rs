@@ -60,10 +60,10 @@ fn windows_grow_as_they_open_and_shrink_as_they_close() {
     screen_at(&mut app, 12, at(5000));
     app.handle(action(Action::Down));
     let dropping = screen_at(&mut app, 12, at(6000));
-    assert!(dropping.contains("Command"), "{dropping}");
-    assert!(!dropping.contains("Sort by name"), "{dropping}");
+    assert!(dropping.contains("Tools"), "{dropping}");
+    assert!(!dropping.contains("Open externally"), "{dropping}");
     let dropped = screen_at(&mut app, 12, at(7000));
-    assert!(dropped.contains("Sort by name"), "{dropped}");
+    assert!(dropped.contains("Open externally"), "{dropped}");
     app.handle(action(Action::Cancel));
     app.handle(action(Action::Cancel));
     screen_at(&mut app, 12, at(8000));

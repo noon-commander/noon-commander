@@ -1023,16 +1023,6 @@ fn the_hints_after_ctrl_x_show_the_keys_of_the_panel() {
     assert_eq!(keymap.hints_of(&state, PANEL), None, "done");
     assert_eq!(
         keymap
-            .other_key(Context::Panel, Action::LocationMenu)
-            .as_deref(),
-        Some("Ctrl+x g l")
-    );
-    assert_eq!(
-        keymap.other_key(Context::Panel, Action::Copy).as_deref(),
-        Some("Ctrl+x Y")
-    );
-    assert_eq!(
-        keymap
             .short_key(Context::Panel, Action::OtherPanel)
             .as_deref(),
         Some("^X")

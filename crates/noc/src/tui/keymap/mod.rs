@@ -811,14 +811,6 @@ impl Keymap {
             .map(|(sequence, _)| sequence)
     }
 
-    /// The keys that do `action` in the other panel, Ctrl+x and its key, as text such as
-    /// `Ctrl+x g l`, for the pull-down menu.
-    pub(crate) fn other_key(&self, context: Context, action: Action) -> Option<String> {
-        let other = self.key(context, Action::OtherPanel)?;
-        let key = self.key(context, action)?;
-        Some(format!("{other} {key}"))
-    }
-
     /// The actions on F1 … F10 in `context`'s chain in `mode`, for the F-key bar.
     pub(crate) fn fkeys(&self, mode: Mode, context: Context) -> [Option<Action>; 10] {
         std::array::from_fn(|index| {

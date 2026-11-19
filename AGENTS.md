@@ -205,7 +205,7 @@ Paths come from `crates/noc-config/src/paths.rs`.
 
 ### Settings
 
-- Every option must be editable in Options → Configuration…; users never edit files by hand.
+- Every option must be editable in Tools → Configuration…; users never edit files by hand.
 - A new `config.toml` option ships with its dialog row (name, hint, Fluent text) and is saved
   through `noc_config::save_config` (ADR 0009). Per-host options go to `hosts.toml` (ADR 0007).
 - Apply a change immediately where possible; otherwise the dialog says it needs a restart.

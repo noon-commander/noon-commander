@@ -1,4 +1,4 @@
-//! The search of a whole tree: `f /` in a panel, or F9 → Command → Find file…. ripgrep searches
+//! The search of a whole tree: `f /` in a panel, or F9 → Go → Find file…. ripgrep searches
 //! the files under the panel's directory, local or on a host, for the text of the first field,
 //! among the files that the globs of the second let through, again as either changes, or the
 //! keys after Ctrl+s in the text switch whether case counts or take it as it is or as a regular
@@ -6,7 +6,7 @@
 //! order of their paths, with the lines that match under it, the matches highlighted; with no text it lists the files. Its buttons go
 //! to the file in the panel, and view and edit it at the line, as in the results of mc's Find
 //! File. Its other mode, Files and dirs, finds files and directories whose names match the text
-//! with fd, and goes to them; `f f` and F9 → Command → Find files and dirs… open the dialog in it.
+//! with fd, and goes to them; `f f` and F9 → Go → Find files and dirs… open the dialog in it.
 
 use std::ops::Range;
 

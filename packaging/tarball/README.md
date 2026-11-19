@@ -16,7 +16,7 @@ operations. The command is `noc`.
 - OpenSSH 8.7 or newer: check with `ssh -V`. macOS has it; on Linux it comes with the
   distribution's `openssh` or `openssh-client` package.
 - A [Nerd Font](https://www.nerdfonts.com) in the terminal for the icons. Without one, turn
-  them off in Options → Configuration (F9), or set `icons = false` under `[ui]`.
+  them off in Tools → Configuration (F9), or set `icons = false` under `[ui]`.
 
 ## Installing
 

@@ -196,7 +196,8 @@ fn the_mouse_chooses_in_menus_and_presses_the_buttons_of_windows() {
     assert!(app.menu.is_none(), "a click outside closes the menu");
     assert_eq!(app.active, Side::Right, "and does nothing else");
 
-    // A job in front goes behind the panels, then the list of jobs aborts it.
+    // A job in front goes behind the panels, then the list of jobs, opened from the corner,
+    // aborts it.
     app.handle(action(Action::Down));
     app.handle(action(Action::Delete));
     let (_, _, _, cancel) = delete_job(app.handle(action(Action::Confirm)));
@@ -204,7 +205,11 @@ fn the_mouse_chooses_in_menus_and_presses_the_buttons_of_windows() {
     press(&mut app, Press::WheelDown, x, y);
     press(&mut app, Press::Click, x, y);
     assert!(app.in_front().is_none());
-    app.handle(action(Action::Jobs));
+    let (x, y) = find(&mut app, "1 job");
+    press(&mut app, Press::RightClick, x, y);
+    assert!(app.jobs_list.is_none(), "only a click opens it");
+    press(&mut app, Press::Click, x, y);
+    assert!(app.jobs_list.is_some());
     let (x, y) = find(&mut app, "Abort");
     press(&mut app, Press::Click, x, y);
     assert!(cancel.is_cancelled());

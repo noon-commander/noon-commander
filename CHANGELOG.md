@@ -15,6 +15,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Packages for Arch Linux in the AUR: `noon-commander` builds a release from its sources,
   `noon-commander-bin` installs its binary, and `noon-commander-git` builds the latest commit
   ([ADR 0090](docs/adr/0090-aur-packages.md)).
+- A click on the jobs in the top right corner opens the list of background jobs, as `f j` does.
 
 ### Changed
 

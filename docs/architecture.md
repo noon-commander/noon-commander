@@ -1783,10 +1783,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   while jobs above it end, and the next row once it ends itself. Questions from jobs
   behind the panels open over whatever is on screen, in turn with other dialogs, and the top
   right corner, where Far has its clock, says how many run and how far they are together
-  (`2 jobs 37%`, the mean of their gauges). The jobs of F4 stay in front, so that the editor
-  does not open in the middle of other work. F10 always asks before quitting, with Yes as the
-  default, or No while jobs run; quitting stops them and waits up to five seconds, so that a
-  copy removes its unfinished file before the connections close.
+  (`2 jobs 37%`, the mean of their gauges); a click there opens the list. The jobs of F4 stay
+  in front, so that the editor does not open in the middle of other work. F10 always asks
+  before quitting, with Yes as the default, or No while jobs run; quitting stops them and waits
+  up to five seconds, so that a copy removes its unfinished file before the connections close.
 - **Checksums.** `f #` (not in mc) asks for an algorithm (a combo box, the last one chosen,
   SHA-256 at first) for the marked entries, or the one under the cursor; files
   in directories count. For one file, the dialog has a field for the checksum it should have,
@@ -2185,9 +2185,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a
   step of the wheel, or a drag with the left button; moves are dropped without a redraw, and
   so are drags while no thumb of a scroll bar is held. Rendering records where the
-  F-key slots, the panels, their rows, the tabs, the menu bar, and each window's rows and
-  buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front first, as keys
-  go. A click on an F-key slot presses its key; in a panel a click moves the cursor and gives
+  F-key slots, the panels, their rows, the tabs, the menu bar, the corner of the jobs, and each
+  window's rows and buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front
+  first, as keys go. A click on an F-key slot presses its key, and one on the corner of the jobs
+  opens their list; in a panel a click moves the cursor and gives
   the panel the keys, a double click does what Enter does, a right click marks the row as in
   mc and Far, and the wheel scrolls the panel under it, by `ui.wheel` lines or a page, or moves
   its cursor as far where it cannot scroll; a click

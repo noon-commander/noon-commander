@@ -220,7 +220,7 @@ impl App {
         }
         if self.viewing.is_none() {
             // On the menu bar, or on the top line of the panels without it.
-            self.render_jobs(frame, menu_bar);
+            self.spots.jobs = self.render_jobs(frame, menu_bar);
             self.render_menus(frame, panels, (&hosts, &spin), &mut stage);
         }
         self.render_windows(frame, panels, &spin, &mut stage);
@@ -529,11 +529,9 @@ impl App {
     }
 
     /// The jobs in the background at the top right of `area`, where Far has its clock: how
-    /// many, and how far they are together.
-    fn render_jobs(&self, frame: &mut Frame<'_>, area: Rect) {
-        let Some((count, percent)) = self.corner() else {
-            return;
-        };
+    /// many, and how far they are together. Returns where it drew them.
+    fn render_jobs(&self, frame: &mut Frame<'_>, area: Rect) -> Option<Rect> {
+        let (count, percent) = self.corner()?;
         let text = format!(
             " {} ",
             fl!("jobs-running", count = count, percent = percent)
@@ -547,6 +545,7 @@ impl App {
         let x = area.right().saturating_sub(width + 1);
         let row = Rect::new(x, area.y, width, 1.min(area.height));
         frame.render_widget(Line::from(text), row);
+        Some(row)
     }
 
     /// The rows above the F-key bar on `screen`, as vim's command line: the command line's,

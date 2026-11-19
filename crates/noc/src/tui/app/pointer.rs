@@ -100,8 +100,9 @@ impl App {
 
     /// The F-key bar presses its keys, and the scroll bar of what is in front its parts; then
     /// what is in front takes the press: a dialog, the pull-down menu, the viewer, the menu
-    /// bar that `ui.menu_bar` keeps, or the panels, where a click moves the cursor, a double
-    /// click opens, a right click marks, and the wheel scrolls.
+    /// bar that `ui.menu_bar` keeps, the corner of the jobs, which a click opens the list of,
+    /// or the panels, where a click moves the cursor, a double click opens, a right click
+    /// marks, and the wheel scrolls.
     fn route_pointer(&mut self, pointer: Pointer) -> Vec<Effect> {
         let Pointer { press, at } = pointer;
         if let Some(slot) = self.spots.fkeys.iter().position(|slot| slot.contains(at)) {
@@ -148,6 +149,13 @@ impl App {
                     pulldown.open_menu(index, &|command| self.command_status(command));
                     self.pulldown = Some(pulldown);
                 }
+            }
+            return Vec::new();
+        }
+        // Over the top line of the right panel without the menu bar.
+        if self.spots.jobs.is_some_and(|corner| corner.contains(at)) {
+            if press == Press::Click {
+                return self.handle(Resolved::Action(Action::Jobs));
             }
             return Vec::new();
         }

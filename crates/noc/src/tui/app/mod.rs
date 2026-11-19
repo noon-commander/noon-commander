@@ -1317,6 +1317,8 @@ struct Spots {
     tabs: Vec<(Side, usize, Rect)>,
     /// The titles of the menu bar that `ui.menu_bar` keeps.
     menu_bar: Vec<Rect>,
+    /// The corner that says how many jobs run in the background, if it shows.
+    jobs: Option<Rect>,
 }
 
 /// What a scroll bar scrolls.

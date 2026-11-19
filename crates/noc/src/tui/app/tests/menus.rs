@@ -188,13 +188,13 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
     assert_eq!(app.active, Side::Right, "the keys come back");
 
-    // Search → Quick search…, Find file…, Find files and dirs….
+    // Search → Quick search…, Find text…, Find files and dirs….
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('s'));
     let text = screen_of(&mut app, 20);
     // Between blanks: the panel's `/..` shares the line.
     assert!(line_with(&text, "Quick search").contains(" / "), "{text}");
-    assert!(line_with(&text, "Find file…").contains("f /"), "{text}");
+    assert!(line_with(&text, "Find text…").contains("f /"), "{text}");
     assert!(
         line_with(&text, "Find files and dirs…").contains("f f"),
         "{text}"

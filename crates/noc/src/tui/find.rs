@@ -1,4 +1,4 @@
-//! The search of a whole tree: `f /` in a panel, or F9 → Search → Find file…. ripgrep searches
+//! The search of a whole tree: `f /` in a panel, or F9 → Search → Find text…. ripgrep searches
 //! the files under the panel's directory, local or on a host, for the text of the first field,
 //! among the files that the globs of the second let through, again as either changes, or the
 //! keys after Ctrl+s in the text switch whether case counts or take it as it is or as a regular

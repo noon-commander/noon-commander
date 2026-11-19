@@ -262,7 +262,7 @@ jump-nothing = zoxide knows no directory that matches. It learns the directories
 # The zoxide program is not there.
 jump-not-installed = zoxide is not installed: cannot run { $program }. Get it from https://github.com/ajeetdsouza/zoxide, or set its path in Tools → Configuration.
 
-## The search of a whole tree (src/tui/find): f / in a panel, or F9 → Search → Find file…; f f
+## The search of a whole tree (src/tui/find): f / in a panel, or F9 → Search → Find text…; f f
 ## and Find files and dirs… open it in its Files and dirs mode.
 ## ripgrep finds the lines that match the text in the files under the panel's directory. Prefix:
 ## find-. As in every dialog, an & marks the letter that Alt and it act on, and && stands for &;
@@ -413,8 +413,9 @@ pulldown-goto = &Go to directory…
 pulldown-jump = &Jump to a directory (zoxide)…
 # Search.
 pulldown-quick-search = &Quick search…
-# Searches the whole tree under the panel's directory, as f / does.
-pulldown-find = &Find file…
+# Searches the files of the whole tree under the panel's directory for text, as f / does, in the
+# Text mode of the dialog.
+pulldown-find = &Find text…
 # The same search in its Files and dirs mode, by name, as f f opens it.
 pulldown-find-names = Find f&iles and dirs…
 # Tools.

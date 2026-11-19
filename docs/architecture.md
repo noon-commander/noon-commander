@@ -393,7 +393,7 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   the other panel), Rescan, and Redraw screen.
 - **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), and the
   [zoxide](#zoxide) window (`g z`).
-- **Search** has Quick search… (`/`), Find file… (`f /`), and Find files and dirs… (`f f`).
+- **Search** has Quick search… (`/`), Find text… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Background jobs (`f j`), Command history (`q :`), Command output (`g <`), Edit host
   settings and Disconnect host for the active panel's host, and
   [Configuration…](#configuration-dialog) (`o o`).
@@ -618,7 +618,7 @@ The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
 
 ### Search of a whole tree
 
-`f /` in a panel, or F9 → Search → Find file…, opens a dialog over both panels that searches the
+`f /` in a panel, or F9 → Search → Find text…, opens a dialog over both panels that searches the
 files below the active panel's directory with ripgrep; `f f`, or F9 → Search → Find files and
 dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ([ADR 0027](adr/0027-search-of-a-whole-tree.md),

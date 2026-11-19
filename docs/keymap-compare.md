@@ -1284,7 +1284,7 @@ then to `global`; Tab and F8 still switch the hosts and remove the command.
 
 ## Search of a whole tree (`find`, Normal mode)
 
-f / in a panel, or F9 → Search → Find file…: ripgrep searches the files under the panel's
+f / in a panel, or F9 → Search → Find text…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
 let through, again as either changes, or either switches how it matches or whether case counts; with
 no text it lists the files. It is a dialog: two fields, the rows, and the buttons Go to, View, Edit,

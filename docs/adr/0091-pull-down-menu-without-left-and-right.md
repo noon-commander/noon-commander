@@ -28,6 +28,9 @@ Three windows were also absent from the menu: the command history (`q :`), the o
 ([ADR 0017](0017-workspaces.md)): a copy of their window (`t w`), one entry below, without its
 filter, its tabs, or its commands, and with a `Command::Workspace` of its own.
 
+`Find file…`, mc's name, searched the files for text, while `Find files and dirs…` beside it
+found them by name.
+
 The ellipsis followed no rule: Select group… and Go to directory… had one, Copy, Rename/Move, and
 Mkdir, which ask just as much, had none, and of the windows Tab list… and Background jobs… had
 one, Help and Command output none.
@@ -45,7 +48,8 @@ one, Help and Command output none.
     whole names; Swap panels, Open in the other panel, This directory in the other panel; Rescan,
     Redraw screen.
   - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)….
-  - **Search:** Quick search…, Find file…, Find files and dirs….
+  - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
+    dialog they open.
   - **Tools:** Background jobs; Command history…, Command output; Edit host settings…, Disconnect
     host; Configuration….
   - **Workspace:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…. The saved

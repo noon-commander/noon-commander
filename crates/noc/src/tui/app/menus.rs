@@ -269,6 +269,7 @@ impl App {
                                 || active.not_connected().is_some()
                         }
                     },
+                    Action::EditHost => self.chosen_host().is_some(),
                     Action::Disconnect => self
                         .chosen_host()
                         .is_some_and(|host| self.hosts.contains_key(&host)),
@@ -277,34 +278,7 @@ impl App {
                         .files
                         .as_ref()
                         .is_some_and(|files| files.log.is_ok()),
-                    Action::Select
-                    | Action::Unselect
-                    | Action::InvertMarks
-                    | Action::SortByName
-                    | Action::SortByExtension
-                    | Action::SortByTime
-                    | Action::SortBySize
-                    | Action::ToggleHidden
-                    | Action::ShowFull
-                    | Action::SwapPanels
-                    | Action::OtherPanelOpen
-                    | Action::OtherPanelSync
-                    | Action::Reload
-                    | Action::LocationMenu
-                    | Action::GoToDir
-                    | Action::Jump
-                    | Action::QuickSearch
-                    | Action::FindFile
-                    | Action::FindNames
-                    | Action::Jobs
-                    | Action::UserScreen
-                    | Action::Configuration
-                    | Action::NewTab
-                    | Action::TabList
-                    | Action::SaveWorkspace
-                    | Action::Workspaces
-                    | Action::KeyHints => true,
-                    _ => self.supports(action),
+                    _ => true,
                 },
                 checked: match action {
                     Action::ToggleHidden => self.config.ui.show_hidden,

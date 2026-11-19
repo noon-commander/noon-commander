@@ -147,43 +147,19 @@ const WORKSPACE_NAME_WIDTH: usize = 40;
 /// workspaces, then the saved `workspaces`, which restore; the first ten have the digits
 /// `1` … `9` and `0`, typed with Alt, and the one restored or saved last a mark.
 fn workspace_menu(title: Label, workspaces: &[String], marks: Marks) -> Menu {
-    let item = |text: String, command, mark| {
-        Entry::Item(Item {
-            label: Label::parse(&text),
-            command,
-            mark,
-        })
-    };
-    let mut entries = vec![
-        item(
-            fl!("pulldown-new-tab"),
-            Command::Do(Action::NewTab),
-            Mark::None,
-        ),
-        item(
-            fl!("pulldown-close-tab"),
-            Command::Do(Action::CloseTab),
-            Mark::None,
-        ),
-        item(
-            fl!("pulldown-tab-list"),
-            Command::Do(Action::TabList),
-            Mark::None,
-        ),
-        Entry::Separator,
-        item(
-            fl!("pulldown-save-workspace"),
-            Command::Do(Action::SaveWorkspace),
-            Mark::None,
-        ),
-        item(
-            fl!("pulldown-workspace-list"),
-            Command::Do(Action::Workspaces),
-            Mark::None,
-        ),
-    ];
+    let mut menu = plain_menu(
+        title,
+        vec![
+            Some((fl!("pulldown-new-tab"), Action::NewTab)),
+            Some((fl!("pulldown-close-tab"), Action::CloseTab)),
+            Some((fl!("pulldown-tab-list"), Action::TabList)),
+            None,
+            Some((fl!("pulldown-save-workspace"), Action::SaveWorkspace)),
+            Some((fl!("pulldown-workspace-list"), Action::Workspaces)),
+        ],
+    );
     if !workspaces.is_empty() {
-        entries.push(Entry::Separator);
+        menu.entries.push(Entry::Separator);
     }
     for (index, name) in workspaces.iter().enumerate() {
         let name = cells::sanitize(name.as_bytes());
@@ -197,13 +173,13 @@ fn workspace_menu(title: Label, workspaces: &[String], marks: Marks) -> Menu {
         let mut label = Label::parse(&text);
         // After the digit and a blank, or two blanks.
         label.cut = fitted.cut.map(|_| 2 + fitted.head.chars().count());
-        entries.push(Entry::Item(Item {
+        menu.entries.push(Entry::Item(Item {
             label,
             command: Command::Workspace(index),
             mark: Mark::Choice,
         }));
     }
-    Menu { title, entries }
+    menu
 }
 
 /// A menu of commands that act as their keys do; `None` is a separator.

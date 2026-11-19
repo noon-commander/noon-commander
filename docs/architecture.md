@@ -390,14 +390,14 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   and Exit.
 - **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names
   (`✓` while on), Swap panels, Rescan, and Redraw screen.
-- **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), the
+- **Go** has Change location… (`g l`) with Edit host settings… and Disconnect host for the active
+  panel's host, which the panels have no keys for, [Go to directory](#go-to-directory) (`g d`), the
   [zoxide](#zoxide) window (`g z`), Jump back (`Ctrl+o`) and Jump forward (`Ctrl+i`) through the
   jump list, dimmed where it has nowhere to go, and where the other panel goes: Open in the other
   panel (`Ctrl+w f`) and This directory in the other panel (`Ctrl+w v`).
 - **Search** has Quick search… (`/`), Find text… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Background jobs (`f j`), Shell command… (`!`), Command history… (`q :`), Command
-  output (`g <`), Edit host settings… and Disconnect host for the active panel's host, and
-  [Configuration…](#configuration-dialog) (`o o`).
+  output (`g <`), and [Configuration…](#configuration-dialog) (`o o`).
 - **Window** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
   workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
 - **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).

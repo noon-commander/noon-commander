@@ -34,6 +34,8 @@ commands were those of the tabs, which its title did not name; `Tabs` could not 
 `Find file…`, mc's name, searched the files for text, while `Find files and dirs…` beside it
 found them by name.
 
+`Tools` mixed four things: the jobs, the command line, the host of the panel, and the settings.
+
 The ellipsis followed no rule: Select group… and Go to directory… had one, Copy, Rename/Move, and
 Mkdir, which ask just as much, had none, and of the windows Tab list… and Background jobs… had
 one, Help and Command output none.
@@ -49,13 +51,14 @@ one, Help and Command output none.
     in place…, Mkdir…, Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
     whole names; Swap panels; Rescan, Redraw screen.
-  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)…; Jump back, Jump
-    forward; Open in the other panel, This directory in the other panel, which say where the other
-    panel goes, not what shows.
+  - **Go:** Change location…, Edit host settings…, Disconnect host; Go to directory…, Jump to a
+    directory (zoxide)…; Jump back, Jump forward; Open in the other panel, This directory in the
+    other panel, which say where the other panel goes, not what shows. The host commands act on
+    the active panel's host, which Change location… lists; the panels have no keys for them.
   - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
     dialog they open.
-  - **Tools:** Background jobs; Shell command…, Command history…, Command output; Edit host
-    settings…, Disconnect host; Configuration….
+  - **Tools:** Background jobs; Shell command…, Command history…, Command output;
+    Configuration….
   - **Window:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…, as the Window menu
     of macOS and of editors holds the tabs. The saved workspaces are not listed: Workspace list…
     opens their window.

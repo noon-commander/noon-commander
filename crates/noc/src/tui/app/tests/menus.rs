@@ -175,6 +175,10 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
         line_with(&text, "This directory in the other panel").contains("Ctrl+w v"),
         "{text}"
     );
+    assert!(
+        text.contains("Edit host settings…") && text.contains("Disconnect host"),
+        "the host of the panel, by its location: {text}"
+    );
     let effects = app.handle(Resolved::Hotkey('l'));
     assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
     assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Right));

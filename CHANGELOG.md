@@ -20,9 +20,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The F9 pull-down menu is reorganized into `File`, `View`, `Go`, `Search`, `Tools`, `Window`,
   and `Help`, without `Left` and `Right`: every command acts on the active panel (Ctrl+x F9 acts on
-  the other), Go adds Jump back and Jump forward, Tools and Help add Shell command…, Command
-  history…, Command output, and Key hints; a command ends in `…` when it asks for something before
-  it acts. `Workspace`, with the tabs and the workspaces, is now `Window`
+  the other), Go has the host commands and adds Jump back and Jump forward, Tools and Help add
+  Shell command…, Command history…, Command output, and Key hints; a command ends in `…` when it
+  asks for something before it acts. `Workspace`, with the tabs and the workspaces, is now `Window`
   ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
 
 ### Removed

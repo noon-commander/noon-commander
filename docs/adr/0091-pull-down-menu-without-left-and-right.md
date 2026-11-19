@@ -23,7 +23,8 @@ itself (`Ctrl+x F9`).
 
 Three windows were also absent from the menu: the command history (`q :`), the output of commands
 (`g <`), and the key hints (`Ctrl+k`); so were the command line itself (`!`), and the jump list
-(`Ctrl+o`, `Ctrl+i`), whose keys are vim's and hard to find without it.
+(`Ctrl+o`, `Ctrl+i`) and the matches of the last quick search (`n`, `N`), whose keys are vim's
+and hard to find without it.
 
 `Workspace` listed the saved workspaces under its commands, the first ten with `1` … `9` and `0`
 ([ADR 0017](0017-workspaces.md)): a copy of their window (`t w`), one entry below, without its
@@ -55,8 +56,8 @@ one, Help and Command output none.
     directory (zoxide)…; Jump back, Jump forward; Open in the other panel, This directory in the
     other panel, which say where the other panel goes, not what shows. The host commands act on
     the active panel's host, which Change location… lists; the panels have no keys for them.
-  - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
-    dialog they open.
+  - **Search:** Quick search…, Next match, Previous match; Find text…, Find files and dirs…,
+    named after the modes of the dialog they open.
   - **Tools:** Shell command…, Command history…, Command output; Background jobs; Configuration…,
     last, where the settings usually are.
   - **Window:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…, as the Window menu
@@ -86,8 +87,8 @@ one, Help and Command output none.
 - In File, Alt+r runs Rename in place…, as `r` does in the panels, and Alt+n runs Rename/Move….
   Alt+s runs Sort by size, as `o s` sorts, and Alt+n New tab, as `t n` opens one, where Alt+z and
   Alt+w were left from the menus of each panel.
-- `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`, and
-  `Jump forward` are reachable from F9.
+- `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`,
+  `Jump forward`, `Next match`, and `Previous match` are reachable from F9.
 - `Workspace` is named `Window`; Alt+W still opens it.
 - Restoring a workspace from F9 takes Workspace list… and Enter, or the filter, in place of Alt and
   a digit.

@@ -423,6 +423,9 @@ pulldown-other-open = &Open in the other panel
 pulldown-other-sync = This &directory in the other panel
 # Search.
 pulldown-quick-search = &Quick search…
+# n and N: the next and the previous name that the last quick search matches, the way it went.
+pulldown-next-match = &Next match
+pulldown-prev-match = &Previous match
 # Searches the files of the whole tree under the panel's directory for text, as f / does, in the
 # Text mode of the dialog.
 pulldown-find = &Find text…

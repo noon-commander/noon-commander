@@ -219,6 +219,9 @@ fn menus() -> Vec<Menu> {
             search,
             vec![
                 Some((fl!("pulldown-quick-search"), Action::QuickSearch)),
+                Some((fl!("pulldown-next-match"), Action::NextMatch)),
+                Some((fl!("pulldown-prev-match"), Action::PrevMatch)),
+                None,
                 Some((fl!("pulldown-find"), Action::FindFile)),
                 Some((fl!("pulldown-find-names"), Action::FindNames)),
             ],

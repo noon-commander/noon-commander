@@ -395,7 +395,8 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   [zoxide](#zoxide) window (`g z`), Jump back (`Ctrl+o`) and Jump forward (`Ctrl+i`) through the
   jump list, dimmed where it has nowhere to go, and where the other panel goes: Open in the other
   panel (`Ctrl+w f`) and This directory in the other panel (`Ctrl+w v`).
-- **Search** has Quick search… (`/`), Find text… (`f /`), and Find files and dirs… (`f f`).
+- **Search** has Quick search… (`/`), Next match (`n`) and Previous match (`N`), dimmed until a
+  quick search ends, Find text… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Shell command… (`!`), Command history… (`q :`), Command output (`g <`),
   Background jobs (`f j`), and [Configuration…](#configuration-dialog) (`o o`).
 - **Window** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save

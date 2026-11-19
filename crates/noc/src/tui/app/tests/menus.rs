@@ -197,12 +197,14 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
     assert_eq!(app.active, Side::Right, "the keys come back");
 
-    // Search → Quick search…, Find text…, Find files and dirs….
+    // Search → Quick search…, Next match, Previous match; Find text…, Find files and dirs….
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('s'));
     let text = screen_of(&mut app, 20);
     // Between blanks: the panel's `/..` shares the line.
     assert!(line_with(&text, "Quick search").contains(" / "), "{text}");
+    assert!(line_with(&text, "Next match").contains(" n "), "{text}");
+    assert!(line_with(&text, "Previous match").contains(" N "), "{text}");
     assert!(line_with(&text, "Find text…").contains("f /"), "{text}");
     assert!(
         line_with(&text, "Find files and dirs…").contains("f f"),
@@ -247,6 +249,22 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
         app.take_hints_asked(),
         Some((Mode::Normal, Context::Panel).into())
     );
+}
+
+#[test]
+fn search_goes_to_the_next_match_only_after_a_quick_search() {
+    let mut app = with_files(&["a1", "b2", "a3"]);
+    let (next, prev) = (Action::NextMatch, Action::PrevMatch);
+    assert!(!app.command_status(next).enabled, "no search yet");
+    assert!(!app.command_status(prev).enabled);
+    keys(&mut app, &["/", "a", "enter"]);
+    assert!(app.command_status(next).enabled);
+    assert!(app.command_status(prev).enabled);
+    keys(&mut app, &["f9", "alt-s", "alt-n"]);
+    assert!(app.pulldown.is_none());
+    assert_eq!(cursor_name(&app, Side::Left), "a3");
+    keys(&mut app, &["f9", "alt-s", "alt-p"]);
+    assert_eq!(cursor_name(&app, Side::Left), "a1");
 }
 
 #[test]

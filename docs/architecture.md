@@ -402,7 +402,7 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
 - **Window** has Swap panels (`Ctrl+w x`), the active panel's [tabs](#tabs) (New tab, Close tab,
   Next tab, Previous tab, Tab list…; all but the first and the last dimmed with one tab), Save
   workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
-- **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).
+- **Help** has Help (`g ?`), Key hints… (`Ctrl+k`), and View the log (`Ctrl+\`).
 - `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
   boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles
   (`dialog_symbol`) but on the cursor and on a command that cannot run now. A menu taller than the
@@ -2161,24 +2161,25 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
   `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its
   last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints
-  list every key of the panel. The action `key_hints` shows
-  every key of the mode and context at once: Ctrl+k everywhere, in every mode, bound once in the
-  `global` context. In Insert mode the hints leave out characters, which are text. The app takes it
-  before whatever is in front, which stays open under the hints. While hints show, the next key runs
-  as it would have, or shows the keys that can follow it; `Esc` closes them and `Backspace` takes
-  back the last key, or with none closes them, and so do `Ctrl+[` and `Ctrl+h`, which the kitty
-  keyboard protocol tells apart from them. Ctrl+k after a count or a register shows every key, and
-  keeps them for the key after it. Ctrl+k while hints show gives them the keys, as `K K` gives
-  nvim's hover window the keys: the keymap resolves it with the count and the register, and the app
-  opens `tui/key_hints.rs` in place of the hints it has, over everything, the dialogs too
-  (`Context::KeyHints`, which falls back to `list`). It lists every sequence of the hints, whole,
-  after the keys they had typed (`Keymap::sequences`), one row for each command, under the name of
-  its group or of the context that binds it (`keymap::Heading`), the headings left out while fzf
-  ranks the rows or while one heading has them all; it opens with its
-  filter taking the keys, Enter closes it and runs the command where the keys went before, with
-  that count and register, and Esc goes to the rows, where Esc again closes it. `Esc` never starts
-  a sequence, and never shows hints. The `KeyState` also keeps what the pending command has typed,
+  list every key of the panel. In Insert mode the hints leave out characters, which are text. While
+  hints show, the next key runs as it would have, or shows the keys that can follow it; `Esc`
+  closes them and `Backspace` takes back the last key, or with none closes them, and so do `Ctrl+[`
+  and `Ctrl+h`, which the kitty keyboard protocol tells apart from them. `Esc` never starts a
+  sequence, and never shows hints. The `KeyState` also keeps what the pending command has typed,
   which the line above the F-key bar shows (`KeyState::showcmd`).
+- **The list of the key hints.** The action `key_hints`, Ctrl+k everywhere, in every mode, bound
+  once in the `global` context, opens `tui/key_hints.rs` at once
+  ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md)): the keymap resolves it with the count,
+  the register, and Ctrl+x typed before it, and leaves in the `KeyState` the hints of the keys typed
+  before it, whether the strip showed them or not (`KeyState::take_listed`); with nothing typed,
+  or from F9 → Help → Key hints…, they are every key of the mode and context (`Keymap::every_key`).
+  The app takes it before whatever is in front, which stays open under the list, the dialogs too
+  (`Context::KeyHints`, which falls back to `list`); in the list itself it does nothing. The list
+  has every sequence of the hints, whole, after the keys typed (`Keymap::sequences`), one row for
+  each command, under the name of its group or of the context that binds it (`keymap::Heading`), the
+  headings left out while fzf ranks the rows or while one heading has them all; it opens with its
+  filter taking the keys, Enter closes it and runs the command where the keys went before, with
+  that count and register, and Esc goes to the rows, where Esc again closes it.
 - **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
   captures the mouse while it is on and turns crossterm's events into `Pointer`s
   (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a

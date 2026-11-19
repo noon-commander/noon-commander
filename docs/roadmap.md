@@ -176,10 +176,11 @@
       own `run` in `hosts.toml`, edited with F4 ([ADR 0054](adr/0054-shell-run.md))
 - [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
       `ui.terminal_title`
-- [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …, and every key of
-      whatever is in front (Ctrl+k); `ui.which_key`, `ui.which_key_delay_ms`
-- [x] Ctrl+k while the key hints show gives them the keys, as nvim's `K K`: a list of every
-      sequence whole, which what is typed filters and Enter runs from
+- [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …; `ui.which_key`,
+      `ui.which_key_delay_ms`
+- [x] Ctrl+k lists the keys that can be typed now over whatever is in front, every sequence
+      whole, which what is typed filters and Enter runs from
+      ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md))
 - [x] One keymap, vim's, in its modes, with mc's F-keys, in place of two presets chosen by
       `ui.keymap`, one modelled on mc ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and
       Visual mode in the panels, the lists, the dialogs, and the text fields; vim's motions,
@@ -307,7 +308,7 @@
 - [x] The hosts of the location menu by name after those used last, as the panels order names
       ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md))
 - [x] The keys of the panels, the text fields, and the viewer in groups, which the list of the
-      key hints (Ctrl+k twice) and the help show under their names
+      key hints (Ctrl+k) and the help show under their names
       ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md))
 - [x] Large windows, 80% of the screen across and down, never narrower than 76 cells: the
       help, the list of the key hints, which shows what the command under the cursor does under

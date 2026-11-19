@@ -252,6 +252,9 @@ impl App {
         if keys.take_dropped() {
             self.give_up_command();
         }
+        if let Some(listed) = keys.take_listed() {
+            self.hints = Some(listed);
+        }
         let mut effects = Vec::new();
         for typed in typed {
             effects.extend(self.typed(typed));

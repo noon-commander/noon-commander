@@ -14,8 +14,8 @@
 //! As which-key does, the keymap lists the keys that can follow a pending sequence, or every
 //! key of a context, with what they do ([`Keymap::hints`]). While the hints show, the sequence
 //! waits for its next key without a deadline; `Esc` closes them, and `Backspace` takes back the
-//! last key of the sequence, or with none closes them. The key of the hints typed again while
-//! they show gives them the keys, as a list of whole sequences ([`Keymap::sequences`]).
+//! last key of the sequence, or with none closes them. The key of the hints lists the keys that
+//! can follow what is typed, as whole sequences ([`Keymap::sequences`]).
 //!
 //! A context with many keys has them in groups ([`Group`]), in the order of the preset, which
 //! the help and that list show under their names.
@@ -217,6 +217,8 @@ pub(crate) struct KeyState {
     dropped: bool,
     /// An operator of a text field waits for its motion, as the app says before each key.
     operator: bool,
+    /// The hints whose keys the key of the hints asked the app to list since it last asked.
+    listed: Option<Hints>,
 }
 
 impl KeyState {
@@ -268,6 +270,12 @@ impl KeyState {
     /// on with it.
     pub(crate) fn take_dropped(&mut self) -> bool {
         std::mem::take(&mut self.dropped)
+    }
+
+    /// The hints whose keys the key of the hints asked to list since the last call: of the keys
+    /// that could follow those typed before it, where they were typed.
+    pub(crate) fn take_listed(&mut self) -> Option<Hints> {
+        self.listed.take()
     }
 
     /// Says whether an operator of a text field waits for its motion: `"` then gives it up and
@@ -529,14 +537,9 @@ impl Keymap {
         }
         state.keys.push(key);
         match self.lookup(place, &state.keys) {
-            // The hints show what can follow a count, a register, or Ctrl+x, which wait for it,
-            // as they do after the first key of a sequence.
-            Lookup::Exact(Action::KeyHints) if state.keys.len() == 1 && state.waits_with() => {
+            Lookup::Exact(Action::KeyHints) => {
                 state.keys.clear();
-                if state.hinting {
-                    return Self::focus_hints(state);
-                }
-                vec![Typed::from(Resolved::Action(Action::KeyHints))]
+                self.list_hints(state, place)
             }
             Lookup::Exact(action) => {
                 let typed = Self::resolve(state, action);
@@ -565,14 +568,9 @@ impl Keymap {
             }
             Lookup::Unknown => {
                 state.keys.pop();
-                // The key of the hints shows what can follow the keys typed so far; again, it
-                // gives the hints the keys.
+                // The key of the hints lists what can follow the keys typed so far.
                 if self.lookup(place, &[key]) == Lookup::Exact(Action::KeyHints) {
-                    if state.hinting {
-                        return Self::focus_hints(state);
-                    }
-                    self.show_hints(state, place);
-                    return Vec::new();
+                    return self.list_hints(state, place);
                 }
                 // In Normal and Visual mode, as in vim, a key that cannot go on with a
                 // sequence that does nothing alone gives up both, as `g x` or Ctrl+w and a key
@@ -592,10 +590,11 @@ impl Keymap {
         }
     }
 
-    /// The key of the hints typed while they show: the app gives them the keys, with the count
-    /// and the register typed, for the command run from them. The keys typed so far stay in the
-    /// hints the app has.
-    fn focus_hints(state: &mut KeyState) -> Vec<Typed> {
+    /// The key of the hints: the app lists the keys that can follow those typed so far, which
+    /// it takes from `state` ([`KeyState::take_listed`]), with the count, the register, and
+    /// Ctrl+x typed, for the command run from the list.
+    fn list_hints(&self, state: &mut KeyState, place: Place) -> Vec<Typed> {
+        state.listed = self.typed_hints(state, place);
         let extra = state.take_extra();
         state.reset();
         vec![Typed {
@@ -859,6 +858,17 @@ impl Keymap {
         if !state.hinting || state.place() != Some(place) {
             return None;
         }
+        self.typed_hints(state, place)
+    }
+
+    /// The hints of every key where `place` says, as the key of the hints lists them with
+    /// nothing typed.
+    pub(crate) fn every_key(&self, place: impl Into<Place>) -> Option<Hints> {
+        self.typed_hints(&KeyState::default(), place.into())
+    }
+
+    /// The hints of the keys that can follow those typed in `state`, where `place` says.
+    fn typed_hints(&self, state: &KeyState, place: Place) -> Option<Hints> {
         let rows = self.hints(place, &state.keys);
         let typed: Sequence = (state.other.iter().flatten())
             .chain(&state.keys)

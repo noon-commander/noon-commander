@@ -373,7 +373,7 @@ pub(crate) async fn run(
             break Err(error.into());
         }
         let now = Instant::now();
-        take_hints(&mut app, &mut keys);
+        app.set_hints(&keys);
         if !std::mem::take(&mut idle) {
             app.frame_for_time(!std::mem::take(&mut news));
             if let Err(error) = draw_whole(&mut terminal, |frame| app.render(frame, now, &tz)) {
@@ -907,15 +907,6 @@ fn copy_to_clipboard(terminal: &mut DefaultTerminal, text: &str) -> io::Result<(
         terminal.backend_mut(),
         CopyToClipboard::to_clipboard_from(text)
     )
-}
-
-/// Shows the key hints that the app asked for, and has it draw those that `keys` has, and what
-/// its pending command has typed.
-fn take_hints(app: &mut App, keys: &mut KeyState) {
-    if let Some(place) = app.take_hints_asked() {
-        app.keymap().show_hints(keys, place);
-    }
-    app.set_hints(keys);
 }
 
 /// When the hints of the pending key sequence are due, while `ui.which_key` is on.

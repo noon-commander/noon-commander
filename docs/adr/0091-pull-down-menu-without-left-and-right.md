@@ -1,6 +1,7 @@
 # 0091. The pull-down menu acts on the active panel, without Left and Right
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0092](0092-ctrl-k-lists-the-keys-at-once.md): Key hints…
+  ends in `…`, as it opens the list of the keys
 - Date: 2026-11-19
 - Amends: [ADR 0009](0009-configuration-dialog-writes-config-toml.md),
   [ADR 0017](0017-workspaces.md), [ADR 0051](0051-ctrl-x-sends-a-command-to-the-other-panel.md),

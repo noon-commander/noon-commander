@@ -96,12 +96,11 @@ last, after its own fallbacks, so a context that binds the same key itself takes
 output of commands is the exception: noc draws nothing there. In Insert mode characters are text, so
 g < and " work only where keys are commands; Ctrl+k and Ctrl+l work in every mode, in every
 terminal. " names a register for the next command, as in vim, wherever keys are commands, so that
-the name never runs as a command; only text fields keep text in registers. Ctrl+k after a count or a
-register shows the keys they can go with, and keeps them for the key after it; Backspace with
-nothing typed closes the hints. Ctrl+k while the hints show gives them the keys, as `K K` gives
-nvim's hover window the keys: a list of every key sequence whole, which what is typed filters,
-Enter runs the command under the cursor with the count and the register typed before, and Esc goes
-to the rows, where Esc again closes it. Ctrl+k
+the name never runs as a command; only text fields keep text in registers. Ctrl+k lists the keys
+that can be typed now, after those typed before it, whether the hints show or not: every key
+sequence whole, which what is typed filters, Enter runs the command under the cursor with the
+count, the register, and Ctrl+x typed before, and Esc goes to the rows, where Esc again closes it
+([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md)). Ctrl+k
 is free in all of noc's modes and is no prefix of tmux or screen; vim's digraphs of Ctrl+k in
 Insert mode noc does not have. yazi and ranger show the keys that can follow on their own, once the
 first key of a sequence is pressed; yazi binds its help in every window, and F1 in mc and Far opens
@@ -117,7 +116,7 @@ front of it. Without the kitty keyboard protocol it arrives as Ctrl+4, which is 
 
 | Description | Action | Status | noc | mc | far | yazi | ranger |
 | --- | --- | :-: | --- | --- | --- | --- | --- |
-| The keys that can be typed now, over whatever is in front, and what they do, as which-key shows them; again, a list of them to filter and run from | `key_hints` | ⏳ | Ctrl+k | — | — | — | — |
+| The keys that can be typed now, over whatever is in front, and what they do, in a list to filter and run from | `key_hints` | ⏳ | Ctrl+k | — | — | — | — |
 | The register for the next command: a … z, which text fields share, and A … Z to append to it | `register` | ⏳ | " | — | — | — | — |
 | The output of commands, in place of the panels and what is in front of them (mc, Far: hide or show the panels) | `user_screen` | ⏳ | g < | Ctrl+o | Ctrl+o | — | — |
 | Redraw the screen | `redraw` | ✅ | Ctrl+l | Ctrl+l | — | — | Ctrl+l |
@@ -1360,13 +1359,13 @@ views the checksums, and Tab and Shift+Tab leave the filter for the buttons.
 
 ## Key hints list (`key_hints`, Normal and Insert mode)
 
-Ctrl+k while the key hints show, as `K K` gives nvim's hover window the keys: every key sequence of
-what is under the hints, whole, after the keys typed, one row for each command, over everything,
-the dialogs too. It binds no keys of its own: it falls back to `list`, whose Enter closes it and
-runs the command under the cursor where the keys went before, with the count and the register typed
-before Ctrl+k, and whose Esc closes it; commands that take a character after them, as `f` does,
-show but do not run. It opens with its filter taking text, in Insert mode, as `/` has it again,
-which falls back to `list`, then to `input`, then to `global`; Esc there goes to the rows. The rows
+Ctrl+k: every key sequence of what is under the list, whole, after the keys typed, one row for each
+command, over everything, the dialogs too. It binds no keys of its own: it falls back to `list`,
+whose Enter closes it and runs the command under the cursor where the keys went before, with the
+count and the register typed before Ctrl+k, and whose Esc closes it; Ctrl+k there does nothing.
+Commands that take a character after them, as `f` does, show but do not run. It opens with its
+filter taking text, in Insert mode, as `/` has it again, which falls back to `list`, then to
+`input`, then to `global`; Esc there goes to the rows. The rows
 show under the names of their groups, as Navigation and Files in the panels, and those of a context
 without groups under its name, as Everywhere, in the order of the keymap; the headings go while the
 filter ranks the rows best first, as fzf does, and when every row shown is under one. mc, Far,

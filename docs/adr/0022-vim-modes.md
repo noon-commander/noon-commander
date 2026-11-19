@@ -3,7 +3,8 @@
 - Status: Accepted; amended by [ADR 0042](0042-quick-search-types-only-what-matches.md),
   [ADR 0049](0049-menus-of-a-panel-keep-the-active-panel.md),
   [ADR 0051](0051-ctrl-x-sends-a-command-to-the-other-panel.md),
-  [ADR 0086](0086-groups-of-keys-live-in-the-preset.md)
+  [ADR 0086](0086-groups-of-keys-live-in-the-preset.md),
+  [ADR 0092](0092-ctrl-k-lists-the-keys-at-once.md): Ctrl+k opens the list of the keys at once
 - Date: 2026-10-13
 - Supersedes: [ADR 0020](0020-esc-acts-at-once.md)
 

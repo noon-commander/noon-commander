@@ -32,9 +32,7 @@ use super::history::HistoryWindow;
 use super::jobs::JobsList;
 use super::jump::JumpMenu;
 use super::key_hints::KeyHintsWindow;
-use super::keymap::{
-    self, Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved,
-};
+use super::keymap::{Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved};
 use super::machine::Machine;
 use super::menu::LocationMenu;
 use super::panel::{Failure, ListRequest, Panel, location_text, short_size};
@@ -1282,12 +1280,9 @@ pub(crate) struct App {
     volumes: Vec<Volume>,
     keymap: Keymap,
     /// The key hints, over everything at the bottom of the panels, as the event loop's key
-    /// state has them.
+    /// state has them; for a moment, those whose keys Ctrl+k lists.
     hints: Option<Hints>,
-    /// The key hints were asked for, with every key of this mode and context.
-    hints_asked: Option<keymap::Place>,
-    /// The key hints with the keys, after Ctrl+k while they show: over everything, the dialogs
-    /// too.
+    /// The list of the key hints, after Ctrl+k: over everything, the dialogs too.
     key_hints: Option<KeyHintsWindow>,
     /// What the pending command has typed so far, as the event loop's key state has it, for
     /// vim's `showcmd`.
@@ -1465,7 +1460,6 @@ impl App {
             volumes: Vec::new(),
             keymap: Keymap::default(),
             hints: None,
-            hints_asked: None,
             key_hints: None,
             showcmd: String::new(),
             extra: Extra::default(),
@@ -1674,12 +1668,6 @@ impl App {
         let ui = &self.config.ui;
         ui.which_key
             .then(|| Duration::from_millis(u64::from(ui.which_key_delay_ms)))
-    }
-
-    /// The mode and the context whose every key the key hints were asked for, since the last
-    /// call.
-    pub(crate) fn take_hints_asked(&mut self) -> Option<keymap::Place> {
-        self.hints_asked.take()
     }
 
     /// Shows the key hints that `keys` has, if any, and what its pending command has typed,

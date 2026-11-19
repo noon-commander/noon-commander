@@ -1,49 +1,23 @@
 use super::*;
 
 #[test]
-fn key_hints_show_every_key_of_the_panel_over_it_when_asked_for() {
+fn key_hints_show_every_key_of_the_panel_over_it_until_a_dialog_hides_them() {
     let mut app = loaded();
     let mut keys = KeyState::default();
     app.set_hints(&keys);
     assert!(!screen_of(&mut app, 16).contains("Esc closes"));
-    app.handle(action(Action::KeyHints));
-    let place = app.take_hints_asked().unwrap();
-    assert_eq!(place, (Mode::Normal, Context::Panel).into());
-    assert_eq!(app.take_hints_asked(), None, "asked once");
-    app.keymap().show_hints(&mut keys, place);
+    // As after Ctrl+x, once they are due.
+    app.keymap().show_hints(&mut keys, app.key_place());
     app.set_hints(&keys);
     let text = screen_of(&mut app, 16);
     assert!(
         text.contains("Esc closes") && text.contains("Ctrl+w") && text.contains("+9 keys"),
         "{text}"
     );
-    // A dialog in front hides them…
+    // A dialog in front hides them.
     app.handle(action(Action::Mkdir));
     app.set_hints(&keys);
     assert!(!screen_of(&mut app, 16).contains("Esc closes"));
-    // …and shows its own when asked, staying open.
-    let dialog = app.place();
-    assert_eq!(dialog, (Mode::Insert, Context::PathInput));
-    assert!(app.handle(action(Action::KeyHints)).is_empty());
-    assert_eq!(app.take_hints_asked(), Some(dialog.into()));
-    assert_eq!(app.place(), dialog);
-    app.keymap().show_hints(&mut keys, dialog);
-    app.set_hints(&keys);
-    let text = screen_of(&mut app, 16);
-    assert!(
-        text.contains("Esc closes") && text.contains("Complete the path"),
-        "{text}"
-    );
-    // So does a menu.
-    app.handle(action(Action::Cancel));
-    app.handle(action(Action::PullDown));
-    assert_eq!(app.context(), Context::PullDown);
-    app.handle(action(Action::KeyHints));
-    assert_eq!(
-        app.take_hints_asked(),
-        Some((Mode::Normal, Context::PullDown).into())
-    );
-    assert_eq!(app.context(), Context::PullDown);
 }
 
 /// Feeds `keys` to the app as the event loop does, with the key hints, which `state` keeps.
@@ -53,24 +27,18 @@ fn keys_with_hints(app: &mut App, state: &mut KeyState, keys: &[&str]) -> Vec<Ef
         let combination = crokey::parse(key).unwrap().normalized();
         let event = KeyEvent::new(*combination.codes.first(), combination.modifiers);
         effects.extend(app.key(state, event, Instant::now()));
-        if let Some(place) = app.take_hints_asked() {
-            app.keymap().show_hints(state, place);
-        }
         app.set_hints(state);
     }
     effects
 }
 
 #[test]
-fn ctrl_k_twice_lists_the_keys_to_filter_and_run_where_they_went() {
+fn ctrl_k_lists_the_keys_to_filter_and_run_where_they_went() {
     let mut app = loaded();
     let mut state = KeyState::default();
     keys_with_hints(&mut app, &mut state, &["2", "ctrl-k"]);
-    assert!(app.hints.is_some());
-    assert_eq!(app.place(), (Mode::Normal, Context::Panel));
-    keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
     assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
-    assert!(app.hints.is_none(), "the list takes the place of the hints");
+    assert!(app.hints.is_none(), "no hints under the list");
     let text = screen_of(&mut app, 30);
     assert!(
         text.contains("g g, Home") && text.contains(&prompt("Filter", "")),
@@ -89,27 +57,36 @@ fn ctrl_k_twice_lists_the_keys_to_filter_and_run_where_they_went() {
 
     // After the first key of a sequence, the list has the sequences after it.
     keys_with_hints(&mut app, &mut state, &["ctrl-w", "ctrl-k"]);
-    assert_eq!(
-        app.hints.as_ref().and_then(|hints| hints.typed.as_deref()),
-        Some("Ctrl+w")
-    );
-    keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
     assert_eq!(app.context(), Context::KeyHints);
     let text = screen_of(&mut app, 30);
     assert!(text.contains("Ctrl+w h") && !text.contains("g g"), "{text}");
-    // Esc goes back to the rows, Esc again closes it, and the hints do not come back.
+    // Ctrl+k in the list leaves it as it is.
+    keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
+    assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
+    assert_eq!(screen_of(&mut app, 30), text);
+    // Esc goes back to the rows, Esc again closes it, and no hints show.
     keys_with_hints(&mut app, &mut state, &["esc"]);
     assert_eq!(app.place(), (Mode::Normal, Context::KeyHints));
     keys_with_hints(&mut app, &mut state, &["esc"]);
     assert_eq!(app.place(), (Mode::Normal, Context::Panel));
     assert!(app.hints.is_none());
+
+    // So does Ctrl+k while the hints of a sequence show.
+    keys_with_hints(&mut app, &mut state, &["g"]);
+    app.keymap().show_hints(&mut state, app.key_place());
+    app.set_hints(&state);
+    assert!(app.hints.is_some());
+    keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
+    assert_eq!(app.context(), Context::KeyHints);
+    assert!(app.hints.is_none(), "the list takes the place of the hints");
+    assert!(screen_of(&mut app, 30).contains("g g"));
 }
 
 #[test]
 fn the_list_of_the_keys_after_ctrl_x_runs_its_command_in_the_other_panel() {
     let mut app = loaded();
     let mut state = KeyState::default();
-    keys_with_hints(&mut app, &mut state, &["ctrl-x", "ctrl-k", "ctrl-k"]);
+    keys_with_hints(&mut app, &mut state, &["ctrl-x", "ctrl-k"]);
     assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
     assert_eq!(app.active, Side::Right, "the other panel has the keys");
     let typed: Vec<String> = "'row down".chars().map(String::from).collect();
@@ -125,13 +102,13 @@ fn the_list_of_the_keys_after_ctrl_x_runs_its_command_in_the_other_panel() {
 }
 
 #[test]
-fn ctrl_k_twice_lists_the_keys_of_a_dialog_over_it() {
+fn ctrl_k_lists_the_keys_of_a_dialog_over_it() {
     let mut app = loaded();
     let mut state = KeyState::default();
     app.handle(action(Action::Mkdir));
     let dialog = app.place();
     assert_eq!(dialog, (Mode::Insert, Context::PathInput));
-    keys_with_hints(&mut app, &mut state, &["ctrl-k", "ctrl-k"]);
+    keys_with_hints(&mut app, &mut state, &["ctrl-k"]);
     assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
     assert!(screen_of(&mut app, 30).contains("Complete the path"));
     keys_with_hints(&mut app, &mut state, &["esc", "esc"]);

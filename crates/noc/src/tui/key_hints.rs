@@ -1,8 +1,7 @@
-//! The key hints with the keys, after Ctrl+k while they show, as `K K` in nvim gives its hover
-//! window the keys: every key sequence of what is under them, whole, with what it does, in a
-//! list that `/` filters, under the names of their groups of keys, or of the contexts that bind
-//! them, in a large window. Enter closes it and runs the command under the cursor where the keys
-//! went before; Esc closes it.
+//! The list of the key hints, after Ctrl+k: every key sequence of what is under it that can
+//! follow the keys typed, whole, with what it does, in a list that `/` filters, under the names
+//! of their groups of keys, or of the contexts that bind them, in a large window. Enter closes
+//! it and runs the command under the cursor where the keys went before; Esc closes it.
 
 use noc_scroll::scrollbar::Bar;
 use ratatui::Frame;
@@ -239,7 +238,7 @@ mod tests {
     use crate::tui::keymap::{Context, KeyState};
     use crate::tui::window::frame_size;
 
-    /// The window over every key of `place`, as Ctrl+k twice opens it.
+    /// The window over every key of `place`, as Ctrl+k opens it.
     fn window(place: (Mode, Context), extra: Extra) -> KeyHintsWindow {
         window_after(place, &[], SearchMode::Fzf, extra)
     }

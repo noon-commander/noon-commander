@@ -450,7 +450,7 @@ pulldown-save-workspace = &Save workspace…
 pulldown-workspace-list = Workspace &list…
 # Help.
 pulldown-help = &Help
-pulldown-key-hints = &Key hints
+pulldown-key-hints = &Key hints…
 pulldown-view-log = &View the log
 
 ## The Configuration dialog, Tools → Configuration… (src/tui/configuration): the settings of
@@ -1071,8 +1071,8 @@ help-tip-dialogs-combo-box = A combo box, a choice in brackets with an arrow, in
 help-tip-key-hints = Key hints
 help-tip-key-hints-show = After a key that starts longer sequences, such as g or Ctrl+w, the keys that can follow show after a moment, and wait for one.
 help-tip-key-hints-keys = Esc closes them, and Backspace takes back the last key, or closes them when none is typed.
-help-tip-key-hints-list = Ctrl+k while they show gives them the keys, as a list of whole sequences: what is typed filters it, and Enter runs the command under the cursor.
-help-key-hints = The keys that can be typed now and what they do; again, a list to filter
+help-tip-key-hints-list = Ctrl+k lists the keys that can be typed now, whole, after those typed, whether the hints show or not: what is typed filters the list, and Enter runs the command under the cursor.
+help-key-hints = The keys that can be typed now and what they do, in a list to filter and run from
 help-key-hints-run = Close the list and run the command, with the count typed before Ctrl+k
 help-key-hints-close = Close the list
 help-register = The register for the next command: a … z, which text fields share, and A … Z to append to it

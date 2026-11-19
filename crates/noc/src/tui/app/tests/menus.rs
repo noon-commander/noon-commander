@@ -245,10 +245,9 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     let text = screen_of(&mut app, 20);
     assert!(line_with(&text, "Key hints").contains("Ctrl+k"), "{text}");
     app.handle(Resolved::Hotkey('k'));
-    assert_eq!(
-        app.take_hints_asked(),
-        Some((Mode::Normal, Context::Panel).into())
-    );
+    assert_eq!(app.place(), (Mode::Insert, Context::KeyHints));
+    let text = screen_of(&mut app, 30);
+    assert!(text.contains("g g, Home"), "the keys of the panel: {text}");
 }
 
 #[test]

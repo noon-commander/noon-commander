@@ -275,17 +275,18 @@ impl App {
             return None;
         };
         match action {
-            // The hints show their keys over what is in front, which stays open; again while
-            // they show, they take the keys, as a list.
+            // The list of the keys opens over what is in front, which stays open: of those that
+            // can follow the keys typed, or of every key, as from the pull-down menu. In the
+            // list itself it does nothing, so that it never takes the list's place.
             Action::KeyHints => {
                 let place = self.key_place();
-                match self.hints.take() {
-                    Some(hints) if hints.place == place => {
-                        let input = self.search_opens(Slot::KeyHints);
-                        let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, input);
-                        self.key_hints = Some(window);
-                    }
-                    _ => self.hints_asked = Some(place),
+                let typed = self.hints.take().filter(|hints| hints.place == place);
+                if self.key_hints.is_none()
+                    && let Some(hints) = typed.or_else(|| self.keymap.every_key(place))
+                {
+                    let input = self.search_opens(Slot::KeyHints);
+                    let window = KeyHintsWindow::new(&self.keymap, &hints, self.extra, input);
+                    self.key_hints = Some(window);
                 }
             }
             // The panels alone: the lists always show their row under the cursor whole.

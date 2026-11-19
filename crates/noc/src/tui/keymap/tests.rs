@@ -782,17 +782,20 @@ fn a_register_is_named_wherever_keys_are_commands() {
 }
 
 #[test]
-fn ctrl_k_after_a_sequence_shows_what_can_follow_it() {
+fn ctrl_k_after_a_sequence_lists_what_can_follow_it() {
     let keymap = Keymap::default();
     let mut state = KeyState::default();
-    assert_eq!(feed(&keymap, &mut state, PANEL, &["g", "ctrl-k"]), []);
-    let hints = keymap.hints_of(&state, PANEL).expect("the hints of g");
-    assert_eq!(hints.typed.as_deref(), Some("g"));
-    assert!(!state.take_dropped());
     assert_eq!(
-        feed(&keymap, &mut state, PANEL, &["g"]),
-        actions(&[Action::Home])
+        feed(&keymap, &mut state, PANEL, &["g", "ctrl-k"]),
+        actions(&[Action::KeyHints])
     );
+    let hints = state.take_listed().expect("the hints of g");
+    assert_eq!(hints.typed.as_deref(), Some("g"));
+    assert_eq!(hints.prefix, parse_sequence("g").unwrap());
+    assert_eq!(state.take_listed(), None, "taken once");
+    assert!(!state.take_dropped());
+    assert_eq!(state.showcmd(), "", "the list has the keys");
+    assert_eq!(keymap.hints_of(&state, PANEL), None);
 }
 
 #[test]
@@ -1671,60 +1674,23 @@ fn esc_closes_the_hints_and_backspace_takes_back_a_key() {
     keymap.show_hints(&mut state, PANEL);
     assert_eq!(keymap.feed(&mut state, PANEL, key("backspace"), now), []);
     assert_eq!(keymap.hints_of(&state, PANEL), None);
-    // A count or a register typed before Ctrl+k waits for the key after the hints.
-    assert_eq!(
-        feed(&keymap, &mut state, PANEL, &["3", "ctrl-k"]),
-        actions(&[Action::KeyHints]),
-        "without the count"
-    );
-    keymap.show_hints(&mut state, PANEL);
-    assert_eq!(state.showcmd(), "3");
-    assert_eq!(
-        feed(&keymap, &mut state, PANEL, &["j"]),
-        with(
-            Action::Down,
-            Extra {
-                count: Some(3),
-                ..Extra::default()
-            }
-        )
-    );
-    assert_eq!(
-        feed(&keymap, &mut state, FIELD, &["\"", "a", "ctrl-k"]),
-        actions(&[Action::KeyHints])
-    );
-    keymap.show_hints(&mut state, FIELD);
-    assert_eq!(
-        feed(&keymap, &mut state, FIELD, &["y"]),
-        with(
-            Action::YankOperator,
-            Extra {
-                register: Some('a'),
-                ..Extra::default()
-            }
-        )
-    );
 }
 
 #[test]
-fn ctrl_k_while_the_hints_show_gives_them_the_keys_with_the_count() {
+fn ctrl_k_lists_the_keys_with_the_count_the_register_and_ctrl_x() {
     let keymap = Keymap::default();
     let mut state = KeyState::default();
-    // Every key: the app, which has the hints, takes the second Ctrl+k for itself.
-    keymap.show_hints(&mut state, PANEL);
+    // Every key, with nothing typed.
     assert_eq!(
         feed(&keymap, &mut state, PANEL, &["ctrl-k"]),
         actions(&[Action::KeyHints])
     );
-    assert_eq!(keymap.hints_of(&state, PANEL), None);
+    let every_key = state.take_listed().unwrap();
+    assert_eq!(every_key.typed, None);
+    assert_eq!(Some(every_key), keymap.every_key(PANEL));
     // After a count, which goes with it, for the command run from the list.
     assert_eq!(
         feed(&keymap, &mut state, PANEL, &["3", "ctrl-k"]),
-        actions(&[Action::KeyHints])
-    );
-    keymap.show_hints(&mut state, PANEL);
-    assert_eq!(
-        feed(&keymap, &mut state, PANEL, &["ctrl-k"]),
         with(
             Action::KeyHints,
             Extra {
@@ -1734,16 +1700,46 @@ fn ctrl_k_while_the_hints_show_gives_them_the_keys_with_the_count() {
         )
     );
     assert_eq!(state.showcmd(), "");
-    // After the first key of a sequence, which the hints keep.
-    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-w", "ctrl-k"]), []);
-    let hints = keymap.hints_of(&state, PANEL).unwrap();
-    assert_eq!(hints.prefix, parse_sequence("ctrl-w").unwrap());
+    assert_eq!(state.take_listed(), keymap.every_key(PANEL), "every key");
+    assert_eq!(
+        feed(&keymap, &mut state, FIELD, &["\"", "a", "ctrl-k"]),
+        with(
+            Action::KeyHints,
+            Extra {
+                register: Some('a'),
+                ..Extra::default()
+            }
+        )
+    );
+    assert_eq!(state.take_listed().unwrap().place, FIELD.into());
+    // After Ctrl+x, which the list names.
+    assert_eq!(
+        feed(&keymap, &mut state, PANEL, &["ctrl-x", "ctrl-k"]),
+        with(
+            Action::KeyHints,
+            Extra {
+                other: true,
+                ..Extra::default()
+            }
+        )
+    );
+    assert_eq!(
+        state.take_listed().unwrap().typed.as_deref(),
+        Some("Ctrl+x")
+    );
+    // While the hints show, after the first key of a sequence, which the list keeps.
+    assert_eq!(feed(&keymap, &mut state, PANEL, &["ctrl-w"]), []);
+    keymap.show_hints(&mut state, PANEL);
     assert_eq!(
         feed(&keymap, &mut state, PANEL, &["ctrl-k"]),
         actions(&[Action::KeyHints])
     );
+    assert_eq!(
+        state.take_listed().unwrap().prefix,
+        parse_sequence("ctrl-w").unwrap()
+    );
     assert_eq!(state.showcmd(), "");
-    assert_eq!(keymap.hints_of(&state, PANEL), None);
+    assert_eq!(keymap.hints_of(&state, PANEL), None, "they close");
 }
 
 #[test]

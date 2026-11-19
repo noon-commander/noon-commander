@@ -22,9 +22,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `Help`, without `Left` and `Right`: every command acts on the active panel (Ctrl+x F9 acts on
   the other), Go has the host commands and adds Jump back and Jump forward, Search adds Next match
   and Previous match, Window has Swap panels and adds Next tab and Previous tab, Tools and Help add
-  Shell command…, Command history…, Command output, and Key hints; a command ends in `…` when it
+  Shell command…, Command history…, Command output, and Key hints…; a command ends in `…` when it
   asks for something before it acts. `Workspace`, with the tabs and the workspaces, is now `Window`
   ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
+- Ctrl+k opens the list of the key hints at once, to filter and run from, in place of Ctrl+k twice;
+  after `g` or Ctrl+w it lists what can follow them. The hints at the bottom show on their own after
+  such a key, and Ctrl+k in the list does nothing
+  ([ADR 0092](docs/adr/0092-ctrl-k-lists-the-keys-at-once.md)).
 
 ### Removed
 

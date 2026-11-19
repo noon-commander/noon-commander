@@ -25,18 +25,18 @@ Three windows were also absent from the menu: the command history (`q :`), the o
 
 ## Decision
 
-- **Six menus by task, without `Left` and `Right`:** `File`, `View`, `Go`, `Tools`, `Workspace`,
-  `Help`. Every command acts on the active panel, as its key does (`Command::Do(Action)`), and
-  `Ctrl+x F9` (or `Ctrl+x g m`) runs any menu command in the other panel and returns the keys once
-  it ends.
+- **Seven menus by task, without `Left` and `Right`:** `File`, `View`, `Go`, `Search`, `Tools`,
+  `Workspace`, `Help`. Every command acts on the active panel, as its key does
+  (`Command::Do(Action)`), and `Ctrl+x F9` (or `Ctrl+x g m`) runs any menu command in the other
+  panel and returns the keys once it ends.
 - **Contents:**
   - **File:** View, Edit, Open externally; Copy, Duplicate, Rename/Move, Rename in place, Mkdir,
     Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
     whole names; Swap panels, Open in the other panel, This directory in the other panel; Rescan,
     Redraw screen.
-  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)…; Quick search, Find
-    file…, Find files and dirs….
+  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)….
+  - **Search:** Quick search, Find file…, Find files and dirs….
   - **Tools:** Checksums…, Background jobs…; Command history…, Command output; Edit host settings…,
     Disconnect host; Configuration….
   - **Workspace:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…; the saved
@@ -50,7 +50,8 @@ Three windows were also absent from the menu: the command history (`q :`), the o
 ## Consequences
 
 - Every menu command follows the same active-panel and Ctrl+x model as the rest of Noon Commander,
-  with no duplicate panel menus and a narrower menu bar (56 cells vs. 64).
+  with no duplicate panel menus; the seven-menu bar takes 67 cells (vs. 64 before), leaving room
+  for the jobs indicator on an 80-column terminal.
 - Acting on the other panel from the menu now takes `Ctrl+x F9` (or switching panels first) instead
   of opening `Left` or `Right`.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`

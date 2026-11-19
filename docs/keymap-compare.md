@@ -1285,13 +1285,13 @@ then to `global`; Tab and F8 still switch the hosts and remove the command.
 
 ## Search of a whole tree (`find`, Normal mode)
 
-f / in a panel, or F9 → Go → Find file…: ripgrep searches the files under the panel's
+f / in a panel, or F9 → Search → Find file…: ripgrep searches the files under the panel's
 directory, local or on a host, for the text of the first field, among those the globs of the second
 let through, again as either changes, or either switches how it matches or whether case counts; with
 no text it lists the files. It is a dialog: two fields, the rows, and the buttons Go to, View, Edit,
 and Cancel, as in the results of mc's Find File, which, as Far's Find file, asks for a mask and a
 text in a dialog first. Its other mode, Files and dirs, in the combo box Mode above the fields,
-finds files and directories by name with fd, and Go to goes into a directory; f f, or F9 → Go →
+finds files and directories by name with fd, and Go to goes into a directory; f f, or F9 → Search →
 Find files and dirs…, opens the dialog in it. Its focus on the rows or a button, it falls back to
 `dialog`, whose motions move the cursor of the rows while they have the focus, and Tab leaves them;
 Enter and Space on a row go to it.

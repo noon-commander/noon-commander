@@ -1,5 +1,5 @@
-//! The pull-down menu of F9: a bar of menus (File, View, Go, Tools, Workspace, Help), and the
-//! commands of the one that is open. Every command acts on the active panel, as its key does;
+//! The pull-down menu of F9: a bar of menus (File, View, Go, Search, Tools, Workspace, Help), and
+//! the commands of the one that is open. Every command acts on the active panel, as its key does;
 //! Ctrl+x F9 acts on the other panel. Each command shows the key that does the same, from the
 //! keymap, and has a letter that, typed with Alt, runs it while its menu is open; the plain
 //! letters move, as `h`, `j`, `k`, and `l`. The Workspace menu lists the saved workspaces too,
@@ -128,11 +128,12 @@ struct Drawn {
 }
 
 /// The titles of the menu bar, left to right.
-fn titles() -> [Label; 6] {
+fn titles() -> [Label; 7] {
     [
         fl!("pulldown-file"),
         fl!("pulldown-view"),
         fl!("pulldown-go"),
+        fl!("pulldown-search"),
         fl!("pulldown-tools"),
         fl!("pulldown-workspace"),
         fl!("pulldown-help-menu"),
@@ -205,9 +206,9 @@ fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
     Menu { title, entries }
 }
 
-/// The six menus on the bar, in order, with the saved `workspaces` in Workspace.
+/// The seven menus on the bar, in order, with the saved `workspaces` in Workspace.
 fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
-    let [file, view, go, tools, workspace, help] = titles();
+    let [file, view, go, search, tools, workspace, help] = titles();
     vec![
         plain_menu(
             file,
@@ -255,7 +256,11 @@ fn menus(workspaces: &[String], marks: Marks) -> Vec<Menu> {
                 Some((fl!("pulldown-location"), Action::LocationMenu)),
                 Some((fl!("pulldown-goto"), Action::GoToDir)),
                 Some((fl!("pulldown-jump"), Action::Jump)),
-                None,
+            ],
+        ),
+        plain_menu(
+            search,
+            vec![
                 Some((fl!("pulldown-quick-search"), Action::QuickSearch)),
                 Some((fl!("pulldown-find"), Action::FindFile)),
                 Some((fl!("pulldown-find-names"), Action::FindNames)),
@@ -930,7 +935,7 @@ mod tests {
             menu.handle(action(Action::Left), &status),
             PullDownEvent::Pending
         );
-        assert_eq!(menu.selected, 5, "round the bar");
+        assert_eq!(menu.selected, 6, "round the bar");
         assert_eq!(menu.menu().title.text, "Help");
         assert!(menu.open, "opens the next menu");
         menu.handle(action(Action::Right), &status);
@@ -1005,7 +1010,7 @@ mod tests {
         assert_eq!((menu.selected, menu.open), (1, false));
         menu.handle(action(Action::Left), &status);
         menu.handle(action(Action::Left), &status);
-        assert_eq!((menu.selected, menu.open), (5, false));
+        assert_eq!((menu.selected, menu.open), (6, false));
         assert_eq!(
             menu.handle(Resolved::Hotkey('x'), &status),
             PullDownEvent::Pending,
@@ -1083,7 +1088,7 @@ mod tests {
     }
 
     fn draw(menu: &PullDown, theme: &Theme) -> String {
-        let mut terminal = Terminal::new(TestBackend::new(64, 20)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(72, 20)).unwrap();
         terminal
             .draw(|frame| {
                 let screen = frame.area();
@@ -1102,7 +1107,7 @@ mod tests {
 
     #[test]
     fn the_mouse_opens_menus_and_runs_commands() {
-        // On the 64 columns of `draw`: ` File ` takes columns 1 … 6, ` View ` 10 … 15, and File's
+        // On the 72 columns of `draw`: ` File ` takes columns 1 … 6, ` View ` 10 … 15, and File's
         // rows start on line 2, View first.
         let mut menu = PullDown::new(None, &[], Glyphs::PLAIN.marks, &status);
         assert_eq!(press(&mut menu, Press::Click, 3, 0), PullDownEvent::Pending);
@@ -1148,7 +1153,7 @@ mod tests {
         let theme = Theme::mc_classic();
         let text = draw(&menu, &theme);
         assert!(!text.contains('╔'), "{text}");
-        let mut terminal = Terminal::new(TestBackend::new(64, 3)).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(72, 3)).unwrap();
         terminal
             .draw(|frame| {
                 let bar = Rect::new(0, 0, frame.area().width, 1);
@@ -1272,7 +1277,7 @@ mod tests {
     fn names_with_ampersands_keep_them_and_no_letter() {
         let names = ["R&D".to_owned()];
         let menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
-        let menu = &menu.menus[4];
+        let menu = &menu.menus[5];
         let Some(Entry::Item(item)) = menu.entries.last() else {
             panic!("{menu:?}");
         };
@@ -1349,7 +1354,7 @@ mod tests {
     fn a_long_name_marks_where_it_is_cut_in_its_own_style() {
         let names = [format!("R&D {}", "x".repeat(60))];
         let menu = PullDown::new(None, &names, Glyphs::PLAIN.marks, &status);
-        let menu = &menu.menus[4];
+        let menu = &menu.menus[5];
         let Some(Entry::Item(item)) = menu.entries.last() else {
             panic!("{menu:?}");
         };

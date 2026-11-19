@@ -71,9 +71,9 @@ show_hidden = true
 # smart at first: only once what is typed has a capital letter. Each field keeps the way and the
 # case it had last until Noon Commander quits.
 default_search_mode = "fzf"
-# The menu bar of F9 (File, View, Go, Tools, Workspace, Help): "on-demand" shows it only while a
-# menu is open, over the panels, as Far Manager does; "always" keeps it above the panels, as
-# Midnight Commander does.
+# The menu bar of F9 (File, View, Go, Search, Tools, Workspace, Help): "on-demand" shows it only
+# while a menu is open, over the panels, as Far Manager does; "always" keeps it above the panels,
+# as Midnight Commander does.
 menu_bar = "on-demand"
 # Where a panel with more than one tab (t n) shows them: "line" on a line of its own above
 # the panels, or "frame" in the top of the panel's frame, in place of its title.

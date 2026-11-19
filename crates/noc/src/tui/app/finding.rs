@@ -84,7 +84,7 @@ impl App {
     }
 
     /// Opens the dialog of the search of the files under the active panel's directory in `mode`
-    /// (`f /` and F9 → Go → Find file… for text, `f f` and Find files and dirs… for
+    /// (`f /` and F9 → Search → Find file… for text, `f f` and Find files and dirs… for
     /// names), as far as `[search]` lets it go, with the hidden files if the panels show them,
     /// and lists the files at once.
     pub(super) fn open_find(&mut self, mode: FindMode) -> Vec<Effect> {

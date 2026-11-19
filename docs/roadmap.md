@@ -76,9 +76,9 @@
       expected checksum, comparison with the file in the other panel, Copy and Save
 - [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
       and missing, with a total
-- [x] F9 pull-down menu: `File`, `View`, `Go`, `Tools`, `Workspace`, `Help`, without `Left` and
-      `Right`; every command acts on the active panel (`Ctrl+x F9` on the other), with Command
-      history, Command output, and Key hints; `ui.menu_bar`
+- [x] F9 pull-down menu: `File`, `View`, `Go`, `Search`, `Tools`, `Workspace`, `Help`, without
+      `Left` and `Right`; every command acts on the active panel (`Ctrl+x F9` on the other), with
+      Command history, Command output, and Key hints; `ui.menu_bar`
       ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md))
 - [x] Configuration dialog (Tools → Configuration…): categories with icons, scrolling
       settings with a scroll bar, Interface; writes changed keys to `config.toml`

@@ -94,7 +94,7 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
     app.handle(action(Action::PullDown));
     assert_eq!(app.context(), Context::PullDown);
     let text = screen_of(&mut app, 20);
-    assert!(text.contains("File     View     Go"), "{text}");
+    assert!(text.contains("File     View     Go     Search"), "{text}");
     assert!(!text.contains("Open externally"), "the bar alone: {text}");
     app.handle(action(Action::Down));
     let text = screen_of(&mut app, 20);
@@ -187,6 +187,20 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     keys(&mut app, &["alt-v", "alt-z"]);
     assert_eq!(app.panel(Side::Left).sort_action(), Action::SortBySize);
     assert_eq!(app.active, Side::Right, "the keys come back");
+
+    // Search → Quick search, Find file…, Find files and dirs….
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('s'));
+    let text = screen_of(&mut app, 20);
+    assert!(line_with(&text, "Quick search").contains('/'), "{text}");
+    assert!(line_with(&text, "Find file…").contains("f /"), "{text}");
+    assert!(
+        line_with(&text, "Find files and dirs…").contains("f f"),
+        "{text}"
+    );
+    app.handle(Resolved::Hotkey('q'));
+    assert_eq!(app.context(), Context::QuickSearch);
+    app.handle(action(Action::Abort));
 
     // Tools → Command history…, Command output; Help → Key hints.
     app.handle(action(Action::PullDown));

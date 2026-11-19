@@ -364,7 +364,7 @@ Ctrl+x F9 (or Ctrl+x `g m`) opens the bar for the other panel and gives the keys
 command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An open menu:
 
 ```text
-  File     View     Go     Tools     Workspace     Help                 2 jobs 37%
+  File     View     Go     Search     Tools     Workspace     Help   2 jobs 37%
  ╔═════════════════════════╗
  ║   View              g f ║
  ║   Edit                e ║
@@ -389,9 +389,9 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
 - **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names
   (`✓` while on), the other-panel commands (Swap panels, Open in the other panel, This directory in
   the other panel), Rescan, and Redraw screen.
-- **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), the
-  [zoxide](#zoxide) window (`g z`), quick search (`/`), Find file… (`f /`), and Find files and
-  dirs… (`f f`).
+- **Go** has Change location… (`g l`), [Go to directory](#go-to-directory) (`g d`), and the
+  [zoxide](#zoxide) window (`g z`).
+- **Search** has quick search (`/`), Find file… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Checksums (`f #`), Background jobs (`f j`), Command history (`q :`), Command output
   (`g <`), Edit host settings and Disconnect host for the active panel's host, and
   [Configuration…](#configuration-dialog) (`o o`).
@@ -618,8 +618,8 @@ The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
 
 ### Search of a whole tree
 
-`f /` in a panel, or F9 → Go → Find file…, opens a dialog over both panels that searches the
-files below the active panel's directory with ripgrep; `f f`, or F9 → Go → Find files and
+`f /` in a panel, or F9 → Search → Find file…, opens a dialog over both panels that searches the
+files below the active panel's directory with ripgrep; `f f`, or F9 → Search → Find files and
 dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
 [ADR 0029](adr/0029-files-and-directories-with-fd.md)):

@@ -27,7 +27,9 @@ Three windows were also absent from the menu: the command history (`q :`), the o
 
 `Workspace` listed the saved workspaces under its commands, the first ten with `1` … `9` and `0`
 ([ADR 0017](0017-workspaces.md)): a copy of their window (`t w`), one entry below, without its
-filter, its tabs, or its commands, and with a `Command::Workspace` of its own.
+filter, its tabs, or its commands, and with a `Command::Workspace` of its own. Its first three
+commands were those of the tabs, which its title did not name; `Tabs` could not have `T`, which
+`Tools` has, and a menu of its own would have left `Workspace` two commands and the bar 76 cells.
 
 `Find file…`, mc's name, searched the files for text, while `Find files and dirs…` beside it
 found them by name.
@@ -39,7 +41,7 @@ one, Help and Command output none.
 ## Decision
 
 - **Seven menus by task, without `Left` and `Right`:** `File`, `View`, `Go`, `Search`, `Tools`,
-  `Workspace`, `Help`. Every command is an `Action` and acts on the active panel, as its key does,
+  `Window`, `Help`. Every command is an `Action` and acts on the active panel, as its key does,
   and `Ctrl+x F9` (or `Ctrl+x g m`) runs any menu command in the other panel and returns the keys
   once it ends.
 - **Contents:**
@@ -54,8 +56,9 @@ one, Help and Command output none.
     dialog they open.
   - **Tools:** Background jobs; Shell command…, Command history…, Command output; Edit host
     settings…, Disconnect host; Configuration….
-  - **Workspace:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…. The saved
-    workspaces are not listed: Workspace list… opens their window.
+  - **Window:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…, as the Window menu
+    of macOS and of editors holds the tabs. The saved workspaces are not listed: Workspace list…
+    opens their window.
   - **Help:** Help, Key hints; View the log.
 - **`…` ends a command that asks for something before it acts:** text, a choice from a list, or
   settings, in a dialog, a field, or a window. A question that only confirms does not count
@@ -70,9 +73,9 @@ one, Help and Command output none.
 ## Consequences
 
 - Every menu command follows the same active-panel and Ctrl+x model as the rest of Noon Commander,
-  with no duplicate panel menus; the seven-menu bar takes 67 cells (vs. 64 before), leaving room
-  for the jobs indicator on an 80-column terminal. On a narrower one, the indicator covers the end
-  of the bar, `Help` first, while jobs run; Alt+H still opens it.
+  with no duplicate panel menus; the seven-menu bar takes 64 cells, as many as before, leaving
+  room for the jobs indicator on an 80-column terminal. On a narrower one, the indicator covers the
+  end of the bar, `Help` first, while jobs run; Alt+H still opens it.
 - Acting on the other panel from the menu now takes `Ctrl+x F9` (or switching panels first) instead
   of opening `Left` or `Right`.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`
@@ -80,5 +83,6 @@ one, Help and Command output none.
 - In File, Alt+r runs Rename in place…, as `r` does in the panels, and Alt+n runs Rename/Move….
 - `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`, and
   `Jump forward` are reachable from F9.
+- `Workspace` is named `Window`; Alt+W still opens it.
 - Restoring a workspace from F9 takes Workspace list… and Enter, or the filter, in place of Alt and
   a digit.

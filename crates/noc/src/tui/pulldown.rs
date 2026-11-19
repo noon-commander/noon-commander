@@ -1,4 +1,4 @@
-//! The pull-down menu of F9: a bar of menus (File, View, Go, Search, Tools, Workspace, Help), and
+//! The pull-down menu of F9: a bar of menus (File, View, Go, Search, Tools, Window, Help), and
 //! the commands of the one that is open. Every command acts on the active panel, as its key does;
 //! Ctrl+x F9 acts on the other panel. Each command shows the key that does the same, from the
 //! keymap, and has a letter that, typed with Alt, runs it while its menu is open; the plain
@@ -126,7 +126,7 @@ fn titles() -> [Label; 7] {
         fl!("pulldown-go"),
         fl!("pulldown-search"),
         fl!("pulldown-tools"),
-        fl!("pulldown-workspace"),
+        fl!("pulldown-window"),
         fl!("pulldown-help-menu"),
     ]
     .map(|title| Label::parse(&title))
@@ -157,7 +157,7 @@ fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
 
 /// The seven menus on the bar, in order.
 fn menus() -> Vec<Menu> {
-    let [file, view, go, search, tools, workspace, help] = titles();
+    let [file, view, go, search, tools, window, help] = titles();
     vec![
         plain_menu(
             file,
@@ -236,7 +236,7 @@ fn menus() -> Vec<Menu> {
             ],
         ),
         plain_menu(
-            workspace,
+            window,
             vec![
                 Some((fl!("pulldown-new-tab"), Action::NewTab)),
                 Some((fl!("pulldown-close-tab"), Action::CloseTab)),

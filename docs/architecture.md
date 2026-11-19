@@ -364,7 +364,7 @@ Ctrl+x F9 (or Ctrl+x `g m`) opens the bar for the other panel and gives the keys
 command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An open menu:
 
 ```text
-  File     View     Go     Search     Tools     Workspace     Help  2 jobs 37%
+  File     View     Go     Search     Tools     Window     Help     2 jobs 37%
  ╔═════════════════════════╗
  ║   View              g f ║
  ║   Edit                e ║
@@ -398,7 +398,7 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
 - **Tools** has Background jobs (`f j`), Shell command… (`!`), Command history… (`q :`), Command
   output (`g <`), Edit host settings… and Disconnect host for the active panel's host, and
   [Configuration…](#configuration-dialog) (`o o`).
-- **Workspace** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
+- **Window** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
   workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
 - **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).
 - `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
@@ -823,13 +823,13 @@ A workspace is the tabs of both panels, saved under a name
 ([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location,
 sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
 
-- `t W`, or F9 → Workspace → Save workspace…, asks for a name, offering
+- `t W`, or F9 → Window → Save workspace…, asks for a name, offering
   that of the workspace restored or saved last, and saves the tabs under it; the name of a
   workspace asks before replacing it, as `W` in the window does: Yes by default over the one
   restored or saved last, No over another one. A location that `workspaces.toml` cannot hold,
   such as a name that is not UTF-8, is saved as the nearest directory above it that it can
   hold, or else as `~`.
-- `t w`, or F9 → Workspace → Workspace list…, opens a window of the saved
+- `t w`, or F9 → Window → Workspace list…, opens a window of the saved
   workspaces, one of the [lists](#lists), with a filter, which matches in the
   [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` or F7 saves the
   tabs as a new workspace, starting with an empty name, `W` or F2 saves them in place of the

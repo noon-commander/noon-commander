@@ -18,17 +18,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The F9 pull-down menu is reorganized into `File`, `View`, `Go`, `Search`, `Tools`, `Workspace`,
+- The F9 pull-down menu is reorganized into `File`, `View`, `Go`, `Search`, `Tools`, `Window`,
   and `Help`, without `Left` and `Right`: every command acts on the active panel (Ctrl+x F9 acts on
   the other), Go adds Jump back and Jump forward, Tools and Help add Shell command…, Command
   history…, Command output, and Key hints; a command ends in `…` when it asks for something before
-  it acts
+  it acts. `Workspace`, with the tabs and the workspaces, is now `Window`
   ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
 
 ### Removed
 
-- F9 → Workspace no longer lists the saved workspaces: Workspace list… (`t w`) opens their window,
-  which restores them by name
+- F9 → Workspace, now Window, no longer lists the saved workspaces: Workspace list… (`t w`) opens
+  their window, which restores them by name
   ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
 
 ## [0.3.2] - 2026-11-16

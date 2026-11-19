@@ -330,7 +330,7 @@ tabs-title = Tabs
 ## Workspaces (src/tui/workspaces, src/tui/app): the tabs of both panels, saved under a name in
 ## workspaces.toml. Prefix: workspaces-.
 
-# The window of t w, F9 → Workspace → Workspace list….
+# The window of t w, F9 → Window → Workspace list….
 workspaces-title = Workspaces
 # When no workspace is saved yet.
 workspaces-none = No workspace is saved yet. a here, or t W in a panel, saves the tabs of both panels under a name.
@@ -374,7 +374,7 @@ pulldown-view = &View
 pulldown-go = &Go
 pulldown-search = &Search
 pulldown-tools = &Tools
-pulldown-workspace = &Workspace
+pulldown-window = &Window
 pulldown-help-menu = &Help
 # File.
 pulldown-view-file = &View
@@ -433,7 +433,7 @@ pulldown-user-screen = Command &output
 pulldown-edit-host = &Edit host settings…
 pulldown-disconnect-host = &Disconnect host
 pulldown-configuration = &Configuration…
-# Workspace. Tabs of the active panel, then workspaces.
+# Window. Tabs of the active panel, then the workspaces, which save and restore them.
 pulldown-new-tab = Ne&w tab
 pulldown-close-tab = &Close tab
 pulldown-tab-list = &Tab list…
@@ -924,7 +924,7 @@ help-menu-reload = Read the volumes and hosts again
 help-menu-close = Close the menu
 help-tab-menu-show = Show the tab in the panel
 help-tab-menu-close = Close the tab under the cursor; the last one stays
-help-pulldown-open = The pull-down menu: File, View, Go, Search, Tools, Workspace, Help
+help-pulldown-open = The pull-down menu: File, View, Go, Search, Tools, Window, Help
 help-pulldown-last = The pull-down menu, on the command of it that ran last
 help-pulldown-up = The command above
 help-pulldown-down = The command below
@@ -1050,7 +1050,7 @@ help-tip-search-regex = Regular expression: a glyph crossed out says it is none.
 help-tip-search-glob = Shell pattern, in g + and g - and the Files field of f /: *, ?, [a-z], and { "{" }a,b{ "}" }, which the whole name must match.
 help-tip-workspaces = Workspaces
 help-tip-workspaces-what = A workspace holds the tabs of both panels: where each is, its sort order, and the row under its cursor.
-help-tip-workspaces-list = t w and F9 → Workspace → Workspace list… list them; restoring one replaces every tab.
+help-tip-workspaces-list = t w and F9 → Window → Workspace list… list them; restoring one replaces every tab.
 help-tip-command = Command line
 help-tip-command-open = ! opens the command line, and : too, for commands of Noon Commander, of which :!command is the only one so far.
 help-tip-command-run = A command runs with the terminal, in the panel's directory, then a key brings the panels back; cd and export last only as long as the command. Ctrl+z stops it and asks whether it goes on.

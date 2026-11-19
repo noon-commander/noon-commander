@@ -11,7 +11,7 @@ use crate::write::write_atomic;
 
 /// The top of `workspaces.toml`, before the workspaces.
 const HEADER: &str = "\
-# Workspaces of Noon Commander: F9 → Workspace saves the tabs of both panels.
+# Workspaces of Noon Commander: F9 → Window saves the tabs of both panels.
 # Noon Commander writes this file again on each change; comments are not kept.
 
 ";

@@ -1130,7 +1130,7 @@ in the panel, and, while the keywords take text, to `input` too.
 
 ## Workspaces window (`workspaces`, Normal mode)
 
-t w, or F9 → Workspace → Workspace list…, the workspaces in the order of their names. It falls
+t w, or F9 → Window → Workspace list…, the workspaces in the order of their names. It falls
 back to `list`, whose Enter restores the workspace: it replaces the tabs of both panels. a and F7
 add one, as A and F7 add a directory in the panels; W and F2 save the tabs in place of the one
 under the cursor after a question, as t W saves them in the panels and F2 saves in mc's editor;

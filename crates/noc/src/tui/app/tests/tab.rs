@@ -276,7 +276,7 @@ fn tabs_in_the_frame_keep_the_column_lines_joined_to_it() {
 }
 
 #[test]
-fn the_workspace_menu_opens_and_closes_tabs_in_the_active_panel() {
+fn the_window_menu_opens_and_closes_tabs_in_the_active_panel() {
     let mut app = loaded();
     let status = app.command_status(Action::CloseTab);
     assert!(!status.enabled, "one tab on the active panel");

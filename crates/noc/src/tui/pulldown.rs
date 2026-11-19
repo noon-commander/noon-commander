@@ -850,6 +850,13 @@ mod tests {
     }
 
     #[test]
+    fn r_renames_in_place_as_it_does_in_the_panels() {
+        let letter = |letter| open().handle(Resolved::Hotkey(letter), &status);
+        assert_eq!(letter('r'), PullDownEvent::Run(Action::Rename));
+        assert_eq!(letter('n'), PullDownEvent::Run(Action::Move));
+    }
+
+    #[test]
     fn every_command_has_a_letter_of_its_own_in_its_menu() {
         let menu = PullDown::new(None, &status);
         let titles: HashSet<_> = menu

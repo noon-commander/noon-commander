@@ -77,6 +77,7 @@ one, Help and Command output none.
   of opening `Left` or `Right`.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`
   move from `Options` to `View`; `o o`, `o h`, and `K` are unchanged.
+- In File, Alt+r runs Rename in place…, as `r` does in the panels, and Alt+n runs Rename/Move….
 - `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`, and
   `Jump forward` are reachable from F9.
 - Restoring a workspace from F9 takes Workspace list… and Enter, or the filter, in place of Alt and

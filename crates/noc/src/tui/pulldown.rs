@@ -155,32 +155,37 @@ fn plain_menu(title: Label, items: Vec<Option<(String, Action)>>) -> Menu {
     Menu { title, entries }
 }
 
+/// The File menu, under `title`.
+fn file_menu(title: Label) -> Menu {
+    plain_menu(
+        title,
+        vec![
+            Some((fl!("pulldown-view-file"), Action::View)),
+            Some((fl!("pulldown-edit"), Action::Edit)),
+            Some((fl!("pulldown-system-open"), Action::SystemOpen)),
+            Some((fl!("pulldown-checksum"), Action::Checksum)),
+            None,
+            Some((fl!("pulldown-copy"), Action::Copy)),
+            Some((fl!("pulldown-duplicate"), Action::Duplicate)),
+            Some((fl!("pulldown-move"), Action::Move)),
+            Some((fl!("pulldown-rename"), Action::Rename)),
+            Some((fl!("pulldown-mkdir"), Action::Mkdir)),
+            Some((fl!("pulldown-delete"), Action::Delete)),
+            None,
+            Some((fl!("pulldown-select"), Action::Select)),
+            Some((fl!("pulldown-unselect"), Action::Unselect)),
+            Some((fl!("pulldown-invert"), Action::InvertMarks)),
+            None,
+            Some((fl!("pulldown-exit"), Action::Quit)),
+        ],
+    )
+}
+
 /// The seven menus on the bar, in order.
 fn menus() -> Vec<Menu> {
     let [file, view, go, search, tools, window, help] = titles();
     vec![
-        plain_menu(
-            file,
-            vec![
-                Some((fl!("pulldown-view-file"), Action::View)),
-                Some((fl!("pulldown-edit"), Action::Edit)),
-                Some((fl!("pulldown-system-open"), Action::SystemOpen)),
-                Some((fl!("pulldown-checksum"), Action::Checksum)),
-                None,
-                Some((fl!("pulldown-copy"), Action::Copy)),
-                Some((fl!("pulldown-duplicate"), Action::Duplicate)),
-                Some((fl!("pulldown-move"), Action::Move)),
-                Some((fl!("pulldown-rename"), Action::Rename)),
-                Some((fl!("pulldown-mkdir"), Action::Mkdir)),
-                Some((fl!("pulldown-delete"), Action::Delete)),
-                None,
-                Some((fl!("pulldown-select"), Action::Select)),
-                Some((fl!("pulldown-unselect"), Action::Unselect)),
-                Some((fl!("pulldown-invert"), Action::InvertMarks)),
-                None,
-                Some((fl!("pulldown-exit"), Action::Quit)),
-            ],
-        ),
+        file_menu(file),
         plain_menu(
             view,
             vec![

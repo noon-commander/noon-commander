@@ -417,9 +417,8 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   it. Esc, `q`, F9, or F10 goes back to the bar, and closes the bar from there. Running a command
   closes it first.
 - The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
-  only the `Command` that ran last, so Shift+F9 Enter repeats it. A command that cannot run now
-  passes the cursor on to the next one; one that is gone, such as a deleted workspace, leaves the
-  bar as F9 opens it.
+  only the `Action` that ran last, so Shift+F9 Enter repeats it. A command that cannot run now
+  passes the cursor on to the next one.
 - `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
   of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
   mc does, which takes a row from them. The jobs indicator sits at the right end of that row.

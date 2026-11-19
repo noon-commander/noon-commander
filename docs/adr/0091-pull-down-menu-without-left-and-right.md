@@ -51,7 +51,8 @@ Three windows were also absent from the menu: the command history (`q :`), the o
 
 - Every menu command follows the same active-panel and Ctrl+x model as the rest of Noon Commander,
   with no duplicate panel menus; the seven-menu bar takes 67 cells (vs. 64 before), leaving room
-  for the jobs indicator on an 80-column terminal.
+  for the jobs indicator on an 80-column terminal. On a narrower one, the indicator covers the end
+  of the bar, `Help` first, while jobs run; Alt+H still opens it.
 - Acting on the other panel from the menu now takes `Ctrl+x F9` (or switching panels first) instead
   of opening `Left` or `Right`.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`

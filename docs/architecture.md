@@ -364,7 +364,7 @@ Ctrl+x F9 (or Ctrl+x `g m`) opens the bar for the other panel and gives the keys
 command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An open menu:
 
 ```text
-  File     View     Go     Search     Tools     Workspace     Help   2 jobs 37%
+  File     View     Go     Search     Tools     Workspace     Help  2 jobs 37%
  ╔═════════════════════════╗
  ║   View              g f ║
  ║   Edit                e ║

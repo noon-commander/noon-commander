@@ -225,6 +225,7 @@ fn menus() -> Vec<Menu> {
             vec![
                 Some((fl!("pulldown-jobs"), Action::Jobs)),
                 None,
+                Some((fl!("pulldown-shell"), Action::Shell)),
                 Some((fl!("pulldown-command-history"), Action::CommandHistory)),
                 Some((fl!("pulldown-user-screen"), Action::UserScreen)),
                 None,

@@ -395,8 +395,8 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   jump list, dimmed where it has nowhere to go, and where the other panel goes: Open in the other
   panel (`Ctrl+w f`) and This directory in the other panel (`Ctrl+w v`).
 - **Search** has Quick search… (`/`), Find text… (`f /`), and Find files and dirs… (`f f`).
-- **Tools** has Background jobs (`f j`), Command history (`q :`), Command output (`g <`), Edit host
-  settings and Disconnect host for the active panel's host, and
+- **Tools** has Background jobs (`f j`), Shell command… (`!`), Command history… (`q :`), Command
+  output (`g <`), Edit host settings… and Disconnect host for the active panel's host, and
   [Configuration…](#configuration-dialog) (`o o`).
 - **Workspace** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
   workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).

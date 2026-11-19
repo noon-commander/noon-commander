@@ -22,8 +22,8 @@ side-addressed `Command` variants (`On`, `Location`, `Tabs`, `DisconnectPanel`) 
 itself (`Ctrl+x F9`).
 
 Three windows were also absent from the menu: the command history (`q :`), the output of commands
-(`g <`), and the key hints (`Ctrl+k`); so was the jump list (`Ctrl+o`, `Ctrl+i`), whose keys are
-vim's and hard to find without it.
+(`g <`), and the key hints (`Ctrl+k`); so were the command line itself (`!`), and the jump list
+(`Ctrl+o`, `Ctrl+i`), whose keys are vim's and hard to find without it.
 
 `Workspace` listed the saved workspaces under its commands, the first ten with `1` … `9` and `0`
 ([ADR 0017](0017-workspaces.md)): a copy of their window (`t w`), one entry below, without its
@@ -52,8 +52,8 @@ one, Help and Command output none.
     panel goes, not what shows.
   - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
     dialog they open.
-  - **Tools:** Background jobs; Command history…, Command output; Edit host settings…, Disconnect
-    host; Configuration….
+  - **Tools:** Background jobs; Shell command…, Command history…, Command output; Edit host
+    settings…, Disconnect host; Configuration….
   - **Workspace:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…. The saved
     workspaces are not listed: Workspace list… opens their window.
   - **Help:** Help, Key hints; View the log.
@@ -77,7 +77,7 @@ one, Help and Command output none.
   of opening `Left` or `Right`.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`
   move from `Options` to `View`; `o o`, `o h`, and `K` are unchanged.
-- `Command history…`, `Command output`, `Key hints`, `Jump back`, and `Jump forward` are reachable
-  from F9.
+- `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`, and
+  `Jump forward` are reachable from F9.
 - Restoring a workspace from F9 takes Workspace list… and Enter, or the filter, in place of Alt and
   a digit.

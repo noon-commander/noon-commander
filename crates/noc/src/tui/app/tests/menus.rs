@@ -208,10 +208,11 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     assert_eq!(app.context(), Context::QuickSearch);
     app.handle(action(Action::Abort));
 
-    // Tools → Command history…, Command output; Help → Key hints.
+    // Tools → Shell command…, Command history…, Command output; Help → Key hints.
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('t'));
     let text = screen_of(&mut app, 20);
+    assert!(line_with(&text, "Shell command…").contains(" i "), "{text}");
     assert!(
         line_with(&text, "Command history…").contains("q :"),
         "{text}"
@@ -221,6 +222,12 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     assert_eq!(app.context(), Context::CommandHistory);
     app.handle(action(Action::Cancel));
     app.handle(action(Action::Cancel));
+
+    app.handle(action(Action::PullDown));
+    app.handle(Resolved::Hotkey('t'));
+    app.handle(Resolved::Hotkey('s'));
+    assert_eq!(app.context(), Context::CommandLine);
+    app.command_line = None;
 
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('t'));
@@ -253,7 +260,7 @@ fn go_jumps_back_and_forward_only_where_the_jump_list_goes() {
 }
 
 #[test]
-fn command_history_in_tools_follows_the_host_connection() {
+fn the_command_line_in_tools_follows_the_host_connection() {
     use noc_config::{Place, SavedTab, SortBy};
 
     let mut app = loaded();
@@ -285,25 +292,25 @@ fn command_history_in_tools_follows_the_host_connection() {
         }),
     );
     app.restore_workspace("remote");
-    let history = Action::CommandHistory;
-    assert!(
-        !app.command_status(history).enabled,
-        "connecting to the host"
-    );
+    // Shell command… and Command history… open the same command line.
+    let enabled = |app: &App| {
+        let [shell, history] = [Action::Shell, Action::CommandHistory]
+            .map(|action| app.command_status(action).enabled);
+        assert_eq!(shell, history);
+        history
+    };
+    assert!(!enabled(&app), "connecting to the host");
 
     // Cancelling before the host connects leaves nothing that opens or asks to connect.
     app.handle(action(Action::Cancel));
-    assert!(
-        !app.command_status(history).enabled,
-        "never connected, so it would do nothing"
-    );
+    assert!(!enabled(&app), "never connected, so it would do nothing");
 
     // Once connected, Tools → Command history… opens the history window.
     let Effect::Connect { connection, .. } = one(app.handle(action(Action::Reload))) else {
         panic!("expected a connection");
     };
     connect_web(&mut app, Side::Left, connection, "/var/www");
-    assert!(app.command_status(history).enabled);
+    assert!(enabled(&app));
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('t'));
     app.handle(Resolved::Hotkey('h'));
@@ -313,7 +320,7 @@ fn command_history_in_tools_follows_the_host_connection() {
 
     // After disconnecting, it stays enabled because it asks to connect.
     app.disconnect("web");
-    assert!(app.command_status(history).enabled);
+    assert!(enabled(&app));
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('t'));
     app.handle(Resolved::Hotkey('h'));

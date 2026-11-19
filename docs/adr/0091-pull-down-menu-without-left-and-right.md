@@ -22,7 +22,8 @@ side-addressed `Command` variants (`On`, `Location`, `Tabs`, `DisconnectPanel`) 
 itself (`Ctrl+x F9`).
 
 Three windows were also absent from the menu: the command history (`q :`), the output of commands
-(`g <`), and the key hints (`Ctrl+k`).
+(`g <`), and the key hints (`Ctrl+k`); so was the jump list (`Ctrl+o`, `Ctrl+i`), whose keys are
+vim's and hard to find without it.
 
 `Workspace` listed the saved workspaces under its commands, the first ten with `1` … `9` and `0`
 ([ADR 0017](0017-workspaces.md)): a copy of their window (`t w`), one entry below, without its
@@ -46,9 +47,9 @@ one, Help and Command output none.
     in place…, Mkdir…, Delete; Select group…, Unselect group…, Invert selection; Exit.
   - **View:** Sort by name, Sort by extension, Sort by time, Sort by size; Show hidden files, Show
     whole names; Swap panels; Rescan, Redraw screen.
-  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)…; Open in the other
-    panel, This directory in the other panel, which say where the other panel goes, not what
-    shows.
+  - **Go:** Change location…, Go to directory…, Jump to a directory (zoxide)…; Jump back, Jump
+    forward; Open in the other panel, This directory in the other panel, which say where the other
+    panel goes, not what shows.
   - **Search:** Quick search…, Find text…, Find files and dirs…, named after the modes of the
     dialog they open.
   - **Tools:** Background jobs; Command history…, Command output; Edit host settings…, Disconnect
@@ -76,6 +77,7 @@ one, Help and Command output none.
   of opening `Left` or `Right`.
 - `Configuration…` moves from `Options` to `Tools`, and `Show hidden files` / `Show whole names`
   move from `Options` to `View`; `o o`, `o h`, and `K` are unchanged.
-- `Command history…`, `Command output`, and `Key hints` are reachable from F9.
+- `Command history…`, `Command output`, `Key hints`, `Jump back`, and `Jump forward` are reachable
+  from F9.
 - Restoring a workspace from F9 takes Workspace list… and Enter, or the filter, in place of Alt and
   a digit.

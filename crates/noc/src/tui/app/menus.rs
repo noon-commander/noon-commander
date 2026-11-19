@@ -241,6 +241,8 @@ impl App {
                     matches!(active.location(), Location::Local(_)) && !active.chosen().is_empty()
                 }
                 Action::CloseTab => self.tabs(self.active).len() > 1,
+                Action::JumpBack => active.can_jump_back(),
+                Action::JumpForward => active.can_jump_forward(),
                 Action::CommandHistory => match active.location() {
                     Location::Local(_) => true,
                     Location::Remote { host, .. } => {

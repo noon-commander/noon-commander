@@ -409,6 +409,10 @@ pulldown-location = Change &location…
 pulldown-goto = &Go to directory…
 # Opens the zoxide window.
 pulldown-jump = &Jump to a directory (zoxide)…
+# Ctrl+o and Ctrl+i: back and forward through the jump list, as vim's, which holds the moves of
+# the cursor within a directory (G, g g) as well as the directories.
+pulldown-jump-back = Jump &back
+pulldown-jump-forward = Jump &forward
 # Where the other panel goes: the directory under the cursor, or this panel's.
 pulldown-other-open = &Open in the other panel
 pulldown-other-sync = This &directory in the other panel

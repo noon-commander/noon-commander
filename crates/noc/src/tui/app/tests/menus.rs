@@ -239,6 +239,20 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
 }
 
 #[test]
+fn go_jumps_back_and_forward_only_where_the_jump_list_goes() {
+    let mut app = loaded();
+    let (back, forward) = (Action::JumpBack, Action::JumpForward);
+    assert!(!app.command_status(back).enabled, "no jump yet");
+    assert!(!app.command_status(forward).enabled);
+    keys(&mut app, &["shift-g"]);
+    assert!(app.command_status(back).enabled, "G is a jump");
+    assert!(!app.command_status(forward).enabled);
+    keys(&mut app, &["f9", "alt-g", "alt-b"]);
+    assert!(app.pulldown.is_none());
+    assert!(app.command_status(forward).enabled, "back from G");
+}
+
+#[test]
 fn command_history_in_tools_follows_the_host_connection() {
     use noc_config::{Place, SavedTab, SortBy};
 

@@ -97,6 +97,16 @@ impl Panel {
         self.travel(self.jumps[self.jump].clone())
     }
 
+    /// Whether [`jump_back`](Self::jump_back) has somewhere to go.
+    pub(crate) fn can_jump_back(&self) -> bool {
+        self.jump.min(self.jumps.len()) > 0
+    }
+
+    /// Whether [`jump_forward`](Self::jump_forward) has somewhere to go.
+    pub(crate) fn can_jump_forward(&self) -> bool {
+        self.jump + 1 < self.jumps.len()
+    }
+
     /// Goes to `to` without a new jump: within this location at once, else by its listing.
     fn travel(&mut self, to: Destination) -> Option<ListRequest> {
         if to.location == self.location && self.pending.is_none() {

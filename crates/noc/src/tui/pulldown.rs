@@ -248,6 +248,8 @@ fn menus() -> Vec<Menu> {
             vec![
                 Some((fl!("pulldown-new-tab"), Action::NewTab)),
                 Some((fl!("pulldown-close-tab"), Action::CloseTab)),
+                Some((fl!("pulldown-next-tab"), Action::NextTab)),
+                Some((fl!("pulldown-prev-tab"), Action::PrevTab)),
                 Some((fl!("pulldown-tab-list"), Action::TabList)),
                 None,
                 Some((fl!("pulldown-save-workspace"), Action::SaveWorkspace)),

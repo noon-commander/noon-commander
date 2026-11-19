@@ -440,6 +440,9 @@ pulldown-configuration = &Configuration…
 # Window. Tabs of the active panel, then the workspaces, which save and restore them.
 pulldown-new-tab = &New tab
 pulldown-close-tab = &Close tab
+# g t and g T: round the tabs of the active panel.
+pulldown-next-tab = Ne&xt tab
+pulldown-prev-tab = &Previous tab
 pulldown-tab-list = &Tab list…
 pulldown-save-workspace = &Save workspace…
 # Opens the window of the saved workspaces, to restore, rename, or delete them.

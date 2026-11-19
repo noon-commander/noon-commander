@@ -399,8 +399,9 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
   quick search ends, Find text… (`f /`), and Find files and dirs… (`f f`).
 - **Tools** has Shell command… (`!`), Command history… (`q :`), Command output (`g <`),
   Background jobs (`f j`), and [Configuration…](#configuration-dialog) (`o o`).
-- **Window** has the active panel's [tabs](#tabs) (New tab, Close tab, Tab list…), Save
-  workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
+- **Window** has the active panel's [tabs](#tabs) (New tab, Close tab, Next tab, Previous tab,
+  Tab list…; all but the first and the last dimmed with one tab), Save workspace…, and Workspace
+  list…, the window of the saved [workspaces](#workspaces).
 - **Help** has Help (`g ?`), Key hints (`Ctrl+k`), and View the log (`Ctrl+\`).
 - `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
   boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles
@@ -795,7 +796,7 @@ row and names the tab that shows by its whole location:
   Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under
   the cursor there as `t c`
   closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. F9 →
-  Workspace has New tab, Close tab, and Tab list… for the active panel.
+  Window has New tab, Close tab, Next tab, Previous tab, and Tab list… for the active panel.
 - Names on the line of tabs are brief: the last component of a directory, `~` for the home
   directory, `host:name` on a host, and the host alone in its start directory. The frame's
   verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,

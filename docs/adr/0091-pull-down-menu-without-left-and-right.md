@@ -60,9 +60,9 @@ one, Help and Command output none.
     named after the modes of the dialog they open.
   - **Tools:** Shell command…, Command history…, Command output; Background jobs; Configuration…,
     last, where the settings usually are.
-  - **Window:** New tab, Close tab, Tab list…; Save workspace…, Workspace list…, as the Window menu
-    of macOS and of editors holds the tabs. The saved workspaces are not listed: Workspace list…
-    opens their window.
+  - **Window:** New tab, Close tab, Next tab, Previous tab, Tab list…; Save workspace…, Workspace
+    list…, as the Window menu of macOS and of editors holds the tabs. The saved workspaces are not
+    listed: Workspace list… opens their window.
   - **Help:** Help, Key hints; View the log.
 - **`…` ends a command that asks for something before it acts:** text, a choice from a list, or
   settings, in a dialog, a field, or a window. A question that only confirms does not count
@@ -88,7 +88,8 @@ one, Help and Command output none.
   Alt+s runs Sort by size, as `o s` sorts, and Alt+n New tab, as `t n` opens one, where Alt+z and
   Alt+w were left from the menus of each panel.
 - `Shell command…`, `Command history…`, `Command output`, `Key hints`, `Jump back`,
-  `Jump forward`, `Next match`, and `Previous match` are reachable from F9.
+  `Jump forward`, `Next match`, `Previous match`, `Next tab`, and `Previous tab` are reachable
+  from F9.
 - `Workspace` is named `Window`; Alt+W still opens it.
 - Restoring a workspace from F9 takes Workspace list… and Enter, or the filter, in place of Alt and
   a digit.

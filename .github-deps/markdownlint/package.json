@@ -2,6 +2,6 @@
   "private": true,
   "description": "markdownlint-cli2 for CI, at the version and hashes of package-lock.json",
   "dependencies": {
-    "markdownlint-cli2": "0.24.0"
+    "markdownlint-cli2": "0.24.1"
   }
 }

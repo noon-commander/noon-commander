@@ -365,15 +365,11 @@ impl Panel {
     }
 
     /// The details of the row under the cursor on the status line, before its name and after
-    /// it, as the layout lists them: those it has. None of `..`, nor of a symlink: its status
-    /// line is about its target, and its own size is only the length of the path it holds.
+    /// it, as the layout lists them: those it has, a symlink its own, as its row. None of `..`.
     fn cursor_details(&self, view: &View<'_>) -> (Vec<Parts>, Vec<Parts>) {
         let Some(Row::Entry(entry)) = self.row(self.cursor) else {
             return (Vec::new(), Vec::new());
         };
-        if entry.metadata.kind == FileKind::Symlink {
-            return (Vec::new(), Vec::new());
-        }
         let mine = self.identity(view);
         let texts = |details: &[Detail]| {
             (details.iter())
@@ -642,9 +638,11 @@ struct Linked {
 }
 
 impl Linked {
-    /// `text` in exactly `width` cells over `style`: the target cut at its start where it does
-    /// not fit, as a path whose end matters most, its icon and marker kept; the name alone where
-    /// it leaves the target too little room. The mark of text cut short in `mark`.
+    /// `text` in exactly `width` cells over `style`: where the name and the target do not both
+    /// fit, they share the room evenly, what one leaves going to the other; the name cut at its
+    /// end, the target at its start, as a path whose end matters most, its icon and marker kept.
+    /// The name alone where either would get too little room. The mark of text cut short in
+    /// `mark`.
     fn fit(
         &self,
         text: &str,
@@ -655,26 +653,20 @@ impl Linked {
         let name = &text[..self.name_end];
         let arrow = &text[self.name_end..self.target_start];
         let target = &text[self.target_start..];
-        let fixed = cells::width(name)
-            + cells::width(arrow)
-            + cells::width(&self.icon)
-            + cells::width(&self.marker);
-        if fixed + MIN_LINK_TARGET.min(cells::width(target)) > width {
+        let (name_width, target_width) = (cells::width(name), cells::width(target));
+        let fixed = cells::width(arrow) + cells::width(&self.icon) + cells::width(&self.marker);
+        let room = width.saturating_sub(fixed);
+        if MIN_LINK_TARGET.min(name_width) + MIN_LINK_TARGET.min(target_width) > room {
             return cells::fitted(name, width, AT_END, (style, mark), marks).spans;
         }
+        let name_room = name_width.min(room.saturating_sub(target_width).max(room / 2));
+        let target_room = target_width.min(room - name_room);
         let target_style = style.patch(self.target);
-        let mut spans = vec![
-            Span::styled(name.to_owned(), style),
-            Span::styled(arrow.to_owned(), Theme::icon(style)),
-            Span::styled(self.icon.clone(), Theme::icon(target_style)),
-        ];
-        let room = width - fixed;
-        if cells::width(target) <= room {
-            spans.push(Span::styled(target.to_owned(), target_style));
-        } else {
-            let fitted = cells::fit_cut(target, room, Align::Left, Cut::Start);
-            spans.extend(cells::spans(fitted, (target_style, mark), marks));
-        }
+        let mut spans = cells::fitted(name, name_room, AT_END, (style, mark), marks).spans;
+        spans.push(Span::styled(arrow.to_owned(), Theme::icon(style)));
+        spans.push(Span::styled(self.icon.clone(), Theme::icon(target_style)));
+        let fitted = cells::fit_cut(target, target_room, Align::Left, Cut::Start);
+        spans.extend(cells::spans(fitted, (target_style, mark), marks));
         spans.push(Span::styled(self.marker.clone(), target_style));
         cells::fit_spans(spans, width, (style, mark), marks)
     }
@@ -901,7 +893,8 @@ fn column_cell(detail: Detail, row: Row<'_>, (view, mine): (&View<'_>, Option<&I
 }
 
 /// The text of `detail` of `entry` on the status line, in parts, what is `mine` set apart; none
-/// where it is not known, nor the size of a directory, which tells nothing of what it holds.
+/// where it is not known, nor the size of a directory or a link to one, which tells nothing of
+/// what it holds.
 fn status_parts(
     detail: Detail,
     entry: &DirEntry,
@@ -911,7 +904,7 @@ fn status_parts(
     let metadata = &entry.metadata;
     let plain = |text: String| vec![(text, Style::new())];
     match detail {
-        Detail::Size if metadata.kind == FileKind::Dir => None,
+        Detail::Size if entry.is_dir_like() => None,
         // Every byte of it, which the column rounds.
         Detail::Size => metadata.size.map(|size| plain(view.formats.integer(size))),
         Detail::Time => Some(cells::mtime(metadata.modified, view.tz, view.formats))
@@ -923,10 +916,10 @@ fn status_parts(
 }
 
 /// Which set of permissions of `metadata` applies to `mine`, as the system checks them: 0 the
-/// owner's, 1 the group's, 2 the others'. None for uid 0, whom they do not limit, nor where the
-/// owner is not known.
+/// owner's, 1 the group's, 2 the others'. None for uid 0, whom they do not limit, nor for a
+/// symlink, whose own the system does not check, nor where the owner is not known.
 fn applies(metadata: &Metadata, mine: &Identity) -> Option<usize> {
-    if mine.uid == 0 {
+    if mine.uid == 0 || metadata.kind == FileKind::Symlink {
         return None;
     }
     let (uid, gid) = (metadata.uid?, metadata.gid?);

@@ -43,8 +43,8 @@ const MAX_JUMPS: usize = 100;
 /// Narrow panels drop columns to keep at least this many cells for names.
 const MIN_NAME_WIDTH: usize = 8;
 
-/// Cells the target of a symlink needs on the status line, its mark of text cut short among
-/// them; with less room the name shows alone.
+/// Cells the name and the target of a symlink each need on the status line, the mark of text cut
+/// short among them; with less room the name shows alone.
 const MIN_LINK_TARGET: usize = 4;
 
 /// A request to list `location` for a panel; the reply must carry `generation`.

@@ -30,8 +30,11 @@ settings come later. The code had to stop fixing the columns first.
 - **While `K` shows the name whole, the status line has no details**: both rows are the name's.
   Details that kept their place in the first row left the name too little of it, and dropping
   them one by one as the name needed the room moved them about.
-- **The status line of a symlink has no details**: it is about the target, and a link's own size
-  and mode tell nothing of it.
+- **The status line of a symlink has the link's own details**, as its row has them, but the size
+  of a link to a directory, as of a directory. Without them the target took the whole line. Where
+  the name and the target do not both fit before them, they share the room evenly, what one does
+  not need going to the other: the name loses its end, the target its start; with less than 4
+  cells for either, the name shows alone.
 - **The owner is in digits alone, not grouped**: a uid and a gid name a user and a group rather
   than count, as `ls -n` and `chown` write them; the rule that every number is grouped does not
   hold for them. Names would need the host's own users: the local ones are wrong for a host. Its

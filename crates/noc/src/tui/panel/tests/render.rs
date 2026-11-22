@@ -217,10 +217,13 @@ fn the_status_line_shows_the_target_of_a_symlink_cut_at_its_start() {
         vec![
             link("conf", Some(config), Some(FileKind::File)),
             link("gone", Some("../missing"), None),
+            link("long-name-of-a-link", Some(config), Some(FileKind::File)),
             link("opt", Some("/opt"), Some(FileKind::Dir)),
             link("unread", None, Some(FileKind::File)),
         ],
     );
+    // The name and the target alone.
+    panel.layout.status.after.clear();
     let hosts = |_: &str| HostState::default();
     let plain = Theme::mc_classic();
     let nerd = Theme::mc_classic().with_glyphs(&glyphs::Glyphs::NERD);
@@ -291,6 +294,17 @@ fn the_status_line_shows_the_target_of_a_symlink_cut_at_its_start() {
     assert_eq!(cells[8].fg, fg(plain.stale_link), "a broken link's target");
     let (text, _) = status(&mut panel, 20, false);
     assert_eq!(text, "gone -> «/missing!", "the marker stays");
+
+    panel.handle(Action::Down);
+    let (text, cells) = status(&mut panel, 40, false);
+    assert_eq!(
+        text, "long-name-of-a-l» -> «/app/config.toml",
+        "the name and the target cut each on its own"
+    );
+    assert_eq!(cells[0].fg, text_fg);
+    assert_eq!(cells[22].fg, fg(plain.file));
+    let (text, _) = status(&mut panel, 22, false);
+    assert_eq!(text, "long-na» -> «ig.toml", "evenly");
 
     panel.handle(Action::Down);
     let (text, _) = status(&mut panel, 40, false);
@@ -930,8 +944,8 @@ fn the_status_line_shows_the_details_of_the_layout_after_the_name() {
     assert!(!directory.contains("4096"), "no size: {directory}");
     let link = status(&mut panel, "link", 50);
     assert!(
-        !link.contains("501"),
-        "a symlink's is about its target: {link}"
+        link.starts_with("link -> /opt/ ") && link.ends_with(" │ lrw-r--r-- │ 501:20║"),
+        "a symlink's own, as its row, but the size of a link to a directory: {link}"
     );
     let unknown = status(&mut panel, "bare", 50);
     assert!(
@@ -1010,6 +1024,13 @@ fn the_mode_and_the_owner_set_apart_what_is_ours() {
         set_apart(&mut panel, None),
         "...................",
         "plain while it is not known who reads it"
+    );
+    let mut link = loaded("/srv", vec![entry("link", FileKind::Symlink, 1)]);
+    link.handle(Action::Down);
+    assert_eq!(
+        emphasis(&mut link, Some(&me(501, &[20])), (6, "lrw-r--r-- │ 501:20")),
+        "................d..",
+        "none for a symlink, whose own the system does not check"
     );
     // In a column too, off the cursor, whose colors take the whole row.
     panel.layout.columns.after = vec![Detail::Mode];

@@ -1475,16 +1475,17 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   a color too, as the theme's `size_units` say. The status line shows, after the name, every byte
   of the file under the cursor, its mode (`-rw-r--r--`), and its owner in digits not grouped
   (`501:20`), those it has, while the name keeps 8 cells, a line `│` in the color of the frame
-  before each; none of a symlink. It cuts the name at its end, `»` before the details (ADR 0094).
-  A column of owners is always 11 cells. The mode and the owner set apart what is ours
+  before each; a symlink's own, but the size of a link to a directory. It cuts the name at its
+  end, `»` before the details (ADR 0094). A column of owners is always 11 cells. The mode and
+  the owner set apart what is ours
   ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions
   that applies, as the system checks them, and the uid and gid that are ours, as they are, the
-  rest dim; none for uid 0. Local panels go by the process (`Machine.identity`: `geteuid`, `getegid`,
-  `getgroups`); a host's task asks `id -u` and `id -G` through `Session::spawn_in` once it
-  connects, over the master only, and the app keeps the answer with the connection
-  (`Done::Identified`, `HostState.identity`). The size column is as wide as the
-  longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time column as the
-  longest time of the formats. Each panel has its own sort order:
+  rest dim; no set for uid 0 nor in a symlink's mode. Local panels go by the process
+  (`Machine.identity`: `geteuid`, `getegid`, `getgroups`); a host's task asks `id -u` and
+  `id -G` through `Session::spawn_in` once it connects, over the master only, and the app keeps
+  the answer with the connection (`Done::Identified`, `HostState.identity`). The size column is
+  as wide as the longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time
+  column as the longest time of the formats. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);
   time and size start newest and largest first, the same key again reverses, ties go by name,
   and an arrow in the header marks the order. Directories stay first. Names that start with a
@@ -1560,9 +1561,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   there; never `executable`, as the target's permissions are not read). The target tells its
   kind too: with icons by the icon of a directory, a file (devicons' by its last name), or a
   broken link in front of it, in its color toned down; without them by
-  mc's marker after it where `ls -F` puts one, `/opt/`, and `!` after a broken one. A target too
-  long loses its start, as a path in the title does, its icon and marker kept; with too little
-  room for it the name shows alone.
+  mc's marker after it where `ls -F` puts one, `/opt/`, and `!` after a broken one. Where the
+  name and the target do not both fit, they share the room evenly, what one does not need going to
+  the other: the name loses its end, the target its start, as a path in the title does, its icon
+  and marker kept; with less than 4 cells for either the name shows alone.
 - **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down,
   as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing
   once; `g *` inverts the marks on files, leaving directories as they are; `..`

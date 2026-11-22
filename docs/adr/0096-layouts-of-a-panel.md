@@ -24,13 +24,22 @@ settings come later. The code had to stop fixing the columns first.
   name, always, without a check. The name takes the cells the details leave.
 - **A narrow panel drops the details at the end of the list first**, those after the name before
   those before it, while the name keeps 8 cells. The status line drops its own the same way.
-- **While `K` shows the name whole, the details make room for it**: those at the end of the list
-  go until the name fits in both rows; a name longer than both rows leaves none.
+- **A line between the name and each detail on the status line**, `│` in the color of the frame,
+  as the lines between the columns above it, so that the details do not run into the name or into
+  each other; each takes two cells more for it.
+- **While `K` shows the name whole, the status line has no details**: both rows are the name's.
+  Details that kept their place in the first row left the name too little of it, and dropping
+  them one by one as the name needed the room moved them about.
 - **The status line of a symlink has no details**: it is about the target, and a link's own size
   and mode tell nothing of it.
 - **The owner is in digits alone, not grouped**: a uid and a gid name a user and a group rather
   than count, as `ls -n` and `chown` write them; the rule that every number is grouped does not
-  hold for them. Names would need the host's own users: the local ones are wrong for a host.
+  hold for them. Names would need the host's own users: the local ones are wrong for a host. Its
+  column is always 11 cells, as `65535:65535`, so that it does not change from one directory to
+  the next; a longer owner loses its middle.
+- **The status line scrolls to its end once the name under the cursor shows its end in its row**:
+  with its details the line is narrower than the column of names, so their scroll alone stopped
+  short of the end of the name.
 - **One built-in layout for now**: the size and the time after the name in the columns, as
   before; the size, the mode, and the owner after it on the status line. Each panel tab has its
   layout; a new tab takes its panel's.
@@ -38,11 +47,10 @@ settings come later. The code had to stop fixing the columns first.
 ## Consequences
 
 - The columns look as they did. The status line shows more, and its size is no longer at its
-  right edge; on a narrow panel the owner goes first, then the mode.
+  right edge; on a narrow panel the owner goes first, then the mode. On a panel 40 cells wide the
+  name keeps only its 8 cells beside the three details.
 - A layout of a user's needs only its lists. Settings for layouts, a key that switches them, a
   layout per tab saved in the workspaces, and a way to edit the lists in Tools → Configuration…
   come later.
 - A rename's field starts where the name starts, after the details before it, and runs to the end
   of the row, as it did.
-- A column of owners is as wide as the widest owner in the directory, which the panel finds over
-  every entry on each frame; only a layout with that column pays for it.

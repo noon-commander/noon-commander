@@ -40,7 +40,7 @@ fn k_shows_the_whole_name_under_the_cursor_on_the_status_line_until_asked_again(
             .take_while(|line| !line.contains('╚'));
         rows.map(|line| line.split('║').nth(1).unwrap_or_default())
             .map(|row| {
-                row.split_once(" 1 ")
+                row.split_once(" │ ")
                     .map_or(row, |(name, _)| name)
                     .trim_end()
             })

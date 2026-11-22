@@ -45,8 +45,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The z keys scroll each name in a panel no further than its end: names that fit do not move
   ([ADR 0095](docs/adr/0095-a-name-scrolls-no-further-than-its-end.md)).
 - The status line of a panel shows the mode (`-rw-r--r--`) and the owner (`501:20`) of the entry
-  under the cursor after its size; a narrow panel drops the owner first, then the mode, and `K`
-  drops them where the name needs the room ([ADR 0096](docs/adr/0096-layouts-of-a-panel.md)).
+  under the cursor after its size, with a line before each; a narrow panel drops the owner first,
+  then the mode, and `K` shows the name without them
+  ([ADR 0096](docs/adr/0096-layouts-of-a-panel.md)).
 
 ### Removed
 

@@ -89,12 +89,12 @@ fn the_status_line_scrolls_with_the_names_until_its_end_shows() {
     }
     assert_eq!(
         status(&mut panel),
-        "║«-a-long-name» 12345 -rw-r--r-- 501:20║"
+        "║«-a-lon» │ 12345 │ -rw-r--r-- │ 501:20║"
     );
     panel.handle(Action::ScrollEnd);
     assert_eq!(
         status(&mut panel),
-        "║«ong-name-.txt 12345 -rw-r--r-- 501:20║",
+        "║«me-.txt │ 12345 │ -rw-r--r-- │ 501:20║",
         "no further than its end"
     );
     panel.handle(Action::Down);
@@ -112,7 +112,17 @@ fn the_status_line_cuts_a_name_at_its_end_before_the_size() {
     panel.handle(Action::Down);
     let backend = draw(&mut panel, 40, 8, true);
     let status: String = (0..40).map(|x| backend.buffer()[(x, 6)].symbol()).collect();
-    assert_eq!(status, "║a-long-name-a» 12345 -rw-r--r-- 501:20║");
+    assert_eq!(status, "║a-long-» │ 12345 │ -rw-r--r-- │ 501:20║");
+    let theme = Theme::mc_classic();
+    let hosts = |_: &str| HostState::default();
+    let terminal = render_themed(&mut panel, (40, 8), true, &hosts, Decor::new(false), &theme);
+    let buffer = terminal.backend().buffer();
+    let line = (1..39).find(|&x| buffer[(x, 6)].symbol() == "│");
+    assert_eq!(
+        line.map(|x| Some(buffer[(x, 6)].fg)),
+        Some(theme.panel_border.fg),
+        "the lines in the color of the frame"
+    );
 }
 
 #[test]
@@ -563,16 +573,25 @@ fn a_layout_puts_its_details_on_either_side_of_the_name() {
 
 #[test]
 fn columns_show_the_mode_and_the_owner() {
-    let mut panel = loaded("/srv", vec![entry("notes", FileKind::File, 1)]);
+    let mut far = entry("far", FileKind::File, 1);
+    far.metadata.uid = Some(4_294_967_294);
+    let files = vec![entry("notes", FileKind::File, 1), far];
+    let mut panel = loaded("/srv", files);
     panel.layout.columns = Around {
         before: Vec::new(),
         after: vec![Detail::Mode, Detail::Owner],
     };
     let backend = draw(&mut panel, 40, 8, true);
     let row = |y: u16| -> String { (0..40).map(|x| backend.buffer()[(x, y)].symbol()).collect() };
-    assert!(row(1).ends_with("│Permissions│Owner ║"), "{}", row(1));
-    assert!(row(2).ends_with("│           │      ║"), "none of `..`");
-    assert!(row(3).ends_with("│-rw-r--r-- │501:20║"), "{}", row(3));
+    // The owner always in 11 cells, so that the column stays from one directory to the next;
+    // a longer one loses its middle.
+    assert!(row(1).ends_with("│Permissions│   Owner   ║"), "{}", row(1));
+    assert!(
+        row(2).ends_with("│           │           ║"),
+        "none of `..`"
+    );
+    assert!(row(3).ends_with("│-rw-r--r-- │42949»94:20║"), "{}", row(3));
+    assert!(row(4).ends_with("│-rw-r--r-- │     501:20║"), "{}", row(4));
 }
 
 #[test]
@@ -884,19 +903,27 @@ fn the_status_line_shows_the_details_of_the_layout_after_the_name() {
         let line = screen.lines().nth(4).unwrap_or_default().to_owned();
         line.trim_matches('"').chars().skip(1).collect::<String>()
     };
-    // Every byte of a file, then its mode and owner, in digits that are not grouped.
+    // Every byte of a file, then its mode and owner, in digits that are not grouped, a line
+    // before each.
     let wide = status(&mut panel, "disk.img", 50);
-    assert!(wide.ends_with(" 3221225472 -rw-r--r-- 501:20║"), "{wide}");
-    // A narrow panel drops the details at the end first, while the name keeps 8 cells.
-    let narrower = [38, 30, 19].map(|width| status(&mut panel, "disk.img", width));
+    let details = " │ 3221225472 │ -rw-r--r-- │ 501:20║";
     assert!(
-        narrower[0].ends_with(" 3221225472 -rw-r--r--║"),
+        wide.starts_with("disk.img ") && wide.ends_with(details),
+        "{wide}"
+    );
+    // A narrow panel drops the details at the end first, while the name keeps 8 cells.
+    let narrower = [44, 30, 19].map(|width| status(&mut panel, "disk.img", width));
+    assert!(
+        narrower[0].ends_with(" │ 3221225472 │ -rw-r--r--║"),
         "{narrower:?}"
     );
-    assert!(narrower[1].ends_with(" 3221225472║"), "{narrower:?}");
+    assert!(narrower[1].ends_with(" │ 3221225472║"), "{narrower:?}");
     assert!(narrower[2].starts_with("disk.img") && !narrower[2].contains('3'));
     let directory = status(&mut panel, "docs", 50);
-    assert!(directory.ends_with(" drw-r--r-- 501:20║"), "{directory}");
+    assert!(
+        directory.ends_with(" │ drw-r--r-- │ 501:20║"),
+        "{directory}"
+    );
     assert!(!directory.contains("4096"), "no size: {directory}");
     let link = status(&mut panel, "link", 50);
     assert!(
@@ -905,7 +932,7 @@ fn the_status_line_shows_the_details_of_the_layout_after_the_name() {
     );
     let unknown = status(&mut panel, "bare", 50);
     assert!(
-        unknown.ends_with(" 7║"),
+        unknown.ends_with(" │ 7║"),
         "what is not known is left out: {unknown}"
     );
 }

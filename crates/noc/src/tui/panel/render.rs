@@ -86,7 +86,7 @@ impl Panel {
         let status = Rect::new(inner.x, separator + 1, inner.width, status_rows);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         let columns = DirColumns::for_width(width, &self.layout.columns, |detail| {
-            self.detail_cells(detail, view.formats)
+            detail_cells(detail, view.formats)
         });
         if let Some(Veil { shine }) = self.veil(view).filter(|_| veiled) {
             frame.render_widget(columns.header(self.sort, theme), line(inner.y));
@@ -248,7 +248,8 @@ impl Panel {
     }
 
     /// The status line, at `area`: the name under the cursor, with the target of a symlink, and
-    /// the details of the layout beside it; while a name is renamed in its row, the name it had.
+    /// the details of the layout beside it, a line between each, but while `K` shows the name
+    /// whole; while a name is renamed in its row, the name it had.
     /// A text that does not fit in the first row goes on in the next ones, plain, where `area`
     /// has more, as [`wrapped`] breaks it; otherwise it is cut at its end, as the viewer's lines,
     /// so that the mark reads as text that goes on, where the row above keeps the end of the name.
@@ -259,24 +260,30 @@ impl Panel {
         let width = usize::from(area.width);
         let status_style = (Style::new(), theme.truncated);
         let (status, linked) = self.cursor_status(view);
-        // In the first row, as in Far, while the name keeps some room; the rows after it have
-        // the whole width. While `K` shows the name whole, they make room for it in both rows.
-        let details = self.cursor_details(view);
-        let spare = usize::from(area.height.saturating_sub(1)) * width.saturating_sub(1);
-        let name = if area.height > 1 {
-            MIN_NAME_WIDTH.max(cells::width(&status).saturating_sub(spare))
+        // As in Far, while the name keeps some room, each with a blank, a line, and a blank.
+        let details = if view.whole {
+            (Vec::new(), Vec::new())
         } else {
-            MIN_NAME_WIDTH
+            self.cursor_details(view)
         };
-        let (before, after, room) = layout::fit(details, width, name, |text| cells::width(text));
+        let (before, after, room) = layout::fit(details, width, MIN_NAME_WIDTH, |text| {
+            cells::width(text) + 2
+        });
         let marks = theme.glyphs.marks;
         let wraps = area.height > 1 && cells::width(&status) > room;
         let rows = if wraps { usize::from(area.height) } else { 1 };
-        // No further than the end of the text comes to the right edge of its last row.
+        // No further than the end of the text comes to the right edge of its last row; that far
+        // once the name under the cursor shows its end in its row, as the line may be narrower.
         let room_of_rows = room + (rows - 1) * width.saturating_sub(1);
-        let shift = self
-            .shift
-            .min(cells::width(&status).saturating_sub(room_of_rows));
+        let end = cells::width(&status).saturating_sub(room_of_rows);
+        let to_end = self
+            .row(self.cursor)
+            .map_or(0, |row| self.shift_to_end(row));
+        let shift = if to_end > 0 && self.shift >= to_end {
+            end
+        } else {
+            self.shift.min(end)
+        };
         let mut lines = if wraps || shift > 0 {
             wrapped(&status, (room, width, rows), shift, status_style, marks)
         } else {
@@ -287,10 +294,13 @@ impl Panel {
             vec![Line::from(fitted)]
         };
         if let Some(first) = lines.first_mut() {
+            let color = theme.panel_border.fg.unwrap_or(Color::Reset);
+            let line = || Span::styled(format!(" {} ", glyphs::COLUMN), Style::new().fg(color));
             let name = std::mem::take(&mut first.spans);
-            first.spans = (before.into_iter().map(|text| Span::raw(format!("{text} "))))
+            first.spans = (before.into_iter())
+                .flat_map(|text| [Span::raw(text), line()])
                 .chain(name)
-                .chain(after.into_iter().map(|text| Span::raw(format!(" {text}"))))
+                .chain(after.into_iter().flat_map(|text| [line(), Span::raw(text)]))
                 .collect();
         }
         for (y, line) in (area.y..area.bottom()).zip(lines) {
@@ -356,34 +366,6 @@ impl Panel {
         };
         let status = &self.layout.status;
         (texts(&status.before), texts(&status.after))
-    }
-
-    /// The cells of a column of `detail`: as many as its longest text with `formats` needs, and
-    /// its title, with the arrow of the order where it sorts.
-    fn detail_cells(&self, detail: Detail, formats: &Formats) -> usize {
-        let title = cells::width(&detail_title(detail)) + usize::from(sorted_by(detail).is_some());
-        let text = match detail {
-            Detail::Size => [fl!("panel-up-dir"), fl!("panel-dir")]
-                .iter()
-                .map(|text| cells::width(text))
-                .max()
-                .unwrap_or_default()
-                .max(cells::short_size_width(formats)),
-            Detail::Time => formats.time_width(),
-            // `ls -l`'s type and nine permissions.
-            Detail::Mode => 10,
-            // shortcut: reads every entry on each frame; keep the width with the listing if the
-            // column slows big directories.
-            Detail::Owner => (0..self.rows())
-                .filter_map(|index| match self.row(index) {
-                    Some(Row::Entry(entry)) => owner_text(entry),
-                    _ => None,
-                })
-                .map(|text| cells::width(&text))
-                .max()
-                .unwrap_or(0),
-        };
-        text.max(title)
     }
 
     /// The status line of the row under the cursor: its name, and the target of a symlink.
@@ -1132,6 +1114,27 @@ fn wrapped(
         lines.push(line);
     }
     lines
+}
+
+/// The cells of a column of `detail`: as many as its longest text with `formats` needs, and its
+/// title, with the arrow of the order where it sorts.
+fn detail_cells(detail: Detail, formats: &Formats) -> usize {
+    let title = cells::width(&detail_title(detail)) + usize::from(sorted_by(detail).is_some());
+    let text = match detail {
+        Detail::Size => [fl!("panel-up-dir"), fl!("panel-dir")]
+            .iter()
+            .map(|text| cells::width(text))
+            .max()
+            .unwrap_or_default()
+            .max(cells::short_size_width(formats)),
+        Detail::Time => formats.time_width(),
+        // `ls -l`'s type and nine permissions.
+        Detail::Mode => 10,
+        // `65535:65535`, so that the column does not change from one directory to the next;
+        // longer numbers lose their middle.
+        Detail::Owner => 11,
+    };
+    text.max(title)
 }
 
 /// The columns of a directory: the details beside the name, each with its cells, and the cells of

@@ -1480,7 +1480,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   the owner set apart what is ours
   ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions
   that applies, as the system checks them, and the uid and gid that are ours, as they are, the
-  rest dim; no set for uid 0 nor in a symlink's mode. Local panels go by the process
+  rest dim; no set for uid 0, a symlink's mode dim whole. Local panels go by the process
   (`Machine.identity`: `geteuid`, `getegid`, `getgroups`); a host's task asks `id -u` and
   `id -G` through `Session::spawn_in` once it connects, over the master only, and the app keeps
   the answer with the connection (`Done::Identified`, `HostState.identity`). Names of owners

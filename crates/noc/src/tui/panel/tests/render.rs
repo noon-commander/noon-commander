@@ -1030,8 +1030,8 @@ fn the_mode_and_the_owner_set_apart_what_is_ours() {
     link.handle(Action::Down);
     assert_eq!(
         emphasis(&mut link, Some(&me(501, &[20])), (6, "lrw-r--r-- │ 501:20")),
-        "................d..",
-        "none for a symlink, whose own the system does not check"
+        "dddddddddd......d..",
+        "none of a symlink's, as the system checks its target's"
     );
     // In a column too, off the cursor, whose colors take the whole row.
     panel.layout.columns.after = vec![Detail::Mode];

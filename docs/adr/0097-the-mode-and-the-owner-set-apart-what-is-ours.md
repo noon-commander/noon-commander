@@ -18,7 +18,7 @@ host's.
 - **The set of permissions that applies is set apart**, as the system checks them: the owner's if
   the uid is ours, else the group's if the gid is one of our groups, else the others'. It stays
   as it is; the type and the other sets are toned down, as icons are. uid 0 has no set, as none
-  limits it, nor does a symlink, whose own the system does not check.
+  limits it. A symlink's mode is toned down whole, as the system checks its target's.
 - **The uid and the gid that are ours stay as they are**, the rest of the owner toned down.
 - **Dim alone, no color nor bold**, so that it shows in every theme, with or without truecolor,
   and needs no new role in the palettes; what is ours in bold besides drew the eye more than the

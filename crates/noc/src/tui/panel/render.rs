@@ -924,10 +924,10 @@ fn status_parts(
 }
 
 /// Which set of permissions of `metadata` applies to `mine`, as the system checks them: 0 the
-/// owner's, 1 the group's, 2 the others'. None for uid 0, whom they do not limit, nor for a
-/// symlink, whose own the system does not check, nor where the owner is not known.
+/// owner's, 1 the group's, 2 the others'. None for uid 0, whom they do not limit, nor where the
+/// owner is not known.
 fn applies(metadata: &Metadata, mine: &Identity) -> Option<usize> {
-    if mine.uid == 0 || metadata.kind == FileKind::Symlink {
+    if mine.uid == 0 {
         return None;
     }
     let (uid, gid) = (metadata.uid?, metadata.gid?);
@@ -950,11 +950,15 @@ fn own(mine: bool) -> Style {
 }
 
 /// The type and the permissions of `entry`, as `ls -l` writes them, in parts: the set that
-/// applies to `mine` as it is, the type and the other sets toned down; plain where it is not
-/// known who reads it, or no set applies. None when they are not known.
+/// applies to `mine` as it is, the type and the other sets toned down; a symlink's toned down
+/// whole, as the system checks its target's; plain where it is not known who reads it, or no set
+/// applies. None when they are not known.
 fn mode_parts(entry: &DirEntry, mine: Option<&Identity>) -> Option<Parts> {
     let metadata = &entry.metadata;
     let text = format::mode(metadata.kind, Some(metadata.permissions?));
+    if mine.is_some() && metadata.kind == FileKind::Symlink {
+        return Some(vec![(text, own(false))]);
+    }
     let Some(set) = mine.and_then(|mine| applies(metadata, mine)) else {
         return Some(vec![(text, Style::new())]);
     };

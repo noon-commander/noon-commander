@@ -96,7 +96,7 @@ impl Side {
     const BOTH: [Self; 2] = [Self::Left, Self::Right];
 }
 
-/// Whether the name under the cursor of the active panel shows whole below the panels too, as
+/// Whether the status lines of the panels show the whole name under the cursor, in two rows, as
 /// `K` asks. The lists always show their row under the cursor whole.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum Whole {
@@ -1149,7 +1149,7 @@ pub(crate) struct App {
     returns: Option<(Side, Mode)>,
     /// The right panel is drawn on the left.
     swapped: bool,
-    /// Whether `K` shows the whole name under the cursor below the panels, until it is asked
+    /// Whether `K` shows the whole name under the cursor on the status lines, until it is asked
     /// again; for this run only.
     whole: Whole,
     /// What the last quick search found, in any panel, for `n` and `N`, as vim keeps the last

@@ -243,6 +243,8 @@ pub(crate) struct View<'a> {
     pub(crate) tz: &'a TimeZone,
     /// How dates and numbers are written.
     pub(crate) formats: &'a Formats,
+    /// Whether the status line shows the whole name under the cursor, as `K` asks.
+    pub(crate) whole: bool,
 }
 
 /// What a directory is sorted by. Directories always come first.
@@ -881,12 +883,6 @@ impl Panel {
     #[cfg(test)]
     pub(crate) fn shift(&self) -> usize {
         self.shift
-    }
-
-    /// The whole name under the cursor, terminal-safe, without its icon or marker.
-    pub(crate) fn full_name(&self) -> Option<String> {
-        self.row(self.cursor)
-            .map(|row| shown_name(row, self.names.0)[1].clone())
     }
 
     /// What the panel shows.

@@ -190,6 +190,8 @@
       bar, and the cursor's shape
 - [x] Quick search typed on the line of the mode, as vim's search
       ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md))
+- [x] `K` shows the whole name in two rows of the status lines, without a frame of its own
+      ([ADR 0094](adr/0094-k-shows-the-whole-name-on-the-status-line.md))
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
 - [ ] A key of vim's for editing the command line in `$EDITOR`

@@ -25,18 +25,30 @@ fn visual_mode_selects_rows_that_the_commands_of_files_act_on() {
 }
 
 #[test]
-fn k_shows_the_whole_name_under_the_cursor_below_the_panels_until_asked_again() {
+fn k_shows_the_whole_name_under_the_cursor_on_the_status_line_until_asked_again() {
     let long = format!("{}.txt", "a-very-long-name-".repeat(6));
     let mut app = with_files(&[&long, "b"]);
     keys(&mut app, &["j"]);
-    let shown = |app: &mut App| screen_of(app, 14).contains(&long);
+    // The rows of the left panel's status line joined, less the size of the file at the right
+    // and the mark that the second starts with.
+    let status = |app: &mut App| -> String {
+        let screen = screen_of(app, 14);
+        let rows = screen
+            .lines()
+            .skip_while(|line| !line.contains('╟'))
+            .skip(1)
+            .take_while(|line| !line.contains('╚'));
+        rows.map(|line| line.split('║').nth(1).unwrap_or_default())
+            .map(|row| row.trim_end().trim_end_matches(" 1").trim_end())
+            .map(|row| row.strip_prefix('»').unwrap_or(row))
+            .collect()
+    };
+    let shown = |app: &mut App| status(app) == long;
     assert!(!shown(&mut app), "the panel cuts it");
     keys(&mut app, &["shift-k"]);
-    let screen = screen_of(&mut app, 14);
-    assert!(screen.contains(&long), "{screen}");
+    assert_eq!(status(&mut app), long, "in two rows");
     keys(&mut app, &["j"]);
-    let screen = screen_of(&mut app, 14);
-    assert!(!screen.contains(&long), "it follows the cursor: {screen}");
+    assert_eq!(status(&mut app), "b", "it follows the cursor");
     keys(&mut app, &["k"]);
     assert!(shown(&mut app), "and stays open");
     keys(&mut app, &["esc"]);

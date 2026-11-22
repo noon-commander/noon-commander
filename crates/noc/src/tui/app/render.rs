@@ -11,7 +11,6 @@ use ratatui::buffer::{Buffer, Cell};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType};
 
 use crate::i18n::fl;
 use crate::tui::cells::{self, Align};
@@ -22,13 +21,11 @@ use crate::tui::jump::JumpMenu;
 use crate::tui::keymap::{Action, Context, Mode};
 use crate::tui::menu::LocationMenu;
 use crate::tui::panel::{HostState, Panel, View};
-use crate::tui::picker::FULL_ROWS;
 use crate::tui::pulldown::{self};
 use crate::tui::reading::Reading;
 use crate::tui::spinner::{self, Spin, Wait};
 use crate::tui::tabs::{self, Bar, Tabs};
 use crate::tui::which_key;
-use crate::tui::window;
 use crate::tui::zoom::{self, Grows, Stage};
 
 use super::{
@@ -158,10 +155,9 @@ impl App {
         let prompt = self.command_prompt(screen.width);
         let prompt_text = cells::text_of(&prompt);
         let line_height = self.line_height(&prompt_text, screen);
-        let [menu_bar, panels, full, command_line, key_bar] = Layout::vertical([
+        let [menu_bar, panels, command_line, key_bar] = Layout::vertical([
             Constraint::Length(bar_height),
             Constraint::Fill(1),
-            Constraint::Length(self.full_height()),
             Constraint::Length(line_height),
             Constraint::Length(1),
         ])
@@ -184,6 +180,7 @@ impl App {
             spin,
             tz,
             formats: &formats,
+            whole: self.whole == Whole::Shown,
         };
         let root_theme = self.theme.for_root();
         let root_view = View {
@@ -208,7 +205,6 @@ impl App {
                 let tabs = spots.into_iter().map(|(index, spot)| (side, index, spot));
                 self.spots.tabs.extend(tabs);
             }
-            self.render_full(frame, full);
         }
         self.spots.fkeys = self.render_fkeys(frame, key_bar);
         self.render_command_line(frame, command_line, &prompt);
@@ -308,39 +304,6 @@ impl App {
                     self.command_status(command)
                 });
             });
-        }
-    }
-
-    /// The rows of the frame below the panels with the whole name under the cursor, while `K`
-    /// asks for it.
-    fn full_height(&self) -> u16 {
-        if self.whole == Whole::Shown && self.viewing.is_none() {
-            FULL_ROWS + 2
-        } else {
-            0
-        }
-    }
-
-    /// The whole name under the cursor of the active panel, in a frame at `area`, below the
-    /// panels, as `K` asks for it: single lines, in the colors of dialogs, which set it apart
-    /// from the panels.
-    fn render_full(&self, frame: &mut Frame<'_>, area: Rect) {
-        if area.height < window::MIN_HEIGHT {
-            return;
-        }
-        let theme = &self.theme;
-        let block = Block::bordered()
-            .border_type(BorderType::Plain)
-            .style(theme.dialog)
-            .border_style(theme.dialog);
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
-        let name = self.panel(self.active).full_name().unwrap_or_default();
-        let size = (usize::from(inner.width), usize::from(inner.height));
-        let styles = (theme.dialog, theme.truncated_dialog);
-        let rows = cells::whole(&name, size, None, styles, theme.glyphs.marks);
-        for (y, row) in (inner.y..inner.bottom()).zip(rows) {
-            frame.render_widget(row, Rect::new(inner.x, y, inner.width, 1));
         }
     }
 

@@ -154,6 +154,7 @@ fn render_themed(
             spin: Spin::new(at, start, false, theme.glyphs.spinners),
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
+            whole: false,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), active, &view))

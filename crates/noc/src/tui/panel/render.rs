@@ -13,6 +13,7 @@ use unicode_width::UnicodeWidthChar as _;
 use crate::i18n::fl;
 use crate::tui::cells::{self, Align, Cut, Marks};
 use crate::tui::glyphs;
+use crate::tui::picker::FULL_ROWS;
 use crate::tui::search::{GlyphSpots, Prompt};
 use crate::tui::spinner::Shine;
 use crate::tui::theme::Theme;
@@ -27,6 +28,9 @@ use super::{
 /// looked busier than what they stand for, and a directory may hold none.
 const WAIT_ROWS: u16 = 3;
 
+/// How the status line fits its name: cut at its end.
+const AT_END: (Align, Cut) = (Align::Left, Cut::End);
+
 /// What a veiled panel shows once its wait shows: a skeleton for its rows and status line.
 struct Veil<'a> {
     /// The shine that crosses the skeleton; none while it rests, as for a host whose dialog
@@ -37,10 +41,11 @@ struct Veil<'a> {
 impl Panel {
     /// Draws the panel: the location in the frame, column headers, the rows, a bar in the frame
     /// beside the marked ones, the size and number of marked entries on the line below them, a
-    /// status line with the name under the cursor, and the totals of the directory and its file
-    /// system on the bottom of the frame. What the panel kept from a host that is not connected
-    /// is toned down. While it is veiled, once its wait shows, a skeleton stands for its rows and
-    /// its status line, and the bottom of the frame is bare.
+    /// status line with the name under the cursor, in two rows while `K` shows it whole, and the
+    /// totals of the directory and its file system on the bottom of the frame. What the panel
+    /// kept from a host that is not connected is toned down. While it is veiled, once its wait
+    /// shows, a skeleton stands for its rows and its status line, and the bottom of the frame is
+    /// bare.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -60,7 +65,10 @@ impl Panel {
         self.column_lines.clear();
         self.list = Rect::default();
         self.bar = None;
-        if inner.height < 3 || inner.width < 2 {
+        let status_rows = if view.whole { FULL_ROWS } else { 1 };
+        // The header, the separator, and the status line.
+        let around = 2 + status_rows;
+        if inner.height < around || inner.width < 2 {
             return;
         }
         let veiled = self.veil(view).is_some();
@@ -68,10 +76,12 @@ impl Panel {
             self.render_bottom(frame, area, theme);
         }
         let width = usize::from(inner.width);
-        let list_height = usize::from(inner.height - 3);
+        let list_height = usize::from(inner.height - around);
         self.page = list_height;
-        self.list = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 3);
+        self.list = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - around);
         self.scroll(list_height);
+        let separator = inner.bottom() - 1 - status_rows;
+        let status = Rect::new(inner.x, separator + 1, inner.width, status_rows);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         let columns = DirColumns::for_width(width, column_widths(view.formats));
         if let Some(Veil { shine }) = self.veil(view).filter(|_| veiled) {
@@ -82,9 +92,9 @@ impl Panel {
                 ..self.list
             };
             window::draw_skeleton(frame, skeleton, (theme, theme.panel), shine);
-            self.render_separator(frame, area, inner.bottom() - 2, (0, 0), theme);
-            let status = window::status_skeleton(inner.width, theme.panel, theme, shine);
-            frame.render_widget(status, line(inner.bottom() - 1));
+            self.render_separator(frame, area, separator, (0, 0), theme);
+            let skeleton = window::status_skeleton(inner.width, theme.panel, theme, shine);
+            frame.render_widget(skeleton, line(status.y));
             return;
         }
         let bar = Rect::new(area.right() - 1, self.list.y, 1, self.list.height);
@@ -126,7 +136,7 @@ impl Panel {
         }
 
         let marked = self.marked_total();
-        self.render_separator(frame, area, inner.bottom() - 2, marked, theme);
+        self.render_separator(frame, area, separator, marked, theme);
         self.column_lines = columns
             .lines()
             .into_iter()
@@ -134,9 +144,9 @@ impl Panel {
             .filter(|offset| *offset < inner.width)
             .map(|offset| inner.x + offset)
             .collect();
-        self.render_column_lines(frame, area, inner, theme);
+        self.render_column_lines(frame, area, (inner.y, separator), theme);
         self.render_rename(frame, inner, list_height, active, view);
-        self.render_status(frame, line(inner.bottom() - 1), view);
+        self.render_status(frame, status, view);
     }
 
     /// Whether the panel would draw otherwise on a frame for time alone, or must draw on every
@@ -228,7 +238,10 @@ impl Panel {
     }
 
     /// The status line, at `area`: the name under the cursor, with the target of a symlink, and
-    /// the size of a file; while a name is renamed in its row, the name it had.
+    /// the size of a file; while a name is renamed in its row, the name it had. A text that does
+    /// not fit in the first row goes on in the next ones, plain, where `area` has more, as
+    /// [`wrapped`] breaks it; otherwise it is cut at its end, as the viewer's lines, so that the
+    /// mark reads as text that goes on, where the row above keeps the end of the name.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
@@ -236,21 +249,31 @@ impl Panel {
         let (status, linked) = self.cursor_status(view);
         // The size of the file under the cursor, every byte of it.
         let size = self.cursor_size(view.formats);
-        let mut line = Line::default().style(status_style.0);
         let mut room = width;
-        // At the right, as in Far, while the name keeps some room.
+        // At the right of the first row, as in Far, while the name keeps some room; the rows
+        // after it have the whole width.
         let size = size
             .map(|size| format!(" {size}"))
             .filter(|size| cells::width(size) + MIN_NAME_WIDTH <= room);
         room -= size.as_deref().map_or(0, cells::width);
         let marks = theme.glyphs.marks;
-        let fitted = match linked {
-            Some(linked) => linked.fit(&status, room, status_style, marks),
-            None => cells::fit(&status, room, Align::Left, status_style, marks),
+        let rows = usize::from(area.height);
+        let mut lines = if rows > 1 && cells::width(&status) > room {
+            wrapped(&status, (room, width, rows), status_style, marks)
+        } else {
+            let fitted = match linked {
+                Some(linked) => linked.fit(&status, room, status_style, marks),
+                None => cells::fitted(&status, room, AT_END, status_style, marks).spans,
+            };
+            vec![Line::from(fitted)]
         };
-        line.spans.extend(fitted);
-        line.spans.extend(size.map(Span::raw));
-        frame.render_widget(self.toned(line), area);
+        if let Some(first) = lines.first_mut() {
+            first.spans.extend(size.map(Span::raw));
+        }
+        for (y, line) in (area.y..area.bottom()).zip(lines) {
+            let line = line.style(status_style.0);
+            frame.render_widget(self.toned(line), Rect::new(area.x, y, area.width, 1));
+        }
     }
 
     /// Quick search on the line `area` below the panels, as vim's search on its command line:
@@ -427,22 +450,29 @@ impl Panel {
         );
     }
 
-    /// The lines between columns, down from the header to the line above the status line, in
-    /// the color of the frame on the background of the rows they cross, so that the cursor and
-    /// marks run across them; never underlined, which would cut them. Joined to the frame where
-    /// its line runs, not where the title or the total of the marked entries cuts into it.
-    fn render_column_lines(&self, frame: &mut Frame<'_>, area: Rect, inner: Rect, theme: &Theme) {
+    /// The lines between columns, down from the header at `top` to the `separator` above the
+    /// status line, in the color of the frame on the background of the rows they cross, so that
+    /// the cursor and marks run across them; never underlined, which would cut them. Joined to
+    /// the frame where its line runs, not where the title or the total of the marked entries cuts
+    /// into it.
+    fn render_column_lines(
+        &self,
+        frame: &mut Frame<'_>,
+        area: Rect,
+        (top, separator): (u16, u16),
+        theme: &Theme,
+    ) {
         let color = theme.panel_border.fg.unwrap_or(Color::Reset);
         let (_, bottom) = theme.column_tees();
         let buffer = frame.buffer_mut();
         for &x in &self.column_lines {
-            for y in inner.y..inner.bottom() - 2 {
+            for y in top..separator {
                 if let Some(cell) = buffer.cell_mut((x, y)) {
                     cell.set_char(glyphs::COLUMN).set_fg(color);
                     cell.modifier.remove(Modifier::UNDERLINED | Modifier::BOLD);
                 }
             }
-            if let Some(cell) = buffer.cell_mut((x, inner.bottom() - 2))
+            if let Some(cell) = buffer.cell_mut((x, separator))
                 && cell.symbol() == glyphs::LINE
             {
                 cell.set_char(bottom);
@@ -566,7 +596,7 @@ impl Linked {
             + cells::width(&self.icon)
             + cells::width(&self.marker);
         if fixed + MIN_LINK_TARGET.min(cells::width(target)) > width {
-            return cells::fit(name, width, Align::Left, (style, mark), marks);
+            return cells::fitted(name, width, AT_END, (style, mark), marks).spans;
         }
         let target_style = style.patch(self.target);
         let mut spans = vec![
@@ -831,6 +861,30 @@ fn name_spans(
     }
     spans.push(&fitted.tail, style, tail, of);
     spans
+}
+
+/// `text` in at most `rows` lines, the first of `first` cells, the others of `width`, in `style`:
+/// the rows after the first start with the mark of `marks` for text that goes on, in `mark`, as
+/// the viewer's wrapped lines do, and the last is cut at its end with it if the text goes on past
+/// it.
+fn wrapped(
+    text: &str,
+    (first, width, rows): (usize, usize, usize),
+    (style, mark): (Style, Style),
+    marks: Marks,
+) -> Vec<Line<'static>> {
+    let head = cells::chop(text, first, None).swap_remove(0);
+    let rest = &text[head.len()..];
+    let fitted = cells::fit(&head, first, Align::Left, (style, mark), marks);
+    let mut lines = vec![Line::from(fitted)];
+    let room = width.saturating_sub(1);
+    let rows = cells::chop(rest, room, None).len().min(rows - 1);
+    for row in cells::whole(rest, (room, rows), None, (style, mark), marks) {
+        let mut line = Line::from(Span::styled(marks.after, style.patch(mark)));
+        line.spans.extend(row.spans);
+        lines.push(line);
+    }
+    lines
 }
 
 /// The cells of the size and the time columns: as many as the longest sizes and times of

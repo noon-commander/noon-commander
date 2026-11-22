@@ -33,6 +33,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Quick search is typed on the line above the F-key bar, as vim's search, `/text` or `?text`, in
   place of the mode, and the status line of the panel keeps the name under the cursor
   ([ADR 0093](docs/adr/0093-quick-search-on-the-line-of-the-mode.md)).
+- `K` shows the whole name under the cursor in two rows of the panels' status lines, the second
+  starting with `»` as the viewer's wrapped lines, in place of a frame below the panels; without
+  `K`, the status line cuts a long name at its end rather than its middle
+  ([ADR 0094](docs/adr/0094-k-shows-the-whole-name-on-the-status-line.md)).
 
 ### Removed
 

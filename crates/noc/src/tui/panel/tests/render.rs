@@ -8,6 +8,48 @@ fn draws_the_listing() {
 }
 
 #[test]
+fn k_shows_the_whole_name_on_two_rows_of_the_status_line() {
+    let long = format!("{}.txt", "a-long-name-".repeat(5));
+    let mut panel = loaded("/srv", vec![entry(&long, FileKind::File, 12_345)]);
+    panel.handle(Action::Down);
+    let theme = Theme::terminal();
+    let hosts = |_: &str| HostState::default();
+    let mut terminal = Terminal::new(TestBackend::new(40, 8)).unwrap();
+    let mut screen = |panel: &mut Panel| {
+        let view = View {
+            hosts: &hosts,
+            decor: Decor::new(false),
+            theme: &theme,
+            spin: Spin::new(Instant::now(), Instant::now(), false, theme.glyphs.spinners),
+            tz: &TimeZone::UTC,
+            formats: &Formats::iso(),
+            whole: true,
+        };
+        terminal
+            .draw(|frame| panel.render(frame, frame.area(), true, &view))
+            .unwrap();
+        terminal.backend().clone()
+    };
+    insta::assert_snapshot!(screen(&mut panel));
+    panel.handle(Action::Up);
+    let short = screen(&mut panel);
+    let status = |y: u16| -> String { (0..40).map(|x| short.buffer()[(x, y)].symbol()).collect() };
+    assert!(status(5).starts_with("║..  "), "{}", status(5));
+    let blank = status(6).trim_matches(['║', ' ']).is_empty();
+    assert!(blank, "a short one keeps a row: {}", status(6));
+}
+
+#[test]
+fn the_status_line_cuts_a_name_at_its_end_before_the_size() {
+    let long = format!("{}.txt", "a-long-name-".repeat(5));
+    let mut panel = loaded("/srv", vec![entry(&long, FileKind::File, 12_345)]);
+    panel.handle(Action::Down);
+    let backend = draw(&mut panel, 40, 8, true);
+    let status: String = (0..40).map(|x| backend.buffer()[(x, 6)].symbol()).collect();
+    assert_eq!(status, "║a-long-name-a-long-name-a-long-» 12345║");
+}
+
+#[test]
 fn a_skeleton_stands_for_the_rows_of_another_location_once_the_wait_shows() {
     let mut panel = loaded("/srv", listing());
     panel.handle(Action::Down);
@@ -25,6 +67,7 @@ fn a_skeleton_stands_for_the_rows_of_another_location_once_the_wait_shows() {
             spin: Spin::new(at, start, false, theme.glyphs.spinners),
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
+            whole: false,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), true, &view))

@@ -308,6 +308,7 @@ fn a_wait_shows_nothing_for_its_first_moment() {
         spin: Spin::new(now, now, true, theme.glyphs.spinners),
         tz: &TimeZone::UTC,
         formats: &Formats::iso(),
+        whole: false,
     };
     terminal
         .draw(|frame| panel.render(frame, frame.area(), true, &view))

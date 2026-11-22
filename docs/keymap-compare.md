@@ -133,8 +133,8 @@ have a command line under the panels that takes what is typed; noc opens one wit
 -, \\, and \*, on the numpad too, mark and unmark only while its command line is empty; with Alt,
 they always do. noc keeps them under g, as g +, g -, and g \*, and binds neither +, -, and \*,
 which are vim's motions and search. mc's Shift+Up and Shift+Down mark, as in Far, the one exception
-to vim's keys, so that `K` can show what is under the cursor, as vim's does: the whole name, below
-the panels. As vim scrolls lines that do not wrap, the z keys scroll the names, not their icons:
+to vim's keys, so that `K` can show what is under the cursor, as vim's does: the whole name, on
+the status lines. As vim scrolls lines that do not wrap, the z keys scroll the names, not their icons:
 `«` marks a name that goes on to the left, and `»` one cut short.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
@@ -228,7 +228,7 @@ section says: the commands of files act on the rows it selects, which become the
 | The names half their column right, as vim's zL | `scroll_half_right` | ⏳ | z L | — | — | — | — |
 | The names from their start, as vim's zs | `scroll_start` | ⏳ | z s | — | Alt+Home | — | — |
 | The end of the name under the cursor at the right edge, as vim's ze | `scroll_end` | ⏳ | z e | — | Alt+End | — | — |
-| Show the whole name under the cursor in a frame below the panels, until asked again or Esc (mc and Far: the mini status line, cut too) | `show_full` | ⏳ | K | — | — | — | — |
+| Show the whole name under the cursor on two rows of the status lines, until asked again or Esc (mc and Far: the mini status line, cut) | `show_full` | ⏳ | K | — | — | — | — |
 | Start quick search | `quick_search` | ✅ | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
 | Start quick search up the rows, as vim's ?; n then goes up too, and N down | `quick_search_back` | ⏳ | ? | — | — | ? | — |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |

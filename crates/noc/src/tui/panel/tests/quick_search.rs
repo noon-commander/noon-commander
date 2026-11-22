@@ -284,6 +284,7 @@ fn found(panel: &mut Panel, width: u16) -> Vec<String> {
         spin: Spin::new(Instant::now(), Instant::now(), false, theme.glyphs.spinners),
         tz: &TimeZone::UTC,
         formats: &Formats::iso(),
+        whole: false,
     };
     terminal
         .draw(|frame| panel.render(frame, frame.area(), true, &view))

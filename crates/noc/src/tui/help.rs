@@ -1146,6 +1146,7 @@ fn describe_panel(context: Context, action: Action) -> Option<String> {
         Action::ScrollStart => fl!("help-names-start"),
         Action::ScrollEnd => fl!("help-names-end"),
         Action::ShowFull => fl!("help-show-full"),
+        Action::PanelInfo => fl!("help-panel-info"),
         Action::InvertMarks => fl!("help-invert-marks"),
         Action::Select => fl!("help-select"),
         Action::Unselect => fl!("help-unselect"),

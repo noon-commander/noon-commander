@@ -139,7 +139,8 @@ pub(super) const PRESET: Preset = &[
                 ],
             ),
             // Names that do not fit: scrolled as vim scrolls lines that do not wrap, and shown
-            // whole under the panels, as vim's `K` shows what is under the cursor.
+            // whole under the panels, as vim's `K` shows what is under the cursor; the path of
+            // the panel whole on the line of the mode, as vim's Ctrl+g names the file.
             (
                 Group::Names,
                 &[
@@ -150,6 +151,7 @@ pub(super) const PRESET: Preset = &[
                     (Action::ScrollStart, &["z s"]),
                     (Action::ScrollEnd, &["z e"]),
                     (Action::ShowFull, &["shift-k"]),
+                    (Action::PanelInfo, &["ctrl-g"]),
                 ],
             ),
             (

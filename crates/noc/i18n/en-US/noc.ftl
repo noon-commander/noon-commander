@@ -69,7 +69,7 @@ window-viewer = Viewer
 
 ## Messages on the line of the mode, in its place until the next key, as vim's on its command
 ## line (src/tui/app): n or N with no search before, a search that goes on round the end of the
-## rows or their start, and g x on a host. Prefix: message-.
+## rows or their start, g x on a host, and where a panel is, Ctrl+g. Prefix: message-.
 
 message-search-none = No previous search
 message-search-bottom = search hit BOTTOM, continuing at TOP
@@ -78,6 +78,11 @@ message-search-top = search hit TOP, continuing at BOTTOM
 message-search-not-found = Pattern not found: { $text }
 # g x on a host: the programs of the desktop open local files only.
 message-open-remote = Only local files open externally
+# Ctrl+g in a panel, as vim's: where it is, in quotes, then where the cursor is, as the viewer's
+# title writes it: its row, `..` counting as in 5G, of the rows, and how far down.
+message-panel-info = "{ $place }" { $row }/{ $rows } { $percent }%
+# The same in a / with no entries.
+message-panel-empty = "{ $place }" 0/0
 
 ## The title of the terminal's window or tab (src/tui/app), with ui.terminal_title. Prefix:
 ## terminal-.
@@ -846,6 +851,7 @@ help-names-half-right = The names half their column right
 help-names-start = The names from their start
 help-names-end = The end of the name under the cursor at the right edge
 help-show-full = Show the whole name under the cursor on the status lines, or stop
+help-panel-info = Where the panel is: its directory and the row under the cursor; with a count, the whole path
 help-invert-marks = Invert the marks on files
 help-select = Mark the names that match a pattern
 help-unselect = Unmark the names that match a pattern

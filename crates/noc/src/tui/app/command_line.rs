@@ -450,6 +450,29 @@ impl App {
         })
     }
 
+    /// Says where the active panel is on the line of the mode, as vim's Ctrl+g: its directory as
+    /// the title shows it, or `whole`, as vim's after a count, without `~`; the row under the
+    /// cursor of the rows, and how far down, as the viewer's title writes them.
+    pub(super) fn panel_info(&mut self, whole: bool) {
+        let panel = self.panel(self.active);
+        let place = if whole {
+            location_text(panel.location())
+        } else {
+            self.active_place()
+        };
+        let (row, rows) = panel.position();
+        self.message = Some(match (row * 100).checked_div(rows) {
+            None => fl!("message-panel-empty", place = place),
+            Some(percent) => fl!(
+                "message-panel-info",
+                place = place,
+                row = row,
+                rows = rows,
+                percent = percent
+            ),
+        });
+    }
+
     /// The directory of the active panel, with `~` for the home directory, or `host:path`.
     fn active_place(&self) -> String {
         match self.panel(self.active).location() {

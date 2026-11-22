@@ -1089,6 +1089,11 @@ impl Panel {
         self.cursor = number.saturating_sub(1).min(self.rows().saturating_sub(1));
     }
 
+    /// The row under the cursor, counted from 1 as `go_to_row` counts, and the rows.
+    pub(crate) fn position(&self) -> (usize, usize) {
+        (self.cursor + 1, self.rows())
+    }
+
     /// This location, with the cursor on the row it is on.
     pub(crate) fn here(&self) -> Destination {
         Destination {

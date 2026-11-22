@@ -352,6 +352,9 @@ pub(crate) enum Action {
     /// Shows the whole name under the cursor of the panels, and the whole row under the cursor
     /// of the lists, until it is asked again.
     ShowFull,
+    /// Says where the panel is on the line of the mode, as vim's Ctrl+g: its directory, the row
+    /// under the cursor of the rows, and how far down; with a count, the whole path.
+    PanelInfo,
     /// Edits the file under the cursor in the editor of `$VISUAL` or `$EDITOR`.
     Edit,
     /// Opens the marked entries, or the one under the cursor, with the programs the desktop has
@@ -728,6 +731,7 @@ impl Action {
         Self::ScrollStart,
         Self::ScrollEnd,
         Self::ShowFull,
+        Self::PanelInfo,
         Self::Edit,
         Self::SystemOpen,
         Self::Copy,

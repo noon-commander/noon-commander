@@ -16,6 +16,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `noon-commander-bin` installs its binary, and `noon-commander-git` builds the latest commit
   ([ADR 0090](docs/adr/0090-aur-packages.md)).
 - A click on the jobs in the top right corner opens the list of background jobs, as `f j` does.
+- Ctrl+g in a panel says where it is on the line of the mode, as vim's: its directory, the row
+  under the cursor of the rows, and how far down (`"~/src" 5/42 11%`); after a count, the whole
+  path, without `~`.
 
 ### Changed
 

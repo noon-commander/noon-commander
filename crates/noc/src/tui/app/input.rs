@@ -244,6 +244,7 @@ impl App {
                     return Some(self.open(id, request));
                 }
             }
+            Action::PanelInfo => self.panel_info(count.is_some()),
             // With a count, the row of that number, as vim's `G` and `g g` go to the line.
             Action::Home | Action::End if count.is_some() => {
                 self.panel_mut(id.side).go_to_row(count.unwrap_or(1));

@@ -49,6 +49,34 @@ fn the_line_of_the_mode_names_the_kind_of_window_by_its_keys() {
 }
 
 #[test]
+fn ctrl_g_says_where_the_panel_is_until_the_next_key_as_vims() {
+    let mut app = with_files(&["a", "b"]);
+    keys(&mut app, &["ctrl-g"]);
+    assert_eq!(mode_of(&mut app), "\"/srv\" 1/3 33%", "`..` counts");
+    keys(&mut app, &["j"]);
+    assert_eq!(mode_of(&mut app), "NORMAL", "gone with the next key");
+    keys(&mut app, &["shift-g", "ctrl-g"]);
+    assert_eq!(mode_of(&mut app), "\"/srv\" 3/3 100%");
+    keys(&mut app, &["ctrl-x", "ctrl-g"]);
+    assert_eq!(mode_of(&mut app), "\"/srv\" 1/3 33%", "of the other panel");
+
+    let (mut app, effects) = App::new(Path::new("/home/me/src"), Path::new("/home/me"), &config());
+    answer(&mut app, effects, &Listing::Dir(vec![dir("noc")]));
+    keys(&mut app, &["ctrl-g"]);
+    assert_eq!(mode_of(&mut app), "\"~/src\" 1/2 50%", "as the title");
+    keys(&mut app, &["1", "ctrl-g"]);
+    assert_eq!(
+        mode_of(&mut app),
+        "\"/home/me/src\" 1/2 50%",
+        "after a count, the whole path"
+    );
+
+    let mut app = at_slash();
+    keys(&mut app, &["ctrl-g"]);
+    assert_eq!(mode_of(&mut app), "\"/\" 0/0");
+}
+
+#[test]
 fn the_command_line_takes_the_line_of_the_mode_while_it_has_the_keys() {
     let mut app = with_files(&["a"]);
     keys(&mut app, &["!", "l", "s"]);

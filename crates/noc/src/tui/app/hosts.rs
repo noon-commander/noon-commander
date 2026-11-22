@@ -850,6 +850,7 @@ fn works_offline(action: Action) -> bool {
             | Action::ScrollStart
             | Action::ScrollEnd
             | Action::ShowFull
+            | Action::PanelInfo
             | Action::QuickSearch
             | Action::QuickSearchBack
             | Action::NextMatch

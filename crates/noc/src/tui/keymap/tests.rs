@@ -1090,6 +1090,9 @@ fn marks_by_pattern_are_under_g_and_mcs_own_keys_are_gone() {
     assert_eq!(typed(PANEL, &["shift-down"]), actions(&[Action::Mark]));
     assert_eq!(typed(PANEL, &["shift-up"]), actions(&[Action::MarkUp]));
     assert_eq!(typed(PANEL, &["shift-k"]), actions(&[Action::ShowFull]));
+    // As vim's Ctrl+g; in Visual mode vim's switches to Select mode, which there is not.
+    assert_eq!(typed(PANEL, &["ctrl-g"]), actions(&[Action::PanelInfo]));
+    assert_eq!(typed(VISUAL_PANEL, &["ctrl-g"]), []);
     // The lists always show their row under the cursor whole.
     for context in [
         Context::LocationMenu,

@@ -315,7 +315,7 @@ mod tests {
             let at = crate::tui::mouse::find(buffer, text);
             buffer[(at.x, at.y)].fg
         };
-        let more = format!("{} 19 more…", theme.glyphs.more);
+        let more = format!("{} 20 more…", theme.glyphs.more);
         assert_eq!(Some(fg(&more)), theme.dialog_more().0.fg);
         assert_ne!(
             fg(&more),

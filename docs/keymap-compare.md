@@ -230,6 +230,7 @@ section says: the commands of files act on the rows it selects, which become the
 | The names from their start, as vim's zs | `scroll_start` | ⏳ | z s | — | Alt+Home | — | — |
 | The end of the name under the cursor at the right edge, as vim's ze | `scroll_end` | ⏳ | z e | — | Alt+End | — | — |
 | Show the whole name under the cursor on two rows of the status lines, until asked again or Esc (mc and Far: the mini status line, cut) | `show_full` | ⏳ | K | — | — | — | — |
+| Where the panel is, as vim's Ctrl+g, on the line of the mode: its directory, the row under the cursor of the rows, and how far down, as the viewer's title writes them; after a count, the whole path, without \~ | `panel_info` | ⏳ | Ctrl+g | — | — | — | — |
 | Start quick search | `quick_search` | ✅ | / | Ctrl+s<br>Alt+s | Alt+characters<br>Alt+Shift+characters | / | f |
 | Start quick search up the rows, as vim's ?; n then goes up too, and N down | `quick_search_back` | ⏳ | ? | — | — | ? | — |
 | The next name that matches the last quick search | `next_match` | ✅ | n<br>Shift+F7 | — | — | n | n |

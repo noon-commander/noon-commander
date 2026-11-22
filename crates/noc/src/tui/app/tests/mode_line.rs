@@ -90,13 +90,25 @@ fn cell_of(app: &mut App, text: &str) -> ratatui::buffer::Cell {
 #[test]
 fn what_a_command_tells_is_plain_and_warnings_in_their_color_as_vims() {
     let mut app = with_files(&["a"]);
+    app.set_machine(alice_on_mac());
     let warning = app.theme.message.fg.unwrap();
     let plain = |cell: ratatui::buffer::Cell| cell.fg != warning && cell.modifier.is_empty();
+    let bold = ratatui::style::Modifier::BOLD;
+    assert!(cell_of(&mut app, "NORMAL").modifier.contains(bold));
+    assert!(
+        plain(cell_of(&mut app, "alice@mac")),
+        "not in the mode's bold"
+    );
     keys(&mut app, &["ctrl-g"]);
     assert!(plain(cell_of(&mut app, "\"/srv\"")), "as vim's Ctrl+g");
+    assert!(plain(cell_of(&mut app, "alice@mac")));
     keys(&mut app, &["n"]);
     assert_eq!(mode_of(&mut app), "No previous search");
     assert_eq!(cell_of(&mut app, "No previous search").fg, warning);
+    assert!(
+        plain(cell_of(&mut app, "alice@mac")),
+        "who is where keeps its own"
+    );
 }
 
 #[test]

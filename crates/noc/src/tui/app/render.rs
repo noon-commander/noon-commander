@@ -582,7 +582,8 @@ impl App {
             return (vec![Span::styled(mode, bold), Span::raw(window)], width);
         }
         let styles = (bold, self.theme.truncated);
-        let spans = cells::fit(&mode, room, Align::Left, styles, self.theme.glyphs.marks);
+        let marks = self.theme.glyphs.marks;
+        let spans = cells::fit(&mode, mode_width.min(room), Align::Left, styles, marks);
         (spans, mode_width)
     }
 
@@ -630,7 +631,9 @@ impl App {
                 Message::Info(text) => (text, Style::new()),
             };
             let styles = (style, self.theme.truncated);
-            let message_line = cells::fit(message, room, Align::Left, styles, marks);
+            // Not padded, as the mode is not: `user@host` goes over the rest in its own style.
+            let shown = cells::width(message).min(room);
+            let message_line = cells::fit(message, shown, Align::Left, styles, marks);
             frame.render_widget(Line::from(message_line), area);
             cells::width(message)
         } else {

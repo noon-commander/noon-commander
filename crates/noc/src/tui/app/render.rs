@@ -181,6 +181,7 @@ impl App {
             tz,
             formats: &formats,
             whole: self.whole == Whole::Shown,
+            identity: self.machine.identity.as_ref(),
         };
         let root_theme = self.theme.for_root();
         let root_view = View {

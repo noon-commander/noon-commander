@@ -1,4 +1,5 @@
 use super::*;
+use crate::tui::machine::Identity;
 use crate::tui::panel::layout::{Around, Detail};
 
 #[test]
@@ -25,6 +26,7 @@ fn k_shows_the_whole_name_on_two_rows_of_the_status_line() {
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
             whole: true,
+            identity: None,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), true, &view))
@@ -144,6 +146,7 @@ fn a_skeleton_stands_for_the_rows_of_another_location_once_the_wait_shows() {
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
             whole: false,
+            identity: None,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), true, &view))
@@ -935,6 +938,84 @@ fn the_status_line_shows_the_details_of_the_layout_after_the_name() {
         unknown.ends_with(" │ 7║"),
         "what is not known is left out: {unknown}"
     );
+}
+
+/// `panel` drawn 50 cells wide with local panels read as `identity`: on row `y`, the cells of
+/// `text`, `d` where they are dim, `B` where bold, `.` where neither.
+fn emphasis(panel: &mut Panel, identity: Option<&Identity>, (y, text): (u16, &str)) -> String {
+    let theme = Theme::terminal();
+    let hosts = |_: &str| HostState::default();
+    let mut terminal = Terminal::new(TestBackend::new(50, 8)).unwrap();
+    let view = View {
+        hosts: &hosts,
+        decor: Decor::new(false),
+        theme: &theme,
+        spin: Spin::new(Instant::now(), Instant::now(), false, theme.glyphs.spinners),
+        tz: &TimeZone::UTC,
+        formats: &Formats::iso(),
+        whole: false,
+        identity,
+    };
+    terminal
+        .draw(|frame| panel.render(frame, frame.area(), true, &view))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let cells: Vec<_> = (0..50).map(|x| &buffer[(x, y)]).collect();
+    let symbols: Vec<&str> = cells.iter().map(|cell| cell.symbol()).collect();
+    let start = (0..cells.len())
+        .find(|&x| symbols[x..].concat().starts_with(text))
+        .unwrap();
+    (cells[start..start + text.chars().count()].iter())
+        .map(|cell| match cell.modifier {
+            m if m.contains(Modifier::BOLD) => 'B',
+            m if m.contains(Modifier::DIM) => 'd',
+            _ => '.',
+        })
+        .collect()
+}
+
+#[test]
+fn the_mode_and_the_owner_set_apart_what_is_ours() {
+    // `-rw-r--r--`, of 501 and the group 20.
+    let mut panel = loaded("/srv", vec![entry("notes", FileKind::File, 1)]);
+    panel.handle(Action::Down);
+    let status = (6, "-rw-r--r-- │ 501:20");
+    let me = |uid, groups: &[u32]| Identity {
+        uid,
+        groups: groups.to_vec(),
+    };
+    let set_apart =
+        |panel: &mut Panel, identity: Option<Identity>| emphasis(panel, identity.as_ref(), status);
+    assert_eq!(
+        set_apart(&mut panel, Some(me(501, &[20]))),
+        "d...dddddd......d..",
+        "the owner's"
+    );
+    assert_eq!(
+        set_apart(&mut panel, Some(me(1000, &[1000, 20]))),
+        "dddd...ddd...dddd..",
+        "the group's, of any group of ours"
+    );
+    assert_eq!(
+        set_apart(&mut panel, Some(me(1000, &[1000]))),
+        "ddddddd......dddddd",
+        "the others'"
+    );
+    assert_eq!(
+        set_apart(&mut panel, Some(me(0, &[0]))),
+        ".............dddddd",
+        "none limits uid 0"
+    );
+    assert_eq!(
+        set_apart(&mut panel, None),
+        "...................",
+        "plain while it is not known who reads it"
+    );
+    // In a column too, off the cursor, whose colors take the whole row.
+    panel.layout.columns.after = vec![Detail::Mode];
+    panel.handle(Action::Up);
+    let column = emphasis(&mut panel, Some(&me(501, &[20])), (3, "-rw-r--r--"));
+    assert_eq!(column, "d...dddddd");
 }
 
 #[test]

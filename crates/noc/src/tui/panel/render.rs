@@ -2,7 +2,7 @@
 
 use noc_locale::Formats;
 use noc_scroll::scrollbar;
-use noc_vfs::{DirEntry, FileKind, Location};
+use noc_vfs::{DirEntry, FileKind, Location, Metadata};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -25,6 +25,7 @@ use super::{
     HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Sort, SortKey, View, home_text,
     location_text, short_size, shown_name,
 };
+use crate::tui::machine::Identity;
 
 /// Rows of the skeleton that stands for the rows a veiled panel waits for: a few, as more
 /// looked busier than what they stand for, and a directory may hold none.
@@ -112,6 +113,7 @@ impl Panel {
         frame.render_widget(columns.header(self.sort, theme), line(inner.y));
         let visual = self.visual_rows();
         let mut finder = self.finder();
+        let mine = self.identity(view);
         for (screen_row, index) in (self.window.top()..self.rows())
             .take(list_height)
             .enumerate()
@@ -125,7 +127,7 @@ impl Panel {
                 _ => Vec::new(),
             };
             let text = row_style(
-                columns.row(row, (self.shift, &found), view),
+                columns.row(row, (self.shift, &found), (view, mine.as_ref())),
                 cursor,
                 (marked, selected),
                 theme,
@@ -266,8 +268,12 @@ impl Panel {
         } else {
             self.cursor_details(view)
         };
-        let (before, after, room) = layout::fit(details, width, MIN_NAME_WIDTH, |text| {
-            cells::width(text) + 2
+        let (before, after, room) = layout::fit(details, width, MIN_NAME_WIDTH, |parts| {
+            parts
+                .iter()
+                .map(|(text, _)| cells::width(text))
+                .sum::<usize>()
+                + 2
         });
         let marks = theme.glyphs.marks;
         let wraps = area.height > 1 && cells::width(&status) > room;
@@ -296,12 +302,21 @@ impl Panel {
         if let Some(first) = lines.first_mut() {
             let color = theme.panel_border.fg.unwrap_or(Color::Reset);
             let line = || Span::styled(format!(" {} ", glyphs::COLUMN), Style::new().fg(color));
+            let spans = |parts: Parts| {
+                parts
+                    .into_iter()
+                    .map(|(text, style)| Span::styled(text, style))
+            };
             let name = std::mem::take(&mut first.spans);
-            first.spans = (before.into_iter())
-                .flat_map(|text| [Span::raw(text), line()])
-                .chain(name)
-                .chain(after.into_iter().flat_map(|text| [line(), Span::raw(text)]))
-                .collect();
+            for parts in before {
+                first.spans.extend(spans(parts));
+                first.spans.push(line());
+            }
+            first.spans.extend(name);
+            for parts in after {
+                first.spans.push(line());
+                first.spans.extend(spans(parts));
+            }
         }
         for (y, line) in (area.y..area.bottom()).zip(lines) {
             let line = line.style(status_style.0);
@@ -352,20 +367,30 @@ impl Panel {
     /// The details of the row under the cursor on the status line, before its name and after
     /// it, as the layout lists them: those it has. None of `..`, nor of a symlink: its status
     /// line is about its target, and its own size is only the length of the path it holds.
-    fn cursor_details(&self, view: &View<'_>) -> (Vec<String>, Vec<String>) {
+    fn cursor_details(&self, view: &View<'_>) -> (Vec<Parts>, Vec<Parts>) {
         let Some(Row::Entry(entry)) = self.row(self.cursor) else {
             return (Vec::new(), Vec::new());
         };
         if entry.metadata.kind == FileKind::Symlink {
             return (Vec::new(), Vec::new());
         }
+        let mine = self.identity(view);
         let texts = |details: &[Detail]| {
             (details.iter())
-                .filter_map(|&detail| status_text(detail, entry, view))
+                .filter_map(|&detail| status_parts(detail, entry, view, mine.as_ref()))
                 .collect()
         };
         let status = &self.layout.status;
         (texts(&status.before), texts(&status.after))
+    }
+
+    /// Who the directory is read as, where known: Noon Commander for a local one, the user of the
+    /// connection for a host's.
+    fn identity(&self, view: &View<'_>) -> Option<Identity> {
+        match &self.location {
+            Location::Local(_) => view.identity.cloned(),
+            Location::Remote { host, .. } => (view.hosts)(host).identity,
+        }
     }
 
     /// The status line of the row under the cursor: its name, and the target of a symlink.
@@ -726,7 +751,12 @@ impl DirColumns {
 
     /// A row, with the name in the color of its kind, as mc highlights files, scrolled `shift`
     /// cells left, the characters of the name that quick search `found` in spans of their own.
-    fn row(&self, row: Row<'_>, (shift, found): (usize, &[usize]), view: &View<'_>) -> Shown {
+    fn row(
+        &self,
+        row: Row<'_>,
+        (shift, found): (usize, &[usize]),
+        (view, mine): (&View<'_>, Option<&Identity>),
+    ) -> Shown {
         let theme = view.theme;
         let [prefix, name] = shown_name(row, view.decor);
         let style = match row {
@@ -735,7 +765,7 @@ impl DirColumns {
         };
         // Without styles: `row_style` gives the row its colors, and the marks their accent.
         let styles = (Style::new(), Style::new());
-        let cell = |detail| column_cell(detail, row, view);
+        let cell = |detail| column_cell(detail, row, (view, mine));
         let [before, after] = self.details(cell, styles, theme.glyphs.marks);
         let name = name_spans(&prefix, &name, (self.name, shift), (style, found), view);
         let mut shown = Shown {
@@ -773,21 +803,28 @@ impl DirColumns {
                 if blank_first {
                     part.spans.push(Span::styled(" ", style));
                 }
-                let Cell { text, align, unit } = cell(detail);
+                let Cell { parts, align } = cell(detail);
+                let text: String = parts.iter().map(|(text, _)| text.as_str()).collect();
                 let fitted = cells::fit_cut(&text, width, align, Cut::Middle);
                 if fitted.cut.is_some() {
-                    // After the text before the mark.
+                    // After the text before the mark; cut short, it is plain.
                     part.cut.push(part.spans.len() + 1);
+                    part.spans
+                        .extend(cells::spans(fitted, (style, mark), marks));
+                } else {
+                    // Padded as `fit_cut` pads it, its parts in their styles.
+                    let gap = width.saturating_sub(cells::width(&text));
+                    let (left, right) = match align {
+                        Align::Left => (0, gap),
+                        Align::Center => (gap / 2, gap - gap / 2),
+                        Align::Right => (gap, 0),
+                    };
+                    part.spans.push(Span::styled(" ".repeat(left), style));
+                    let parts = parts.into_iter();
+                    part.spans
+                        .extend(parts.map(|(text, own)| Span::styled(text, style.patch(own))));
+                    part.spans.push(Span::styled(" ".repeat(right), style));
                 }
-                let mut spans = cells::spans(fitted, (style, mark), marks);
-                if let ([head, tail], Some((unit, unit_style))) = (spans.as_mut_slice(), unit)
-                    && tail.content.is_empty()
-                    && let Some(number) = head.content.strip_suffix(unit)
-                {
-                    *head = Span::styled(number.to_owned(), style);
-                    *tail = Span::styled(unit.to_owned(), style.patch(unit_style));
-                }
-                part.spans.extend(spans);
                 if !blank_first {
                     part.spans.push(Span::styled(" ", style));
                 }
@@ -798,20 +835,21 @@ impl DirColumns {
     }
 }
 
-/// The cell of a detail in a column: its text, how it aligns, and the unit that ends a size, with
-/// its style.
+/// A text in parts, each with a style of its own over the style around it.
+type Parts = Vec<(String, Style)>;
+
+/// The cell of a detail in a column: its text in parts, as the unit that ends a size in a style of
+/// its own, and how it aligns.
 struct Cell {
-    text: String,
+    parts: Parts,
     align: Align,
-    unit: Option<(&'static str, Style)>,
 }
 
 impl Cell {
     fn plain(text: String, align: Align) -> Self {
         Self {
-            text,
+            parts: vec![(text, Style::new())],
             align,
-            unit: None,
         }
     }
 }
@@ -823,8 +861,8 @@ struct Part {
     cut: Vec<usize>,
 }
 
-/// The cell of `detail` in the column of `row`.
-fn column_cell(detail: Detail, row: Row<'_>, view: &View<'_>) -> Cell {
+/// The cell of `detail` in the column of `row`, what is `mine` set apart.
+fn column_cell(detail: Detail, row: Row<'_>, (view, mine): (&View<'_>, Option<&Identity>)) -> Cell {
     let Row::Entry(entry) = row else {
         return match detail {
             Detail::Size => Cell::plain(fl!("panel-up-dir"), Align::Right),
@@ -840,11 +878,10 @@ fn column_cell(detail: Detail, row: Row<'_>, view: &View<'_>) -> Cell {
                 // Sizes stay far below 2^52, where `f64` would round them.
                 #[allow(clippy::cast_precision_loss)]
                 let (number, power) = cells::size_parts(size as f64, view.formats);
-                let unit = cells::unit(power);
+                let unit = cells::unit(power).to_owned();
                 Cell {
-                    text: format!("{number}{unit}"),
+                    parts: vec![(number, Style::new()), (unit, view.theme.size_unit(power))],
                     align: Align::Right,
-                    unit: Some((unit, view.theme.size_unit(power))),
                 }
             }
         },
@@ -852,38 +889,97 @@ fn column_cell(detail: Detail, row: Row<'_>, view: &View<'_>) -> Cell {
             let time = cells::mtime(metadata.modified, view.tz, view.formats);
             Cell::plain(time, Align::Left)
         }
-        Detail::Mode => Cell::plain(mode_text(entry).unwrap_or_default(), Align::Left),
-        Detail::Owner => Cell::plain(owner_text(entry).unwrap_or_default(), Align::Right),
+        Detail::Mode => Cell {
+            parts: mode_parts(entry, mine).unwrap_or_default(),
+            align: Align::Left,
+        },
+        Detail::Owner => Cell {
+            parts: owner_parts(entry, mine).unwrap_or_default(),
+            align: Align::Right,
+        },
     }
 }
 
-/// The text of `detail` of `entry` on the status line; none where it is not known, nor the size
-/// of a directory, which tells nothing of what it holds.
-fn status_text(detail: Detail, entry: &DirEntry, view: &View<'_>) -> Option<String> {
+/// The text of `detail` of `entry` on the status line, in parts, what is `mine` set apart; none
+/// where it is not known, nor the size of a directory, which tells nothing of what it holds.
+fn status_parts(
+    detail: Detail,
+    entry: &DirEntry,
+    view: &View<'_>,
+    mine: Option<&Identity>,
+) -> Option<Parts> {
     let metadata = &entry.metadata;
+    let plain = |text: String| vec![(text, Style::new())];
     match detail {
         Detail::Size if metadata.kind == FileKind::Dir => None,
         // Every byte of it, which the column rounds.
-        Detail::Size => metadata.size.map(|size| view.formats.integer(size)),
+        Detail::Size => metadata.size.map(|size| plain(view.formats.integer(size))),
         Detail::Time => Some(cells::mtime(metadata.modified, view.tz, view.formats))
-            .filter(|time| !time.is_empty()),
-        Detail::Mode => mode_text(entry),
-        Detail::Owner => owner_text(entry),
+            .filter(|time| !time.is_empty())
+            .map(plain),
+        Detail::Mode => mode_parts(entry, mine),
+        Detail::Owner => owner_parts(entry, mine),
     }
 }
 
-/// The type and the permissions of `entry`, as `ls -l` writes them; none when they are not
-/// known.
-fn mode_text(entry: &DirEntry) -> Option<String> {
+/// Which set of permissions of `metadata` applies to `mine`, as the system checks them: 0 the
+/// owner's, 1 the group's, 2 the others'. None for uid 0, whom they do not limit, nor where the
+/// owner is not known.
+fn applies(metadata: &Metadata, mine: &Identity) -> Option<usize> {
+    if mine.uid == 0 {
+        return None;
+    }
+    let (uid, gid) = (metadata.uid?, metadata.gid?);
+    Some(if uid == mine.uid {
+        0
+    } else if mine.groups.contains(&gid) {
+        1
+    } else {
+        2
+    })
+}
+
+/// What is `mine` as it is, and the rest toned down, as an icon is (ADR 0097).
+fn own(mine: bool) -> Style {
+    if mine {
+        Style::new()
+    } else {
+        Theme::icon(Style::new())
+    }
+}
+
+/// The type and the permissions of `entry`, as `ls -l` writes them, in parts: the set that
+/// applies to `mine` as it is, the type and the other sets toned down; plain where it is not
+/// known who reads it, or no set applies. None when they are not known.
+fn mode_parts(entry: &DirEntry, mine: Option<&Identity>) -> Option<Parts> {
     let metadata = &entry.metadata;
-    (metadata.permissions).map(|bits| format::mode(metadata.kind, Some(bits)))
+    let text = format::mode(metadata.kind, Some(metadata.permissions?));
+    let Some(set) = mine.and_then(|mine| applies(metadata, mine)) else {
+        return Some(vec![(text, Style::new())]);
+    };
+    // The type, then three sets of three letters, all ASCII.
+    let mut parts = vec![(text[..1].to_owned(), own(false))];
+    for index in 0..3 {
+        let start = 1 + 3 * index;
+        parts.push((text[start..start + 3].to_owned(), own(index == set)));
+    }
+    Some(parts)
 }
 
 /// The numbers of the owner of `entry` and of its group, as `ls -n` and `chown` write them: in
-/// digits alone, not grouped, as they name rather than count (ADR 0096); none when not known.
-fn owner_text(entry: &DirEntry) -> Option<String> {
-    let metadata = &entry.metadata;
-    (metadata.uid.zip(metadata.gid)).map(|(uid, gid)| format!("{uid}:{gid}"))
+/// digits alone, not grouped, as they name rather than count (ADR 0096); in parts, each that is
+/// `mine` as it is and the rest toned down, plain where it is not known who reads it. None when
+/// they are not known.
+fn owner_parts(entry: &DirEntry, mine: Option<&Identity>) -> Option<Parts> {
+    let (uid, gid) = (entry.metadata.uid?, entry.metadata.gid?);
+    let Some(mine) = mine else {
+        return Some(vec![(format!("{uid}:{gid}"), Style::new())]);
+    };
+    Some(vec![
+        (uid.to_string(), own(uid == mine.uid)),
+        (":".to_owned(), own(false)),
+        (gid.to_string(), own(mine.groups.contains(&gid))),
+    ])
 }
 
 /// The title of the column of `detail`.

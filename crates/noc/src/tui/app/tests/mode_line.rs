@@ -5,6 +5,7 @@ fn alice_on_mac() -> Machine {
         host: Some("mac".to_owned()),
         user: Some("alice".to_owned()),
         root: false,
+        identity: None,
     }
 }
 

@@ -246,6 +246,32 @@ fn a_host_tells_how_it_is_and_why_it_failed() {
     assert_eq!(app.host_state("web").status, HostStatus::Connected);
 }
 
+#[test]
+fn a_host_tells_who_its_connection_runs_as_once_id_says() {
+    use crate::tui::machine::Identity;
+
+    let (mut app, connection) = on_a_host();
+    assert_eq!(app.host_state("web").identity, None, "until id says");
+    let deploy = Identity {
+        uid: 1000,
+        groups: vec![1000, 27],
+    };
+    app.identified("web", connection + 1, Some(deploy.clone()));
+    assert_eq!(
+        app.host_state("web").identity,
+        None,
+        "not of an earlier one"
+    );
+    app.identified("web", connection, Some(deploy.clone()));
+    assert_eq!(app.host_state("web").identity, Some(deploy));
+    app.closed("web", connection, None);
+    assert_eq!(
+        app.host_state("web").identity,
+        None,
+        "nor once it is closed"
+    );
+}
+
 /// What the app asks of `ssh -G` now.
 #[derive(Debug, PartialEq, Eq)]
 enum Asked {

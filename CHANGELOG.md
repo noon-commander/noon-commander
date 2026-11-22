@@ -48,6 +48,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   under the cursor after its size, with a line before each; a narrow panel drops the owner first,
   then the mode, and `K` shows the name without them
   ([ADR 0096](docs/adr/0096-layouts-of-a-panel.md)).
+- The mode and the owner set apart what is yours: the rest of them is dim, but the set of
+  permissions that applies to you, and your uid and group; on a host, as `id` there says once it
+  connects
+  ([ADR 0097](docs/adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)).
 
 ### Removed
 

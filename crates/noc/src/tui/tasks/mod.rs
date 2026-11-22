@@ -35,6 +35,7 @@ use super::app::{
 use super::describe::{self, Reason};
 use super::dialog::Ask;
 use super::find::{FindQuery, FindSummary, Finding};
+use super::machine::Identity;
 use super::panel::{ListError, ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::progress::Counts;
@@ -124,6 +125,13 @@ pub(crate) enum Done {
         host: String,
         connection: u64,
         handle: HostHandle,
+    },
+    /// Who the connection `connection` to `host` runs as there, as `id` told it; `None` where it
+    /// did not.
+    Identified {
+        host: String,
+        connection: u64,
+        identity: Option<Identity>,
     },
     /// ssh asks something.
     Ask(Ask),

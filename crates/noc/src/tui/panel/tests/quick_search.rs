@@ -285,6 +285,7 @@ fn found(panel: &mut Panel, width: u16) -> Vec<String> {
         tz: &TimeZone::UTC,
         formats: &Formats::iso(),
         whole: false,
+        identity: None,
     };
     terminal
         .draw(|frame| panel.render(frame, frame.area(), true, &view))

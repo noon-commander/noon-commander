@@ -22,6 +22,7 @@ use crate::context::Context;
 use crate::i18n::fl;
 use crate::tui::describe;
 use crate::tui::dialog::{Ask, Reply};
+use crate::tui::machine::Identity;
 use crate::tui::panel::{ListError, ListRequest, Listed, Listing};
 use crate::tui::tabs::PanelId;
 
@@ -408,6 +409,10 @@ impl HostTask {
         });
         let mut running: FuturesUnordered<Pin<Box<dyn Future<Output = Done> + Send + '_>>> =
             FuturesUnordered::new();
+        // Without the master, each command would connect, and may ask, again.
+        if session.is_multiplexed() {
+            running.push(self.identify(&session));
+        }
         let reason = loop {
             tokio::select! {
                 Some(request) = incoming.recv() => match request {
@@ -459,6 +464,29 @@ impl HostTask {
         session.close().await;
         process.finish().await;
         reason
+    }
+
+    /// Who the connection runs as on the host, as `id -u` and `id -G` tell, for the panels to
+    /// set apart what is its own (ADR 0097).
+    fn identify(&self, session: &Session) -> Pin<Box<dyn Future<Output = Done> + Send + 'static>> {
+        let spawn = |flag: &str| (session.spawn_in(b"", "id", &[OsString::from(flag)])).ok();
+        let (uid, groups) = (spawn("-u"), spawn("-G"));
+        let (host, connection) = (self.host.clone(), self.connection);
+        Box::pin(async move {
+            let printed = |child: Option<tokio::process::Child>| async move {
+                let output = child?.wait_with_output().await.ok()?;
+                output.status.success().then_some(output.stdout)
+            };
+            let (uid, groups) = tokio::join!(printed(uid), printed(groups));
+            let identity = uid
+                .zip(groups)
+                .and_then(|(uid, groups)| Identity::parse(&uid, &groups));
+            Done::Identified {
+                host,
+                connection,
+                identity,
+            }
+        })
     }
 
     async fn create_dir(&self, fs: &SftpFs, panel: PanelId, path: RemotePath) -> Done {

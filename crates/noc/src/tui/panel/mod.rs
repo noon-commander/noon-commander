@@ -18,6 +18,7 @@ use super::describe;
 use super::dialog::Field;
 use super::glyphs;
 use super::keymap::Action;
+use super::machine::Identity;
 use super::scroll::Window;
 use super::search::Input;
 use super::spinner::{Spin, Wait};
@@ -164,6 +165,8 @@ pub(crate) struct HostState {
     /// Why the last attempt failed, or the connection was lost, while it is `Failed` or
     /// `Stalled`: terminal-safe, on one line.
     pub(crate) reason: Option<String>,
+    /// Who the connection runs as on the host, once `id` told it.
+    pub(crate) identity: Option<Identity>,
 }
 
 /// The connection state of a host.
@@ -247,6 +250,8 @@ pub(crate) struct View<'a> {
     pub(crate) formats: &'a Formats,
     /// Whether the status line shows the whole name under the cursor, as `K` asks.
     pub(crate) whole: bool,
+    /// Who Noon Commander runs as, which local panels set apart the mode and owner of.
+    pub(crate) identity: Option<&'a Identity>,
 }
 
 /// What a directory is sorted by. Directories always come first.

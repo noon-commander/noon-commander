@@ -15,6 +15,7 @@ use crate::tui::configuration::{run_of, run_text};
 use crate::tui::describe::Reason;
 use crate::tui::dialog::{Ask, Button, Dialog, DialogEvent, Problem, Reply};
 use crate::tui::keymap::Action;
+use crate::tui::machine::Identity;
 use crate::tui::menu::LocationMenu;
 use crate::tui::panel::{
     Destination, Failure, HostState, HostStatus, ListError, ListErrorKind, ListRequest, Listed,
@@ -372,12 +373,31 @@ impl App {
             None if self.failed.contains_key(host) => HostStatus::Failed,
             None => HostStatus::Idle,
         };
+        let identity = match self.hosts.get(host) {
+            Some(Host::Connected { identity, .. }) => identity.clone(),
+            _ => None,
+        };
         HostState {
             status,
             address: self.ssh_g.addresses.get(host).cloned(),
             jump: self.ssh_g.jumps.get(host).cloned(),
             unresolved: self.ssh_g.unresolved.contains(host),
             reason: self.failed.get(host).cloned(),
+            identity,
+        }
+    }
+
+    /// Takes who the connection `connection` to `host` runs as there, for its panels to set
+    /// apart what is its own.
+    pub(crate) fn identified(&mut self, host: &str, connection: u64, identity: Option<Identity>) {
+        if let Some(Host::Connected {
+            connection: current,
+            identity: known,
+            ..
+        }) = self.hosts.get_mut(host)
+            && *current == connection
+        {
+            *known = identity;
         }
     }
 
@@ -587,6 +607,7 @@ impl App {
             connection,
             stop: stop.clone(),
             handle,
+            identity: None,
         };
         self.recent.use_host(host);
         self.resume_jobs();

@@ -33,7 +33,7 @@ use super::jobs::JobsList;
 use super::jump::JumpMenu;
 use super::key_hints::KeyHintsWindow;
 use super::keymap::{Action, Context, Extra, Hints, KeyState, Keyboard, Keymap, Mode, Resolved};
-use super::machine::Machine;
+use super::machine::{Identity, Machine};
 use super::menu::LocationMenu;
 use super::panel::{Failure, ListRequest, Panel, location_text, short_size};
 use super::progress::{JobView, Look, RowLook};
@@ -396,6 +396,8 @@ enum Host {
         connection: u64,
         stop: CancellationToken,
         handle: HostHandle,
+        /// Who the connection runs as on the host, once `id` told it.
+        identity: Option<Identity>,
     },
     /// The attempt `connection` failed, or the connection was lost, and a dialog asks whether
     /// to try again; the panels that wait for the host wait on.

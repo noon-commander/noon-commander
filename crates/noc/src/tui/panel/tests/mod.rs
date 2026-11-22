@@ -155,6 +155,7 @@ fn render_themed(
             tz: &TimeZone::UTC,
             formats: &Formats::iso(),
             whole: false,
+            identity: None,
         };
         terminal
             .draw(|frame| panel.render(frame, frame.area(), active, &view))

@@ -1476,7 +1476,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   of the file under the cursor, its mode (`-rw-r--r--`), and its owner in digits not grouped
   (`501:20`), those it has, while the name keeps 8 cells, a line `│` in the color of the frame
   before each; none of a symlink. It cuts the name at its end, `»` before the details (ADR 0094).
-  A column of owners is always 11 cells. The size column is as wide as the
+  A column of owners is always 11 cells. The mode and the owner set apart what is ours
+  ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions
+  that applies, as the system checks them, and the uid and gid that are ours, as they are, the
+  rest dim; none for uid 0. Local panels go by the process (`Machine.identity`: `geteuid`, `getegid`,
+  `getgroups`); a host's task asks `id -u` and `id -G` through `Session::spawn_in` once it
+  connects, over the master only, and the app keeps the answer with the connection
+  (`Done::Identified`, `HostState.identity`). The size column is as wide as the
   longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time column as the
   longest time of the formats. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);

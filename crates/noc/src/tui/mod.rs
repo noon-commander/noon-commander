@@ -153,6 +153,11 @@ fn take_done(app: &mut App, tasks: &mut Tasks, done: Done) -> bool {
             connection,
             handle,
         } => tasks.run(app.connected(&host, connection, handle)),
+        Done::Identified {
+            host,
+            connection,
+            identity,
+        } => app.identified(&host, connection, identity),
         Done::Resolved {
             host,
             address,

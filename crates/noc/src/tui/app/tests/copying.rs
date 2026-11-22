@@ -356,6 +356,7 @@ fn f5_takes_typed_targets_and_remembers_preserve() {
         connection: 1,
         stop,
         handle,
+        identity: None,
     };
     app.hosts.insert("web".to_owned(), web);
     let copy_to = |app: &mut App, text: &str| {

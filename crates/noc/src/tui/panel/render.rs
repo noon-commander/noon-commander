@@ -10,6 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
 use unicode_width::UnicodeWidthChar as _;
 
+use crate::format;
 use crate::i18n::fl;
 use crate::tui::cells::{self, Align, Cut, Marks};
 use crate::tui::glyphs;
@@ -85,7 +86,7 @@ impl Panel {
         let status = Rect::new(inner.x, separator + 1, inner.width, status_rows);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
         let columns = DirColumns::for_width(width, &self.layout.columns, |detail| {
-            detail_cells(detail, view.formats)
+            self.detail_cells(detail, view.formats)
         });
         if let Some(Veil { shine }) = self.veil(view).filter(|_| veiled) {
             frame.render_widget(columns.header(self.sort, theme), line(inner.y));
@@ -259,10 +260,15 @@ impl Panel {
         let status_style = (Style::new(), theme.truncated);
         let (status, linked) = self.cursor_status(view);
         // In the first row, as in Far, while the name keeps some room; the rows after it have
-        // the whole width.
+        // the whole width. While `K` shows the name whole, they make room for it in both rows.
         let details = self.cursor_details(view);
-        let (before, after, room) =
-            layout::fit(details, width, MIN_NAME_WIDTH, |text| cells::width(text));
+        let spare = usize::from(area.height.saturating_sub(1)) * width.saturating_sub(1);
+        let name = if area.height > 1 {
+            MIN_NAME_WIDTH.max(cells::width(&status).saturating_sub(spare))
+        } else {
+            MIN_NAME_WIDTH
+        };
+        let (before, after, room) = layout::fit(details, width, name, |text| cells::width(text));
         let marks = theme.glyphs.marks;
         let wraps = area.height > 1 && cells::width(&status) > room;
         let rows = if wraps { usize::from(area.height) } else { 1 };
@@ -350,6 +356,34 @@ impl Panel {
         };
         let status = &self.layout.status;
         (texts(&status.before), texts(&status.after))
+    }
+
+    /// The cells of a column of `detail`: as many as its longest text with `formats` needs, and
+    /// its title, with the arrow of the order where it sorts.
+    fn detail_cells(&self, detail: Detail, formats: &Formats) -> usize {
+        let title = cells::width(&detail_title(detail)) + usize::from(sorted_by(detail).is_some());
+        let text = match detail {
+            Detail::Size => [fl!("panel-up-dir"), fl!("panel-dir")]
+                .iter()
+                .map(|text| cells::width(text))
+                .max()
+                .unwrap_or_default()
+                .max(cells::short_size_width(formats)),
+            Detail::Time => formats.time_width(),
+            // `ls -l`'s type and nine permissions.
+            Detail::Mode => 10,
+            // shortcut: reads every entry on each frame; keep the width with the listing if the
+            // column slows big directories.
+            Detail::Owner => (0..self.rows())
+                .filter_map(|index| match self.row(index) {
+                    Some(Row::Entry(entry)) => owner_text(entry),
+                    _ => None,
+                })
+                .map(|text| cells::width(&text))
+                .max()
+                .unwrap_or(0),
+        };
+        text.max(title)
     }
 
     /// The status line of the row under the cursor: its name, and the target of a symlink.
@@ -696,7 +730,7 @@ impl DirColumns {
             SortKey::Size | SortKey::Time => fl!("panel-name"),
         };
         let title = |detail| {
-            let by = sorted_by(detail) == sort.key;
+            let by = sorted_by(detail) == Some(sort.key);
             Cell::plain(arrowed(detail_title(detail), by), Align::Center)
         };
         let styles = (theme.header, theme.truncated);
@@ -812,7 +846,7 @@ fn column_cell(detail: Detail, row: Row<'_>, view: &View<'_>) -> Cell {
     let Row::Entry(entry) = row else {
         return match detail {
             Detail::Size => Cell::plain(fl!("panel-up-dir"), Align::Right),
-            Detail::Time => Cell::plain(String::new(), Align::Left),
+            Detail::Time | Detail::Mode | Detail::Owner => Cell::plain(String::new(), Align::Left),
         };
     };
     let metadata = &entry.metadata;
@@ -836,6 +870,8 @@ fn column_cell(detail: Detail, row: Row<'_>, view: &View<'_>) -> Cell {
             let time = cells::mtime(metadata.modified, view.tz, view.formats);
             Cell::plain(time, Align::Left)
         }
+        Detail::Mode => Cell::plain(mode_text(entry).unwrap_or_default(), Align::Left),
+        Detail::Owner => Cell::plain(owner_text(entry).unwrap_or_default(), Align::Right),
     }
 }
 
@@ -849,7 +885,23 @@ fn status_text(detail: Detail, entry: &DirEntry, view: &View<'_>) -> Option<Stri
         Detail::Size => metadata.size.map(|size| view.formats.integer(size)),
         Detail::Time => Some(cells::mtime(metadata.modified, view.tz, view.formats))
             .filter(|time| !time.is_empty()),
+        Detail::Mode => mode_text(entry),
+        Detail::Owner => owner_text(entry),
     }
+}
+
+/// The type and the permissions of `entry`, as `ls -l` writes them; none when they are not
+/// known.
+fn mode_text(entry: &DirEntry) -> Option<String> {
+    let metadata = &entry.metadata;
+    (metadata.permissions).map(|bits| format::mode(metadata.kind, Some(bits)))
+}
+
+/// The numbers of the owner of `entry` and of its group, as `ls -n` and `chown` write them: in
+/// digits alone, not grouped, as they name rather than count (ADR 0096); none when not known.
+fn owner_text(entry: &DirEntry) -> Option<String> {
+    let metadata = &entry.metadata;
+    (metadata.uid.zip(metadata.gid)).map(|(uid, gid)| format!("{uid}:{gid}"))
 }
 
 /// The title of the column of `detail`.
@@ -857,32 +909,18 @@ fn detail_title(detail: Detail) -> String {
     match detail {
         Detail::Size => fl!("panel-size"),
         Detail::Time => fl!("panel-time"),
+        Detail::Mode => fl!("panel-mode"),
+        Detail::Owner => fl!("panel-owner"),
     }
 }
 
-/// What a directory is sorted by when its column of `detail` has the arrow.
-fn sorted_by(detail: Detail) -> SortKey {
+/// What a directory is sorted by when its column of `detail` has the arrow, if it sorts.
+fn sorted_by(detail: Detail) -> Option<SortKey> {
     match detail {
-        Detail::Size => SortKey::Size,
-        Detail::Time => SortKey::Time,
+        Detail::Size => Some(SortKey::Size),
+        Detail::Time => Some(SortKey::Time),
+        Detail::Mode | Detail::Owner => None,
     }
-}
-
-/// The cells of a column of `detail`: as many as its longest text with `formats` needs, and its
-/// title, with the arrow of the order where it sorts.
-fn detail_cells(detail: Detail, formats: &Formats) -> usize {
-    // With the arrow.
-    let title = cells::width(&detail_title(detail)) + 1;
-    let text = match detail {
-        Detail::Size => [fl!("panel-up-dir"), fl!("panel-dir")]
-            .iter()
-            .map(|text| cells::width(text))
-            .max()
-            .unwrap_or_default()
-            .max(cells::short_size_width(formats)),
-        Detail::Time => formats.time_width(),
-    };
-    text.max(title)
 }
 
 /// A row as drawn, before [`row_style`] gives it its colors, with the indexes of its spans that

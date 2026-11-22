@@ -63,10 +63,10 @@ fn k_shows_the_whole_name_on_two_rows_of_the_status_line() {
     assert_eq!(
         [row(5), row(6)],
         [
-            "║«ame-a-long-name-a-long-name-a-l 12345║",
+            "║«long-name-a-long-name-a-long-name-a-l║",
             "║»ong-name-a-long-name-a-long-name-.txt║",
         ],
-        "a longer one scrolls as far as its end"
+        "a longer one scrolls as far as its end, the details making room for it"
     );
 }
 
@@ -89,12 +89,12 @@ fn the_status_line_scrolls_with_the_names_until_its_end_shows() {
     }
     assert_eq!(
         status(&mut panel),
-        "║«-a-long-name-a-long-name-a-lon» 12345║"
+        "║«-a-long-name» 12345 -rw-r--r-- 501:20║"
     );
     panel.handle(Action::ScrollEnd);
     assert_eq!(
         status(&mut panel),
-        "║«me-a-long-name-a-long-name-.txt 12345║",
+        "║«ong-name-.txt 12345 -rw-r--r-- 501:20║",
         "no further than its end"
     );
     panel.handle(Action::Down);
@@ -112,7 +112,7 @@ fn the_status_line_cuts_a_name_at_its_end_before_the_size() {
     panel.handle(Action::Down);
     let backend = draw(&mut panel, 40, 8, true);
     let status: String = (0..40).map(|x| backend.buffer()[(x, 6)].symbol()).collect();
-    assert_eq!(status, "║a-long-name-a-long-name-a-long-» 12345║");
+    assert_eq!(status, "║a-long-name-a» 12345 -rw-r--r-- 501:20║");
 }
 
 #[test]
@@ -562,6 +562,20 @@ fn a_layout_puts_its_details_on_either_side_of_the_name() {
 }
 
 #[test]
+fn columns_show_the_mode_and_the_owner() {
+    let mut panel = loaded("/srv", vec![entry("notes", FileKind::File, 1)]);
+    panel.layout.columns = Around {
+        before: Vec::new(),
+        after: vec![Detail::Mode, Detail::Owner],
+    };
+    let backend = draw(&mut panel, 40, 8, true);
+    let row = |y: u16| -> String { (0..40).map(|x| backend.buffer()[(x, y)].symbol()).collect() };
+    assert!(row(1).ends_with("│Permissions│Owner ║"), "{}", row(1));
+    assert!(row(2).ends_with("│           │      ║"), "none of `..`");
+    assert!(row(3).ends_with("│-rw-r--r-- │501:20║"), "{}", row(3));
+}
+
+#[test]
 fn the_marks_of_names_cut_short_have_an_accent_on_every_row() {
     use ratatui::style::{Color, Modifier};
 
@@ -846,33 +860,54 @@ fn units_of_sizes_take_colors_by_how_big_and_the_cursor_s_on_its_row() {
 }
 
 #[test]
-fn the_status_line_shows_every_byte_of_a_file_at_its_right() {
+fn the_status_line_shows_the_details_of_the_layout_after_the_name() {
+    let bare = DirEntry {
+        metadata: Metadata {
+            permissions: None,
+            uid: None,
+            ..entry("bare", FileKind::File, 7).metadata
+        },
+        ..entry("bare", FileKind::File, 7)
+    };
     let mut panel = loaded(
         "/srv",
         vec![
             entry("docs", FileKind::Dir, 4096),
             entry("disk.img", FileKind::File, 3_221_225_472),
+            link_to_dir("link"),
+            bare,
         ],
     );
-    let status = |panel: &mut Panel, width: u16| {
+    let status = |panel: &mut Panel, name: &str, width: u16| {
+        panel.cursor = names(panel).iter().position(|row| row == name).unwrap();
         let screen = draw(panel, width, 6, true).to_string();
         let line = screen.lines().nth(4).unwrap_or_default().to_owned();
         line.trim_matches('"').chars().skip(1).collect::<String>()
     };
-    panel.handle(Action::End);
+    // Every byte of a file, then its mode and owner, in digits that are not grouped.
+    let wide = status(&mut panel, "disk.img", 50);
+    assert!(wide.ends_with(" 3221225472 -rw-r--r-- 501:20║"), "{wide}");
+    // A narrow panel drops the details at the end first, while the name keeps 8 cells.
+    let narrower = [38, 30, 19].map(|width| status(&mut panel, "disk.img", width));
     assert!(
-        status(&mut panel, 40).ends_with(" 3221225472║"),
-        "{}",
-        status(&mut panel, 40)
+        narrower[0].ends_with(" 3221225472 -rw-r--r--║"),
+        "{narrower:?}"
     );
-    let narrow = status(&mut panel, 19);
+    assert!(narrower[1].ends_with(" 3221225472║"), "{narrower:?}");
+    assert!(narrower[2].starts_with("disk.img") && !narrower[2].contains('3'));
+    let directory = status(&mut panel, "docs", 50);
+    assert!(directory.ends_with(" drw-r--r-- 501:20║"), "{directory}");
+    assert!(!directory.contains("4096"), "no size: {directory}");
+    let link = status(&mut panel, "link", 50);
     assert!(
-        narrow.starts_with("disk.img") && !narrow.contains('3'),
-        "{narrow}"
+        !link.contains("501"),
+        "a symlink's is about its target: {link}"
     );
-    panel.handle(Action::Up);
-    let directory = status(&mut panel, 40);
-    assert!(!directory.contains("4096"), "{directory}");
+    let unknown = status(&mut panel, "bare", 50);
+    assert!(
+        unknown.ends_with(" 7║"),
+        "what is not known is left out: {unknown}"
+    );
 }
 
 #[test]

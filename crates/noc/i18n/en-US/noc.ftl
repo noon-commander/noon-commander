@@ -99,6 +99,10 @@ terminal-title-root = [root] { $place } — noc
 panel-name = Name
 panel-size = Size
 panel-time = Modify time
+# The type and permissions, as `ls -l` writes them (`-rw-r--r--`).
+panel-mode = Permissions
+# The numbers of the owner and its group (`501:20`).
+panel-owner = Owner
 # The name column's title while the panel is sorted by extension.
 panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.

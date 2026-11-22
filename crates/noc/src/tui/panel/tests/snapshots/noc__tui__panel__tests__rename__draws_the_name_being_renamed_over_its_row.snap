@@ -9,5 +9,5 @@ expression: terminal.backend()
 "║ notes       │     1B│2023-11-14 21:13█"
 "║ report.final.pdf                     ▼"
 "╟─────────────┴───────┴────────────────╢"
-"║report.final.pdf                    10║"
+"║report.final.pdf  10 -rw-r--r-- 501:20║"
 "╚═ 12B in 3 files, 1 dir ══════════════╝"

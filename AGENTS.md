@@ -171,8 +171,9 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Library errors are typed; the UI turns them into messages.
 - Numbers, dates, and times on screen go through `noc_locale::Formats` (ADR 0035), never
   `format!`; pass numbers to `fl!` as numbers, so plural forms and the formatter see them. Every
-  number is grouped, file sizes too. A time always shows its date, with the year, and its time of
-  day, in digits (`Formats::date_time`).
+  number is grouped, file sizes too; a uid and a gid, which name rather than count, are digits
+  alone (ADR 0096). A time always shows its date, with the year, and its time of day, in digits
+  (`Formats::date_time`).
 - No code for one language or region: no tables of a layout, no special cases, no tags but in
   settings. Formats come from the system or CLDR; tests use `iso` and patterns of their own.
 - clap `--help` and logs stay English, outside Fluent.

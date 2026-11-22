@@ -1,4 +1,4 @@
-//! Text formatting for command-line output.
+//! Text formatting for command-line output, and the mode the panels show.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

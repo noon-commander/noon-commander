@@ -1472,9 +1472,10 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   modification time (local time: the date, with its year, and the time, in the formats of the
   region, as `12.10.26 05:05`), so narrow panels drop the time, then the size. Sizes have a
   unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in
-  a color too, as the theme's `size_units` say; the status line shows every byte of the file
-  under the cursor at its right, while the name keeps 8 cells, and cuts the name at its end, `»`
-  before the size (ADR 0094). The size column is as wide as the
+  a color too, as the theme's `size_units` say. The status line shows, after the name, every byte
+  of the file under the cursor, its mode (`-rw-r--r--`), and its owner in digits not grouped
+  (`501:20`), those it has, while the name keeps 8 cells; none of a symlink. It cuts the name at
+  its end, `»` before the details (ADR 0094). The size column is as wide as the
   longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time column as the
   longest time of the formats. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);
@@ -1489,8 +1490,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   error dialogs), and paths their start, as titles do (`«/deploy/site`); `noc_text::fit_cut` says
   where the mark goes, and `cells::fit`, `cells::fitted`, and `cells::spans` draw it as spans.
   `K` makes the status lines of both panels two rows high, the name under the cursor going on in
-  the second, plain, after `»` as the viewer's wrapped rows, the size staying at the right of the
-  first, until `K` or Esc (`App.whole`,
+  the second, plain, after `»` as the viewer's wrapped rows, the details staying in the first, as
+  many as leave the name room in both rows, until `K` or Esc (`App.whole`,
   `View.whole`, not saved;
   [ADR 0094](adr/0094-k-shows-the-whole-name-on-the-status-line.md)). The
   z keys scroll the names of all rows as vim scrolls lines that do not wrap (`Panel.shift`, back

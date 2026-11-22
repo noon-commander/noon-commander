@@ -29,8 +29,8 @@ fn k_shows_the_whole_name_under_the_cursor_on_the_status_line_until_asked_again(
     let long = format!("{}.txt", "a-very-long-name-".repeat(6));
     let mut app = with_files(&[&long, "b"]);
     keys(&mut app, &["j"]);
-    // The rows of the left panel's status line joined, less the size of the file at the right
-    // and the mark that the second starts with.
+    // The rows of the left panel's status line joined, less the details of the file at the
+    // right, from its size on, and the mark that the second starts with.
     let status = |app: &mut App| -> String {
         let screen = screen_of(app, 14);
         let rows = screen
@@ -39,7 +39,11 @@ fn k_shows_the_whole_name_under_the_cursor_on_the_status_line_until_asked_again(
             .skip(1)
             .take_while(|line| !line.contains('╚'));
         rows.map(|line| line.split('║').nth(1).unwrap_or_default())
-            .map(|row| row.trim_end().trim_end_matches(" 1").trim_end())
+            .map(|row| {
+                row.split_once(" 1 ")
+                    .map_or(row, |(name, _)| name)
+                    .trim_end()
+            })
             .map(|row| row.strip_prefix('»').unwrap_or(row))
             .collect()
     };

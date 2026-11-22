@@ -8,6 +8,10 @@ pub(crate) enum Detail {
     Size,
     /// The time of the last modification.
     Time,
+    /// The type and the permissions, as `ls -l` writes them.
+    Mode,
+    /// The numbers of the owner and of its group.
+    Owner,
 }
 
 /// The details on either side of the name, each in the order they show.
@@ -33,7 +37,7 @@ impl Default for Layout {
             },
             status: Around {
                 before: Vec::new(),
-                after: vec![Detail::Size],
+                after: vec![Detail::Size, Detail::Mode, Detail::Owner],
             },
         }
     }

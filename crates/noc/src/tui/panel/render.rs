@@ -893,8 +893,7 @@ fn column_cell(detail: Detail, row: Row<'_>, (view, mine): (&View<'_>, Option<&I
 }
 
 /// The text of `detail` of `entry` on the status line, in parts, what is `mine` set apart; none
-/// where it is not known, nor the size of a directory or a link to one, which tells nothing of
-/// what it holds.
+/// where it is not known.
 fn status_parts(
     detail: Detail,
     entry: &DirEntry,
@@ -904,8 +903,7 @@ fn status_parts(
     let metadata = &entry.metadata;
     let plain = |text: String| vec![(text, Style::new())];
     match detail {
-        Detail::Size if entry.is_dir_like() => None,
-        // Every byte of it, which the column rounds.
+        // Every byte of it, which the column rounds, or shows as `DIR`.
         Detail::Size => metadata.size.map(|size| plain(view.formats.integer(size))),
         Detail::Time => Some(cells::mtime(metadata.modified, view.tz, view.formats))
             .filter(|time| !time.is_empty())

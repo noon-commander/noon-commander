@@ -1473,11 +1473,11 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   region, as `12.10.26 05:05`), so narrow panels drop the time, then the size. Sizes have a
   unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in
   a color too, as the theme's `size_units` say. The status line shows, after the name, every byte
-  of the file under the cursor, its mode (`-rw-r--r--`), and its owner in digits not grouped
-  (`501:20`), those it has, while the name keeps 8 cells, a line `│` in the color of the frame
-  before each; a symlink's own, but the size of a link to a directory. It cuts the name at its
-  end, `»` before the details (ADR 0094). A column of owners is always 11 cells. The mode and
-  the owner set apart what is ours
+  of the entry under the cursor, a directory's too, its mode (`-rw-r--r--`), and its owner in
+  digits not grouped (`501:20`), those it has, while the name keeps 8 cells, a line `│` in the
+  color of the frame before each; a symlink's own. It cuts the name at its end, `»` before the
+  details (ADR 0094). A column of owners is always 11 cells. The mode and the owner set apart
+  what is ours
   ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions
   that applies, as the system checks them, and the uid and gid that are ours, as they are, the
   rest dim; no set for uid 0 nor in a symlink's mode. Local panels go by the process

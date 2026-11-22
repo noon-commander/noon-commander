@@ -938,14 +938,13 @@ fn the_status_line_shows_the_details_of_the_layout_after_the_name() {
     assert!(narrower[2].starts_with("disk.img") && !narrower[2].contains('3'));
     let directory = status(&mut panel, "docs", 50);
     assert!(
-        directory.ends_with(" │ drw-r--r-- │ 501:20║"),
-        "{directory}"
+        directory.ends_with(" │ 4096 │ drw-r--r-- │ 501:20║"),
+        "the size of a directory too, which its row shows as DIR: {directory}"
     );
-    assert!(!directory.contains("4096"), "no size: {directory}");
     let link = status(&mut panel, "link", 50);
     assert!(
-        link.starts_with("link -> /opt/ ") && link.ends_with(" │ lrw-r--r-- │ 501:20║"),
-        "a symlink's own, as its row, but the size of a link to a directory: {link}"
+        link.starts_with("link -> /opt/ ") && link.ends_with(" │ 4 │ lrw-r--r-- │ 501:20║"),
+        "a symlink's own, as its row: {link}"
     );
     let unknown = status(&mut panel, "bare", 50);
     assert!(

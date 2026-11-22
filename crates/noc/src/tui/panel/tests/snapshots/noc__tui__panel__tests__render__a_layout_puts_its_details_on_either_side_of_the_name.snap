@@ -1,0 +1,12 @@
+---
+source: crates/noc/src/tui/panel/tests/render.rs
+expression: "draw(&mut panel, 50, 8, true)"
+---
+"╔ / /srv ═══════════════════════╤════════════════╗"
+"║ Size  │         ↑Name         │  Modify time   ║"
+"║UP--DIR│/..                    │                ║"
+"║  12.1K│ a-long-nam»g-name-.txt│2023-11-14 21:13║"
+"║     1B│ short                 │2023-11-14 21:13║"
+"╟───────┴───────────────────────┴────────────────╢"
+"║12345 a-long-name-a-long-name-a-long-name-.txt  ║"
+"╚═ 12.1K in 2 files, 0 dirs ═════════════════════╝"

@@ -1464,9 +1464,13 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   whenever another program gets the terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name as the language of the formats orders names, with the numbers in them by
-  value (`ui.natural_sort`; off, by their characters ignoring case); columns are name, size, and
+  value (`ui.natural_sort`; off, by their characters ignoring case). A layout
+  (`panel::layout::Layout`, [ADR 0096](adr/0096-layouts-of-a-panel.md)) lists the details of the
+  columns and of the status line, before the name and after it; the name takes what they leave,
+  and narrow panels drop the details at the end of the list first. The one built-in layout has
+  the columns name, size, and
   modification time (local time: the date, with its year, and the time, in the formats of the
-  region, as `12.10.26 05:05`), and narrow panels drop the time, then the size. Sizes have a
+  region, as `12.10.26 05:05`), so narrow panels drop the time, then the size. Sizes have a
   unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in
   a color too, as the theme's `size_units` say; the status line shows every byte of the file
   under the cursor at its right, while the name keeps 8 cells, and cuts the name at its end, `»`
@@ -1743,7 +1747,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   is copied. Its window says Moving; when it ends, the
   panels on both sides read their directories again.
 - **Shift+F6 renames in place** the entry under the cursor, not the marked ones: its
-  row becomes a text field from the name on, over the size and time columns, in Insert mode
+  row becomes a text field from the name on, over the columns after it, in Insert mode
   with the cursor before a file's last extension (after the whole name of a directory, a
   dotfile, or a name that ends with a dot), so that Ctrl+u takes away the rest of the name.
   Enter renames in every mode; Esc goes to Normal mode, where vim's motions and operators edit

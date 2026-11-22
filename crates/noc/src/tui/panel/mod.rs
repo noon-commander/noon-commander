@@ -22,8 +22,10 @@ use super::scroll::Window;
 use super::search::Input;
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
+use layout::Layout;
 
 mod jumps;
+mod layout;
 mod marks;
 mod pointer;
 mod quick_search;
@@ -460,6 +462,8 @@ pub(crate) struct Panel {
     /// The icons and the width of the names at the last render, which the scrolling of the
     /// names goes by.
     names: (Decor, usize),
+    /// What the rows and the status line show beside the names.
+    layout: Layout,
 }
 
 impl Panel {
@@ -512,6 +516,7 @@ impl Panel {
             column_lines: Vec::new(),
             shift: 0,
             names: (Decor::new(false), 0),
+            layout: Layout::default(),
         };
         let request = panel.open(location, focus);
         (panel, request)
@@ -552,6 +557,7 @@ impl Panel {
             column_lines: Vec::new(),
             shift: 0,
             names: (Decor::new(false), 0),
+            layout: self.layout.clone(),
         };
         let request = self
             .pending

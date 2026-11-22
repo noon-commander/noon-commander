@@ -2,7 +2,7 @@
 
 use noc_locale::Formats;
 use noc_scroll::scrollbar;
-use noc_vfs::{FileKind, Location};
+use noc_vfs::{DirEntry, FileKind, Location};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -19,6 +19,7 @@ use crate::tui::spinner::Shine;
 use crate::tui::theme::Theme;
 use crate::tui::window;
 
+use super::layout::{self, Around, Detail};
 use super::{
     HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Sort, SortKey, View, home_text,
     location_text, short_size, shown_name,
@@ -83,7 +84,9 @@ impl Panel {
         let separator = inner.bottom() - 1 - status_rows;
         let status = Rect::new(inner.x, separator + 1, inner.width, status_rows);
         let line = |y: u16| Rect::new(inner.x, y, inner.width, 1);
-        let columns = DirColumns::for_width(width, column_widths(view.formats));
+        let columns = DirColumns::for_width(width, &self.layout.columns, |detail| {
+            detail_cells(detail, view.formats)
+        });
         if let Some(Veil { shine }) = self.veil(view).filter(|_| veiled) {
             frame.render_widget(columns.header(self.sort, theme), line(inner.y));
             let rows = self.list.height.min(WAIT_ROWS);
@@ -145,7 +148,13 @@ impl Panel {
             .map(|offset| inner.x + offset)
             .collect();
         self.render_column_lines(frame, area, (inner.y, separator), theme);
-        self.render_rename(frame, inner, list_height, active, view);
+        let at = u16::try_from(columns.name_at()).map_or(inner.width, |at| at.min(inner.width));
+        let from_name = Rect {
+            x: inner.x + at,
+            width: inner.width - at,
+            ..inner
+        };
+        self.render_rename(frame, from_name, list_height, active, view);
         self.render_status(frame, status, view);
     }
 
@@ -238,26 +247,22 @@ impl Panel {
     }
 
     /// The status line, at `area`: the name under the cursor, with the target of a symlink, and
-    /// the size of a file; while a name is renamed in its row, the name it had. A text that does
-    /// not fit in the first row goes on in the next ones, plain, where `area` has more, as
-    /// [`wrapped`] breaks it; otherwise it is cut at its end, as the viewer's lines, so that the
-    /// mark reads as text that goes on, where the row above keeps the end of the name. It scrolls
-    /// with the names, plain, `«` over its first cell, but no further than its end comes to the
-    /// right edge of its last row.
+    /// the details of the layout beside it; while a name is renamed in its row, the name it had.
+    /// A text that does not fit in the first row goes on in the next ones, plain, where `area`
+    /// has more, as [`wrapped`] breaks it; otherwise it is cut at its end, as the viewer's lines,
+    /// so that the mark reads as text that goes on, where the row above keeps the end of the name.
+    /// It scrolls with the names, plain, `«` over its first cell, but no further than its end
+    /// comes to the right edge of its last row.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
         let status_style = (Style::new(), theme.truncated);
         let (status, linked) = self.cursor_status(view);
-        // The size of the file under the cursor, every byte of it.
-        let size = self.cursor_size(view.formats);
-        let mut room = width;
-        // At the right of the first row, as in Far, while the name keeps some room; the rows
-        // after it have the whole width.
-        let size = size
-            .map(|size| format!(" {size}"))
-            .filter(|size| cells::width(size) + MIN_NAME_WIDTH <= room);
-        room -= size.as_deref().map_or(0, cells::width);
+        // In the first row, as in Far, while the name keeps some room; the rows after it have
+        // the whole width.
+        let details = self.cursor_details(view);
+        let (before, after, room) =
+            layout::fit(details, width, MIN_NAME_WIDTH, |text| cells::width(text));
         let marks = theme.glyphs.marks;
         let wraps = area.height > 1 && cells::width(&status) > room;
         let rows = if wraps { usize::from(area.height) } else { 1 };
@@ -276,7 +281,11 @@ impl Panel {
             vec![Line::from(fitted)]
         };
         if let Some(first) = lines.first_mut() {
-            first.spans.extend(size.map(Span::raw));
+            let name = std::mem::take(&mut first.spans);
+            first.spans = (before.into_iter().map(|text| Span::raw(format!("{text} "))))
+                .chain(name)
+                .chain(after.into_iter().map(|text| Span::raw(format!(" {text}"))))
+                .collect();
         }
         for (y, line) in (area.y..area.bottom()).zip(lines) {
             let line = line.style(status_style.0);
@@ -324,18 +333,23 @@ impl Panel {
         line
     }
 
-    /// The size of the file under the cursor, every byte of it, which the size column rounds.
-    /// Not of a symlink: its status line is about its target, and its own size is only the
-    /// length of the path it holds.
-    fn cursor_size(&self, formats: &Formats) -> Option<String> {
-        match self.row(self.cursor)? {
-            Row::Entry(entry)
-                if !matches!(entry.metadata.kind, FileKind::Dir | FileKind::Symlink) =>
-            {
-                entry.metadata.size.map(|size| formats.integer(size))
-            }
-            Row::Entry(_) | Row::Parent => None,
+    /// The details of the row under the cursor on the status line, before its name and after
+    /// it, as the layout lists them: those it has. None of `..`, nor of a symlink: its status
+    /// line is about its target, and its own size is only the length of the path it holds.
+    fn cursor_details(&self, view: &View<'_>) -> (Vec<String>, Vec<String>) {
+        let Some(Row::Entry(entry)) = self.row(self.cursor) else {
+            return (Vec::new(), Vec::new());
+        };
+        if entry.metadata.kind == FileKind::Symlink {
+            return (Vec::new(), Vec::new());
         }
+        let texts = |details: &[Detail]| {
+            (details.iter())
+                .filter_map(|&detail| status_text(detail, entry, view))
+                .collect()
+        };
+        let status = &self.layout.status;
+        (texts(&status.before), texts(&status.after))
     }
 
     /// The status line of the row under the cursor: its name, and the target of a symlink.
@@ -378,8 +392,9 @@ impl Panel {
         (status, Some(linked))
     }
 
-    /// The field of the entry being renamed, over its row from the name on, in the colors of a
-    /// dialog's text field, with the selection in reverse.
+    /// The field of the entry being renamed, over its row from the name on, `inner` the inside of
+    /// the panel from there, in the colors of a dialog's text field, with the selection in
+    /// reverse.
     fn render_rename(
         &self,
         frame: &mut Frame<'_>,
@@ -625,79 +640,249 @@ impl Linked {
 }
 
 impl DirColumns {
+    /// The columns of a directory `width` cells wide, with the details of `around` in their
+    /// `cells`: the name takes what they leave, and narrow panels drop those at the end of the
+    /// list first.
+    fn for_width(width: usize, around: &Around, cells: impl Fn(Detail) -> usize) -> Self {
+        let sized = |details: &[Detail]| {
+            (details.iter())
+                .map(|&detail| (detail, cells(detail)))
+                .collect()
+        };
+        let parts = (sized(&around.before), sized(&around.after));
+        let (before, after, name) = layout::fit(parts, width, MIN_NAME_WIDTH, |(_, cells)| *cells);
+        Self {
+            before,
+            name,
+            after,
+        }
+    }
+
+    /// Where the name starts, in cells from the left of the rows.
+    fn name_at(&self) -> usize {
+        self.before.iter().map(|(_, cells)| cells + 1).sum()
+    }
+
     /// Where the lines between columns run, in cells from the left of the rows; the rows leave
     /// a blank there for them.
-    fn lines(self) -> Vec<usize> {
+    fn lines(&self) -> Vec<usize> {
         let mut lines = Vec::new();
-        if self.size {
-            lines.push(self.name);
+        let mut x = 0;
+        for (_, cells) in &self.before {
+            x += cells;
+            lines.push(x);
+            x += 1;
         }
-        if self.time {
-            lines.push(self.name + 1 + self.widths.0);
+        x += self.name;
+        for (_, cells) in &self.after {
+            lines.push(x);
+            x += 1 + cells;
         }
         lines
     }
 
     /// The column titles; an arrow marks the one the directory is sorted by, and its direction.
-    fn header(self, sort: Sort, theme: &Theme) -> Line<'static> {
-        let mut titles = [fl!("panel-name"), fl!("panel-size"), fl!("panel-time")];
-        let (column, title) = match sort.key {
-            SortKey::Name => (0, fl!("panel-name")),
-            SortKey::Extension => (0, fl!("panel-name-by-extension")),
-            SortKey::Size => (1, fl!("panel-size")),
-            SortKey::Time => (2, fl!("panel-time")),
+    fn header(&self, sort: Sort, theme: &Theme) -> Line<'static> {
+        let arrowed = |title: String, by: bool| {
+            if by {
+                format!("{}{title}", sort.arrow())
+            } else {
+                title
+            }
         };
-        titles[column] = format!("{}{title}", sort.arrow());
-        let [name, size, time] = titles;
+        let name = match sort.key {
+            SortKey::Name => arrowed(fl!("panel-name"), true),
+            SortKey::Extension => arrowed(fl!("panel-name-by-extension"), true),
+            SortKey::Size | SortKey::Time => fl!("panel-name"),
+        };
+        let title = |detail| {
+            let by = sorted_by(detail) == sort.key;
+            Cell::plain(arrowed(detail_title(detail), by), Align::Center)
+        };
         let styles = (theme.header, theme.truncated);
-        let titles = [name.as_str(), size.as_str(), time.as_str()];
-        let marks = (theme.glyphs.marks, None);
-        let (mut name, rest, _) = self.join(titles, [Align::Center; 3], styles, marks);
-        name.extend(rest);
-        Line::from(name).style(theme.header)
+        let marks = theme.glyphs.marks;
+        let [before, after] = self.details(title, styles, marks);
+        let mut spans = before.spans;
+        spans.extend(cells::fit(&name, self.name, Align::Center, styles, marks));
+        spans.extend(after.spans);
+        Line::from(spans).style(theme.header)
     }
 
     /// A row, with the name in the color of its kind, as mc highlights files, scrolled `shift`
     /// cells left, the characters of the name that quick search `found` in spans of their own.
-    fn row(self, row: Row<'_>, (shift, found): (usize, &[usize]), view: &View<'_>) -> Shown {
-        const ALIGN: [Align; 3] = [Align::Left, Align::Right, Align::Left];
+    fn row(&self, row: Row<'_>, (shift, found): (usize, &[usize]), view: &View<'_>) -> Shown {
         let theme = view.theme;
         let [prefix, name] = shown_name(row, view.decor);
-        let mut unit = None;
-        let (size, time, style) = match row {
-            Row::Parent => (fl!("panel-up-dir"), String::new(), theme.directory),
-            Row::Entry(entry) => {
-                let size = match entry.metadata.size {
-                    _ if entry.is_dir_like() => fl!("panel-dir"),
-                    None => String::new(),
-                    Some(size) => {
-                        // Sizes stay far below 2^52, where `f64` would round them.
-                        #[allow(clippy::cast_precision_loss)]
-                        let (number, power) = cells::size_parts(size as f64, view.formats);
-                        unit = Some((cells::unit(power), theme.size_unit(power)));
-                        format!("{number}{}", cells::unit(power))
-                    }
-                };
-                let time = cells::mtime(entry.metadata.modified, view.tz, view.formats);
-                (size, time, theme.entry(entry))
-            }
+        let style = match row {
+            Row::Parent => theme.directory,
+            Row::Entry(entry) => theme.entry(entry),
         };
         // Without styles: `row_style` gives the row its colors, and the marks their accent.
         let styles = (Style::new(), Style::new());
-        let cells = ["", &size, &time];
-        let (_, rest, cut) = self.join(cells, ALIGN, styles, (theme.glyphs.marks, unit));
-        let mut shown = name_spans(&prefix, &name, (self.name, shift), (style, found), view);
-        let after = shown.spans.len();
+        let cell = |detail| column_cell(detail, row, view);
+        let [before, after] = self.details(cell, styles, theme.glyphs.marks);
+        let name = name_spans(&prefix, &name, (self.name, shift), (style, found), view);
+        let mut shown = Shown {
+            line: Line::from(before.spans),
+            marks: before.cut,
+            found: Vec::new(),
+        };
+        let at = shown.line.spans.len();
         shown
             .marks
-            .extend(cut.into_iter().map(|index| after + index));
-        shown.spans.extend(rest);
-        Shown {
-            line: Line::from(shown.spans),
-            marks: shown.marks,
-            found: shown.found,
+            .extend(name.marks.iter().map(|index| at + index));
+        shown
+            .found
+            .extend(name.found.iter().map(|index| at + index));
+        shown.line.spans.extend(name.spans);
+        let at = shown.line.spans.len();
+        shown.marks.extend(after.cut.iter().map(|index| at + index));
+        shown.line.spans.extend(after.spans);
+        shown
+    }
+
+    /// The cells of the details before the name and after it, each with the blank beside it that
+    /// a line between columns runs on, as `cell` gives them, in `style`, with the marks of text
+    /// cut short of `marks` in `mark` over it, and the unit that ends a size in a style of its
+    /// own.
+    fn details(
+        &self,
+        cell: impl Fn(Detail) -> Cell,
+        (style, mark): (Style, Style),
+        marks: Marks,
+    ) -> [Part; 2] {
+        let part = |details: &[(Detail, usize)], blank_first: bool| {
+            let mut part = Part::default();
+            for &(detail, width) in details {
+                if blank_first {
+                    part.spans.push(Span::styled(" ", style));
+                }
+                let Cell { text, align, unit } = cell(detail);
+                let fitted = cells::fit_cut(&text, width, align, Cut::Middle);
+                if fitted.cut.is_some() {
+                    // After the text before the mark.
+                    part.cut.push(part.spans.len() + 1);
+                }
+                let mut spans = cells::spans(fitted, (style, mark), marks);
+                if let ([head, tail], Some((unit, unit_style))) = (spans.as_mut_slice(), unit)
+                    && tail.content.is_empty()
+                    && let Some(number) = head.content.strip_suffix(unit)
+                {
+                    *head = Span::styled(number.to_owned(), style);
+                    *tail = Span::styled(unit.to_owned(), style.patch(unit_style));
+                }
+                part.spans.extend(spans);
+                if !blank_first {
+                    part.spans.push(Span::styled(" ", style));
+                }
+            }
+            part
+        };
+        [part(&self.before, false), part(&self.after, true)]
+    }
+}
+
+/// The cell of a detail in a column: its text, how it aligns, and the unit that ends a size, with
+/// its style.
+struct Cell {
+    text: String,
+    align: Align,
+    unit: Option<(&'static str, Style)>,
+}
+
+impl Cell {
+    fn plain(text: String, align: Align) -> Self {
+        Self {
+            text,
+            align,
+            unit: None,
         }
     }
+}
+
+/// Spans of cells, with the indexes of those that are marks of text cut short.
+#[derive(Default)]
+struct Part {
+    spans: Vec<Span<'static>>,
+    cut: Vec<usize>,
+}
+
+/// The cell of `detail` in the column of `row`.
+fn column_cell(detail: Detail, row: Row<'_>, view: &View<'_>) -> Cell {
+    let Row::Entry(entry) = row else {
+        return match detail {
+            Detail::Size => Cell::plain(fl!("panel-up-dir"), Align::Right),
+            Detail::Time => Cell::plain(String::new(), Align::Left),
+        };
+    };
+    let metadata = &entry.metadata;
+    match detail {
+        Detail::Size => match metadata.size {
+            _ if entry.is_dir_like() => Cell::plain(fl!("panel-dir"), Align::Right),
+            None => Cell::plain(String::new(), Align::Right),
+            Some(size) => {
+                // Sizes stay far below 2^52, where `f64` would round them.
+                #[allow(clippy::cast_precision_loss)]
+                let (number, power) = cells::size_parts(size as f64, view.formats);
+                let unit = cells::unit(power);
+                Cell {
+                    text: format!("{number}{unit}"),
+                    align: Align::Right,
+                    unit: Some((unit, view.theme.size_unit(power))),
+                }
+            }
+        },
+        Detail::Time => {
+            let time = cells::mtime(metadata.modified, view.tz, view.formats);
+            Cell::plain(time, Align::Left)
+        }
+    }
+}
+
+/// The text of `detail` of `entry` on the status line; none where it is not known, nor the size
+/// of a directory, which tells nothing of what it holds.
+fn status_text(detail: Detail, entry: &DirEntry, view: &View<'_>) -> Option<String> {
+    let metadata = &entry.metadata;
+    match detail {
+        Detail::Size if metadata.kind == FileKind::Dir => None,
+        // Every byte of it, which the column rounds.
+        Detail::Size => metadata.size.map(|size| view.formats.integer(size)),
+        Detail::Time => Some(cells::mtime(metadata.modified, view.tz, view.formats))
+            .filter(|time| !time.is_empty()),
+    }
+}
+
+/// The title of the column of `detail`.
+fn detail_title(detail: Detail) -> String {
+    match detail {
+        Detail::Size => fl!("panel-size"),
+        Detail::Time => fl!("panel-time"),
+    }
+}
+
+/// What a directory is sorted by when its column of `detail` has the arrow.
+fn sorted_by(detail: Detail) -> SortKey {
+    match detail {
+        Detail::Size => SortKey::Size,
+        Detail::Time => SortKey::Time,
+    }
+}
+
+/// The cells of a column of `detail`: as many as its longest text with `formats` needs, and its
+/// title, with the arrow of the order where it sorts.
+fn detail_cells(detail: Detail, formats: &Formats) -> usize {
+    // With the arrow.
+    let title = cells::width(&detail_title(detail)) + 1;
+    let text = match detail {
+        Detail::Size => [fl!("panel-up-dir"), fl!("panel-dir")]
+            .iter()
+            .map(|text| cells::width(text))
+            .max()
+            .unwrap_or_default()
+            .max(cells::short_size_width(formats)),
+        Detail::Time => formats.time_width(),
+    };
+    text.max(title)
 }
 
 /// A row as drawn, before [`row_style`] gives it its colors, with the indexes of its spans that
@@ -911,98 +1096,13 @@ fn wrapped(
     lines
 }
 
-/// The cells of the size and the time columns: as many as the longest sizes and times of
-/// `formats`, the words that stand for a size, and the titles with the arrow of the order need.
-fn column_widths(formats: &Formats) -> (usize, usize) {
-    let widest = |texts: &[String]| texts.iter().map(|text| cells::width(text)).max();
-    let titled = |title: String| cells::width(&title) + 1;
-    let size = widest(&[fl!("panel-up-dir"), fl!("panel-dir")])
-        .unwrap_or_default()
-        .max(titled(fl!("panel-size")))
-        .max(cells::short_size_width(formats));
-    let time = formats.time_width().max(titled(fl!("panel-time")));
-    (size, time)
-}
-
-/// Column widths of a directory: the name takes what the size and time columns leave, and
-/// narrow panels drop the time, then the size.
-#[derive(Debug, Clone, Copy)]
+/// The columns of a directory: the details beside the name, each with its cells, and the cells of
+/// the name.
+#[derive(Debug)]
 struct DirColumns {
+    before: Vec<(Detail, usize)>,
     name: usize,
-    size: bool,
-    time: bool,
-    /// The cells of the size and the time columns.
-    widths: (usize, usize),
-}
-
-impl DirColumns {
-    fn for_width(width: usize, widths: (usize, usize)) -> Self {
-        let full = width.saturating_sub(widths.0 + widths.1 + 2);
-        if full >= MIN_NAME_WIDTH {
-            return Self {
-                name: full,
-                size: true,
-                time: true,
-                widths,
-            };
-        }
-        let sized = width.saturating_sub(widths.0 + 1);
-        if sized >= MIN_NAME_WIDTH {
-            return Self {
-                name: sized,
-                size: true,
-                time: false,
-                widths,
-            };
-        }
-        Self {
-            name: width,
-            size: false,
-            time: false,
-            widths,
-        }
-    }
-
-    /// The name cell, and the other cells with the blanks the lines between them go on, in
-    /// `style`, with the marks of text cut short of `marks` in `mark` over it, and the `unit`
-    /// that ends the size in a style of its own; and the indexes of those marks among the other
-    /// cells.
-    fn join(
-        self,
-        [name, size, time]: [&str; 3],
-        align: [Align; 3],
-        (style, mark): (Style, Style),
-        (marks, unit): (Marks, Option<(&str, Style)>),
-    ) -> (Vec<Span<'static>>, Vec<Span<'static>>, Vec<usize>) {
-        let mut rest = Vec::new();
-        let mut cut = Vec::new();
-        let cells = [
-            (self.size, size, self.widths.0, unit),
-            (self.time, time, self.widths.1, None),
-        ];
-        for ((shown, text, width, unit), align) in cells.into_iter().zip([align[1], align[2]]) {
-            if !shown {
-                continue;
-            }
-            rest.push(Span::styled(" ", style));
-            let fitted = cells::fit_cut(text, width, align, Cut::Middle);
-            if fitted.cut.is_some() {
-                // After the text before the mark.
-                cut.push(rest.len() + 1);
-            }
-            let mut spans = cells::spans(fitted, (style, mark), marks);
-            if let ([head, tail], Some((unit, unit_style))) = (spans.as_mut_slice(), unit)
-                && tail.content.is_empty()
-                && let Some(number) = head.content.strip_suffix(unit)
-            {
-                *head = Span::styled(number.to_owned(), style);
-                *tail = Span::styled(unit.to_owned(), style.patch(unit_style));
-            }
-            rest.extend(spans);
-        }
-        let name = cells::fit(name, self.name, align[0], (style, mark), marks);
-        (name, rest, cut)
-    }
+    after: Vec<(Detail, usize)>,
 }
 
 /// `style` for selected text: its colors swapped, or else reversed.

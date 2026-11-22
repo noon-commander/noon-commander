@@ -1,4 +1,5 @@
 use super::*;
+use crate::tui::panel::layout::{Around, Detail};
 
 #[test]
 fn draws_the_listing() {
@@ -488,6 +489,76 @@ fn scrolled_names_keep_their_icons_in_front() {
     let terminal = draw(&mut panel);
     assert_eq!(panel.shift, 1);
     assert!(row(&terminal, 3).starts_with(&decor.entry(&long)));
+}
+
+/// A layout with the size before the name, in the columns and on the status line, and the time
+/// after it.
+fn size_first() -> Layout {
+    Layout {
+        columns: Around {
+            before: vec![Detail::Size],
+            after: vec![Detail::Time],
+        },
+        status: Around {
+            before: vec![Detail::Size],
+            after: Vec::new(),
+        },
+    }
+}
+
+#[test]
+fn a_layout_puts_its_details_on_either_side_of_the_name() {
+    use ratatui::style::Color;
+
+    let long = format!("{}.txt", "a-long-name-".repeat(3));
+    let files = vec![
+        entry(&long, FileKind::File, 12_345),
+        entry("short", FileKind::File, 1),
+    ];
+    let mut panel = loaded("/srv", files);
+    panel.layout = size_first();
+    panel.handle(Action::Down);
+    insta::assert_snapshot!(draw(&mut panel, 50, 8, true));
+
+    let hosts = |_: &str| HostState::default();
+    let theme = Theme::mc_classic();
+    let terminal = render_themed(&mut panel, (50, 8), true, &hosts, Decor::new(false), &theme);
+    let buffer = terminal.backend().buffer();
+    let mark = (0..50).find(|&x| buffer[(x, 3)].symbol() == "»").unwrap();
+    assert_eq!(
+        buffer[(mark, 3)].fg,
+        Color::LightYellow,
+        "the mark of a name cut short keeps its accent after the size"
+    );
+
+    // The field of a rename starts at the name, after the size, its line, and the marker; the
+    // cursor at the end of the name.
+    panel.handle(Action::Down);
+    assert!(panel.start_rename());
+    let terminal = render_with(&mut panel, (50, 8), true, &hosts, Decor::new(false));
+    let buffer = terminal.backend().buffer();
+    let line = (1..50).find(|&x| buffer[(x, 4)].symbol().starts_with(glyphs::COLUMN));
+    let cursor = terminal.backend().cursor_position().x;
+    assert_eq!(line.map(|line| line + 2 + 5), Some(cursor));
+    panel.renaming = None;
+
+    // Narrow panels drop the details at the end of the list first: the time, then the size.
+    let mut header = |width: u16| -> String {
+        let backend = draw(&mut panel, width, 8, true);
+        (0..width)
+            .map(|x| backend.buffer()[(x, 1)].symbol())
+            .collect()
+    };
+    let (wide, narrow, narrower) = (header(50), header(26), header(12));
+    assert!(wide.contains("Size") && wide.contains("time"), "{wide}");
+    assert!(
+        narrow.contains("Size") && !narrow.contains("time"),
+        "{narrow}"
+    );
+    assert!(
+        !narrower.contains("Size") && narrower.contains("Name"),
+        "{narrower}"
+    );
 }
 
 #[test]

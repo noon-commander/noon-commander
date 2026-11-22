@@ -345,6 +345,20 @@ fn a_name_cut_short_shows_what_it_found_where_it_shows() {
 }
 
 #[test]
+fn quick_search_shows_what_it_found_in_a_name_after_other_columns() {
+    use crate::tui::panel::layout::{Around, Detail};
+
+    let mut panel = search_files(&["abab", "cab"]);
+    panel.layout.columns = Around {
+        before: vec![Detail::Size, Detail::Time],
+        after: Vec::new(),
+    };
+    panel.search_down(1, quick(Way::Plain));
+    typed(&mut panel, "ab");
+    assert_eq!(found(&mut panel, 60), ["abab", "ab"]);
+}
+
+#[test]
 fn quick_search_edits_its_text_as_a_text_field_does() {
     let mut panel = search_files(&["bar", "bat", "boot", "cab"]);
     panel.search_down(1, quick(Way::Plain));

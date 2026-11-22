@@ -23,7 +23,8 @@ settings come later. The code had to stop fixing the columns first.
   in Far: a layout lists the details before the name and those after it, so that it holds one
   name, always, without a check. The name takes the cells the details leave.
 - **A narrow panel drops the details at the end of the list first**, those after the name before
-  those before it, while the name keeps 8 cells. The status line drops its own the same way.
+  those before it, while the name keeps 8 cells. The status line drops its own the same way, but
+  an owner first loses the ends of its names (ADR 0098).
 - **A line between the name and each detail on the status line**, `│` in the color of the frame,
   as the lines between the columns above it, so that the details do not run into the name or into
   each other; each takes two cells more for it.

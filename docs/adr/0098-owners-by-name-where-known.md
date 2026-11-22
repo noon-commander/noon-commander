@@ -28,6 +28,11 @@ call's; `nix` has it, safe, and is already a dependency for the signal mask
   uid and its groups, the groups in the order of `id -G`; where they are not as many, as a name
   with a space in it splits in two, the groups keep their numbers. Other owners keep theirs.
 - **Names are terminal-safe**, as every name from outside.
+- **On the status line, an owner too long loses the ends of its names before it goes**: where the
+  name of the entry would get less than its 8 cells, the names of the owner and of its group share
+  what is left evenly, what one does not need going to the other, each cut at its end, down to 4
+  cells each with the mark; with less room the owner goes, as any detail. A name is what tells
+  who, and its start tells most of it.
 
 ## Consequences
 
@@ -35,5 +40,4 @@ call's; `nix` has it, safe, and is already a dependency for the signal mask
 - A host shows its other owners in digits, `root` among them. `getent` would name them on Linux
   and BSD, not on macOS, at the cost of a command for each new number.
 - A local listing looks up its names each time it is read, as names change rarely but may.
-- A column of owners stays 11 cells: an owner by name longer than that loses its middle there; the
-  status line shows it whole.
+- A column of owners stays 11 cells: an owner by name longer than that loses its middle there.

@@ -52,7 +52,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   target too long for it are cut each on its own, sharing the room evenly
   ([ADR 0096](docs/adr/0096-layouts-of-a-panel.md)).
 - The status line shows the owner and the group by name where known, else by number: every one
-  locally, yours on a host, as `id` there names them
+  locally, yours on a host, as `id` there names them; names too long lose their ends evenly before
+  the owner is left out
   ([ADR 0098](docs/adr/0098-owners-by-name-where-known.md)).
 - The mode and the owner set apart what is yours: the rest of them is dim, but the set of
   permissions that applies to you, and your uid and group; on a host, as `id` there says once it

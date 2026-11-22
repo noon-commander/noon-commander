@@ -1475,7 +1475,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   a color too, as the theme's `size_units` say. The status line shows, after the name, every byte
   of the entry under the cursor, a directory's too, its mode (`-rw-r--r--`), and its owner by
   name where known, else in digits not grouped (`alice:20`), those it has, while the name keeps
-  8 cells, a line `│` in the color of the frame before each; a symlink's own. It cuts the name at
+  8 cells, an owner too long losing the ends of its names evenly first, down to 4 cells each; a
+  line `│` in the color of the frame before each; a symlink's own. It cuts the name at
   its end, `»` before the details (ADR 0094). A column of owners is always 11 cells. The mode and
   the owner set apart what is ours
   ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions

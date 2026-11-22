@@ -22,8 +22,8 @@ use crate::tui::window;
 
 use super::layout::{self, Around, Detail};
 use super::{
-    HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Sort, SortKey, View, home_text,
-    location_text, short_size, shown_name,
+    HostStatus, MIN_CUT, MIN_NAME_WIDTH, Panel, Row, Sort, SortKey, View, home_text, location_text,
+    short_size, shown_name,
 };
 use crate::tui::machine::{Identity, Names};
 
@@ -269,13 +269,21 @@ impl Panel {
         } else {
             self.cursor_details(view)
         };
-        let (before, after, room) = layout::fit(details, width, MIN_NAME_WIDTH, |parts| {
-            parts
-                .iter()
-                .map(|(text, _)| cells::width(text))
-                .sum::<usize>()
-                + 2
-        });
+        // An owner may lose the ends of its names before it goes.
+        let (before, after, room) =
+            layout::fit(details, width, MIN_NAME_WIDTH, |(detail, parts)| {
+                let width = |parts: &[(String, Style)]| -> usize {
+                    parts.iter().map(|(text, _)| cells::width(text)).sum()
+                };
+                let least = match (detail, &parts[..]) {
+                    (Detail::Owner, [user, colon, group]) => {
+                        let name = |part: &(String, Style)| MIN_CUT.min(cells::width(&part.0));
+                        name(user) + width(std::slice::from_ref(colon)) + name(group)
+                    }
+                    _ => width(parts),
+                };
+                (width(parts) + 2, least + 2)
+            });
         let marks = theme.glyphs.marks;
         let wraps = area.height > 1 && cells::width(&status) > room;
         let rows = if wraps { usize::from(area.height) } else { 1 };
@@ -303,10 +311,12 @@ impl Panel {
         if let Some(first) = lines.first_mut() {
             let color = theme.panel_border.fg.unwrap_or(Color::Reset);
             let line = || Span::styled(format!(" {} ", glyphs::COLUMN), Style::new().fg(color));
-            let spans = |parts: Parts| {
-                parts
-                    .into_iter()
-                    .map(|(text, style)| Span::styled(text, style))
+            let spans = |((detail, parts), cells): ((Detail, Parts), usize)| {
+                let parts = match detail {
+                    Detail::Owner => cut_owner(parts, cells - 2, status_style.1, marks),
+                    _ => parts,
+                };
+                (parts.into_iter()).map(|(text, style)| Span::styled(text, style))
             };
             let name = std::mem::take(&mut first.spans);
             for parts in before {
@@ -367,7 +377,7 @@ impl Panel {
 
     /// The details of the row under the cursor on the status line, before its name and after
     /// it, as the layout lists them: those it has, a symlink its own, as its row. None of `..`.
-    fn cursor_details(&self, view: &View<'_>) -> (Vec<Parts>, Vec<Parts>) {
+    fn cursor_details(&self, view: &View<'_>) -> (Vec<Detailed>, Vec<Detailed>) {
         let Some(Row::Entry(entry)) = self.row(self.cursor) else {
             return (Vec::new(), Vec::new());
         };
@@ -375,7 +385,7 @@ impl Panel {
         let owners = self.owners(mine.as_ref());
         let texts = |details: &[Detail]| {
             (details.iter())
-                .filter_map(|&detail| status_parts(detail, entry, view, owners))
+                .filter_map(|&detail| Some((detail, status_parts(detail, entry, view, owners)?)))
                 .collect()
         };
         let status = &self.layout.status;
@@ -666,11 +676,10 @@ impl Linked {
         let (name_width, target_width) = (cells::width(name), cells::width(target));
         let fixed = cells::width(arrow) + cells::width(&self.icon) + cells::width(&self.marker);
         let room = width.saturating_sub(fixed);
-        if MIN_LINK_TARGET.min(name_width) + MIN_LINK_TARGET.min(target_width) > room {
+        if MIN_CUT.min(name_width) + MIN_CUT.min(target_width) > room {
             return cells::fitted(name, width, AT_END, (style, mark), marks).spans;
         }
-        let name_room = name_width.min(room.saturating_sub(target_width).max(room / 2));
-        let target_room = target_width.min(room - name_room);
+        let (name_room, target_room) = evenly(room, (name_width, target_width));
         let target_style = style.patch(self.target);
         let mut spans = cells::fitted(name, name_room, AT_END, (style, mark), marks).spans;
         spans.push(Span::styled(arrow.to_owned(), Theme::icon(style)));
@@ -687,13 +696,11 @@ impl DirColumns {
     /// `cells`: the name takes what they leave, and narrow panels drop those at the end of the
     /// list first.
     fn for_width(width: usize, around: &Around, cells: impl Fn(Detail) -> usize) -> Self {
-        let sized = |details: &[Detail]| {
-            (details.iter())
-                .map(|&detail| (detail, cells(detail)))
-                .collect()
-        };
-        let parts = (sized(&around.before), sized(&around.after));
-        let (before, after, name) = layout::fit(parts, width, MIN_NAME_WIDTH, |(_, cells)| *cells);
+        let details = (around.before.clone(), around.after.clone());
+        let (before, after, name) = layout::fit(details, width, MIN_NAME_WIDTH, |&detail| {
+            let cells = cells(detail);
+            (cells, cells)
+        });
         Self {
             before,
             name,
@@ -839,6 +846,9 @@ impl DirColumns {
 
 /// A text in parts, each with a style of its own over the style around it.
 type Parts = Vec<(String, Style)>;
+
+/// A detail on the status line, and its text.
+type Detailed = (Detail, Parts);
 
 /// The cell of a detail in a column: its text in parts, as the unit that ends a size in a style of
 /// its own, and how it aligns.
@@ -1002,14 +1012,45 @@ impl Owners<'_> {
 fn owner_parts(entry: &DirEntry, owners: Owners<'_>) -> Option<Parts> {
     let (uid, gid) = (entry.metadata.uid?, entry.metadata.gid?);
     let (user, group) = (owners.user(uid), owners.group(gid));
-    let Some(mine) = owners.mine else {
-        return Some(vec![(format!("{user}:{group}"), Style::new())]);
+    let (user_style, colon, group_style) = match owners.mine {
+        Some(mine) => (
+            own(uid == mine.uid),
+            own(false),
+            own(mine.groups.contains(&gid)),
+        ),
+        None => (Style::new(), Style::new(), Style::new()),
     };
     Some(vec![
-        (user, own(uid == mine.uid)),
-        (":".to_owned(), own(false)),
-        (group, own(mine.groups.contains(&gid))),
+        (user, user_style),
+        (":".to_owned(), colon),
+        (group, group_style),
     ])
+}
+
+/// The parts of an owner, its name, a colon, and its group's, in `width` cells: the two names
+/// share what the colon leaves evenly, each cut at its end, its mark in `mark`.
+fn cut_owner(parts: Parts, width: usize, mark: Style, marks: Marks) -> Parts {
+    let [(user, user_style), colon, (group, group_style)] = match <[_; 3]>::try_from(parts) {
+        Ok(parts) => parts,
+        Err(parts) => return parts,
+    };
+    let room = width.saturating_sub(cells::width(&colon.0));
+    let (user_room, group_room) = evenly(room, (cells::width(&user), cells::width(&group)));
+    let cut = |text: &str, style: Style, room: usize| {
+        let fitted = cells::fit_cut(text, room, Align::Left, Cut::End);
+        let marked = fitted.mark(marks).to_owned();
+        [(fitted.head, style), (marked, mark)]
+    };
+    let user = cut(&user, user_style, user_room);
+    let group = cut(&group, group_style, group_room);
+    user.into_iter().chain([colon]).chain(group).collect()
+}
+
+/// `room` shared evenly by two texts `first` and `second` cells wide, what one does not need
+/// going to the other: the cells of each.
+fn evenly(room: usize, (first, second): (usize, usize)) -> (usize, usize) {
+    let first = first.min(room.saturating_sub(second).max(room / 2));
+    (first, second.min(room - first))
 }
 
 /// The title of the column of `detail`.

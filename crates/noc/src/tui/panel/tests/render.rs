@@ -1085,6 +1085,36 @@ fn the_owner_goes_by_name_where_known() {
 }
 
 #[test]
+fn a_long_owner_loses_the_ends_of_its_names_before_it_goes() {
+    let mut panel = loaded("/srv", vec![entry("notes", FileKind::File, 1)]);
+    panel.handle(Action::Down);
+    let server = || "_windowserver".to_owned();
+    panel.owners = Names {
+        users: [(501, server())].into(),
+        groups: [(20, server())].into(),
+    };
+    let status = |panel: &mut Panel, width: u16| {
+        let screen = draw(panel, width, 6, true).to_string();
+        let line = screen.lines().nth(4).unwrap_or_default().to_owned();
+        line.trim_matches('"').chars().skip(1).collect::<String>()
+    };
+    let whole = status(&mut panel, 57);
+    assert!(
+        whole.ends_with(" │ _windowserver:_windowserver║"),
+        "{whole}"
+    );
+    let cut = status(&mut panel, 50);
+    assert!(
+        cut.starts_with("notes    │ ") && cut.ends_with(" │ _windows»:_windowse»║"),
+        "evenly, while the name keeps 8 cells: {cut}"
+    );
+    let least = status(&mut panel, 40);
+    assert!(least.ends_with(" │ _wi»:_win»║"), "{least}");
+    let gone = status(&mut panel, 30);
+    assert!(gone.ends_with(" │ -rw-r--r--║"), "{gone}");
+}
+
+#[test]
 fn column_lines_leave_the_title_whole() {
     let mut panel = loaded("/srv/some-dir", listing());
     let text = draw(&mut panel, 40, 12, true).to_string();

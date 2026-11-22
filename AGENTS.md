@@ -201,8 +201,9 @@ Paths come from `crates/noc-config/src/paths.rs`.
 ### Line of the mode
 
 - It says which keys work: the mode, then `·` and the kind of window by its keymap context
-  (`List`, `Menu`, `Dialog`, `Help`, `Viewer`, `Quick search`, `Rename`), as `NORMAL · List`.
-  The panels show the mode alone. It is never empty (ADR 0032).
+  (`List`, `Menu`, `Dialog`, `Help`, `Viewer`, `Rename`), as `NORMAL · List`. The panels show
+  the mode alone; quick search and the command line take the line while they have the keys
+  (ADR 0093). It is never empty (ADR 0032).
 - Same keys, same kind. Never put a window's title or own name there.
 - A new `Context` gets its kind in `window_kind` (`crates/noc/src/tui/app/render.rs`), whose
   match has no wildcard. A new kind comes only with keys of its own, with its `window-` Fluent text.

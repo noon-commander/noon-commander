@@ -643,7 +643,7 @@ and the end of the text, as on vim's command line. Up, Down, PgUp, PgDn, and the
 search and do what they do in the panel, as in mc, but Shift+F7, which goes to the next match;
 Left, Right, Home, and End move in the text, and other keys that none of
 them binds do nothing. Its field searches, so `search_input` goes before it: Ctrl+s and a letter, or
-a click on a glyph at the right end of the status line, switch how it matches, as it is, as fzf
+a click on a glyph at the right end of the line of the mode, switch how it matches, as it is, as fzf
 does, or as a regular expression, and whether case counts; the next search starts as the last one
 was, at first in `ui.default_search_mode` and smart case. mc's Ctrl+s starts quick
 search and goes to the next match, but of mc's keys noc keeps only the F-keys, and its next match is

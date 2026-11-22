@@ -589,7 +589,7 @@ impl App {
     /// The mode in capitals, as lualine shows it, then the window that has the keys, in `room`
     /// cells: the window goes first where they are too few, then the mode is cut. Returns how
     /// many cells they take whole. Every mode shows, so that the line always says where keys
-    /// go: Normal mode and quick search too, which vim's `showmode` does not.
+    /// go: Normal mode too, which vim's `showmode` does not.
     fn mode_spans(&self, room: usize) -> (Vec<Span<'static>>, usize) {
         let once = self.focused_editor().is_some_and(Editor::once);
         let mode = match self.place() {

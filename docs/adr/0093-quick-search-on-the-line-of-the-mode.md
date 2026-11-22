@@ -34,6 +34,9 @@ cursor, which the search moves, did not show whole while it ran, nor did the siz
 - The line no longer says `INSERT` while the search runs: the prompt and the cursor, a bar in
   Insert mode, stand for it, as on the command line. After Ctrl+x, the line no longer shows `(^X)`
   while the search runs in the other panel, which is drawn active.
+- Nor does the line show, while the search runs, the keys of a command typed so far, as `^S`
+  after Ctrl+s or `^R` after Ctrl+r, or who is where, as on the command line; the key hints show
+  what can follow Ctrl+s, unless `ui.which_key` is off.
 - The search is drawn by the app, on the line it lays out above the F-key bar, rather than by the
   panel, which no longer needs to draw on every frame while it searches (ADR 0069).
 - Messages after the search, such as `search hit BOTTOM, continuing at TOP`, take the same line

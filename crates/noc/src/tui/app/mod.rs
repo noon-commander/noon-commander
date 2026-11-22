@@ -115,6 +115,15 @@ impl Whole {
     }
 }
 
+/// A message on the line of the mode until the next key, as vim's on its command line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Message {
+    /// As vim's error and warning messages, in the theme's color for them.
+    Warning(String),
+    /// What a command tells, as vim's Ctrl+g, plain.
+    Info(String),
+}
+
 /// Work the app asks the event loop to do.
 #[derive(Debug)]
 pub(crate) enum Effect {
@@ -1220,8 +1229,7 @@ pub(crate) struct App {
     find: Option<FindWindow>,
     /// The generation of the last search of a tree.
     finds: u64,
-    /// A message on the line of the mode until the next key, as vim's on its command line.
-    message: Option<String>,
+    message: Option<Message>,
     /// The working directory last handed to the event loop.
     work_dir: Option<PathBuf>,
     /// Where copies of remote files for the editor go.

@@ -76,6 +76,29 @@ fn ctrl_g_says_where_the_panel_is_until_the_next_key_as_vims() {
     assert_eq!(mode_of(&mut app), "\"/\" 0/0");
 }
 
+/// The cell where `text` starts on the screen.
+fn cell_of(app: &mut App, text: &str) -> ratatui::buffer::Cell {
+    let mut terminal = Terminal::new(TestBackend::new(160, 9)).unwrap();
+    terminal
+        .draw(|frame| app.render(frame, Instant::now(), &TimeZone::UTC))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let at = crate::tui::mouse::find(buffer, text);
+    buffer[(at.x, at.y)].clone()
+}
+
+#[test]
+fn what_a_command_tells_is_plain_and_warnings_in_their_color_as_vims() {
+    let mut app = with_files(&["a"]);
+    let warning = app.theme.message.fg.unwrap();
+    let plain = |cell: ratatui::buffer::Cell| cell.fg != warning && cell.modifier.is_empty();
+    keys(&mut app, &["ctrl-g"]);
+    assert!(plain(cell_of(&mut app, "\"/srv\"")), "as vim's Ctrl+g");
+    keys(&mut app, &["n"]);
+    assert_eq!(mode_of(&mut app), "No previous search");
+    assert_eq!(cell_of(&mut app, "No previous search").fg, warning);
+}
+
 #[test]
 fn the_command_line_takes_the_line_of_the_mode_while_it_has_the_keys() {
     let mut app = with_files(&["a"]);

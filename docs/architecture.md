@@ -1499,7 +1499,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   does not move ([ADR 0095](adr/0095-a-name-scrolls-no-further-than-its-end.md)). The status line
   scrolls as many cells, plain, `«` over its first, but no further than its end comes to the right
   edge of its last row, of both while `K` shows them (ADR 0094). Ctrl+g says where the panel is
-  on the line of the mode until the next key, as vim's: its path in quotes, as the title shows it,
+  on the line of the mode until the next key, as vim's, plain, where the messages that warn take
+  the theme's color for them (`Message`): its path in quotes, as the title shows it,
   or whole, without `~`, after a count; then the row under the cursor of the rows, `..` counting
   as in `5G`, and how far down, as the viewer's title writes them (`"~/src" 5/42 11%`).
 - **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window

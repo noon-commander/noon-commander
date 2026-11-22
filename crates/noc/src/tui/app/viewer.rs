@@ -19,8 +19,8 @@ use crate::tui::reading::Reading;
 use crate::tui::spinner::Wait;
 
 use super::{
-    Again, App, Effect, Neighbours, Open, PollRequest, ReadRequest, Results, Source, Step, Viewing,
-    Way, file_name, sums_file, sums_name, viewer_command,
+    Again, App, Effect, Message, Neighbours, Open, PollRequest, ReadRequest, Results, Source, Step,
+    Viewing, Way, file_name, sums_file, sums_name, viewer_command,
 };
 
 /// A file of no more bytes is read whole once its first part shows, and the end of a file no
@@ -138,7 +138,7 @@ impl App {
             Some(Ok(path)) => path.clone(),
             Some(Err(reason)) => {
                 let reason = cells::sanitize(reason.as_bytes());
-                self.message = Some(fl!("log-none", reason = reason));
+                self.message = Some(Message::Warning(fl!("log-none", reason = reason)));
                 return Vec::new();
             }
             None => return Vec::new(),
@@ -310,7 +310,7 @@ impl App {
                 }
                 if viewing.viewer.take(part) == Taken::Changed {
                     let path = viewing.name();
-                    self.message = Some(fl!("viewer-changed", path = path));
+                    self.message = Some(Message::Warning(fl!("viewer-changed", path = path)));
                 }
             }
             Err(reason) => {
@@ -431,7 +431,7 @@ impl App {
         match location {
             Location::Local(path) => vec![Effect::Open(vec![path.clone()])],
             Location::Remote { .. } => {
-                self.message = Some(fl!("message-open-remote"));
+                self.message = Some(Message::Warning(fl!("message-open-remote")));
                 Vec::new()
             }
         }
@@ -486,13 +486,17 @@ impl App {
         match result {
             Ok(stamp) => {
                 if viewing.viewer.check(stamp) == Checked::Changed {
-                    self.message = Some(fl!("viewer-changed", path = path));
+                    self.message = Some(Message::Warning(fl!("viewer-changed", path = path)));
                 }
             }
             Err(reason) => {
                 viewing.viewer.follow(false);
                 let reason = reason.sanitized().text;
-                self.message = Some(fl!("viewer-follow-stopped", path = path, reason = reason));
+                self.message = Some(Message::Warning(fl!(
+                    "viewer-follow-stopped",
+                    path = path,
+                    reason = reason
+                )));
                 return Vec::new();
             }
         }
@@ -586,7 +590,11 @@ impl App {
             Ok(entries) => entries,
             Err(reason) => {
                 let (path, reason) = (location_text(&dir), reason.sanitized().text);
-                self.message = Some(fl!("viewer-list-error", path = path, reason = reason));
+                self.message = Some(Message::Warning(fl!(
+                    "viewer-list-error",
+                    path = path,
+                    reason = reason
+                )));
                 return Vec::new();
             }
         };

@@ -109,8 +109,10 @@ fn without_a_log_it_says_why() {
     assert!(app.handle(action(Action::ViewLog)).is_empty());
     assert_eq!(app.context(), Context::Panel);
     assert_eq!(
-        app.message.as_deref(),
-        Some("This run has no log: Permission denied")
+        app.message,
+        Some(Message::Warning(
+            "This run has no log: Permission denied".to_owned()
+        ))
     );
 }
 

@@ -5,7 +5,7 @@ use crate::tui::keymap::{Action, Resolved};
 use crate::tui::panel::SearchEnd;
 use crate::tui::search::{Slot, Switch};
 
-use super::{App, Side};
+use super::{App, Message, Side};
 
 impl App {
     /// Gives a key to quick search in the active panel, if it runs; the action that the panel
@@ -71,7 +71,8 @@ impl App {
                             Some(true) if end.back => Some(fl!("message-search-top")),
                             Some(true) => Some(fl!("message-search-bottom")),
                             Some(false) => None,
-                        };
+                        }
+                        .map(Message::Warning);
                     }
                     None
                 }
@@ -113,7 +114,7 @@ impl App {
     /// list.
     pub(super) fn search_again(&mut self, next: bool) {
         let Some((last, back, input)) = self.last_search.clone() else {
-            self.message = Some(fl!("message-search-none"));
+            self.message = Some(Message::Warning(fl!("message-search-none")));
             return;
         };
         let forward = next != back;
@@ -126,7 +127,8 @@ impl App {
             Some(true) if forward => Some(fl!("message-search-bottom")),
             Some(true) => Some(fl!("message-search-top")),
             Some(false) => None,
-        };
+        }
+        .map(Message::Warning);
     }
 
     /// The side of the panel drawn on the left, or on the right: swapped panels are drawn on

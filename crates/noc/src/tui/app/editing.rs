@@ -16,8 +16,8 @@ use crate::tui::transfer::{self};
 use crate::tui::window::Tone;
 
 use super::{
-    Again, App, CopyRequest, Editing, Effect, Handover, Job, JobKind, Open, Purpose, Sniffed,
-    Sniffing, Then, Way,
+    Again, App, CopyRequest, Editing, Effect, Handover, Job, JobKind, Message, Open, Purpose,
+    Sniffed, Sniffing, Then, Way,
 };
 
 impl App {
@@ -199,7 +199,7 @@ impl App {
             return Vec::new();
         }
         let Location::Local(here) = &dir else {
-            self.message = Some(fl!("message-open-remote"));
+            self.message = Some(Message::Warning(fl!("message-open-remote")));
             return Vec::new();
         };
         let paths = chosen

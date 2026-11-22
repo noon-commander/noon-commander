@@ -29,8 +29,8 @@ use crate::tui::which_key;
 use crate::tui::zoom::{self, Grows, Stage};
 
 use super::{
-    App, Completes, Host, Job, Purpose, SHOWCMD_WIDTH, Side, Sight, Spots, Whole, choices_for,
-    fkey_label, waits_for,
+    App, Completes, Host, Job, Message, Purpose, SHOWCMD_WIDTH, Side, Sight, Spots, Whole,
+    choices_for, fkey_label, waits_for,
 };
 
 impl App {
@@ -625,7 +625,11 @@ impl App {
         // A message takes the place of the mode, as on vim's command line.
         let marks = self.theme.glyphs.marks;
         let left_width = if let Some(message) = &self.message {
-            let styles = (self.theme.message, self.theme.truncated);
+            let (message, style) = match message {
+                Message::Warning(text) => (text, self.theme.message),
+                Message::Info(text) => (text, Style::new()),
+            };
+            let styles = (style, self.theme.truncated);
             let message_line = cells::fit(message, room, Align::Left, styles, marks);
             frame.render_widget(Line::from(message_line), area);
             cells::width(message)

@@ -19,7 +19,9 @@ use crate::tui::machine::{self};
 use crate::tui::panel::{home_text, location_text};
 use crate::tui::search::Slot;
 
-use super::{Again, App, Completes, Effect, Handover, HistoryChange, Host, PROMPT_DIR_WIDTH, Way};
+use super::{
+    Again, App, Completes, Effect, Handover, HistoryChange, Host, Message, PROMPT_DIR_WIDTH, Way,
+};
 
 impl App {
     /// Opens the command line for `action`: `!` for a shell command, `:` for commands of Noon
@@ -461,7 +463,7 @@ impl App {
             self.active_place()
         };
         let (row, rows) = panel.position();
-        self.message = Some(match (row * 100).checked_div(rows) {
+        self.message = Some(Message::Info(match (row * 100).checked_div(rows) {
             None => fl!("message-panel-empty", place = place),
             Some(percent) => fl!(
                 "message-panel-info",
@@ -470,7 +472,7 @@ impl App {
                 rows = rows,
                 percent = percent
             ),
-        });
+        }));
     }
 
     /// The directory of the active panel, with `~` for the home directory, or `host:path`.

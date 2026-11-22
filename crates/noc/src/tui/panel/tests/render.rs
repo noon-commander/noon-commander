@@ -37,6 +37,71 @@ fn k_shows_the_whole_name_on_two_rows_of_the_status_line() {
     assert!(status(5).starts_with("║..  "), "{}", status(5));
     let blank = status(6).trim_matches(['║', ' ']).is_empty();
     assert!(blank, "a short one keeps a row: {}", status(6));
+    panel.handle(Action::Down);
+    panel.handle(Action::ScrollEnd);
+    let scrolled = screen(&mut panel);
+    let first: String = (0..40)
+        .map(|x| scrolled.buffer()[(x, 5)].symbol())
+        .collect();
+    assert!(
+        first.starts_with("║a-long-name-"),
+        "a name that fits in both rows does not scroll: {first}"
+    );
+
+    let longer = format!("{}.txt", "a-long-name-".repeat(8));
+    let mut panel = loaded("/srv", vec![entry(&longer, FileKind::File, 12_345)]);
+    panel.handle(Action::Down);
+    screen(&mut panel);
+    panel.handle(Action::ScrollEnd);
+    let scrolled = screen(&mut panel);
+    let row = |y: u16| -> String {
+        (0..40)
+            .map(|x| scrolled.buffer()[(x, y)].symbol())
+            .collect()
+    };
+    assert_eq!(
+        [row(5), row(6)],
+        [
+            "║«ame-a-long-name-a-long-name-a-l 12345║",
+            "║»ong-name-a-long-name-a-long-name-.txt║",
+        ],
+        "a longer one scrolls as far as its end"
+    );
+}
+
+#[test]
+fn the_status_line_scrolls_with_the_names_until_its_end_shows() {
+    let long = format!("{}.txt", "a-long-name-".repeat(5));
+    let files = vec![
+        entry(&long, FileKind::File, 12_345),
+        entry("short", FileKind::File, 1),
+    ];
+    let mut panel = loaded("/srv", files);
+    panel.handle(Action::Down);
+    let status = |panel: &mut Panel| -> String {
+        let backend = draw(panel, 40, 8, true);
+        (0..40).map(|x| backend.buffer()[(x, 6)].symbol()).collect()
+    };
+    status(&mut panel);
+    for _ in 0..10 {
+        panel.handle(Action::ScrollRight);
+    }
+    assert_eq!(
+        status(&mut panel),
+        "║«-a-long-name-a-long-name-a-lon» 12345║"
+    );
+    panel.handle(Action::ScrollEnd);
+    assert_eq!(
+        status(&mut panel),
+        "║«me-a-long-name-a-long-name-.txt 12345║",
+        "no further than its end"
+    );
+    panel.handle(Action::Down);
+    let short = status(&mut panel);
+    assert!(
+        short.starts_with("║short "),
+        "a name that fits stays: {short}"
+    );
 }
 
 #[test]

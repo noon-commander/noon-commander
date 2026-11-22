@@ -134,8 +134,8 @@ have a command line under the panels that takes what is typed; noc opens one wit
 they always do. noc keeps them under g, as g +, g -, and g \*, and binds neither +, -, and \*,
 which are vim's motions and search. mc's Shift+Up and Shift+Down mark, as in Far, the one exception
 to vim's keys, so that `K` can show what is under the cursor, as vim's does: the whole name, on
-the status lines. As vim scrolls lines that do not wrap, the z keys scroll the names, not their icons:
-`«` marks a name that goes on to the left, and `»` one cut short.
+the status lines. As vim scrolls lines that do not wrap, the z keys scroll the names, not their icons,
+and the status line with them: `«` marks a name that goes on to the left, and `»` one cut short.
 
 noc groups keys under a first key: vim's g, q, and Ctrl+w, and its own t for the tabs and the
 workspaces, o for the sort order, as ranger's sort keys, and the hidden names, and f for the file

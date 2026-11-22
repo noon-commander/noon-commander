@@ -37,6 +37,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   starting with `»` as the viewer's wrapped lines, in place of a frame below the panels; without
   `K`, the status line cuts a long name at its end rather than its middle
   ([ADR 0094](docs/adr/0094-k-shows-the-whole-name-on-the-status-line.md)).
+- The z keys scroll the status line with the names, as far as the end of its name
+  ([ADR 0094](docs/adr/0094-k-shows-the-whole-name-on-the-status-line.md)).
 
 ### Removed
 

@@ -30,8 +30,13 @@ frame ([ADR 0041](0041-lists-always-show-the-whole-row.md)).
   it elsewhere ([ADR 0025](0025-marks-of-text-cut-short.md)). A `»` in the middle of the line was
   taken for a part of the name, or for the arrow of a symlink, which shares the line; the row
   above keeps the end of the name, with its extension.
-- **A status that goes on is plain**: the arrow and the target of a symlink lose their colors and
-  icons where the text takes the second row.
+- **The status line scrolls with the names**: the z keys move it as many cells as the names, `«`
+  over its first cell, but no further than its end comes to the right edge of its last row, as
+  `z e` puts it. The line is wider than the column of names, so the same scroll would leave a name
+  that ends sooner as `«` and blanks; a name that fits does not move. With `K`, so, only a name
+  longer than both rows scrolls.
+- **A status that goes on, or scrolls, is plain**: the arrow and the target of a symlink lose their
+  colors and icons where the text takes the second row or scrolls.
 - **Both panels**, so that their separators and the tees of their columns stay at one height; the
   inactive one shows its own name whole too.
 - The frame below the panels is gone, and with it the colors of dialogs for the name.

@@ -241,7 +241,9 @@ impl Panel {
     /// the size of a file; while a name is renamed in its row, the name it had. A text that does
     /// not fit in the first row goes on in the next ones, plain, where `area` has more, as
     /// [`wrapped`] breaks it; otherwise it is cut at its end, as the viewer's lines, so that the
-    /// mark reads as text that goes on, where the row above keeps the end of the name.
+    /// mark reads as text that goes on, where the row above keeps the end of the name. It scrolls
+    /// with the names, plain, `«` over its first cell, but no further than its end comes to the
+    /// right edge of its last row.
     fn render_status(&self, frame: &mut Frame<'_>, area: Rect, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
@@ -257,9 +259,15 @@ impl Panel {
             .filter(|size| cells::width(size) + MIN_NAME_WIDTH <= room);
         room -= size.as_deref().map_or(0, cells::width);
         let marks = theme.glyphs.marks;
-        let rows = usize::from(area.height);
-        let mut lines = if rows > 1 && cells::width(&status) > room {
-            wrapped(&status, (room, width, rows), status_style, marks)
+        let wraps = area.height > 1 && cells::width(&status) > room;
+        let rows = if wraps { usize::from(area.height) } else { 1 };
+        // No further than the end of the text comes to the right edge of its last row.
+        let room_of_rows = room + (rows - 1) * width.saturating_sub(1);
+        let shift = self
+            .shift
+            .min(cells::width(&status).saturating_sub(room_of_rows));
+        let mut lines = if wraps || shift > 0 {
+            wrapped(&status, (room, width, rows), shift, status_style, marks)
         } else {
             let fitted = match linked {
                 Some(linked) => linked.fit(&status, room, status_style, marks),
@@ -863,20 +871,33 @@ fn name_spans(
     spans
 }
 
-/// `text` in at most `rows` lines, the first of `first` cells, the others of `width`, in `style`:
-/// the rows after the first start with the mark of `marks` for text that goes on, in `mark`, as
-/// the viewer's wrapped lines do, and the last is cut at its end with it if the text goes on past
-/// it.
+/// `text` scrolled `shift` cells left and in at most `rows` lines, the first of `first` cells, the
+/// others of `width`, in `style`, with the marks of `marks` in `mark`: `«` over the first cell of
+/// text scrolled; the rows after the first start with the mark of text that goes on, as the
+/// viewer's wrapped lines do; and the last is cut at its end with it if the text goes on past it.
 fn wrapped(
     text: &str,
     (first, width, rows): (usize, usize, usize),
+    shift: usize,
     (style, mark): (Style, Style),
     marks: Marks,
 ) -> Vec<Line<'static>> {
-    let head = cells::chop(text, first, None).swap_remove(0);
+    let mut spans = Vec::new();
+    let (mut text, mut first) = (text.to_owned(), first);
+    if shift > 0 {
+        let (_, shown) = cells::split(&text, shift);
+        text = cells::split(&shown, 1).1;
+        spans.push(Span::styled(marks.before, style.patch(mark)));
+        first = first.saturating_sub(1);
+    }
+    let head = if rows > 1 {
+        cells::chop(&text, first, None).swap_remove(0)
+    } else {
+        text.clone()
+    };
     let rest = &text[head.len()..];
-    let fitted = cells::fit(&head, first, Align::Left, (style, mark), marks);
-    let mut lines = vec![Line::from(fitted)];
+    spans.extend(cells::fitted(&head, first, AT_END, (style, mark), marks).spans);
+    let mut lines = vec![Line::from(spans)];
     let room = width.saturating_sub(1);
     let rows = cells::chop(rest, room, None).len().min(rows - 1);
     for row in cells::whole(rest, (room, rows), None, (style, mark), marks) {

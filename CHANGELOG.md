@@ -30,6 +30,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   after `g` or Ctrl+w it lists what can follow them. The hints at the bottom show on their own after
   such a key, and Ctrl+k in the list does nothing
   ([ADR 0092](docs/adr/0092-ctrl-k-lists-the-keys-at-once.md)).
+- Quick search is typed on the line above the F-key bar, as vim's search, `/text` or `?text`, in
+  place of the mode, and the status line of the panel keeps the name under the cursor
+  ([ADR 0093](docs/adr/0093-quick-search-on-the-line-of-the-mode.md)).
 
 ### Removed
 

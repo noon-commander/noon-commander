@@ -399,7 +399,7 @@ impl Memory {
 /// message puts it: a noncharacter, which no message, glyph, or typed text has.
 const TYPED: &str = "\u{FFFF}";
 
-/// The message of a prompt around what is typed into it, such as `Search: …`: its text before
+/// The message of a prompt around what is typed into it, such as `Filter: …`: its text before
 /// and after what is typed, wherever a translation puts it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Prompt {
@@ -422,11 +422,6 @@ impl Prompt {
                 after: String::new(),
             },
         }
-    }
-
-    /// The cells it takes without what is typed.
-    pub(crate) fn width(&self) -> usize {
-        cells::width(&self.before) + cells::width(&self.after)
     }
 
     /// The whole text, with `typed` in its place.
@@ -957,7 +952,6 @@ mod tests {
             (last.before.as_str(), last.after.as_str()),
             ("Search *: ", "")
         );
-        assert_eq!(last.width(), 10);
         let first = Prompt::new(|text| format!("{text} :* search"));
         assert_eq!(
             (first.before.as_str(), first.after.as_str()),

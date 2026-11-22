@@ -182,8 +182,7 @@ root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
   says why again. Jobs on a lost host end with it.
 - A panel on a host that is not connected draws what it kept dim, without bold, over its colors
   (`Theme::offline`): rows, status line, the total of the marked entries, and the totals on the
-  frame, not the frame, title, or headers; quick search, being typed, is not dim. The cursor and
-  marks stay; a rename in its row ends.
+  frame, not the frame, title, or headers. The cursor and marks stay; a rename in its row ends.
 - In it, the keys that look through the entries work: moving the cursor and scrolling, quick
   search, sorting, marking, Visual mode (`works_offline` in `app/hosts.rs`). A key that needs the host
   opens the dialog Connection, `Not connected to web`, with Connect (the default), which reads
@@ -562,8 +561,8 @@ of the text to ripgrep (`--smart-case`, `--ignore-case`, `--case-sensitive`) and
 so by name the field has only case, and ripgrep's comes back in the Text mode.
 
 Two glyphs at the end of the field say the case, then the way, in every field: at the right end
-of the status line of quick search, and at the end of the field of the filters and of the
-dialogs. A blank goes before them and one after each, in the colors of the field
+of the line of the mode while quick search takes it, and at the end of the field of the filters
+and of the dialogs. A blank goes before them and one after each, in the colors of the field
 (`Filter: text   Aa ~`, and a blank): kitty draws a Nerd Font icon over two cells when the cell
 after it is blank, and spills it over what comes next otherwise. In `glyphs.rs`: for the case,
 nf-md-format_letter_case_upper, nf-md-format_letter_case_lower, nf-cod-case_sensitive (`Aa`, `aa`,
@@ -1445,7 +1444,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   `VISUAL`, or `VISUAL LINE`, and after Ctrl+o `(insert)`; then, after `·`, the kind of window
   that has the keys, named by its keymap context so that it says which keys work
   ([ADR 0032](adr/0032-line-of-the-mode.md)):
-  `Quick search`, `Rename`, `List` for the location menu, the tab menu, the zoxide window, the
+  `Rename`, `List` for the location menu, the tab menu, the zoxide window, the
   workspaces, the command history, and the list of the key hints, `Menu` for F9, `Dialog` for
   every dialog, the Configuration dialog, the search of a tree, the jobs, and the checksums,
   `Help`, and `Viewer`; `window_kind` maps every context, and none to the contexts that are
@@ -1454,15 +1453,15 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   register, operator, or keys of a command typed so far, as typed, Ctrl+x as `^X`, or how much
   Visual mode selects, as vim's `showcmd` does; while the command of Ctrl+x has the keys, the mode
   starts with `(^X)`, as vim's `(insert)` after Ctrl+o. Unlike vim's `showmode`, it shows every mode
-  everywhere, Normal mode and quick search too. A message, such as that a search went round, takes
-  the place
+  everywhere, Normal mode too. A message, such as that a search went round, takes the place
   of the mode until the next key, as vim's messages do on its command line. Left of the cells of
   what is typed it shows who is where in the active panel, `alice@mac` or `deploy@web`, as long
   as it fits after the mode or the message ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The
-  command line takes the line while it has the keys; a window over it, such as the command
-  history of `q :`, takes the line back. The cursor is a bar in Insert mode and a block in the
-  others (DECSCUSR), and the terminal's own shape comes back whenever another program gets the
-  terminal, and on quitting.
+  command line and [quick search](#quick-search) take the line while they have the keys, as vim's
+  command line and search do ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md)); a
+  window over them, such as the command history of `q :`, takes the line back. The cursor is a
+  bar in Insert mode and a block in the others (DECSCUSR), and the terminal's own shape comes back
+  whenever another program gets the terminal, and on quitting.
 - **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
   then files, by name as the language of the formats orders names, with the numbers in them by
   value (`ui.natural_sort`; off, by their characters ignoring case); columns are name, size, and
@@ -1862,13 +1861,16 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   mouse closed its window or the program it ran returned. Windows of a panel open centered over
   both, as every window does; the panel drawn active, after Ctrl+x the other one, says which they
   act on.
-- **Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts
-  it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and
-  `:` open the [command line](#command-line-of--and-). As vim's search, it looks from the row after
-  the one where it started, round, or after `?` up from the row before it, round to the bottom, and
-  a count before `/` or `?` goes to the match of that number (`2/`). It matches in the
+- <a id="quick-search"></a>**Quick search.** `/` starts quick search, typed as vim's search, in
+  Insert mode, and `?` starts it up the rows; typing in a panel in Normal mode does nothing but its
+  commands, and `i`, `!`, and `:` open the [command line](#command-line-of--and-). As vim's search,
+  it is typed on the line of the mode, after `/` or `?`, in place of the mode while it has the
+  keys, and the status line of the panel keeps the name under the cursor
+  ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md)). It looks from the row after the
+  one where it started, round, or after `?` up from the row before it, round to the bottom, and a
+  count before `/` or `?` goes to the match of that number (`2/`). It matches in the
   [search mode](#search-modes), with smart case, which the keys after Ctrl+s, or a click on a glyph
-  at the right end of the status line, switch while it runs. As fzf, the default, the cursor
+  at the right end of its line, switch while it runs. As fzf, the default, the cursor
   jumps to the best match as fzf ranks it, the first after where it started of those as good, and
   Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after
   where it started that holds the text anywhere, or that matches it as a regular
@@ -2297,7 +2299,7 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   Arguments are inserted without Unicode isolation marks, which terminals would show. Numbers
   are passed to messages as numbers, so that plural forms see them, and written by
   `noc_locale::fluent`, the formatter of every bundle, in the formats of the region. A prompt
-  with what is typed in it (`Search: …`) is split where its message puts the typed text
+  with what is typed in it (`Filter: …`) is split where its message puts the typed text
   (`search::Prompt`), so a translation may put it anywhere.
 - **Formats of the region** ([ADR 0035](adr/0035-formats-of-the-region.md)). `noc-locale` writes
   numbers, dates, and times, and compares names, as `ui.formats` says: `auto` takes each part

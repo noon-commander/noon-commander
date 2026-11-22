@@ -131,7 +131,7 @@ impl App {
         }
         // A click on a glyph of quick search switches how it matches, or whether case counts,
         // as the keys after Ctrl+s do.
-        if let Some(action) = self.panel(self.active).search_action_at(at) {
+        if let Some(action) = self.spots.search.and_then(|glyphs| glyphs.action_at(at)) {
             if press == Press::Click {
                 return self.handle(Resolved::Action(action));
             }

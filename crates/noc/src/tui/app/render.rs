@@ -567,14 +567,20 @@ impl App {
             )
     }
 
-    /// The command line in `area`, after `prompt`, while it has the keys; else the mode and
-    /// what the pending command has typed, on the line it takes.
+    /// The command line in `area`, after `prompt`, or quick search, while it has the keys, as
+    /// vim's command line and search; else the mode and what the pending command has typed, on
+    /// the line it takes.
     fn render_command_line(&mut self, frame: &mut Frame<'_>, area: Rect, prompt: &[Span<'static>]) {
         let typing = self.typing_command();
+        let searching = self.context() == Context::QuickSearch;
         match &mut self.command_line {
             Some(line) if typing => {
                 let bar = self.theme.glyphs.scroll_bar;
                 line.render(frame, area, (prompt, Style::default()), bar);
+            }
+            _ if searching => {
+                let panel = self.panel(self.active);
+                self.spots.search = panel.render_search(frame, area, &self.theme);
             }
             _ => self.render_mode(frame, area),
         }
@@ -719,11 +725,11 @@ impl App {
 
 /// What kind of window has the keys in `context`, as the line of the mode names it after the
 /// mode: the kind says which keys work there, so windows with the same keys share it (ADR
-/// 0032). None in the panels, which the mode alone stands for, on the command line, which
-/// shows itself, and in the contexts keys never go to alone.
+/// 0032). None in the panels, which the mode alone stands for, on the command line and in quick
+/// search, which take the line and show themselves (ADR 0093), and in the contexts keys never go
+/// to alone.
 fn window_kind(context: Context) -> Option<String> {
     let kind = match context {
-        Context::QuickSearch => fl!("window-quick-search"),
         Context::Rename => fl!("window-rename"),
         Context::LocationMenu
         | Context::TabMenu
@@ -743,6 +749,7 @@ fn window_kind(context: Context) -> Option<String> {
         Context::Help => fl!("window-help"),
         Context::Viewer => fl!("window-viewer"),
         Context::Panel
+        | Context::QuickSearch
         | Context::CommandLine
         | Context::CommandCompletion
         | Context::Global

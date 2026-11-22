@@ -20,8 +20,6 @@ fn root_on_mac() -> Machine {
 fn the_line_of_the_mode_names_the_kind_of_window_by_its_keys() {
     let cases: &[(&[&str], &str)] = &[
         (&[], "NORMAL"),
-        (&["/"], "INSERT · Quick search"),
-        (&["?"], "INSERT · Quick search"),
         (&["j", "r", "esc"], "NORMAL · Rename"),
         (&["g", "l"], "INSERT · List"),
         (&["t", "t"], "INSERT · List"),
@@ -37,7 +35,6 @@ fn the_line_of_the_mode_names_the_kind_of_window_by_its_keys() {
         (&["f", "j"], "NORMAL · Dialog"),
         (&["j", "g", "f"], "NORMAL · Viewer"),
         (&["ctrl-x", "g", "d"], "(^X) INSERT · Dialog"),
-        (&["ctrl-x", "/"], "(^X) INSERT · Quick search"),
         (&["ctrl-x", "v"], "(^X) VISUAL"),
         (&["ctrl-x", "j"], "NORMAL"),
     ];
@@ -62,6 +59,20 @@ fn the_command_line_takes_the_line_of_the_mode_while_it_has_the_keys() {
     keys(&mut app, &["esc", "q"]);
     assert_eq!(app.place().1, Context::CommandLine);
     assert!(mode_line(&mut app, 160).ends_with("$ ls"));
+}
+
+#[test]
+fn quick_search_takes_the_line_of_the_mode_while_it_has_the_keys() {
+    let mut app = with_files(&["a", "b"]);
+    let way = glyph(&app);
+    keys(&mut app, &["/", "b"]);
+    assert!(searching(&mut app, "b", way));
+    // In the other panel too, which is drawn active.
+    keys(&mut app, &["esc", "ctrl-x", "/", "a"]);
+    assert_eq!(app.active, Side::Right);
+    assert!(searching(&mut app, "a", way));
+    keys(&mut app, &["enter"]);
+    assert_eq!(mode_of(&mut app), "NORMAL");
 }
 
 #[test]

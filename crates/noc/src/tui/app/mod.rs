@@ -39,7 +39,7 @@ use super::panel::{Failure, ListRequest, Panel, location_text, short_size};
 use super::progress::{JobView, Look, RowLook};
 use super::pulldown::PullDown;
 use super::reading::Reading;
-use super::search::{self, Input};
+use super::search::{self, GlyphSpots, Input};
 use super::spinner::{Spin, Wait};
 use super::sums::SumsWindow;
 use super::tab_menu::TabMenu;
@@ -1319,6 +1319,8 @@ struct Spots {
     menu_bar: Vec<Rect>,
     /// The corner that says how many jobs run in the background, if it shows.
     jobs: Option<Rect>,
+    /// The glyphs at the end of quick search, while it shows.
+    search: Option<GlyphSpots>,
 }
 
 /// What a scroll bar scrolls.

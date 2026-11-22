@@ -269,7 +269,7 @@ fn pasted_text_never_runs_and_panels_ignore_it() {
     app.handle(action(Action::Cancel));
     app.handle(action(Action::QuickSearch));
     app.paste("ri\nght");
-    assert!(screen(&mut app).contains(&prompt("Search", "right")));
+    assert_eq!(mode_of(&mut app), "/right");
 }
 
 #[test]

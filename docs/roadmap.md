@@ -188,6 +188,8 @@
       (Ctrl+o, Ctrl+i) in the panels, where Tab goes to the other panel if the terminal tells it
       from Ctrl+i; the mode and the command typed on a line above the F-key
       bar, and the cursor's shape
+- [x] Quick search typed on the line of the mode, as vim's search
+      ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md))
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
 - [ ] A key of vim's for editing the command line in `$EDITOR`

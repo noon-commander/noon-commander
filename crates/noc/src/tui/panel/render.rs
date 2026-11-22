@@ -4,7 +4,7 @@ use noc_locale::Formats;
 use noc_scroll::scrollbar;
 use noc_vfs::{FileKind, Location};
 use ratatui::Frame;
-use ratatui::layout::{Position, Rect};
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Clear};
@@ -13,15 +13,14 @@ use unicode_width::UnicodeWidthChar as _;
 use crate::i18n::fl;
 use crate::tui::cells::{self, Align, Cut, Marks};
 use crate::tui::glyphs;
-use crate::tui::keymap::Action;
-use crate::tui::search::Prompt;
+use crate::tui::search::{GlyphSpots, Prompt};
 use crate::tui::spinner::Shine;
 use crate::tui::theme::Theme;
 use crate::tui::window;
 
 use super::{
-    HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Search, Sort, SortKey, View,
-    home_text, location_text, short_size, shown_name,
+    HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Sort, SortKey, View, home_text,
+    location_text, short_size, shown_name,
 };
 
 /// Rows of the skeleton that stands for the rows a veiled panel waits for: a few, as more
@@ -37,11 +36,11 @@ struct Veil<'a> {
 
 impl Panel {
     /// Draws the panel: the location in the frame, column headers, the rows, a bar in the frame
-    /// beside the marked ones, the size and number of marked entries on the line below them, a status line with the name under the cursor or
-    /// quick search, and the totals of the directory and its file system on the bottom of the
-    /// frame. What the panel kept from a host that is not connected is toned down. While it is
-    /// veiled, once its wait shows, a skeleton stands for its rows and its status line, and the
-    /// bottom of the frame is bare.
+    /// beside the marked ones, the size and number of marked entries on the line below them, a
+    /// status line with the name under the cursor, and the totals of the directory and its file
+    /// system on the bottom of the frame. What the panel kept from a host that is not connected
+    /// is toned down. While it is veiled, once its wait shows, a skeleton stands for its rows and
+    /// its status line, and the bottom of the frame is bare.
     pub(crate) fn render(
         &mut self,
         frame: &mut Frame<'_>,
@@ -84,7 +83,6 @@ impl Panel {
             };
             window::draw_skeleton(frame, skeleton, (theme, theme.panel), shine);
             self.render_separator(frame, area, inner.bottom() - 2, (0, 0), theme);
-            self.search_glyphs.set(None);
             let status = window::status_skeleton(inner.width, theme.panel, theme, shine);
             frame.render_widget(status, line(inner.bottom() - 1));
             return;
@@ -138,14 +136,14 @@ impl Panel {
             .collect();
         self.render_column_lines(frame, area, inner, theme);
         self.render_rename(frame, inner, list_height, active, view);
-        self.render_status(frame, line(inner.bottom() - 1), active, view);
+        self.render_status(frame, line(inner.bottom() - 1), view);
     }
 
     /// Whether the panel would draw otherwise on a frame for time alone, or must draw on every
-    /// frame: while it waits, or its host connects, dots turn in its title; while a name is typed
-    /// in it, it puts the cursor of the terminal there.
+    /// frame: while it waits, or its host connects, dots turn in its title; while a name is
+    /// renamed in it, it puts the cursor of the terminal there.
     pub(crate) fn moves(&self, view: &View<'_>) -> bool {
-        if self.wait().is_some() || self.search.is_some() || self.renaming.is_some() {
+        if self.wait().is_some() || self.renaming.is_some() {
             return true;
         }
         let location = self
@@ -229,17 +227,11 @@ impl Panel {
         Some(Veil { shine })
     }
 
-    /// The status line, at `area`: quick search with its cursor in the active panel, or the name
-    /// under the cursor, with the target of a symlink, and the size of a file; while a name is
-    /// renamed in its row, the name it had.
-    fn render_status(&self, frame: &mut Frame<'_>, area: Rect, active: bool, view: &View<'_>) {
+    /// The status line, at `area`: the name under the cursor, with the target of a symlink, and
+    /// the size of a file; while a name is renamed in its row, the name it had.
+    fn render_status(&self, frame: &mut Frame<'_>, area: Rect, view: &View<'_>) {
         let theme = view.theme;
         let width = usize::from(area.width);
-        self.search_glyphs.set(None);
-        if let Some(search) = &self.search {
-            self.render_search(frame, area, active, (search, theme));
-            return;
-        }
         let status_style = (Style::new(), theme.truncated);
         let (status, linked) = self.cursor_status(view);
         // The size of the file under the cursor, every byte of it.
@@ -261,21 +253,21 @@ impl Panel {
         frame.render_widget(self.toned(line), area);
     }
 
-    /// The status line of quick search, at `area`: what is typed after its prompt, with the
-    /// cursor in the active panel, and the glyph of how it matches at the right end, crossed
-    /// out while what is typed is no regular expression (ADR 0045). What is typed is not of
-    /// the host, so it is never toned down.
-    fn render_search(
+    /// Quick search on the line `area` below the panels, as vim's search on its command line:
+    /// what is typed after `/`, or `?` up the rows, with the cursor, and the glyphs of how it
+    /// matches at the right end, crossed out while what is typed is no regular expression
+    /// (ADR 0045, ADR 0093). Returns where the glyphs are, for the mouse; nothing without a
+    /// search.
+    pub(crate) fn render_search(
         &self,
         frame: &mut Frame<'_>,
         area: Rect,
-        active: bool,
-        (search, theme): (&Search, &Theme),
-    ) {
-        let width = usize::from(area.width);
-        let style = (theme.quick_search, theme.truncated_cursor);
+        theme: &Theme,
+    ) -> Option<GlyphSpots> {
+        let search = self.search.as_ref().filter(|_| !area.is_empty())?;
+        let style = Style::new();
         let invalid = self.finder().is_some_and(|finder| finder.error().is_some());
-        let mark = search.input.mark(invalid, theme.quick_search, theme);
+        let mark = search.input.mark(invalid, style, theme);
         let prompt = Prompt::new(|text| {
             if search.back {
                 fl!("panel-search-back", text = text)
@@ -283,32 +275,11 @@ impl Panel {
                 fl!("panel-search", text = text)
             }
         });
-        // The glyphs, when what is typed keeps some room.
-        let glyphs = Some(mark.width()).filter(|glyphs| prompt.width() + glyphs < width);
-        let room = width - glyphs.unwrap_or(0);
-        let (shown, column) = search.field.visible(room.saturating_sub(prompt.width()));
-        if active {
-            let column = u16::try_from(cells::width(&prompt.before) + column).unwrap_or(u16::MAX);
-            let x = area.x.saturating_add(column).min(area.right() - 1);
-            frame.set_cursor_position((x, area.y));
-        }
-        let text = prompt.with(&shown);
-        let spans = vec![Span::styled(text, theme.quick_search)];
-        let mut line = Line::from(cells::fit_spans(spans, room, style, theme.glyphs.marks))
-            .style(theme.quick_search);
-        if glyphs.is_some() {
-            let at = area.x + u16::try_from(room).unwrap_or(u16::MAX);
-            line.spans.extend(mark.spans());
-            self.search_glyphs.set(Some(mark.drawn_at(at, area.y)));
-        }
-        frame.render_widget(line, area);
-    }
-
-    /// What a click at `at` stands for on the glyphs of quick search, where the last render
-    /// drew them, as the keys after Ctrl+s.
-    pub(crate) fn search_action_at(&self, at: Position) -> Option<Action> {
-        self.search.as_ref()?;
-        self.search_glyphs.get()?.action_at(at)
+        let field = (&prompt, &search.field);
+        let (column, glyphs) = mark.render_field(frame, area, field, style, theme);
+        let x = area.x.saturating_add(column).min(area.right() - 1);
+        frame.set_cursor_position((x, area.y));
+        glyphs
     }
 
     /// `line` toned down if it shows what the panel kept from a host that is not connected.

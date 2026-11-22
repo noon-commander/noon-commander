@@ -451,7 +451,7 @@ fn question_mark_searches_up_and_n_goes_the_same_way_as_vims() {
     let mut app = with_files(&["a1", "b2", "a3", "b4"]);
     app.config.ui.default_search_mode = SearchMode::Plain;
     keys(&mut app, &["shift-g", "?"]);
-    assert!(screen(&mut app).contains(&prompt("Search up", "")));
+    assert_eq!(mode_of(&mut app), "?");
     keys(&mut app, &["a", "enter"]);
     assert_eq!(cursor_name(&app, Side::Left), "a3");
     keys(&mut app, &["n"]);
@@ -626,7 +626,8 @@ fn ctrl_s_and_a_click_on_its_glyph_switch_how_the_field_with_the_focus_matches()
     let mut app = loaded();
     let glyphs = app.theme.glyphs.search_modes;
     let cases = app.theme.glyphs.case_modes;
-    // Quick search, whose glyphs end the status line.
+    // Quick search, whose glyphs end the line of the mode, which starts a line of the test
+    // backend.
     app.config.ui.default_search_mode = SearchMode::Plain;
     app.handle(action(Action::QuickSearch));
     app.handle(Resolved::Insert('r'));
@@ -635,18 +636,19 @@ fn ctrl_s_and_a_click_on_its_glyph_switch_how_the_field_with_the_focus_matches()
         Some(search::Kind::QUICK_SEARCH),
         "the keys after Ctrl+s go before its own"
     );
-    let at = glyph_cell(&screen_of(&mut app, 12), "║Search: r", glyphs.plain);
+    let at = glyph_cell(&screen_of(&mut app, 12), "\"/r", glyphs.plain);
     assert!(press(&mut app, Press::Click, at.x, at.y).is_empty());
     assert!(searching(&mut app, "r", glyphs.fzf), "the search goes on");
+    let both = |case| format!("{case} {}", glyphs.fzf);
     assert!(
-        screen(&mut app).contains(&format!(" {} {} ║", cases.smart, glyphs.fzf)),
+        searching(&mut app, "r", &both(cases.smart)),
         "the case before the way"
     );
-    let at = glyph_cell(&screen_of(&mut app, 12), "║Search: r", cases.smart);
+    let at = glyph_cell(&screen_of(&mut app, 12), "\"/r", cases.smart);
     press(&mut app, Press::Click, at.x, at.y);
-    assert!(screen(&mut app).contains(&format!(" {} {} ║", cases.ignore, glyphs.fzf)));
+    assert!(searching(&mut app, "r", &both(cases.ignore)));
     keys(&mut app, &["ctrl-s", "m"]);
-    assert!(screen(&mut app).contains(&format!(" {} {} ║", cases.exact, glyphs.fzf)));
+    assert!(searching(&mut app, "r", &both(cases.exact)));
     keys(&mut app, &["ctrl-s", "r"]);
     assert!(
         searching(&mut app, "r", glyphs.regex),

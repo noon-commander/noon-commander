@@ -344,20 +344,17 @@ fn screen(app: &mut App) -> String {
     screen_of(app, 9)
 }
 
-/// What the prompt of quick search or of a filter shows: `prompt` and `text`. The glyph of
-/// how it matches is at the end of the field.
+/// What the prompt of a filter shows: `prompt` and `text`. The glyph of how it matches is at
+/// the end of the field.
 fn prompt(prompt: &str, text: &str) -> String {
     format!("{prompt}: {text}")
 }
 
-/// Whether the status line shows quick search with `text` typed, and `glyph` at its right
-/// end.
+/// Whether the line of the mode shows quick search with `text` typed after `/`, and `glyph`
+/// at its right end.
 fn searching(app: &mut App, text: &str, glyph: &str) -> bool {
-    let screen = screen(app);
-    let end = format!(" {glyph} ║");
-    screen
-        .lines()
-        .any(|line| line.contains(&format!("║Search: {text}")) && line.contains(&end))
+    let line = mode_line(app, 160);
+    line.starts_with(&format!("/{text}")) && line.ends_with(&format!(" {glyph}"))
 }
 
 /// The glyph of how quick search or a filter matches in the search mode of the settings.

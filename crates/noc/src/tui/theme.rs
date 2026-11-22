@@ -33,8 +33,6 @@ pub(crate) struct Theme {
     pub(crate) mark: Style,
     /// `cursor` in a panel where the user is root: on red.
     pub(crate) root_cursor: Style,
-    /// What quick search has matched so far.
-    pub(crate) quick_search: Style,
     /// What a search found: in the lines of the search of a tree, and in the names that quick
     /// search matches. Apart from the cursor, so that it shows on the cursor's row too, and from
     /// the panels and the dialogs it is drawn on.
@@ -282,7 +280,6 @@ impl Theme {
             mark: on(Color::LightYellow, Color::Blue),
             // As the titles of error dialogs.
             root_cursor: on(Color::White, Color::Red),
-            quick_search: on(Color::Black, Color::Cyan),
             // As mc's editor shows a bookmark found (`bookmarkfound`).
             find_match: on(Color::Black, Color::Green),
             file: fg(Color::Gray),
@@ -403,7 +400,6 @@ impl Theme {
             marked: plain,
             mark: plain.bold(),
             root_cursor: reversed.bold(),
-            quick_search: reversed,
             // Reversed is the cursor; this shows on it.
             find_match: plain.bold().underlined(),
             file: plain,
@@ -508,7 +504,6 @@ impl Theme {
             marked: tint(p.mauve, p.base),
             mark: on(p.mauve, p.base),
             root_cursor: on(p.base, p.red),
-            quick_search: cursor,
             find_match: on(p.base, p.yellow),
             file: fg(p.text),
             directory: fg(p.blue).bold(),
@@ -618,7 +613,6 @@ impl Theme {
             marked: tint(p.mark, p.panel),
             mark: on(p.mark, p.panel),
             root_cursor: on(p.ink, p.danger),
-            quick_search: cursor,
             // The golds are the cursor's and the menu bar's.
             find_match: on(p.panel, p.teal),
             file: fg(p.text),

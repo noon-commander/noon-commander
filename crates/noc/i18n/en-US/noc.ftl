@@ -48,10 +48,9 @@ mode-insert-visual = (insert) VISUAL
 mode-other = ({ $key }) { $mode }
 
 ## What kind of window has the keys, after the mode on its line (src/tui/app), by the keys
-## that work there: INSERT · Quick search, NORMAL · List. The panels go by the mode alone.
-## Prefix: window-.
+## that work there: INSERT · Dialog, NORMAL · List. The panels go by the mode alone, and quick
+## search and the command line take the line. Prefix: window-.
 
-window-quick-search = Quick search
 # The name of an entry, edited in its row, r or Shift+F6.
 window-rename = Rename
 # The windows that list rows to choose from: the location menu, the tab menu, the zoxide window,
@@ -100,12 +99,12 @@ panel-name-by-extension = Name, by extension
 # The size column of the `..` row and of directories.
 panel-up-dir = UP--DIR
 panel-dir = DIR
-# Status line during quick search: what was typed so far. The glyphs of whether case counts and
-# how it matches (plain, fzf, or regex; the keys after Ctrl+s switch them) show at the right end
-# of the line.
-panel-search = Search: { $text }
-# Status line during quick search up the rows, as vim's ?: the same.
-panel-search-back = Search up: { $text }
+# Quick search, on the line of the mode, as vim's search on its command line: what was typed so
+# far, after the key of the search. The glyphs of whether case counts and how it matches (plain,
+# fzf, or regex; the keys after Ctrl+s switch them) show at the right end of the line.
+panel-search = /{ $text }
+# Quick search up the rows, as vim's ?: the same.
+panel-search-back = ?{ $text }
 # Status line with a symlink under the cursor: its name, an arrow (a Nerd Font glyph, or -> without
 # icons), and its target as stored in the link, which must end the text: it is cut at its start
 # where the line is too short.
@@ -1040,7 +1039,7 @@ help-tip-modes = Modes
 help-tip-modes-keys = Keys are vim's, in its modes; the F-keys of the panels are mc's, in Normal and Visual mode and in quick search.
 help-tip-modes-fields = Text fields open in Insert mode, where characters are text; Esc goes to Normal mode, and Esc there closes.
 help-tip-modes-close = Quick search and the command line close on Esc, as vim's search and command line do.
-help-tip-modes-line = The line above the F-key bar says the mode, NORMAL, INSERT, or VISUAL, and the window that has the keys, as INSERT · Quick search; (insert) is the one command of Normal mode after Ctrl+o. The cursor is a bar in Insert mode.
+help-tip-modes-line = The line above the F-key bar says the mode, NORMAL, INSERT, or VISUAL, and the window that has the keys, as INSERT · Dialog; quick search and the command line are typed there in its place, as in vim. (insert) is the one command of Normal mode after Ctrl+o. The cursor is a bar in Insert mode.
 help-tip-modes-alt = Alt and a key stand for Esc and the key in Insert and Visual mode and in the panels, but on a password, and in the dialogs and the pull-down menu, where Alt and a highlighted letter act on what has it.
 help-tip-modes-cancel = Ctrl+c closes or cancels in every mode.
 help-tip-counts = Counts and registers

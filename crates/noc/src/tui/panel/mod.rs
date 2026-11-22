@@ -1,6 +1,5 @@
 //! A panel that lists a local or remote directory.
 
-use std::cell::Cell;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt as _;
@@ -20,7 +19,7 @@ use super::dialog::Field;
 use super::glyphs;
 use super::keymap::Action;
 use super::scroll::Window;
-use super::search::{GlyphSpots, Input};
+use super::search::Input;
 use super::spinner::{Spin, Wait};
 use super::theme::Theme;
 
@@ -434,8 +433,6 @@ pub(crate) struct Panel {
     wait: Wait,
     /// Quick search, while it runs.
     search: Option<Search>,
-    /// Where the last render drew the glyphs of how quick search matches, for the mouse.
-    search_glyphs: Cell<Option<GlyphSpots>>,
     /// The entry under the cursor, while its name is edited in its row.
     renaming: Option<Renaming>,
     /// The row where Visual mode started, while it selects the rows from there to the cursor.
@@ -503,7 +500,6 @@ impl Panel {
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
-            search_glyphs: Cell::new(None),
             renaming: None,
             visual: None,
             last_visual: None,
@@ -544,7 +540,6 @@ impl Panel {
             working: Vec::new(),
             wait: Wait::default(),
             search: None,
-            search_glyphs: Cell::new(None),
             renaming: None,
             visual: None,
             last_visual: None,

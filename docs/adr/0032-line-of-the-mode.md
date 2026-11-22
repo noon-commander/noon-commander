@@ -1,6 +1,7 @@
 # 0032. The line of the mode says which keys work
 
-- Status: Accepted
+- Status: Accepted; amended by [ADR 0093](0093-quick-search-on-the-line-of-the-mode.md): quick
+  search takes the line while it has the keys, and has no kind
 - Date: 2026-10-16
 - Amends: [ADR 0022](0022-vim-modes.md)
 

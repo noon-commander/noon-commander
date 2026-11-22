@@ -440,11 +440,6 @@ fn a_panel_not_connected_tones_down_what_it_kept() {
         .map(|x| backend.buffer()[(x, 11)].symbol())
         .collect();
     assert!(bottom.contains(" in "), "the total stays: {bottom}");
-
-    // Quick search types what is not of the host.
-    panel.search_down(1, quick(Way::Plain));
-    let backend = draw(&mut panel, 40, 12, true);
-    assert!(!dim(&backend, status));
 }
 
 #[test]

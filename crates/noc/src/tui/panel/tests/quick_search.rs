@@ -14,6 +14,21 @@ fn typed(panel: &mut Panel, text: &str) {
     }
 }
 
+/// Quick search drawn on a line `width` cells wide, as the line of the mode shows it, and
+/// where it puts the cursor.
+fn search_line(panel: &Panel, width: u16) -> (String, Position) {
+    let theme = Theme::terminal();
+    let mut terminal = Terminal::new(TestBackend::new(width, 1)).unwrap();
+    terminal
+        .draw(|frame| {
+            panel.render_search(frame, frame.area(), &theme);
+        })
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let line = (0..width).map(|x| buffer[(x, 0)].symbol()).collect();
+    (line, terminal.get_cursor_position().unwrap())
+}
+
 #[test]
 fn quick_search_searches_from_where_it_started_as_vims_incremental_search() {
     let mut panel = search_files(&["bar", "bin", "boot", "cab"]);
@@ -44,23 +59,14 @@ fn quick_search_searches_from_where_it_started_as_vims_incremental_search() {
         "an edit searches from the start again"
     );
     typed(&mut panel, "o");
-    let hosts = |_: &str| HostState::default();
-    let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
     let plain = Theme::terminal().glyphs.search_modes.plain;
-    let screen = terminal.backend().to_string();
-    let status = screen
-        .lines()
-        .find(|line| line.contains("║Search: Bo"))
-        .unwrap();
+    let (line, cursor) = search_line(&panel, 40);
+    assert!(line.starts_with("/Bo "), "{line}");
     assert!(
-        status.contains(&format!(" {plain} ║")),
-        "the glyph of how it matches at the right end: {status}"
+        line.ends_with(&format!(" {plain} ")),
+        "the glyph of how it matches at the right end: {line}"
     );
-    assert_eq!(
-        terminal.get_cursor_position().unwrap(),
-        Position::new(11, 4),
-        "after the text"
-    );
+    assert_eq!(cursor, Position::new(3, 0), "after the text");
     let end = panel.end_search();
     assert_eq!(
         end,
@@ -364,14 +370,9 @@ fn quick_search_edits_its_text_as_a_text_field_does() {
     panel.search_edit(Action::DeleteToEnd);
     assert_eq!(panel.search_text(), Some(""));
     assert_eq!(panel.cursor, 0, "nothing typed: where it started");
-    let hosts = |_: &str| HostState::default();
     typed(&mut panel, "c");
     panel.search_edit(Action::TextStart);
-    let mut terminal = render_with(&mut panel, (40, 6), true, &hosts, Decor::new(false));
-    assert!(terminal.backend().to_string().contains("║Search: c"));
-    assert_eq!(
-        terminal.get_cursor_position().unwrap(),
-        Position::new(9, 4),
-        "on the text cursor"
-    );
+    let (line, cursor) = search_line(&panel, 40);
+    assert!(line.starts_with("/c "), "{line}");
+    assert_eq!(cursor, Position::new(1, 0), "on the text cursor");
 }

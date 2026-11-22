@@ -7,9 +7,16 @@ fn slash_searches_as_vim_does_and_enter_ends_on_the_match() {
     assert_eq!(app.context(), Context::Panel, "typing does nothing");
     assert!(keys(&mut app, &["/", "r"]).is_empty());
     assert_eq!(app.context(), Context::QuickSearch);
+    assert_eq!(
+        mode_of(&mut app),
+        "/r",
+        "in place of the mode, as vim's search"
+    );
     let shown = screen(&mut app);
-    assert!(shown.contains(&prompt("Search", "r")));
-    assert_eq!(mode_of(&mut app), "INSERT · Quick search");
+    assert!(
+        shown.contains("║right "),
+        "the status line keeps the name: {shown}"
+    );
     // Enter ends the search on what it found, as in vim; l opens it.
     assert!(keys(&mut app, &["enter"]).is_empty());
     assert_eq!(app.context(), Context::Panel);
@@ -27,9 +34,14 @@ fn slash_searches_as_vim_does_and_enter_ends_on_the_match() {
     );
     app.handle(Resolved::Insert('l'));
     app.handle(action(Action::Backspace));
-    assert!(screen(&mut app).contains(&prompt("Search", "")));
+    assert_eq!(mode_of(&mut app), "/");
     assert!(app.handle(action(Action::Cancel)).is_empty());
     assert_eq!(app.context(), Context::Panel, "Esc ends it");
+    assert_eq!(mode_of(&mut app), "NORMAL", "the mode comes back");
+
+    let mut app = loaded();
+    keys(&mut app, &["?", "l"]);
+    assert_eq!(mode_of(&mut app), "?l", "up the rows, as vim's ?");
 }
 
 #[test]
@@ -49,9 +61,9 @@ fn quick_search_edits_its_text_with_the_keys_of_text_fields() {
     assert_eq!(under(&app), "boot");
     assert_eq!(app.context(), Context::QuickSearch);
     app.handle(action(Action::DeleteChar));
-    assert!(screen(&mut app).contains(&prompt("Search", "o")));
+    assert_eq!(mode_of(&mut app), "/o");
     app.handle(action(Action::DeleteToEnd));
-    assert!(screen(&mut app).contains(&prompt("Search", "")));
+    assert_eq!(mode_of(&mut app), "/");
     assert_eq!(app.context(), Context::QuickSearch, "still searching");
     app.handle(Resolved::Insert('d'));
     assert_eq!(under(&app), "dev");
@@ -104,7 +116,7 @@ fn n_and_shift_n_repeat_the_last_quick_search_and_ctrl_g_brings_it_back() {
     // With nothing typed, Ctrl+g searches for what the last search found.
     keys(&mut app, &["/", "ctrl-g"]);
     assert_eq!(under(&app), "bar");
-    assert!(screen(&mut app).contains(&prompt("Search", "b")));
+    assert_eq!(mode_of(&mut app), "/b");
     // A key that ends a search keeps it too.
     keys(&mut app, &["i", "down"]);
     app.handle(action(Action::Home));
@@ -158,7 +170,8 @@ fn ctrl_s_ctrl_s_switches_how_one_quick_search_matches_and_n_matches_as_it_did()
         "the next search starts as the last one was, whatever the default"
     );
     let cases = app.theme.glyphs.case_modes;
-    assert!(screen(&mut app).contains(&format!(" {} {} ║", cases.exact, glyphs.regex)));
+    let both = format!("{} {}", cases.exact, glyphs.regex);
+    assert!(searching(&mut app, "", &both));
     keys(&mut app, &["esc"]);
     app.handle(action(Action::Home));
     app.handle(action(Action::NextMatch));
@@ -177,7 +190,7 @@ fn quick_search_matches_as_fzf_does_or_as_the_search_mode_says() {
     app.handle(action(Action::QuickSearch));
     app.handle(Resolved::Insert('r'));
     app.handle(Resolved::Insert('t'));
-    assert!(screen(&mut app).contains(&prompt("Search", "rt")));
+    assert_eq!(mode_of(&mut app), "/rt");
     let Effect::List { request, .. } = one(app.handle(action(Action::Enter))) else {
         panic!("expected a listing");
     };

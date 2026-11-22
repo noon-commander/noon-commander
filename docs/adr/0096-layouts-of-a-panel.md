@@ -35,11 +35,11 @@ settings come later. The code had to stop fixing the columns first.
   share the room evenly, what one does not need going to the other: the name loses its end, the
   target its start; with less than 4 cells for either, the name shows alone.
 - **The status line has the size of a directory too**, in bytes, which its row shows as `DIR`.
-- **The owner is in digits alone, not grouped**: a uid and a gid name a user and a group rather
+- **The owner is in digits alone, not grouped**, where its name is not known
+  ([ADR 0098](0098-owners-by-name-where-known.md)): a uid and a gid name a user and a group rather
   than count, as `ls -n` and `chown` write them; the rule that every number is grouped does not
-  hold for them. Names would need the host's own users: the local ones are wrong for a host. Its
-  column is always 11 cells, as `65535:65535`, so that it does not change from one directory to
-  the next; a longer owner loses its middle.
+  hold for them. Its column is always 11 cells, as `65535:65535`, so that it does not change from
+  one directory to the next; a longer owner loses its middle.
 - **The status line scrolls to its end once the name under the cursor shows its end in its row**:
   with its details the line is narrower than the column of names, so their scroll alone stopped
   short of the end of the name.

@@ -252,6 +252,7 @@ fn ctrl_u_swaps_where_the_panels_are_and_replies_follow_them() {
             location,
             listing,
             space: None,
+            owners: Names::default(),
         }),
     );
     let (left, right) = titles(&mut app);

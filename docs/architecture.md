@@ -1473,17 +1473,21 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   region, as `12.10.26 05:05`), so narrow panels drop the time, then the size. Sizes have a
   unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in
   a color too, as the theme's `size_units` say. The status line shows, after the name, every byte
-  of the entry under the cursor, a directory's too, its mode (`-rw-r--r--`), and its owner in
-  digits not grouped (`501:20`), those it has, while the name keeps 8 cells, a line `│` in the
-  color of the frame before each; a symlink's own. It cuts the name at its end, `»` before the
-  details (ADR 0094). A column of owners is always 11 cells. The mode and the owner set apart
-  what is ours
+  of the entry under the cursor, a directory's too, its mode (`-rw-r--r--`), and its owner by
+  name where known, else in digits not grouped (`alice:20`), those it has, while the name keeps
+  8 cells, a line `│` in the color of the frame before each; a symlink's own. It cuts the name at
+  its end, `»` before the details (ADR 0094). A column of owners is always 11 cells. The mode and
+  the owner set apart what is ours
   ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions
   that applies, as the system checks them, and the uid and gid that are ours, as they are, the
   rest dim; no set for uid 0 nor in a symlink's mode. Local panels go by the process
   (`Machine.identity`: `geteuid`, `getegid`, `getgroups`); a host's task asks `id -u` and
   `id -G` through `Session::spawn_in` once it connects, over the master only, and the app keeps
-  the answer with the connection (`Done::Identified`, `HostState.identity`). The size column is
+  the answer with the connection (`Done::Identified`, `HostState.identity`). Names of owners
+  ([ADR 0098](adr/0098-owners-by-name-where-known.md)): a local listing comes with those of its
+  uids and gids (`Listed.owners`, `Names::local`: `nix`'s `User` and `Group` in
+  `spawn_blocking`, no longer than 500 ms); a host's are those of `id -un` and `id -Gn`, of its
+  user and groups alone (`Identity.names`). The size column is
   as wide as the longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time
   column as the longest time of the formats. Each panel has its own sort order:
   name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);

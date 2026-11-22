@@ -88,6 +88,7 @@ fn answer(panel: &mut Panel, request: &ListRequest, listing: Listing) {
             location,
             listing,
             space: None,
+            owners: Names::default(),
         }),
     );
 }

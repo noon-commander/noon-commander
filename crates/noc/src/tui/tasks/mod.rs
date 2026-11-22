@@ -35,7 +35,7 @@ use super::app::{
 use super::describe::{self, Reason};
 use super::dialog::Ask;
 use super::find::{FindQuery, FindSummary, Finding};
-use super::machine::Identity;
+use super::machine::{Identity, Names};
 use super::panel::{ListError, ListRequest, Listed, Listing};
 use super::places::{self, Places};
 use super::progress::Counts;
@@ -70,6 +70,9 @@ const RESOLVE_DELAY: Duration = Duration::from_millis(150);
 /// How long the viewer waits before it looks at a file it follows again: a second, as
 /// `tail -f` sleeps between its reads.
 const POLL_DELAY: Duration = Duration::from_secs(1);
+/// How long a local listing waits for the names of the owners of its entries, as the space of a
+/// volume, so that a directory service that does not answer does not hold it up.
+const NAMES_TIMEOUT: Duration = places::VOLUME_TIMEOUT;
 /// A finished piece of background work.
 #[derive(Debug)]
 pub(crate) enum Done {
@@ -1324,11 +1327,31 @@ async fn list(location: Location) -> Result<Listed, ListError> {
     let space = tokio::time::timeout(places::VOLUME_TIMEOUT, space(&LocalFs, path));
     let (entries, space) = tokio::join!(LocalFs.list_dir(path), space);
     let entries = entries.map_err(|error| ListError::vfs(&error))?;
+    let owners = owner_names(&entries).await;
     Ok(Listed {
         location,
         listing: Listing::Dir(entries),
         space: space.ok().flatten(),
+        owners,
     })
+}
+
+/// The names this machine gives the owners of `entries` and their groups (ADR 0098); none that
+/// it does not tell within [`NAMES_TIMEOUT`], as a directory service that does not answer.
+async fn owner_names(entries: &[DirEntry]) -> Names {
+    let uids = entries
+        .iter()
+        .filter_map(|entry| entry.metadata.uid)
+        .collect();
+    let gids = entries
+        .iter()
+        .filter_map(|entry| entry.metadata.gid)
+        .collect();
+    let names = tokio::task::spawn_blocking(move || Names::local(&uids, &gids));
+    match tokio::time::timeout(NAMES_TIMEOUT, names).await {
+        Ok(Ok(names)) => names,
+        _ => Names::default(),
+    }
 }
 
 /// Debug builds only: `places` with every volume as if it did not answer in time, without its

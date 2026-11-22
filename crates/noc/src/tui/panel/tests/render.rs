@@ -1,5 +1,5 @@
 use super::*;
-use crate::tui::machine::Identity;
+use crate::tui::machine::{Identity, Names};
 use crate::tui::panel::layout::{Around, Detail};
 
 #[test]
@@ -172,6 +172,7 @@ fn the_frame_shows_the_space_of_the_file_system_while_it_fits() {
         location: local("/srv"),
         listing: Listing::Dir(Vec::new()),
         space: Some(space),
+        owners: Names::default(),
     };
     panel.listed(request.generation, Ok(reply));
     insta::assert_snapshot!(draw(&mut panel, 50, 6, true));
@@ -996,6 +997,7 @@ fn the_mode_and_the_owner_set_apart_what_is_ours() {
     let me = |uid, groups: &[u32]| Identity {
         uid,
         groups: groups.to_vec(),
+        names: Names::default(),
     };
     let set_apart =
         |panel: &mut Panel, identity: Option<Identity>| emphasis(panel, identity.as_ref(), status);
@@ -1036,6 +1038,50 @@ fn the_mode_and_the_owner_set_apart_what_is_ours() {
     panel.handle(Action::Up);
     let column = emphasis(&mut panel, Some(&me(501, &[20])), (3, "-rw-r--r--"));
     assert_eq!(column, "d...dddddd");
+}
+
+#[test]
+fn the_owner_goes_by_name_where_known() {
+    // Of 501 and the group 20.
+    let mut panel = loaded("/srv", vec![entry("notes", FileKind::File, 1)]);
+    panel.handle(Action::Down);
+    let names = |users: &[(u32, &str)], groups: &[(u32, &str)]| {
+        let named = |pairs: &[(u32, &str)]| {
+            let pairs = pairs.iter().map(|&(id, name)| (id, name.to_owned()));
+            pairs.collect()
+        };
+        Names {
+            users: named(users),
+            groups: named(groups),
+        }
+    };
+    let alice = Identity {
+        uid: 501,
+        groups: vec![20],
+        names: Names::default(),
+    };
+    panel.owners = names(&[(501, "alice")], &[]);
+    assert_eq!(
+        emphasis(&mut panel, Some(&alice), (6, "│ alice:20")),
+        ".......d..",
+        "names its listing came with, the number where it has none; ours set apart as before"
+    );
+    panel.owners = names(&[(501, "alice")], &[(20, "staff")]);
+    assert_eq!(
+        emphasis(&mut panel, None, (6, "│ alice:staff")),
+        "............."
+    );
+    panel.owners = Names::default();
+    let deploy = Identity {
+        uid: 1000,
+        groups: vec![1000],
+        names: names(&[(501, "alice")], &[(20, "staff")]),
+    };
+    assert_eq!(
+        emphasis(&mut panel, Some(&deploy), (6, "│ alice:staff")),
+        "..ddddddddddd",
+        "names of who reads it, as id tells them on a host"
+    );
 }
 
 #[test]

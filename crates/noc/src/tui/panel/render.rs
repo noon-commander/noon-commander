@@ -25,7 +25,7 @@ use super::{
     HostStatus, MIN_LINK_TARGET, MIN_NAME_WIDTH, Panel, Row, Sort, SortKey, View, home_text,
     location_text, short_size, shown_name,
 };
-use crate::tui::machine::Identity;
+use crate::tui::machine::{Identity, Names};
 
 /// Rows of the skeleton that stands for the rows a veiled panel waits for: a few, as more
 /// looked busier than what they stand for, and a directory may hold none.
@@ -114,6 +114,7 @@ impl Panel {
         let visual = self.visual_rows();
         let mut finder = self.finder();
         let mine = self.identity(view);
+        let owners = self.owners(mine.as_ref());
         for (screen_row, index) in (self.window.top()..self.rows())
             .take(list_height)
             .enumerate()
@@ -127,7 +128,7 @@ impl Panel {
                 _ => Vec::new(),
             };
             let text = row_style(
-                columns.row(row, (self.shift, &found), (view, mine.as_ref())),
+                columns.row(row, (self.shift, &found), (view, owners)),
                 cursor,
                 (marked, selected),
                 theme,
@@ -371,9 +372,10 @@ impl Panel {
             return (Vec::new(), Vec::new());
         };
         let mine = self.identity(view);
+        let owners = self.owners(mine.as_ref());
         let texts = |details: &[Detail]| {
             (details.iter())
-                .filter_map(|&detail| status_parts(detail, entry, view, mine.as_ref()))
+                .filter_map(|&detail| status_parts(detail, entry, view, owners))
                 .collect()
         };
         let status = &self.layout.status;
@@ -386,6 +388,14 @@ impl Panel {
         match &self.location {
             Location::Local(_) => view.identity.cloned(),
             Location::Remote { host, .. } => (view.hosts)(host).identity,
+        }
+    }
+
+    /// What the panel knows of the owners of its entries, read as `mine`.
+    fn owners<'a>(&'a self, mine: Option<&'a Identity>) -> Owners<'a> {
+        Owners {
+            mine,
+            listed: &self.owners,
         }
     }
 
@@ -747,7 +757,7 @@ impl DirColumns {
         &self,
         row: Row<'_>,
         (shift, found): (usize, &[usize]),
-        (view, mine): (&View<'_>, Option<&Identity>),
+        (view, owners): (&View<'_>, Owners<'_>),
     ) -> Shown {
         let theme = view.theme;
         let [prefix, name] = shown_name(row, view.decor);
@@ -757,7 +767,7 @@ impl DirColumns {
         };
         // Without styles: `row_style` gives the row its colors, and the marks their accent.
         let styles = (Style::new(), Style::new());
-        let cell = |detail| column_cell(detail, row, (view, mine));
+        let cell = |detail| column_cell(detail, row, (view, owners));
         let [before, after] = self.details(cell, styles, theme.glyphs.marks);
         let name = name_spans(&prefix, &name, (self.name, shift), (style, found), view);
         let mut shown = Shown {
@@ -853,8 +863,8 @@ struct Part {
     cut: Vec<usize>,
 }
 
-/// The cell of `detail` in the column of `row`, what is `mine` set apart.
-fn column_cell(detail: Detail, row: Row<'_>, (view, mine): (&View<'_>, Option<&Identity>)) -> Cell {
+/// The cell of `detail` in the column of `row`, what is ours set apart.
+fn column_cell(detail: Detail, row: Row<'_>, (view, owners): (&View<'_>, Owners<'_>)) -> Cell {
     let Row::Entry(entry) = row else {
         return match detail {
             Detail::Size => Cell::plain(fl!("panel-up-dir"), Align::Right),
@@ -882,23 +892,23 @@ fn column_cell(detail: Detail, row: Row<'_>, (view, mine): (&View<'_>, Option<&I
             Cell::plain(time, Align::Left)
         }
         Detail::Mode => Cell {
-            parts: mode_parts(entry, mine).unwrap_or_default(),
+            parts: mode_parts(entry, owners.mine).unwrap_or_default(),
             align: Align::Left,
         },
         Detail::Owner => Cell {
-            parts: owner_parts(entry, mine).unwrap_or_default(),
+            parts: owner_parts(entry, owners).unwrap_or_default(),
             align: Align::Right,
         },
     }
 }
 
-/// The text of `detail` of `entry` on the status line, in parts, what is `mine` set apart; none
+/// The text of `detail` of `entry` on the status line, in parts, what is ours set apart; none
 /// where it is not known.
 fn status_parts(
     detail: Detail,
     entry: &DirEntry,
     view: &View<'_>,
-    mine: Option<&Identity>,
+    owners: Owners<'_>,
 ) -> Option<Parts> {
     let metadata = &entry.metadata;
     let plain = |text: String| vec![(text, Style::new())];
@@ -908,8 +918,8 @@ fn status_parts(
         Detail::Time => Some(cells::mtime(metadata.modified, view.tz, view.formats))
             .filter(|time| !time.is_empty())
             .map(plain),
-        Detail::Mode => mode_parts(entry, mine),
-        Detail::Owner => owner_parts(entry, mine),
+        Detail::Mode => mode_parts(entry, owners.mine),
+        Detail::Owner => owner_parts(entry, owners),
     }
 }
 
@@ -957,19 +967,44 @@ fn mode_parts(entry: &DirEntry, mine: Option<&Identity>) -> Option<Parts> {
     Some(parts)
 }
 
-/// The numbers of the owner of `entry` and of its group, as `ls -n` and `chown` write them: in
-/// digits alone, not grouped, as they name rather than count (ADR 0096); in parts, each that is
-/// `mine` as it is and the rest toned down, plain where it is not known who reads it. None when
-/// they are not known.
-fn owner_parts(entry: &DirEntry, mine: Option<&Identity>) -> Option<Parts> {
+/// What a panel knows of the owners of its entries: who reads it, and the names of owners and
+/// groups, those its listing came with, then those of who reads it (ADR 0098).
+#[derive(Clone, Copy)]
+struct Owners<'a> {
+    mine: Option<&'a Identity>,
+    listed: &'a Names,
+}
+
+impl Owners<'_> {
+    /// The name of the user `uid`, else its number.
+    fn user(self, uid: u32) -> String {
+        let named = self.listed.users.get(&uid);
+        let named = named.or_else(|| self.mine?.names.users.get(&uid));
+        named.cloned().unwrap_or_else(|| uid.to_string())
+    }
+
+    /// The name of the group `gid`, else its number.
+    fn group(self, gid: u32) -> String {
+        let named = self.listed.groups.get(&gid);
+        let named = named.or_else(|| self.mine?.names.groups.get(&gid));
+        named.cloned().unwrap_or_else(|| gid.to_string())
+    }
+}
+
+/// The owner of `entry` and its group, by name where `owners` knows it, else by number in digits
+/// alone, not grouped, as `ls -n` and `chown` write them, as they name rather than count
+/// (ADR 0096, ADR 0098); in parts, each that is ours as it is and the rest toned down, plain
+/// where it is not known who reads it. None when they are not known.
+fn owner_parts(entry: &DirEntry, owners: Owners<'_>) -> Option<Parts> {
     let (uid, gid) = (entry.metadata.uid?, entry.metadata.gid?);
-    let Some(mine) = mine else {
-        return Some(vec![(format!("{uid}:{gid}"), Style::new())]);
+    let (user, group) = (owners.user(uid), owners.group(gid));
+    let Some(mine) = owners.mine else {
+        return Some(vec![(format!("{user}:{group}"), Style::new())]);
     };
     Some(vec![
-        (uid.to_string(), own(uid == mine.uid)),
+        (user, own(uid == mine.uid)),
         (":".to_owned(), own(false)),
-        (gid.to_string(), own(mine.groups.contains(&gid))),
+        (group, own(mine.groups.contains(&gid))),
     ])
 }
 
@@ -1218,7 +1253,7 @@ fn detail_cells(detail: Detail, formats: &Formats) -> usize {
         // `ls -l`'s type and nine permissions.
         Detail::Mode => 10,
         // `65535:65535`, so that the column does not change from one directory to the next;
-        // longer numbers lose their middle.
+        // a longer one, as an owner by name may be, loses its middle.
         Detail::Owner => 11,
     };
     text.max(title)

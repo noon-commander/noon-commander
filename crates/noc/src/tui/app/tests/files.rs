@@ -272,6 +272,7 @@ fn f7_works_on_hosts() {
             location,
             listing,
             space: None,
+            owners: Names::default(),
         }),
     );
     assert!(screen(&mut app).contains("7Mkdir"));

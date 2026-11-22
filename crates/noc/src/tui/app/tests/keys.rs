@@ -251,6 +251,7 @@ fn visual_mode_keeps_its_rows_and_stays_with_its_panel() {
             location: local("/srv"),
             listing: Listing::Dir(entries.to_vec()),
             space: None,
+            owners: Names::default(),
         }),
     );
     keys(&mut app, &["space"]);

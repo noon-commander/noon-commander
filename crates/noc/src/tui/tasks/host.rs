@@ -22,7 +22,7 @@ use crate::context::Context;
 use crate::i18n::fl;
 use crate::tui::describe;
 use crate::tui::dialog::{Ask, Reply};
-use crate::tui::machine::Identity;
+use crate::tui::machine::{Identity, Names};
 use crate::tui::panel::{ListError, ListRequest, Listed, Listing};
 use crate::tui::tabs::PanelId;
 
@@ -467,20 +467,27 @@ impl HostTask {
     }
 
     /// Who the connection runs as on the host, as `id -u` and `id -G` tell, for the panels to
-    /// set apart what is its own (ADR 0097).
+    /// set apart what is its own (ADR 0097); with the names `id -un` and `id -Gn` give, which
+    /// they show for those numbers (ADR 0098).
     fn identify(&self, session: &Session) -> Pin<Box<dyn Future<Output = Done> + Send + 'static>> {
         let spawn = |flag: &str| (session.spawn_in(b"", "id", &[OsString::from(flag)])).ok();
         let (uid, groups) = (spawn("-u"), spawn("-G"));
+        let (user, group_names) = (spawn("-un"), spawn("-Gn"));
         let (host, connection) = (self.host.clone(), self.connection);
         Box::pin(async move {
             let printed = |child: Option<tokio::process::Child>| async move {
                 let output = child?.wait_with_output().await.ok()?;
                 output.status.success().then_some(output.stdout)
             };
-            let (uid, groups) = tokio::join!(printed(uid), printed(groups));
-            let identity = uid
-                .zip(groups)
-                .and_then(|(uid, groups)| Identity::parse(&uid, &groups));
+            let (uid, groups, user, group_names) = tokio::join!(
+                printed(uid),
+                printed(groups),
+                printed(user),
+                printed(group_names)
+            );
+            let identity = (uid.zip(groups))
+                .and_then(|(uid, groups)| Identity::parse(&uid, &groups))
+                .map(|identity| identity.named(user.as_deref(), group_names.as_deref()));
             Done::Identified {
                 host,
                 connection,
@@ -569,6 +576,8 @@ impl HostTask {
             location: self.remote(path),
             listing: Listing::Dir(entries?),
             space,
+            // Those of who the connection runs as come with it (ADR 0098).
+            owners: Names::default(),
         })
     }
 

@@ -25,6 +25,7 @@ use crate::tui::describe::Reason;
 use crate::tui::dialog::{Ask, Problem};
 use crate::tui::find::{FindSummary, Finding};
 use crate::tui::keymap::Typed;
+use crate::tui::machine::Names;
 use crate::tui::mouse::{Pointer, Press};
 use crate::tui::panel::{
     Destination, HostState, HostStatus, ListError, ListErrorKind, Listed, Listing,
@@ -256,6 +257,7 @@ fn answer(app: &mut App, effects: Vec<Effect>, listing: &Listing) {
                 location,
                 listing,
                 space: None,
+                owners: Names::default(),
             }),
         );
     }
@@ -560,6 +562,7 @@ fn on_a_host() -> (App, u64) {
             location,
             listing,
             space: None,
+            owners: Names::default(),
         }),
     );
     app.set_runtime_dir(PathBuf::from("/run/noc"));
@@ -580,6 +583,7 @@ fn connect_web(app: &mut App, side: Side, connection: u64, path: &str) -> ListRe
         location: remote("web", path),
         listing: Listing::Dir(vec![dir("app")]),
         space: None,
+        owners: Names::default(),
     };
     app.listed(app.shown(side), request.generation, Ok(listed));
     request

@@ -137,6 +137,7 @@ fn hosts_open_their_home_directory_and_lead_up_to_slash() {
         location: home.clone(),
         listing: Listing::Dir(Vec::new()),
         space: None,
+        owners: Names::default(),
     };
     panel.listed(request.generation, Ok(reply));
     assert_eq!(panel.location, home);

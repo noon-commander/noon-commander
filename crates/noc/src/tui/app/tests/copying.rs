@@ -698,6 +698,7 @@ fn a_copy_to_a_lost_host_waits_and_ends_when_it_is_disconnected() {
             location,
             listing,
             space: None,
+            owners: Names::default(),
         }),
     );
 

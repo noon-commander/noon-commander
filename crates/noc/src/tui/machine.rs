@@ -1,6 +1,7 @@
 //! The machine Noon Commander runs on and who runs it, for the line of the mode, the prompt of
 //! the command line, the terminal title, and what the panels set apart as its own.
 
+use std::collections::{BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt as _;
 
@@ -22,11 +23,41 @@ pub(crate) struct Machine {
     pub(crate) identity: Option<Identity>,
 }
 
-/// Who a process runs as, by number: its effective uid, and the groups whose rights it has.
+/// Who a process runs as, by number: its effective uid, and the groups whose rights it has; and
+/// their names, those that are known.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Identity {
     pub(crate) uid: u32,
     pub(crate) groups: Vec<u32>,
+    pub(crate) names: Names,
+}
+
+/// The names of users and of groups by their numbers, those that are known, terminal-safe.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Names {
+    pub(crate) users: HashMap<u32, String>,
+    pub(crate) groups: HashMap<u32, String>,
+}
+
+impl Names {
+    /// The names this machine gives `uids` and `gids`, those it knows. Blocking: the system may
+    /// ask a directory service.
+    pub(crate) fn local(uids: &BTreeSet<u32>, gids: &BTreeSet<u32>) -> Self {
+        use nix::unistd::{Gid, Group, Uid, User};
+        let users = (uids.iter())
+            .filter_map(|&uid| {
+                let user = User::from_uid(Uid::from_raw(uid)).ok()??;
+                Some((uid, cells::sanitize(user.name.as_bytes())))
+            })
+            .collect();
+        let groups = (gids.iter())
+            .filter_map(|&gid| {
+                let group = Group::from_gid(Gid::from_raw(gid)).ok()??;
+                Some((gid, cells::sanitize(group.name.as_bytes())))
+            })
+            .collect();
+        Self { users, groups }
+    }
 }
 
 impl Identity {
@@ -38,6 +69,7 @@ impl Identity {
         Self {
             uid: rustix::process::geteuid().as_raw(),
             groups,
+            names: Names::default(),
         }
     }
 
@@ -52,7 +84,28 @@ impl Identity {
             return None;
         };
         let groups = numbers(groups).filter(|groups| !groups.is_empty())?;
-        Some(Self { uid, groups })
+        Some(Self {
+            uid,
+            groups,
+            names: Names::default(),
+        })
+    }
+
+    /// `self` with the names `id -un` and `id -Gn` print, of its uid and of its groups; those of
+    /// the groups only where they are as many as its groups, as `id -G` lists them in that order.
+    pub(crate) fn named(mut self, user: Option<&[u8]>, groups: Option<&[u8]>) -> Self {
+        if let Some(user) = user.map(<[u8]>::trim_ascii).filter(|user| !user.is_empty()) {
+            self.names.users.insert(self.uid, cells::sanitize(user));
+        }
+        let words: Vec<&[u8]> = (groups.unwrap_or_default())
+            .split(u8::is_ascii_whitespace)
+            .filter(|word| !word.is_empty())
+            .collect();
+        if words.len() == self.groups.len() {
+            let pairs = self.groups.iter().zip(words);
+            (self.names.groups).extend(pairs.map(|(&gid, word)| (gid, cells::sanitize(word))));
+        }
+        self
     }
 }
 
@@ -144,7 +197,8 @@ mod tests {
             parsed,
             Some(Identity {
                 uid: 501,
-                groups: vec![20, 12, 61, 79]
+                groups: vec![20, 12, 61, 79],
+                names: Names::default(),
             })
         );
         assert_eq!(Identity::parse(b"501 502\n", b"20\n"), None, "one uid");
@@ -158,6 +212,37 @@ mod tests {
             Some(&egid),
             "the effective gid first"
         );
+    }
+
+    #[test]
+    fn id_names_the_uid_and_the_groups_in_their_order() {
+        let alice = || Identity::parse(b"501\n", b"20 12\n").unwrap();
+        let named = alice().named(Some(b"alice\n"), Some(b"staff everyone\n"));
+        assert_eq!(
+            named.names.users.get(&501).map(String::as_str),
+            Some("alice")
+        );
+        assert_eq!(
+            named.names.groups.get(&20).map(String::as_str),
+            Some("staff")
+        );
+        assert_eq!(
+            named.names.groups.get(&12).map(String::as_str),
+            Some("everyone")
+        );
+        let spaced = alice().named(None, Some(b"domain users everyone\n"));
+        assert!(spaced.names.users.is_empty(), "no name without -un");
+        assert!(
+            spaced.names.groups.is_empty(),
+            "nor where they do not match"
+        );
+    }
+
+    #[test]
+    fn this_machine_names_uid_0() {
+        let names = Names::local(&BTreeSet::from([0]), &BTreeSet::from([0]));
+        assert_eq!(names.users.get(&0).map(String::as_str), Some(ROOT));
+        assert!(names.groups.contains_key(&0), "wheel or root: {names:?}");
     }
 
     #[test]

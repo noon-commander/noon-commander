@@ -18,7 +18,7 @@ use super::describe;
 use super::dialog::Field;
 use super::glyphs;
 use super::keymap::Action;
-use super::machine::Identity;
+use super::machine::{Identity, Names};
 use super::scroll::Window;
 use super::search::Input;
 use super::spinner::{Spin, Wait};
@@ -65,6 +65,8 @@ pub(crate) struct Listed {
     pub(crate) listing: Listing,
     /// The space of the file system that holds the directory; `None` when unknown.
     pub(crate) space: Option<Space>,
+    /// The names of the owners of the entries and of their groups, those that are known.
+    pub(crate) owners: Names,
 }
 
 /// What a location holds.
@@ -408,6 +410,8 @@ pub(crate) struct Panel {
     listing: Listing,
     /// The space of the file system that holds the directory shown, on the bottom of the frame.
     space: Option<Space>,
+    /// The names of the owners of its entries and of their groups that its listing came with.
+    owners: Names,
     /// The entries of the listing that are shown, in order: hidden files may be left out.
     shown: Vec<usize>,
     /// The panel is on a host that is not connected, and shows the entries it kept toned down
@@ -490,6 +494,7 @@ impl Panel {
             location: location.clone(),
             listing: Listing::Dir(Vec::new()),
             space: None,
+            owners: Names::default(),
             shown: Vec::new(),
             disconnected: false,
             sort: Sort {
@@ -534,6 +539,7 @@ impl Panel {
             location: self.location.clone(),
             listing: self.listing.clone(),
             space: self.space,
+            owners: self.owners.clone(),
             shown: self.shown.clone(),
             disconnected: self.disconnected,
             sort: self.sort,
@@ -611,6 +617,7 @@ impl Panel {
                 location,
                 listing,
                 space,
+                owners,
             }) => {
                 // Reading the same directory again keeps the marks on names still there.
                 if location != self.location {
@@ -624,6 +631,7 @@ impl Panel {
                 self.location = location;
                 self.listing = listing;
                 self.space = space;
+                self.owners = owners;
                 self.disconnected = false;
                 self.listings += 1;
                 self.arrange();

@@ -173,6 +173,28 @@ async fn a_host_opens_where_it_left_off_else_at_its_start_dir_else_at_home() {
 }
 
 #[tokio::test]
+async fn a_local_listing_comes_with_the_names_of_its_owners() {
+    use std::collections::BTreeSet;
+
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(tmp.path().join("file"), "").unwrap();
+    let listed = list(Location::Local(tmp.path().to_path_buf()))
+        .await
+        .unwrap();
+    let Listing::Dir(entries) = &listed.listing;
+    let uids: BTreeSet<u32> = entries
+        .iter()
+        .filter_map(|entry| entry.metadata.uid)
+        .collect();
+    let gids: BTreeSet<u32> = entries
+        .iter()
+        .filter_map(|entry| entry.metadata.gid)
+        .collect();
+    assert_eq!(uids, BTreeSet::from([rustix::process::geteuid().as_raw()]));
+    assert_eq!(listed.owners, Names::local(&uids, &gids));
+}
+
+#[tokio::test]
 async fn names_to_complete_tell_directories_and_links_to_them() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::create_dir(tmp.path().join("dir")).unwrap();

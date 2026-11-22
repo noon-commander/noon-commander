@@ -18,6 +18,7 @@ fn replies_reach_their_own_panel() {
             location,
             listing,
             space: None,
+            owners: Names::default(),
         })
     };
     app.listed(
@@ -208,6 +209,7 @@ fn remember_dir_resumes_the_last_directory_of_the_session() {
             location: remote("web", "/var/www/app"),
             listing: Listing::Dir(Vec::new()),
             space: None,
+            owners: Names::default(),
         };
         app.listed(app.shown(Side::Left), request.generation, Ok(listed));
 
@@ -252,10 +254,9 @@ fn a_host_tells_who_its_connection_runs_as_once_id_says() {
 
     let (mut app, connection) = on_a_host();
     assert_eq!(app.host_state("web").identity, None, "until id says");
-    let deploy = Identity {
-        uid: 1000,
-        groups: vec![1000, 27],
-    };
+    let deploy = Identity::parse(b"1000\n", b"1000 27\n")
+        .map(|deploy| deploy.named(Some(b"deploy\n"), Some(b"deploy sudo\n")));
+    let deploy = deploy.unwrap();
     app.identified("web", connection + 1, Some(deploy.clone()));
     assert_eq!(
         app.host_state("web").identity,

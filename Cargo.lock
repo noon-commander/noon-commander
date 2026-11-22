@@ -1746,6 +1746,7 @@ dependencies = [
  "insta",
  "jiff",
  "mio",
+ "nix 0.30.1",
  "noc-config",
  "noc-locale",
  "noc-ops",

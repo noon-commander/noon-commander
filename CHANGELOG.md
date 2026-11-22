@@ -39,6 +39,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ([ADR 0094](docs/adr/0094-k-shows-the-whole-name-on-the-status-line.md)).
 - The z keys scroll the status line with the names, as far as the end of its name
   ([ADR 0094](docs/adr/0094-k-shows-the-whole-name-on-the-status-line.md)).
+- The z keys scroll each name in a panel no further than its end: names that fit do not move
+  ([ADR 0095](docs/adr/0095-a-name-scrolls-no-further-than-its-end.md)).
 
 ### Removed
 

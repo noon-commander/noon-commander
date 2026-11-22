@@ -801,8 +801,9 @@ fn first_from(text: &[char], cells: usize) -> usize {
 
 /// The name cell, `cells` wide, in `style`, with the icon of its `prefix` in a toned-down
 /// `style`, and the indexes of the spans that are marks: `…` where a name that does not fit
-/// loses its middle, as in mc; scrolled `shift` cells left, the name alone, its prefix staying
-/// in front of it, `‹` over its first cell and `…` where it goes on past the right one. A cell
+/// loses its middle, as in mc; scrolled `shift` cells left, but no further than its end comes to
+/// the right edge, the name alone, its prefix staying in front of it, `‹` over its first cell and
+/// `…` where it goes on past the right one. A cell
 /// that leaves no room after the prefix does not scroll. A cell cut so short that the prefix
 /// lost its end, and mc's markers, are drawn in `style`. The characters of the name that quick
 /// search `found` get spans of their own.
@@ -826,6 +827,8 @@ fn name_spans(
     let shown_marks = view.theme.glyphs.marks;
     let mut spans = NameSpans::default();
     let prefix_cells = cells::width(prefix);
+    // No further than its end comes to the right edge: a name that fits does not move.
+    let shift = shift.min(cells::width(name).saturating_sub(cells.saturating_sub(prefix_cells)));
     let fitted = if shift > 0 && cells > prefix_cells {
         let prefix_style = if view.decor.icons() {
             Theme::icon(style)

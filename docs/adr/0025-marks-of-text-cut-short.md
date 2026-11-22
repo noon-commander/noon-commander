@@ -1,7 +1,8 @@
 # 0025. Marks of text cut short, and where to see it whole
 
-- Status: Accepted; amended by [ADR 0041](0041-lists-always-show-the-whole-row.md) and
-  [ADR 0094](0094-k-shows-the-whole-name-on-the-status-line.md)
+- Status: Accepted; amended by [ADR 0041](0041-lists-always-show-the-whole-row.md),
+  [ADR 0094](0094-k-shows-the-whole-name-on-the-status-line.md), and
+  [ADR 0095](0095-a-name-scrolls-no-further-than-its-end.md)
 - Date: 2026-10-15
 - Amends: [ADR 0022](0022-vim-modes.md)
 

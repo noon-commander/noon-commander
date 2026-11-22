@@ -356,14 +356,14 @@ fn z_scrolls_the_names_as_vim_scrolls_lines_that_do_not_wrap() {
         name_rows(panel)
     };
     // `zl`: a column of the names alone, the markers staying in front, `«` over the first
-    // cell after them, and a name cut short at its end.
+    // cell after them, and a name cut short at its end; names that fit do not move.
     assert_eq!(
         press(&mut panel, &[Action::ScrollRight]),
         [
-            "/«          ",
-            "/«r         ",
+            "/..         ",
+            "/dir        ",
             " «cdefghijk»",
-            " «ort       "
+            " short      "
         ]
     );
     // `zL`: half the column of 12.
@@ -424,6 +424,12 @@ fn the_names_scroll_back_as_far_as_the_names_on_screen_need() {
         panel.shift, 9,
         "'abcdefghijklmnopqrst' is 20 cells, the 11 after the marker"
     );
+    let rows = name_rows(&mut panel);
+    assert_eq!(
+        rows[1..3],
+        [" «klmnopqrst", " «dium-name0"],
+        "a shorter name stops at its end"
+    );
     panel.handle(Action::End);
     let rows = name_rows(&mut panel);
     assert!(panel.window.top() > 1, "the long name is off screen");
@@ -463,10 +469,10 @@ fn scrolled_names_keep_their_icons_in_front() {
     };
     let marks = theme.glyphs.marks;
     let terminal = draw(&mut panel);
-    // Rows: frame, header, `..`, the long name; a column of 12.
+    // Rows: frame, header, `..`, which fits and does not move, the long name; a column of 12.
     assert_eq!(
         row(&terminal, 2),
-        format!("{}{}{}", decor.parent(), marks.before, " ".repeat(9))
+        format!("{}..{}", decor.parent(), " ".repeat(8))
     );
     let (icon, before, after) = (decor.entry(&long), marks.before, marks.after);
     assert_eq!(row(&terminal, 3), format!("{icon}{before}cdefghij{after}"));

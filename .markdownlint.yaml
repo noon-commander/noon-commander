@@ -1,9 +1,9 @@
-line-length:
-  line_length: 100
-  code_blocks: false
-  tables: false
-# CHANGELOG.md repeats Added, Changed, and Fixed under every release.
-no-duplicate-heading:
+default: true
+line-length: false # MD013
+no-duplicate-heading: # MD024
   siblings_only: true
-fenced-code-language: false
-no-inline-html: false
+no-inline-html: false # MD033
+fenced-code-language: true # MD040
+
+# >>> custom
+# <<< custom

@@ -24,7 +24,7 @@ env:
   JUST_VERSION: 1.58.0
 
 jobs:
-  fmt:
+  format:
     name: rustfmt
     runs-on: macos-latest
     steps:
@@ -37,7 +37,7 @@ jobs:
           rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo install --locked "just@$JUST_VERSION"
-      - run: just fmt-check
+      - run: just format-check
 
   clippy:
     name: clippy (${{ matrix.name }})

@@ -33,10 +33,10 @@ Instructions for AI coding agents and humans working on Noon Commander.
 ## Commands
 
 ```sh
-just check   # fmt-check, clippy, tests, cargo-deny
+just check   # format-check, clippy, tests, cargo-deny
 just lint    # Markdown, shell scripts, TOML, workflows, unused dependencies
 just all     # check + lint + stale snapshots; run before committing
-just fmt     # format the code
+just format  # format the code
 just run     # run noc from source; arguments go to noc
 ```
 
@@ -126,7 +126,7 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Dependencies: declare versions once in root `[workspace.dependencies]`; crates use
   `name.workspace = true`. Every crate has `[lints] workspace = true`. Remove unused ones from
   both places (`just unused`).
-- TOML is formatted by taplo: `just toml` checks, `just toml-fmt` formats.
+- TOML is formatted by taplo: `just toml` checks, `just toml-format` formats.
 - Comments explain why, not what. Keep them sparse.
 
 ## UI conventions

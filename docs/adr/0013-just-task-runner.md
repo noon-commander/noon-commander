@@ -18,14 +18,14 @@ renderer: a library in an `xtask` crate, or a command-line program.
 ## Decision
 
 - `just` runs the project's tasks from a `justfile` at the root: `build`, `release` (the
-  optimized `noc`, with `--locked`), `run`, `fmt`, `clippy`, `test`, `deny`, `check` (`fmt`,
+  optimized `noc`, with `--locked`), `run`, `format`, `clippy`, `test`, `deny`, `check` (`format`,
   `clippy`, `test`, and `deny`, with `cargo fmt --check`, so it changes no files), `lint` (the
   checks below of everything but the Rust code), `all` (`check`, `lint`, and `snap-stale`),
   `msrv`, `md` (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked
   script with a `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review
   the changed UI snapshots, find the ones no test uses), `unused` (cargo-shear: dependencies no
   crate uses, also in
-  `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), `gha` (actionlint and
+  `[workspace.dependencies]`), `toml` and `toml-format` (taplo), `gha` (actionlint and
   zizmor on the workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
   `cargo update --dry-run` for `Cargo.lock`), and `logo`. `msrv` is not part of `check`: it
   needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI runs it in a

@@ -226,7 +226,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
 | `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
 | `just all` | `check`, `lint`, and `snap-stale`: every check there is |
-| `just fmt` | Format the code |
+| `just format` | Format the code |
 | `just build` | Build the workspace for development |
 | `just release` | Build the optimized binary into `target/release/noc` |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
@@ -238,7 +238,7 @@ The project's tasks live in the [`justfile`](justfile)
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
 | `just unused` | Find dependencies that no crate uses (needs cargo-shear) |
 | `just toml` | Check that the TOML files are valid and formatted (needs taplo) |
-| `just toml-fmt` | Format the TOML files, keeping their comments (needs taplo) |
+| `just toml-format` | Format the TOML files, keeping their comments (needs taplo) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
 | `just gha` | Lint the GitHub Actions workflows and audit their security, pedantically (needs actionlint, zizmor) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |

@@ -8,11 +8,11 @@ default:
     @just --list
 
 # Format the code
-fmt:
+format:
     cargo fmt --all
 
 # Fail if the code is not formatted, without changing it
-fmt-check:
+format-check:
     cargo fmt --all --check
 
 # Clippy; extra arguments go to cargo, as --locked in CI
@@ -91,7 +91,7 @@ toml:
     RUST_LOG=warn taplo fmt --check
 
 # Format the TOML files, keeping their comments (needs taplo)
-toml-fmt:
+toml-format:
     RUST_LOG=warn taplo fmt
 
 # Show newer dependency versions for Cargo.toml and Cargo.lock; changes no files (needs cargo-edit)
@@ -144,7 +144,7 @@ msrv:
     rustup run {{msrv}} cargo check --workspace --all-targets --all-features --locked
 
 # Everything that must pass before work is done; changes no files
-check: fmt-check clippy test deny
+check: format-check clippy test deny
 
 # The fast checks of everything but the Rust code; changes no files
 lint: md sh toml gha unused glyphs

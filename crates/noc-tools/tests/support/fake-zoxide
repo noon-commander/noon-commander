@@ -13,10 +13,10 @@ if [ -n "${FAKE_ZOXIDE_LOG:-}" ]; then
     # printf of macOS's /bin/sh writes line by line, while cat copies the here-document whole.
     record=
     for arg in "$@"; do
-        record="$record$arg
+        record="${record}${arg}
 "
     done
-    cat >>"$FAKE_ZOXIDE_LOG" <<EOF
+    cat >>"${FAKE_ZOXIDE_LOG}" <<EOF
 ${record}--end--
 EOF
 fi
@@ -25,7 +25,7 @@ if [ -n "${FAKE_ZOXIDE_HANG:-}" ]; then
     exec sleep 600
 fi
 if [ -n "${FAKE_ZOXIDE_FAIL:-}" ]; then
-    printf 'zoxide: %s\n' "$FAKE_ZOXIDE_FAIL" >&2
+    printf 'zoxide: %s\n' "${FAKE_ZOXIDE_FAIL}" >&2
     exit 1
 fi
 
@@ -35,10 +35,16 @@ case ${1:-} in
     ;;
 add)
     shift
-    [ "${1:-}" = -- ] || { echo "fake-zoxide: add without --" >&2; exit 2; }
+    [ "${1:-}" = -- ] || {
+        echo "fake-zoxide: add without --" >&2
+        exit 2
+    }
     shift
     for dir in "$@"; do
-        [ -d "$dir" ] || { echo "zoxide: not a directory: $dir" >&2; exit 1; }
+        [ -d "${dir}" ] || {
+            echo "zoxide: not a directory: ${dir}" >&2
+            exit 1
+        }
     done
     ;;
 query)
@@ -48,14 +54,24 @@ query)
         case $1 in
         --list | --score) ;;
         --exclude) shift ;;
-        --) seen_separator=yes; shift; break ;;
-        *) echo "fake-zoxide: unexpected query argument $1" >&2; exit 2 ;;
+        --)
+            seen_separator=yes
+            shift
+            break
+            ;;
+        *)
+            echo "fake-zoxide: unexpected query argument $1" >&2
+            exit 2
+            ;;
         esac
         shift
     done
-    [ $seen_separator = yes ] || { echo "fake-zoxide: query without --" >&2; exit 2; }
+    [ "${seen_separator}" = yes ] || {
+        echo "fake-zoxide: query without --" >&2
+        exit 2
+    }
     if [ -n "${FAKE_ZOXIDE_OUTPUT:-}" ]; then
-        cat "$FAKE_ZOXIDE_OUTPUT"
+        cat "${FAKE_ZOXIDE_OUTPUT}"
     fi
     ;;
 *)

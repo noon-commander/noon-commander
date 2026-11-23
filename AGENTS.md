@@ -239,7 +239,6 @@ Paths come from `crates/noc-config/src/paths.rs`.
   in sync with the flags we pass.
 - zoxide: `crates/noc-tools/tests/support/fake-zoxide`. Never touch the real database.
 - Never touch the real `~/.ssh` or XDG directories; use temporary directories.
-- Shell scripts: POSIX `sh`, pass ShellCheck (`just sh`).
 
 ## Workflow
 

@@ -13,17 +13,34 @@ default:
 # Format the code.
 format:
     RUST_LOG=warn taplo fmt
+    {{ shell(_shell_scripts, 'shfmt --write') }}
     cargo fmt --all
 
 # Check formatting without changing files.
 format-check:
     RUST_LOG=warn taplo fmt --check
+    {{ shell(_shell_scripts, 'shfmt --diff') }}
     cargo fmt --all --check
 
+_shell_scripts := '''
+    shebang='^#!.*[/[:space:]](sh|bash|dash|ksh)([[:space:]]|$)'
+    scripts=()
+    while IFS= read -r -d '' file; do
+        [[ -f $file ]] || continue
+        IFS= read -r line < "$file" || true
+        [[ $line =~ $shebang ]] && scripts+=("$file")
+    done < <(git ls-files -z)
+    if [[ -n ${scripts[*]-} ]]; then
+        printf '%s' "$1"
+        printf ' %q' "${scripts[@]}"
+    fi
+'''
+
 # Lint the code.
-lint: sh gha glyphs
+lint: gha glyphs
     markdownlint-cli2
     RUST_LOG=warn taplo lint
+    {{ shell(_shell_scripts, 'shellcheck') }}
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo shear --locked
 
@@ -54,7 +71,7 @@ build *args:
 
 # Build the optimized noc binary into target/release/noc; extra arguments go to cargo
 release *args:
-    cargo build --release --locked -p noc {{ args }}
+    cargo build --release --locked --package noc {{ args }}
 
 # Commit the version bump, sign a tag for it, and push both, which starts release.yml (ADR 0014)
 [confirm("Commit, tag, and push this release?")]
@@ -111,17 +128,6 @@ outdated:
 gha:
     actionlint
     zizmor --offline --persona=pedantic --quiet .github/
-
-# Lint the shell scripts, found by their shebang (needs shellcheck)
-sh:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    scripts=()
-    while IFS= read -r -d '' file; do
-        IFS= read -r line < "$file" || true
-        [[ $line =~ ^\#!.*[/[:space:]](sh|bash|dash)$ ]] && scripts+=("$file")
-    done < <(git ls-files -z)
-    shellcheck "${scripts[@]}"
 
 # Fail if code that draws writes a special character itself, not from crates/noc/src/tui/glyphs.rs
 # (needs perl)

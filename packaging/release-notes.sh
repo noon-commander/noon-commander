@@ -17,7 +17,7 @@ fi
 version=$1
 changelog=${2:-CHANGELOG.md}
 
-if ! awk -v version="$version" '
+if ! awk -v version="${version}" '
     # Blank lines are held back, so that none starts or ends the notes and runs of them become one.
     function emit(text) {
         if (blank && printed) print ""
@@ -40,7 +40,7 @@ if ! awk -v version="$version" '
     line ~ /(\\|  )$/ { emit(line); line = $0; next }
     { sub(/^[[:space:]]+/, ""); line = line " " $0 }
     END { flush(); if (!printed) exit 1 }
-' "$changelog"; then
-    echo "$changelog has no section for $version" >&2
+' "${changelog}"; then
+    echo "${changelog} has no section for ${version}" >&2
     exit 1
 fi

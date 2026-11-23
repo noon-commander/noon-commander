@@ -236,7 +236,6 @@ The project's tasks live in the [`justfile`](justfile)
 | `just msrv` | Build with the oldest supported Rust (needs rustup) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
 | `just gha` | Lint the GitHub Actions workflows and audit their security, pedantically (needs actionlint, zizmor) |
-| `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 | `just demo` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |
 

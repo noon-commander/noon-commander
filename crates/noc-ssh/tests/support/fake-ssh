@@ -27,47 +27,57 @@ if [ -n "${FAKE_SSH_LOG:-}" ]; then
     # printf of macOS's /bin/sh writes line by line, while cat copies the here-document whole.
     record=
     for arg in "$@"; do
-        record="$record$arg
+        record="${record}${arg}
 "
     done
-    cat >>"$FAKE_SSH_LOG" <<EOF
+    cat >>"${FAKE_SSH_LOG}" <<EOF
 ${record}--end--
 EOF
 fi
 if [ -n "${FAKE_SSH_PIDS:-}" ]; then
-    echo $$ >>"$FAKE_SSH_PIDS"
+    echo $$ >>"${FAKE_SSH_PIDS}"
 fi
 
 mode=session sock='' control='' subsystem=no tty=''
 while [ $# -gt 0 ]; do
     case $1 in
-        -V)
-            printf '%s\n' "${FAKE_SSH_BANNER:-OpenSSH_9.9p1, FakeSSL 1.0}" >&2
-            exit 0
-            ;;
-        -G) mode=resolve ;;
-        -M) mode=master ;;
-        -s) subsystem=yes ;;
-        -S) shift; sock=$1 ;;
-        -O) shift; control=$1 ;;
-        -o)
-            shift
-            case $1 in
-                # Like ssh, the first value counts.
-                RequestTTY=*) [ -n "$tty" ] || tty=${1#RequestTTY=} ;;
-            esac
-            ;;
-        -[BbcDEeFIiJLlmPpQRWw]) shift ;;
-        --) shift; break ;;
-        -*) ;;
-        *) break ;;
+    -V)
+        printf '%s\n' "${FAKE_SSH_BANNER:-OpenSSH_9.9p1, FakeSSL 1.0}" >&2
+        exit 0
+        ;;
+    -G) mode=resolve ;;
+    -M) mode=master ;;
+    -s) subsystem=yes ;;
+    -S)
+        shift
+        sock=$1
+        ;;
+    -O)
+        shift
+        control=$1
+        ;;
+    -o)
+        shift
+        case $1 in
+        # Like ssh, the first value counts.
+        RequestTTY=*) [ -n "${tty}" ] || tty=${1#RequestTTY=} ;;
+        *) ;;
+        esac
+        ;;
+    -[BbcDEeFIiJLlmPpQRWw]) shift ;;
+    --)
+        shift
+        break
+        ;;
+    -*) ;;
+    *) break ;;
     esac
     shift
 done
 dest=${1:-}
 
-if [ $# -lt 2 ] || [ "$subsystem" = yes ] || [ "$mode" != session ] || [ -n "$control" ] ||
-    [ "$tty" = no ]; then
+if [ $# -lt 2 ] || [ "${subsystem}" = yes ] || [ "${mode}" != session ] || [ -n "${control}" ] ||
+    [ "${tty}" = no ]; then
     if (: </dev/tty) 2>/dev/null; then
         echo "fake-ssh: started with a controlling terminal" >&2
         exit 3
@@ -76,13 +86,13 @@ fi
 
 authenticate() {
     if [ -n "${FAKE_SSH_GREETING:-}" ]; then
-        printf '%s\n' "$FAKE_SSH_GREETING" >&2
+        printf '%s\n' "${FAKE_SSH_GREETING}" >&2
     fi
     if [ -n "${FAKE_SSH_HANG:-}" ]; then
         exec sleep 600
     fi
     if [ -n "${FAKE_SSH_FAIL:-}" ]; then
-        printf '%s\n' "$FAKE_SSH_FAIL" >&2
+        printf '%s\n' "${FAKE_SSH_FAIL}" >&2
         exit 255
     fi
     if [ -n "${FAKE_SSH_PASSWORD:-}" ]; then
@@ -91,68 +101,71 @@ authenticate() {
             echo "Permission denied (password)." >&2
             exit 255
         fi
-        if ! answer=$("$SSH_ASKPASS" "$dest's password: ") || [ "$answer" != "$FAKE_SSH_PASSWORD" ]; then
+        if ! answer=$("${SSH_ASKPASS}" "${dest}'s password: ") || [ "${answer}" != "${FAKE_SSH_PASSWORD}" ]; then
             echo "Permission denied (password)." >&2
             exit 255
         fi
     fi
 }
 
-case $control in
-    check)
-        if [ -e "$sock" ]; then
-            echo "Master running (pid=$(cat "$sock"))" >&2
-            exit 0
-        fi
-        echo "Control socket connect($sock): No such file or directory" >&2
-        exit 255
-        ;;
-    exit)
-        if [ -e "$sock" ]; then
-            kill "$(cat "$sock")" 2>/dev/null || true
-            echo "Exit request sent." >&2
-            exit 0
-        fi
-        echo "Control socket connect($sock): No such file or directory" >&2
-        exit 255
-        ;;
-esac
-
-case $mode in
-    resolve)
-        printf 'host %s\nuser %s\nhostname %s\nport %s\n' "$dest" "${FAKE_SSH_USER:-tester}" \
-            "${FAKE_SSH_HOSTNAME:-$dest.example}" "${FAKE_SSH_PORT:-22}"
+case ${control} in
+check)
+    if [ -e "${sock}" ]; then
+        echo "Master running (pid=$(cat "${sock}" || :))" >&2
         exit 0
-        ;;
-    master)
-        authenticate
-        trap 'rm -f "$sock" "$sock.new"; [ -z "${FAKE_SSH_LAST_WORDS:-}" ] || printf "%s\n" "$FAKE_SSH_LAST_WORDS" >&2; exit 0' TERM INT
-        # Whole once it is there, as a socket ssh binds: whoever sees it can read the pid.
-        echo $$ >"$sock.new"
-        mv -f "$sock.new" "$sock"
-        while :; do
-            sleep 1 &
-            wait $! || true
-        done
-        ;;
+    fi
+    echo "Control socket connect(${sock}): No such file or directory" >&2
+    exit 255
+    ;;
+exit)
+    if [ -e "${sock}" ]; then
+        kill "$(cat "${sock}")" 2>/dev/null || true
+        echo "Exit request sent." >&2
+        exit 0
+    fi
+    echo "Control socket connect(${sock}): No such file or directory" >&2
+    exit 255
+    ;;
+*) ;;
 esac
 
-if [ "$subsystem" = yes ] && [ "${2:-}" = sftp ]; then
-    if [ -n "$sock" ]; then
-        if [ ! -e "$sock" ]; then
-            echo "Control socket connect($sock): No such file or directory" >&2
+case ${mode} in
+resolve)
+    printf 'host %s\nuser %s\nhostname %s\nport %s\n' "${dest}" "${FAKE_SSH_USER:-tester}" \
+        "${FAKE_SSH_HOSTNAME:-${dest}.example}" "${FAKE_SSH_PORT:-22}"
+    exit 0
+    ;;
+master)
+    authenticate
+    # shellcheck disable=SC2154
+    trap 'rm -f "$sock" "$sock.new"; [ -z "${FAKE_SSH_LAST_WORDS:-}" ] || printf "%s\n" "${FAKE_SSH_LAST_WORDS}" >&2; exit 0' TERM INT
+    # Whole once it is there, as a socket ssh binds: whoever sees it can read the pid.
+    echo $$ >"${sock}.new"
+    mv -f "${sock}.new" "${sock}"
+    while :; do
+        sleep 1 &
+        wait $! || true
+    done
+    ;;
+*) ;;
+esac
+
+if [ "${subsystem}" = yes ] && [ "${2:-}" = sftp ]; then
+    if [ -n "${sock}" ]; then
+        if [ ! -e "${sock}" ]; then
+            echo "Control socket connect(${sock}): No such file or directory" >&2
             exit 255
         fi
     else
         authenticate
     fi
-    exec "${FAKE_SSH_SFTP_SERVER:-/usr/libexec/sftp-server}" -d "${FAKE_SSH_ROOT:-$HOME}"
+    exec "${FAKE_SSH_SFTP_SERVER:-/usr/libexec/sftp-server}" -d "${FAKE_SSH_ROOT:-${HOME}}"
 fi
 
-if [ "$subsystem" = no ] && [ $# -ge 2 ]; then
-    if [ -n "$sock" ]; then
-        if [ ! -e "$sock" ]; then
-            echo "Control socket connect($sock): No such file or directory" >&2
+if [ "${subsystem}" = no ] && [ $# -ge 2 ]; then
+    if [ -n "${sock}" ]; then
+        if [ ! -e "${sock}" ]; then
+            echo "Control socket connect(${sock}): No such file or directory" >&2
             exit 255
         fi
     else
@@ -160,7 +173,7 @@ if [ "$subsystem" = no ] && [ $# -ge 2 ]; then
     fi
     # Like sshd: the command, its words joined by spaces, runs in the user's shell at home.
     shift
-    cd "${FAKE_SSH_ROOT:-$HOME}"
+    cd "${FAKE_SSH_ROOT:-${HOME}}"
     exec /bin/sh -c "$*"
 fi
 

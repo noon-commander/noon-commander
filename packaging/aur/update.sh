@@ -23,12 +23,13 @@ fi
 package=$1
 dir=$2
 here=$(cd "$(dirname "$0")" && pwd)
-template=$here/$package/PKGBUILD.in
-case $package in
-    '' | .* | */*) template= ;;
+template=${here}/${package}/PKGBUILD.in
+case "${package}" in
+'' | .* | */*) template= ;;
+*) ;;
 esac
-if [ -z "$template" ] || [ ! -f "$template" ]; then
-    echo "No template for $package in $here" >&2
+if [ -z "${template}" ] || [ ! -f "${template}" ]; then
+    echo "No template for ${package} in ${here}" >&2
     exit 1
 fi
 
@@ -36,45 +37,45 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 for name in VERSION REPOSITORY SHA256_SOURCE SHA256_X86_64 SHA256_AARCH64; do
-    if grep -q "@$name@" "$template" && [ -z "$(printenv "$name" || true)" ]; then
-        echo "$name is not set, and the template of $package needs it" >&2
+    if grep -q "@${name}@" "${template}" && [ -z "$(printenv "${name}" || true)" ]; then
+        echo "${name} is not set, and the template of ${package} needs it" >&2
         exit 1
     fi
 done
 sed -e "s|@VERSION@|${VERSION-}|g" -e "s|@REPOSITORY@|${REPOSITORY-}|g" \
     -e "s|@SHA256_SOURCE@|${SHA256_SOURCE-}|g" -e "s|@SHA256_X86_64@|${SHA256_X86_64-}|g" \
-    -e "s|@SHA256_AARCH64@|${SHA256_AARCH64-}|g" "$template" >"$work/PKGBUILD"
-if grep -n '@[A-Z0-9_]*@' "$work/PKGBUILD" >&2; then
-    echo "The PKGBUILD of $package has placeholders left" >&2
+    -e "s|@SHA256_AARCH64@|${SHA256_AARCH64-}|g" "${template}" >"${work}/PKGBUILD"
+if grep -n '@[A-Z0-9_]*@' "${work}/PKGBUILD" >&2; then
+    echo "The PKGBUILD of ${package} has placeholders left" >&2
     exit 1
 fi
 
-git clone --quiet "https://aur.archlinux.org/$package.git" "$dir"
+git clone --quiet "https://aur.archlinux.org/${package}.git" "${dir}"
 
-if [ -f "$dir/PKGBUILD" ]; then
-    sed '/^pkgver=/d' "$dir/PKGBUILD" >"$work/old"
-    sed '/^pkgver=/d' "$work/PKGBUILD" >"$work/new"
-    if cmp -s "$work/old" "$work/new" && cmp -s "$dir/LICENSE" "$here/LICENSE"; then
-        echo "$package is up to date in the AUR"
+if [ -f "${dir}/PKGBUILD" ]; then
+    sed '/^pkgver=/d' "${dir}/PKGBUILD" >"${work}/old"
+    sed '/^pkgver=/d' "${work}/PKGBUILD" >"${work}/new"
+    if cmp -s "${work}/old" "${work}/new" && cmp -s "${dir}/LICENSE" "${here}/LICENSE"; then
+        echo "${package} is up to date in the AUR"
         exit 0
     fi
 fi
 
-mkdir "$work/build"
-cp "$work/PKGBUILD" "$work/build/"
-(cd "$work/build" && makepkg --cleanbuild --noconfirm --noprogressbar)
+mkdir "${work}/build"
+cp "${work}/PKGBUILD" "${work}/build/"
+(cd "${work}/build" && makepkg --cleanbuild --noconfirm --noprogressbar)
 
 # makepkg wrote the pkgver of a VCS package into its PKGBUILD.
-cp "$work/build/PKGBUILD" "$here/LICENSE" "$dir/"
-(cd "$dir" && makepkg --printsrcinfo >.SRCINFO)
-git -C "$dir" add PKGBUILD .SRCINFO LICENSE
-if git -C "$dir" diff --cached --quiet; then
-    echo "$package is up to date in the AUR"
+cp "${work}/build/PKGBUILD" "${here}/LICENSE" "${dir}/"
+(cd "${dir}" && makepkg --printsrcinfo >.SRCINFO)
+git -C "${dir}" add PKGBUILD .SRCINFO LICENSE
+if git -C "${dir}" diff --cached --quiet; then
+    echo "${package} is up to date in the AUR"
     exit 0
 fi
-pkgver=$(sed -n 's/^[[:space:]]*pkgver = //p' "$dir/.SRCINFO")
-pkgrel=$(sed -n 's/^[[:space:]]*pkgrel = //p' "$dir/.SRCINFO")
-version=$pkgver-$pkgrel
-git -C "$dir" -c user.name="$author_name" -c user.email="$author_email" commit --quiet \
-    -m "$package $version"
-echo "Committed $package $version"
+pkgver=$(sed -n 's/^[[:space:]]*pkgver = //p' "${dir}/.SRCINFO")
+pkgrel=$(sed -n 's/^[[:space:]]*pkgrel = //p' "${dir}/.SRCINFO")
+version=${pkgver}-${pkgrel}
+git -C "${dir}" -c user.name="${author_name}" -c user.email="${author_email}" commit --quiet \
+    -m "${package} ${version}"
+echo "Committed ${package} ${version}"

@@ -1,28 +1,53 @@
-set shell := ["bash", "-euo", "pipefail", "-c"]
+set shell := ["bash", "-ceuo", "pipefail"]
+set ignore-comments
 
+# >>> custom vars
 logo_svg := "assets/icons/logo.svg"
 msrv := `sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml`
+# <<< custom vars
 
-# Show available recipes
+# List available recipes.
 default:
-    @just --list
+    @just --list --unsorted
 
-# Format the code
+# Format the code.
 format:
+    RUST_LOG=warn taplo fmt
     cargo fmt --all
 
-# Fail if the code is not formatted, without changing it
+# Check formatting without changing files.
 format-check:
+    RUST_LOG=warn taplo fmt --check
     cargo fmt --all --check
 
-# Clippy; extra arguments go to cargo, as --locked in CI
-clippy *args:
-    cargo clippy --workspace --all-targets {{ args }} -- -D warnings
+# Lint the code.
+lint: sh gha glyphs
+    markdownlint-cli2
+    RUST_LOG=warn taplo lint
+    cargo clippy --workspace --all-targets --locked -- -D warnings
+    cargo shear --locked
 
-# Tests; extra arguments go to cargo
-test *args:
-    cargo test --workspace {{ args }}
+# Run the tests.
+test:
+    cargo test --workspace --locked
 
+# Everything that must pass before a commit.
+ci: format-check lint test deny
+
+# Build distribution.
+dist:
+    rm -rf target/dist
+    # >>> custom dist
+    # <<< custom dist
+
+# Remove caches, build artifacts and generated files.
+clean:
+    rm -rf target
+    find . -type f -name .DS_Store -delete
+    # >>> custom clean
+    # <<< custom clean
+
+# >>> custom
 # Build the workspace for development; extra arguments go to cargo
 build *args:
     cargo build --workspace {{ args }}
@@ -77,23 +102,6 @@ snap:
 snap-stale:
     cargo insta test --workspace --unreferenced=reject
 
-# Lint the Markdown files with .markdownlint.yaml (needs markdownlint-cli2)
-md:
-    markdownlint-cli2 "**/*.md" "#target"
-
-# Find dependencies no crate uses, in the crates and the workspace (needs cargo-shear)
-unused:
-    cargo shear
-
-# Check the TOML files: valid, and formatted as taplo.toml says (needs taplo)
-toml:
-    RUST_LOG=warn taplo lint
-    RUST_LOG=warn taplo fmt --check
-
-# Format the TOML files, keeping their comments (needs taplo)
-toml-format:
-    RUST_LOG=warn taplo fmt
-
 # Show newer dependency versions for Cargo.toml and Cargo.lock; changes no files (needs cargo-edit)
 outdated:
     cargo upgrade --dry-run --incompatible allow
@@ -143,12 +151,6 @@ msrv:
     @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }
     rustup run {{msrv}} cargo check --workspace --all-targets --all-features --locked
 
-# Everything that must pass before work is done; changes no files
-ci: format-check clippy test deny
-
-# The fast checks of everything but the Rust code; changes no files
-lint: md sh toml gha unused glyphs
-
 # check, lint, and stale snapshots; changes no files
 all: ci lint snap-stale
 
@@ -164,3 +166,4 @@ logo: (_logo-png "github" "512")
 
 _logo-png name size:
     resvg --width {{size}} --height {{size}} {{logo_svg}} assets/icons/logo-{{name}}.png
+# <<< custom

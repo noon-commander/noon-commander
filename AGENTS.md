@@ -41,9 +41,6 @@ just run     # run noc from source; arguments go to noc
 ```
 
 - Done means `just ci` passes. It changes no files.
-- Iterate on one crate with `cargo test -p <crate> [name]` and
-  `cargo clippy -p <crate> --all-targets`. `just test`/`just clippy` always build the whole
-  workspace.
 - Other recipes: `just --list`. `just msrv` needs rustup; `just logo` needs `resvg`.
 - CI runs `justfile` recipes (ADR 0013). Add a new check as a recipe and call it from `ci.yml`;
   never put raw commands in `ci.yml`.
@@ -124,9 +121,7 @@ Paths come from `crates/noc-config/src/paths.rs`.
   a local `#[allow(unsafe_code)]` and a `// SAFETY:` comment.
 - Prefer `pub(crate)`; `unreachable_pub` is on.
 - Dependencies: declare versions once in root `[workspace.dependencies]`; crates use
-  `name.workspace = true`. Every crate has `[lints] workspace = true`. Remove unused ones from
-  both places (`just unused`).
-- TOML is formatted by taplo: `just toml` checks, `just toml-format` formats.
+  `name.workspace = true`. Every crate has `[lints] workspace = true`.
 - Comments explain why, not what. Keep them sparse.
 
 ## UI conventions
@@ -262,4 +257,3 @@ Paths come from `crates/noc-config/src/paths.rs`.
 - Keep `docs/architecture.md`, `docs/roadmap.md`, `docs/keymap-compare.md`,
   `docs/keymap-non-vim.md` in sync with code.
 - User-visible changes go in `CHANGELOG.md` under `Unreleased`.
-- Markdown follows `.markdownlint.yaml` (100-character lines); `just md` checks it.

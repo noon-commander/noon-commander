@@ -1,0 +1,7 @@
+gitignore: true
+noBanner: true
+globs:
+  - "**/*.md"
+
+# >>> custom
+# <<< custom

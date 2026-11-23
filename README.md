@@ -231,14 +231,9 @@ The project's tasks live in the [`justfile`](justfile)
 | `just release` | Build the optimized binary into `target/release/noc` |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
 | `just release-tag X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
-| `just test` | Tests |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just msrv` | Build with the oldest supported Rust (needs rustup) |
-| `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
-| `just unused` | Find dependencies that no crate uses (needs cargo-shear) |
-| `just toml` | Check that the TOML files are valid and formatted (needs taplo) |
-| `just toml-format` | Format the TOML files, keeping their comments (needs taplo) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
 | `just gha` | Lint the GitHub Actions workflows and audit their security, pedantically (needs actionlint, zizmor) |
 | `just sh` | Lint the shell scripts, such as the fake `ssh` of the tests (needs shellcheck) |

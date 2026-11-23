@@ -1,0 +1,13 @@
+exclude = [
+    "**/target/**",
+    # >>> custom exclude
+    # <<< custom exclude
+]
+
+[formatting]
+indent_string = "    "
+column_width = 100
+array_auto_collapse = false
+
+# >>> custom
+# <<< custom

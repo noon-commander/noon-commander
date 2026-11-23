@@ -153,7 +153,7 @@ cargo build --release
 ./target/release/noc
 ```
 
-With [just](https://github.com/casey/just), `just release` builds the same binary and `just run`
+With [just](https://github.com/casey/just), `just build-release` builds the same binary and `just run`
 starts a development build; arguments after it go to `noc`, as in `just run --version`.
 
 `noc --version` prints the version, as in `noc 0.2.0`. `noc debug version` adds what a bug
@@ -225,17 +225,12 @@ The project's tasks live in the [`justfile`](justfile)
 | `just` | List the tasks |
 | `just ci` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
 | `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
-| `just all` | `ci`, `lint`, and `snap-stale`: every check there is |
-| `just format` | Format the code |
-| `just build` | Build the workspace for development |
-| `just release` | Build the optimized binary into `target/release/noc` |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
 | `just release-tag X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just msrv` | Build with the oldest supported Rust (needs rustup) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
-| `just gha` | Lint the GitHub Actions workflows and audit their security, pedantically (needs actionlint, zizmor) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 | `just demo` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |
 

@@ -35,8 +35,6 @@ Instructions for AI coding agents and humans working on Noon Commander.
 ```sh
 just ci      # format-check, clippy, tests, cargo-deny
 just lint    # Markdown, shell scripts, TOML, workflows, unused dependencies
-just all     # ci + lint + stale snapshots; run before committing
-just format  # format the code
 just run     # run noc from source; arguments go to noc
 ```
 

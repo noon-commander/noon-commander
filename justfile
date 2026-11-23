@@ -10,18 +10,6 @@ msrv := `sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml`
 default:
     @just --list --unsorted
 
-# Format the code.
-format:
-    RUST_LOG=warn taplo fmt
-    {{ shell(_shell_scripts, 'shfmt --write') }}
-    cargo fmt --all
-
-# Check formatting without changing files.
-format-check:
-    RUST_LOG=warn taplo fmt --check
-    {{ shell(_shell_scripts, 'shfmt --diff') }}
-    cargo fmt --all --check
-
 _shell_scripts := '''
     shebang='^#!.*[/[:space:]](sh|bash|dash|ksh)([[:space:]]|$)'
     scripts=()
@@ -36,20 +24,57 @@ _shell_scripts := '''
     fi
 '''
 
-# Lint the code.
-lint: gha glyphs
+# Lint the code and check its formatting without changing files.
+lint: glyphs
     markdownlint-cli2
     RUST_LOG=warn taplo lint
+    RUST_LOG=warn taplo fmt --check
     {{ shell(_shell_scripts, 'shellcheck') }}
+    {{ shell(_shell_scripts, 'shfmt --diff') }}
+    actionlint
+    zizmor --offline --pedantic --quiet --strict-collection .
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo shear --locked
+    cargo fmt --all --check
+
+# Fix what lint finds, where a safe automatic fix exists.
+fix:
+    RUST_LOG=warn taplo fmt
+    {{ shell(_shell_scripts, 'shfmt --write') }}
+    zizmor --offline --pedantic --quiet --no-exit-codes --fix .
+    cargo fmt --all
 
 # Run the tests.
 test:
     cargo test --workspace --locked
 
 # Everything that must pass before a commit.
-ci: format-check lint test deny
+ci: lint test deny
+
+# Build the debug binaries.
+[positional-arguments]
+build *args:
+    cargo build --workspace --locked "${@}"
+
+# Build the release binaries.
+[positional-arguments]
+build-release *args:
+    cargo build --workspace --locked --release "${@}"
+
+# Run the binary, passing the arguments to it.
+[positional-arguments]
+run *args:
+    cargo run --locked -- "${@}"
+
+# Show outdated dependencies without changing files.
+outdated:
+    cargo upgrade --dry-run --incompatible allow
+    cargo update --dry-run --verbose
+
+# Upgrade the dependencies to the latest versions.
+upgrade:
+    cargo upgrade --incompatible allow
+    cargo update
 
 # Build distribution.
 dist:
@@ -65,14 +90,6 @@ clean:
     # <<< custom clean
 
 # >>> custom
-# Build the workspace for development; extra arguments go to cargo
-build *args:
-    cargo build --workspace {{ args }}
-
-# Build the optimized noc binary into target/release/noc; extra arguments go to cargo
-release *args:
-    cargo build --release --locked --package noc {{ args }}
-
 # Commit the version bump, sign a tag for it, and push both, which starts release.yml (ADR 0014)
 [confirm("Commit, tag, and push this release?")]
 release-tag version:
@@ -103,10 +120,6 @@ release-tag version:
 release-notes version:
     @packaging/release-notes.sh {{ quote(version) }}
 
-# Run noc from the sources; arguments go to noc
-run *args:
-    cargo run -p noc -- {{ args }}
-
 # License, advisory, and ban checks (needs cargo-deny)
 deny:
     cargo deny check
@@ -118,16 +131,6 @@ snap:
 # Fail if a snapshot file has no test left (needs cargo-insta)
 snap-stale:
     cargo insta test --workspace --unreferenced=reject
-
-# Show newer dependency versions for Cargo.toml and Cargo.lock; changes no files (needs cargo-edit)
-outdated:
-    cargo upgrade --dry-run --incompatible allow
-    cargo update --dry-run --verbose
-
-# Lint the GitHub Actions workflows and audit their security (needs actionlint and zizmor)
-gha:
-    actionlint
-    zizmor --offline --persona=pedantic --quiet .github/
 
 # Fail if code that draws writes a special character itself, not from crates/noc/src/tui/glyphs.rs
 # (needs perl)
@@ -156,9 +159,6 @@ glyphs:
 msrv:
     @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }
     rustup run {{msrv}} cargo check --workspace --all-targets --all-features --locked
-
-# check, lint, and stale snapshots; changes no files
-all: ci lint snap-stale
 
 # Take the screenshots of docs/demo/*.tape with made-up files and hosts (needs vhs, a Nerd Font)
 demo:

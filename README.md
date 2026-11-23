@@ -223,9 +223,9 @@ The project's tasks live in the [`justfile`](justfile)
 | Command | What it does |
 | --- | --- |
 | `just` | List the tasks |
-| `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
+| `just ci` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
 | `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
-| `just all` | `check`, `lint`, and `snap-stale`: every check there is |
+| `just all` | `ci`, `lint`, and `snap-stale`: every check there is |
 | `just format` | Format the code |
 | `just build` | Build the workspace for development |
 | `just release` | Build the optimized binary into `target/release/noc` |

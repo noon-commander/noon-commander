@@ -33,14 +33,14 @@ Instructions for AI coding agents and humans working on Noon Commander.
 ## Commands
 
 ```sh
-just check   # format-check, clippy, tests, cargo-deny
+just ci      # format-check, clippy, tests, cargo-deny
 just lint    # Markdown, shell scripts, TOML, workflows, unused dependencies
-just all     # check + lint + stale snapshots; run before committing
+just all     # ci + lint + stale snapshots; run before committing
 just format  # format the code
 just run     # run noc from source; arguments go to noc
 ```
 
-- Done means `just check` passes. It changes no files.
+- Done means `just ci` passes. It changes no files.
 - Iterate on one crate with `cargo test -p <crate> [name]` and
   `cargo clippy -p <crate> --all-targets`. `just test`/`just clippy` always build the whole
   workspace.

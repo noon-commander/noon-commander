@@ -15,7 +15,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Every check is a recipe of the justfile, so CI runs what `just check` and `just lint` run
+# Every check is a recipe of the justfile, so CI runs what `just ci` and `just lint` run
 # locally. Tools are built with `cargo install` at pinned versions; rust-cache keeps them in
 # ~/.cargo/bin between runs.
 env:

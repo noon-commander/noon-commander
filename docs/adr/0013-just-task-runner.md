@@ -18,16 +18,16 @@ renderer: a library in an `xtask` crate, or a command-line program.
 ## Decision
 
 - `just` runs the project's tasks from a `justfile` at the root: `build`, `release` (the
-  optimized `noc`, with `--locked`), `run`, `format`, `clippy`, `test`, `deny`, `check` (`format`,
+  optimized `noc`, with `--locked`), `run`, `format`, `clippy`, `test`, `deny`, `ci` (`format`,
   `clippy`, `test`, and `deny`, with `cargo fmt --check`, so it changes no files), `lint` (the
-  checks below of everything but the Rust code), `all` (`check`, `lint`, and `snap-stale`),
+  checks below of everything but the Rust code), `all` (`ci`, `lint`, and `snap-stale`),
   `msrv`, `md` (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked
   script with a `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review
   the changed UI snapshots, find the ones no test uses), `unused` (cargo-shear: dependencies no
   crate uses, also in
   `[workspace.dependencies]`), `toml` and `toml-format` (taplo), `gha` (actionlint and
   zizmor on the workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
-  `cargo update --dry-run` for `Cargo.lock`), and `logo`. `msrv` is not part of `check`: it
+  `cargo update --dry-run` for `Cargo.lock`), and `logo`. `msrv` is not part of `ci`: it
   needs rustup and the oldest supported toolchain, which a Homebrew Rust lacks; CI runs it in a
   job of its own. `make` brings tabs, `.PHONY`, and an old GNU make on macOS; `cargo-make` is
   heavy for a handful of commands; an `xtask` crate would wrap each cargo command in Rust code.
@@ -37,7 +37,7 @@ renderer: a library in an `xtask` crate, or a command-line program.
   Rust is installed with the runner's own rustup rather than an action, and matrix values reach
   commands through `env:`, never as `${{ }}` inside `run:`. `just gha` runs zizmor as
   `pedantic`, so these code smells fail it too.
-- CI runs the recipes of the `justfile`, so it checks what `just check` and `just lint` check
+- CI runs the recipes of the `justfile`, so it checks what `just ci` and `just lint` check
   locally. Its jobs stay apart to run in parallel: rustfmt, clippy and tests per feature set
   (`clippy-with` and `test-with`, with `--locked`), the release build, MSRV, cargo-deny, and
   lint. The tools are built with `cargo install` at versions pinned in `ci.yml`, and

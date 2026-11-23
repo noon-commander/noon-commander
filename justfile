@@ -144,13 +144,13 @@ msrv:
     rustup run {{msrv}} cargo check --workspace --all-targets --all-features --locked
 
 # Everything that must pass before work is done; changes no files
-check: format-check clippy test deny
+ci: format-check clippy test deny
 
 # The fast checks of everything but the Rust code; changes no files
 lint: md sh toml gha unused glyphs
 
 # check, lint, and stale snapshots; changes no files
-all: check lint snap-stale
+all: ci lint snap-stale
 
 # Take the screenshots of docs/demo/*.tape with made-up files and hosts (needs vhs, a Nerd Font)
 demo:

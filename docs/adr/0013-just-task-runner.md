@@ -23,8 +23,8 @@ renderer: a library in an `xtask` crate, or a command-line program.
   checks below of everything but the Rust code), `all` (`check`, `lint`, and `snap-stale`),
   `msrv`, `md` (markdownlint-cli2 with `.markdownlint.yaml`), `sh` (ShellCheck on every tracked
   script with a `sh`, `bash`, or `dash` shebang), `snap` and `snap-stale` (cargo-insta: review
-  the changed UI snapshots, find the ones no test uses), `typos` (spelling, with exceptions in
-  `typos.toml`), `unused` (cargo-shear: dependencies no crate uses, also in
+  the changed UI snapshots, find the ones no test uses), `unused` (cargo-shear: dependencies no
+  crate uses, also in
   `[workspace.dependencies]`), `toml` and `toml-fmt` (taplo), `gha` (actionlint and
   zizmor on the workflows), `outdated` (`cargo upgrade --dry-run` from cargo-edit for `Cargo.toml`,
   `cargo update --dry-run` for `Cargo.lock`), and `logo`. `msrv` is not part of `check`: it

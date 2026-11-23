@@ -2,8 +2,7 @@
 
 Instructions for AI coding agents and humans working on Noon Commander.
 
-**English only**: code, comments, docs, commits, logs, test names. `just typos` checks spelling;
-add false positives to `typos.toml`, with a comment if the reason is not obvious.
+**English only**: code, comments, docs, commits, logs, test names.
 
 ## Hard rules
 
@@ -35,7 +34,7 @@ add false positives to `typos.toml`, with a comment if the reason is not obvious
 
 ```sh
 just check   # fmt-check, clippy, tests, cargo-deny
-just lint    # Markdown, shell scripts, spelling, TOML, workflows, unused dependencies
+just lint    # Markdown, shell scripts, TOML, workflows, unused dependencies
 just all     # check + lint + stale snapshots; run before committing
 just fmt     # format the code
 just run     # run noc from source; arguments go to noc

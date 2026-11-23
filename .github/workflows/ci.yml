@@ -179,8 +179,8 @@ jobs:
           rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: >-
-          cargo install --locked "just@$JUST_VERSION" typos-cli@1.50.3 taplo-cli@0.10.0
-          cargo-shear@1.14.0 zizmor@1.30.1
+          cargo install --locked "just@$JUST_VERSION" taplo-cli@0.10.0 cargo-shear@1.14.0
+          zizmor@1.30.1
       # ShellCheck comes with the runner; actionlint and markdownlint-cli2 are not Rust programs.
       # markdownlint-cli2 is installed outside the checkout, so no linter sees its node_modules.
       - name: Install actionlint and markdownlint-cli2

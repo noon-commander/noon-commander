@@ -124,7 +124,6 @@ Homebrew sets none.
   [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
   [ShellCheck](https://www.shellcheck.net) checks the shell scripts,
   [cargo-insta](https://insta.rs) reviews the UI snapshots,
-  [typos](https://github.com/crate-ci/typos) finds misspelled words,
   [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies,
   [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files,
   [actionlint](https://github.com/rhysd/actionlint) checks the GitHub Actions workflows,
@@ -134,11 +133,11 @@ Homebrew sets none.
   needs ttyd and ffmpeg, and a [Nerd Font](https://www.nerdfonts.com) for the icons):
 
   ```sh
-  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta typos-cli \
-      cargo-shear taplo actionlint zizmor cargo-edit vhs
+  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta cargo-shear \
+      taplo actionlint zizmor cargo-edit vhs
   # or, on any platform (ShellCheck, ttyd, and ffmpeg from your package manager):
-  cargo install just resvg cargo-deny cargo-insta typos-cli cargo-shear taplo-cli zizmor \
-      cargo-edit --locked
+  cargo install just resvg cargo-deny cargo-insta cargo-shear taplo-cli zizmor cargo-edit \
+      --locked
   npm install --global markdownlint-cli2
   go install github.com/rhysd/actionlint/cmd/actionlint@latest
   go install github.com/charmbracelet/vhs@latest
@@ -225,7 +224,7 @@ The project's tasks live in the [`justfile`](justfile)
 | --- | --- |
 | `just` | List the tasks |
 | `just check` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
-| `just lint` | Markdown, shell scripts, spelling, TOML, workflows, and unused dependencies |
+| `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
 | `just all` | `check`, `lint`, and `snap-stale`: every check there is |
 | `just fmt` | Format the code |
 | `just build` | Build the workspace for development |
@@ -237,7 +236,6 @@ The project's tasks live in the [`justfile`](justfile)
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just msrv` | Build with the oldest supported Rust (needs rustup) |
 | `just md` | Lint the Markdown files with `.markdownlint.yaml` (needs markdownlint-cli2) |
-| `just typos` | Find misspelled words in code and docs; exceptions go to `typos.toml` (needs typos) |
 | `just unused` | Find dependencies that no crate uses (needs cargo-shear) |
 | `just toml` | Check that the TOML files are valid and formatted (needs taplo) |
 | `just toml-fmt` | Format the TOML files, keeping their comments (needs taplo) |

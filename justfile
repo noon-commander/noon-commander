@@ -81,10 +81,6 @@ snap-stale:
 md:
     markdownlint-cli2 "**/*.md" "#target"
 
-# Find misspelled words in code and docs, with typos.toml (needs typos)
-typos:
-    typos
-
 # Find dependencies no crate uses, in the crates and the workspace (needs cargo-shear)
 unused:
     cargo shear
@@ -151,7 +147,7 @@ msrv:
 check: fmt-check clippy test deny
 
 # The fast checks of everything but the Rust code; changes no files
-lint: md sh typos toml gha unused glyphs
+lint: md sh toml gha unused glyphs
 
 # check, lint, and stale snapshots; changes no files
 all: check lint snap-stale

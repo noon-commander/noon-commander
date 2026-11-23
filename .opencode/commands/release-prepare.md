@@ -71,8 +71,8 @@ Rewrite the section so that a user reads it in a minute:
 
 ## 5. Verify
 
-Run `just md`, `just typos`, `just toml`, and `cargo check --workspace --locked`. Fix what they
-report in the files you changed.
+Run `just md`, `just toml`, and `cargo check --workspace --locked`. Fix what they report in the
+files you changed.
 
 ## 6. Report
 

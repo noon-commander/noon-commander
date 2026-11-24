@@ -148,8 +148,8 @@ cargo install --path crates/noc --locked
 cargo test --workspace
 ```
 
-The SFTP tests run against the local `sftp-server` over pipes, with no network and no real `ssh`. If it is not in a standard location (`/usr/libexec/sftp-server` on macOS, `/usr/lib/openssh/sftp-server` on Debian and Ubuntu, `/usr/libexec/openssh/sftp-server` on Fedora, `/usr/lib/ssh/sftp-server` on Arch), set `SFTP_SERVER` to its path; otherwise those tests are skipped. CI runs the tests on macOS and Linux. The full set of checks is listed in
-[AGENTS.md](AGENTS.md#commands).
+The SFTP tests run against the local `sftp-server` over pipes, with no network and no real `ssh`. If it is not in a standard location (`/usr/libexec/sftp-server` on macOS, `/usr/lib/openssh/sftp-server` on Debian and Ubuntu, `/usr/libexec/openssh/sftp-server` on Fedora, `/usr/lib/ssh/sftp-server` on Arch), set `SFTP_SERVER` to its path; otherwise those tests are skipped. CI runs the tests on macOS and Linux. The full set of checks is the `ci` recipe of the
+[`justfile`](justfile).
 
 ### Tasks
 

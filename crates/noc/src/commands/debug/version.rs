@@ -10,11 +10,12 @@ use std::time::{Duration, Instant};
 
 use noc_locale::Formats;
 use noc_tools::editor::Editor;
-use rustix::termios::{OptionalActions, Termios, tcgetattr, tcgetpgrp, tcsetattr};
+use rustix::termios::{Termios, tcgetpgrp};
 
 use crate::about::{
     Build, Detected, Fact, Keyboard, Report, System, Terminal, editor_command, formats_text, known,
 };
+use crate::tty::changed_modes;
 
 /// Prints the report, with what zoxide, ripgrep, and fd said they are. Blocks while the
 /// terminal is asked.
@@ -102,7 +103,7 @@ impl Answers {
 
 /// Writes [`QUERY`] and reads the answers, in raw mode so that they are not echoed.
 fn ask(tty: &File) -> io::Result<Vec<u8>> {
-    let _raw = Raw::new(tty)?;
+    let _raw = changed_modes(tty, Termios::make_raw)?;
     rustix::io::ioctl_fionbio(tty, true)?;
     let (mut writer, mut reader) = (tty, tty);
     writer.write_all(QUERY)?;
@@ -119,28 +120,6 @@ fn ask(tty: &File) -> io::Result<Vec<u8>> {
         }
     }
     Ok(reply)
-}
-
-/// Raw mode on the terminal until dropped.
-struct Raw<'a> {
-    tty: &'a File,
-    saved: Termios,
-}
-
-impl<'a> Raw<'a> {
-    fn new(tty: &'a File) -> io::Result<Self> {
-        let saved = tcgetattr(tty)?;
-        let mut raw = saved.clone();
-        raw.make_raw();
-        tcsetattr(tty, OptionalActions::Now, &raw)?;
-        Ok(Self { tty, saved })
-    }
-}
-
-impl Drop for Raw<'_> {
-    fn drop(&mut self) {
-        let _ = tcsetattr(self.tty, OptionalActions::Now, &self.saved);
-    }
 }
 
 /// Whether `reply` has `ESC [ ? params end`, the form of the keyboard flags and of the device

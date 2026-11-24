@@ -5,6 +5,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read as _, Write as _};
+use std::mem::DropGuard;
 use std::time::Duration;
 
 use rustix::termios::{LocalModes, OptionalActions, Termios, tcgetattr, tcsetattr};
@@ -41,7 +42,9 @@ impl Tty {
         secret: bool,
     ) -> io::Result<Zeroizing<String>> {
         let echo_off = if secret {
-            Some(EchoOff::new(&self.reader)?)
+            Some(changed_modes(&self.reader, |modes| {
+                modes.local_modes.remove(LocalModes::ECHO);
+            })?)
         } else {
             None
         };
@@ -84,24 +87,17 @@ impl Tty {
     }
 }
 
-/// Turns terminal echo off until dropped.
-struct EchoOff<'a> {
-    file: &'a File,
-    saved: Termios,
-}
-
-impl<'a> EchoOff<'a> {
-    fn new(file: &'a File) -> io::Result<Self> {
-        let saved = tcgetattr(file)?;
-        let mut quiet = saved.clone();
-        quiet.local_modes.remove(LocalModes::ECHO);
-        tcsetattr(file, OptionalActions::Now, &quiet)?;
-        Ok(Self { file, saved })
-    }
-}
-
-impl Drop for EchoOff<'_> {
-    fn drop(&mut self) {
-        let _ = tcsetattr(self.file, OptionalActions::Now, &self.saved);
-    }
+/// Sets the modes of the terminal `file` as `change` makes them, until the guard is dropped,
+/// which puts back those it had.
+pub(crate) fn changed_modes(
+    file: &File,
+    change: impl FnOnce(&mut Termios),
+) -> io::Result<DropGuard<Termios, impl FnOnce(Termios)>> {
+    let saved = tcgetattr(file)?;
+    let mut changed = saved.clone();
+    change(&mut changed);
+    tcsetattr(file, OptionalActions::Now, &changed)?;
+    Ok(DropGuard::new(saved, move |saved| {
+        let _ = tcsetattr(file, OptionalActions::Now, &saved);
+    }))
 }

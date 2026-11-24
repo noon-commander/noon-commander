@@ -65,26 +65,19 @@ file() {
     touch -t "$2" "$1"
 }
 
-# --- Hosts: alias, user, address, port, label ---------------------------------------------------
+# --- Hosts: alias, user, address, port ----------------------------------------------------------
 
-hosts='prod-web deploy web1.example.com 22 Production
-staging deploy staging.example.com 22 Staging
-nas backup nas.home.arpa 2222 Backups'
+hosts='prod-web deploy web1.example.com 22
+staging deploy staging.example.com 22
+nas backup nas.home.arpa 2222'
 
 {
     echo '# Made-up hosts for the Noon Commander demo; the fake ssh serves them.'
-    echo "${hosts}" | while read -r alias user address port _; do
+    echo "${hosts}" | while read -r alias user address port; do
         printf '\nHost %s\n    HostName %s\n    User %s\n' "${alias}" "${address}" "${user}"
         [ "${port}" = 22 ] || printf '    Port %s\n' "${port}"
     done
 } >"${dir}/ssh_config"
-
-{
-    echo '# Made-up hosts for the Noon Commander demo.'
-    echo "${hosts}" | while read -r alias _ _ _ label; do
-        printf '\n["%s"]\ntype = "sftp"\nlabel = "%s"\n' "${alias}" "${label}"
-    done
-} >"${home}/.config/noc/hosts.toml"
 
 # settings THEME: the settings of the demo with the colors THEME.
 settings() {
@@ -104,7 +97,7 @@ EOF
 }
 
 # noon-dark has colors of its own, so that the terminal's palette does not change them. The
-# other themes get a file each, for `noc --config`; hosts.toml next to it serves them all.
+# other themes get a file each, for `noc --config`.
 settings noon-dark >"${home}/.config/noc/config.toml"
 settings mc-classic >"${home}/.config/noc/mc-classic.toml"
 
@@ -119,7 +112,7 @@ settings mc-classic >"${home}/.config/noc/mc-classic.toml"
     echo '    [ "$arg" = -- ] && after=1'
     echo 'done'
     echo 'case $dest in'
-    echo "${hosts}" | while read -r alias user address port _; do
+    echo "${hosts}" | while read -r alias user address port; do
         printf '    %s) FAKE_SSH_USER=%s FAKE_SSH_HOSTNAME=%s FAKE_SSH_PORT=%s ;;\n' \
             "${alias}" "${user}" "${address}" "${port}"
     done

@@ -32,6 +32,8 @@ todo = "warn"
 unimplemented = "warn"
 expect_used = "warn"
 unwrap_used = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
 must_use_candidate = "allow"
 multiple_crate_versions = "allow"
 # >>> custom lints_clippy

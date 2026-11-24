@@ -5,7 +5,7 @@ Guidelines for AI coding agents working in this repository. Human contributors s
 ## Basic
 
 - **English only.** All code, comments, docstrings, commit messages, TODO notes, log messages, and test descriptions must be written in English. No exceptions.
-- **Generated files.** `.editorconfig`, `.gitignore`, `.markdownlint-cli2.yaml`, `.markdownlint.yaml`, `.shellcheckrc`, `.taplo.toml`, `AGENTS.md`, `deny.toml`, `justfile` are generated. Edit them only inside the `>>> custom` / `<<< custom` blocks; any change outside them is overwritten on the next sync.
+- **Generated files.** `.clippy.toml`, `.deny.toml`, `.editorconfig`, `.gitignore`, `.markdownlint-cli2.yaml`, `.markdownlint.yaml`, `.rustfmt.toml`, `.shellcheckrc`, `.taplo.toml`, `AGENTS.md`, `Cargo.toml`, `justfile`, `crates/*/Cargo.toml` are generated. Edit them only inside the `>>> custom` / `<<< custom` blocks; any change outside them is overwritten on the next sync.
   <!-- >>> custom basic -->
   <!-- <<< custom basic -->
 
@@ -13,7 +13,18 @@ Guidelines for AI coding agents working in this repository. Human contributors s
 
 - **Read `.editorconfig` before editing a file.** `.editorconfig` is the single source of truth for line width. The repo-root `.editorconfig` declares `max_line_length`. Code, comments, docstrings, Markdown prose, and any other text you write must respect this limit.
 - Do not hand-wrap narrower than `max_line_length`. Don't impose a personal 72/80-column habit on comments or docstrings. Let lines run up to the configured limit, then break.
+- Comments explain why, not what. Keep them sparse.
+- Edition and MSRV are `edition` and `rust-version` in the root `Cargo.toml`; don't use std APIs newer than the MSRV.
+- `clippy::pedantic` and `clippy::cargo` are on, and `just lint` fails on any warning. Fix a lint rather than silence it; when silencing is right, use `#[expect(lint, reason = "...")]` on the narrowest item.
+- No `unwrap`/`expect`/`dbg!`/`todo!`/`unimplemented!` outside tests; propagate errors with `?`.
+- Prefer `pub(crate)`; `unreachable_pub` is on.
+- Add a dependency's version to root `[workspace.dependencies]` first; `cargo add -p <crate> <name>` then writes `name.workspace = true`.
+- A new crate goes to `crates/<name>/`; start its `Cargo.toml` from an existing crate's, so its dependencies sit inside the custom block.
   <!-- >>> custom code_conventions -->
+- Errors: `thiserror` enums in libraries, `color-eyre` in the binary.
+- Logging: `tracing` only. Library crates never print; the terminal belongs to the TUI.
+- `unsafe` is denied. Sole planned exception: `setsid` in a `pre_exec` hook in `noc-ssh`, with a local `#[allow(unsafe_code)]` and a `// SAFETY:` comment.
+- No blocking I/O in async code; use `spawn_blocking`.
   <!-- <<< custom code_conventions -->
 
 ## Hard rules
@@ -33,7 +44,6 @@ Guidelines for AI coding agents working in this repository. Human contributors s
 - User-supplied ssh arguments must pass the validator (ADR 0004). Unknown flags are errors.
 - Never pass `StrictHostKeyChecking=no`. Never write to `~/.ssh/`.
 - Clipboard: write through OSC 52 only. Never read it. Never call `pbcopy`/`xclip` (ADR 0008).
-- No blocking I/O in async code; use `spawn_blocking`.
 - Remote operations are cancel-safe: dropping the future abandons them cleanly. Long work
   (connect, transfer, recursive walk) also takes a `CancellationToken`.
 - Secrets: `secrecy::SecretString` only. Never log, persist, or pass them via argv.
@@ -43,13 +53,6 @@ Guidelines for AI coding agents working in this repository. Human contributors s
 
 ## Commands
 
-```sh
-just ci      # format-check, clippy, tests, snapshots, cargo-deny
-just lint    # Markdown, shell scripts, TOML, workflows, unused dependencies
-just run     # run noc from source; arguments go to noc
-```
-
-- Done means `just ci` passes. It changes no files.
 - CI runs `justfile` recipes (ADR 0013). Add a new check as a recipe and call it from `ci.yml`;
   never put raw commands in `ci.yml`.
 - Releases are the exception: `release.yml` builds from a signed `v*` tag (ADR 0014). Package

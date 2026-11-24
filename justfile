@@ -131,8 +131,7 @@ test-snapshots-orphans:
     cargo insta test --workspace --check --unreferenced=reject
 
 # Take the screenshots of docs/demo/*.tape with made-up files and hosts.
-render-screenshots:
-    cargo build -p noc
+render-screenshots: build
     docs/demo/setup.sh
     mkdir -p assets/screenshots
     for tape in docs/demo/*.tape; do vhs "$tape"; done

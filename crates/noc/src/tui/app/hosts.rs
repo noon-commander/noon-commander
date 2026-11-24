@@ -50,10 +50,7 @@ impl App {
         let fields = [
             (fl!("host-start-dir"), text(&sftp.start_dir)),
             (fl!("host-other-dir"), text(&sftp.other_dir)),
-            (
-                fl!("host-run"),
-                sftp.run.as_ref().map(run_text).unwrap_or_default(),
-            ),
+            (fl!("host-run"), sftp.run.as_ref().map_or_default(run_text)),
         ];
         let checks = [(fl!("host-remember-dir"), sftp.remember_dir)];
         let mut buttons = vec![Button::Ok, Button::Cancel];

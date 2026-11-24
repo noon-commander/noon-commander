@@ -565,8 +565,7 @@ fn cursor_on(app: &mut App, name: &str) {
 fn field_text(app: &App) -> String {
     app.dialogs
         .front()
-        .map(|open| open.dialog.text().to_owned())
-        .unwrap_or_default()
+        .map_or_default(|open| open.dialog.text().to_owned())
 }
 
 #[test]

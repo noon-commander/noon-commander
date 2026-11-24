@@ -608,8 +608,7 @@ impl App {
             };
             typed = size
                 .and_then(|size| u64::try_from(size).ok())
-                .map(|size| noc_locale::current().integer(size))
-                .unwrap_or_default();
+                .map_or_default(|size| noc_locale::current().integer(size));
         }
         // As vim's, the last ten cells of what is typed.
         let typed: String = typed
@@ -680,7 +679,7 @@ impl App {
         let slots = Layout::horizontal([Constraint::Fill(1); 10]).split(area);
         let actions = self.fkey_actions();
         for (number, (slot, action)) in (1..).zip(slots.iter().zip(actions)) {
-            let label = action.map(|(_, label)| label).unwrap_or_default();
+            let label = action.map_or_default(|(_, label)| label);
             let number = number.to_string();
             // The label's color fills its slot, as in mc.
             let room = usize::from(slot.width).saturating_sub(number.len());

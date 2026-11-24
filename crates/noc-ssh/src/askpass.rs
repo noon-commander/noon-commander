@@ -420,8 +420,7 @@ impl Invocation {
         let token = std::env::var(ENV_TOKEN).ok()?;
         let prompt = std::env::args_os()
             .nth(1)
-            .map(|prompt| prompt.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|prompt| prompt.to_string_lossy().into_owned());
         Some(Self {
             socket: PathBuf::from(socket),
             token,

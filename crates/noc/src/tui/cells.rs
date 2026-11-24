@@ -90,8 +90,7 @@ pub(crate) fn short_size_width(formats: &Formats) -> usize {
 /// formats of the region; nothing when unknown. At most [`Formats::time_width`] cells.
 pub(crate) fn mtime(time: Option<SystemTime>, tz: &TimeZone, formats: &Formats) -> String {
     time.and_then(|time| Timestamp::try_from(time).ok())
-        .map(|stamp| formats.date_time(stamp.to_zoned(tz.clone()).datetime()))
-        .unwrap_or_default()
+        .map_or_default(|stamp| formats.date_time(stamp.to_zoned(tz.clone()).datetime()))
 }
 
 /// Fits `text` into exactly `width` cells: shorter text is padded; longer text loses its

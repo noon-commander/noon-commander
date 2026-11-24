@@ -69,8 +69,7 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), ConfigErr
 fn temporary_path(path: &Path) -> PathBuf {
     let name = path
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
+        .map_or_default(|name| name.to_string_lossy().into_owned());
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.subsec_nanos());

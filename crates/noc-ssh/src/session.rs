@@ -275,8 +275,7 @@ impl Session {
     pub fn stderr(&self) -> String {
         self.master
             .as_ref()
-            .map(|master| master.stderr.text())
-            .unwrap_or_default()
+            .map_or_default(|master| master.stderr.text())
     }
 
     /// Starts an `ssh -s … sftp` process. Must be called within a tokio runtime.

@@ -126,7 +126,7 @@ impl Decor {
             Some(FileKind::Socket) => Some(kinds.socket),
             Some(_) => None,
         };
-        (String::new(), marker.map(String::from).unwrap_or_default())
+        (String::new(), marker.map_or_default(String::from))
     }
 
     /// The icon or the marker of an entry's kind; with icons, devicons' for a file it knows.

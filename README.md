@@ -64,7 +64,7 @@ The [releases](https://github.com/noon-commander/noon-commander/releases) have t
 
 ## Development
 
-Needs Rust 1.88 or newer ([rustup](https://rustup.rs)), [just](https://github.com/casey/just), and a C toolchain for linking: `xcode-select --install` on macOS, `build-essential` (Debian, Ubuntu) or `base-devel` (Arch) on Linux.
+Needs Rust 1.100 or newer ([rustup](https://rustup.rs)), [just](https://github.com/casey/just), and a C toolchain for linking: `xcode-select --install` on macOS, `build-essential` (Debian, Ubuntu) or `base-devel` (Arch) on Linux.
 
 ```sh
 git clone https://github.com/noon-commander/noon-commander.git

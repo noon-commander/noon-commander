@@ -1254,8 +1254,7 @@ impl JobView {
         };
         let left = row
             .left
-            .map(|left| fl!("jobs-left", left = duration(left)))
-            .unwrap_or_default();
+            .map_or_default(|left| fl!("jobs-left", left = duration(left)));
         Summary {
             state,
             left,

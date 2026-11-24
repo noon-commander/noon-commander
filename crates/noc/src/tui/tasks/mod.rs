@@ -646,8 +646,7 @@ impl Tasks {
                 }
                 tokio::task::spawn_blocking(move || places::read_hosts(&context))
                     .await
-                    .map(|hosts| hosts.into_iter().map(|host| host.alias).collect())
-                    .unwrap_or_default()
+                    .map_or_default(|hosts| hosts.into_iter().map(|host| host.alias).collect())
             };
             let (entries, hosts) = tokio::join!(entries, aliases);
             let _ = done.send(Done::Names {

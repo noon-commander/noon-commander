@@ -8,7 +8,7 @@ members = ["crates/*"]
 # >>> custom package
 version = "0.3.2"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.100"
 description = "A Rust-based terminal file manager for macOS and Linux, focused on seamless local and SFTP file operations."
 repository = "https://github.com/noon-commander/noon-commander"
 keywords = ["file-manager", "terminal", "tui", "sftp", "midnight-commander"]

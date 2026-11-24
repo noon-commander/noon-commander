@@ -297,7 +297,7 @@ mod tests {
         let path = dir.join(name);
         let file = File::create(&path).unwrap();
         let hours = days_ago * 24 + u64::from(past);
-        file.set_modified(now - Duration::from_secs(hours * 60 * 60))
+        file.set_modified(now - Duration::from_hours(hours))
             .unwrap();
         path
     }

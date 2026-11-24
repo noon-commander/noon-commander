@@ -87,7 +87,7 @@ const AHEAD: f64 = 10.0;
 /// How far back the pauses between a job's reports tell how long it may go without one and
 /// still work: a link that sends a chunk every few seconds, a disk that takes its time to
 /// write what it holds back, every so often.
-const PAUSES: Duration = Duration::from_secs(60);
+const PAUSES: Duration = Duration::from_mins(1);
 
 /// The fewest entries that the share of the work skipped looks back over, beside [`RECENT`] of
 /// work: files of a few MiB over a link take seconds each, and a handful of them tell little.

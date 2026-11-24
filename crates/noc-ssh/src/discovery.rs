@@ -418,11 +418,7 @@ fn wildcard(component: &OsStr) -> Option<glob::Pattern> {
 }
 
 fn matching_entries(dir: &Path, wildcard: &glob::Pattern) -> Vec<PathBuf> {
-    let listed = if dir.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        dir
-    };
+    let listed = if dir.is_empty() { Path::new(".") } else { dir };
     let Ok(entries) = fs::read_dir(listed) else {
         return Vec::new();
     };

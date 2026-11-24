@@ -606,7 +606,7 @@ fn expand_tilde_in(path: &mut PathBuf, home: &Path) {
     let Ok(rest) = path.strip_prefix("~") else {
         return;
     };
-    let expanded = if rest.as_os_str().is_empty() {
+    let expanded = if rest.is_empty() {
         home.to_path_buf()
     } else {
         home.join(rest)

@@ -193,7 +193,7 @@ impl JumpMenu {
     /// A directory as the window shows it: under the home directory, from `~`.
     fn path_shown(&self, path: &Path) -> String {
         match path.strip_prefix(&self.home) {
-            Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+            Ok(rest) if rest.is_empty() => "~".to_owned(),
             Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
             Err(_) => cells::sanitize(path.as_os_str().as_bytes()),
         }

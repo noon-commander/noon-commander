@@ -658,7 +658,7 @@ impl Panel {
                     (Location::Local(path), Location::Local(current)) => path
                         .strip_prefix(current)
                         .ok()
-                        .filter(|relative| !relative.as_os_str().is_empty())
+                        .filter(|relative| !relative.is_empty())
                         .map(|relative| cells::sanitize(relative.as_os_str().as_bytes())),
                     _ => None,
                 };
@@ -1369,7 +1369,7 @@ pub(crate) fn home_text(path: &Path, home: &Path) -> String {
     match path.strip_prefix(home) {
         // A home directory of `/` would put `~` before every path.
         _ if home.parent().is_none() => cells::sanitize(path.as_os_str().as_bytes()),
-        Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+        Ok(rest) if rest.is_empty() => "~".to_owned(),
         Ok(rest) => format!("~/{}", cells::sanitize(rest.as_os_str().as_bytes())),
         Err(_) => cells::sanitize(path.as_os_str().as_bytes()),
     }

@@ -233,7 +233,7 @@ impl Vfs for LocalFs {
 
 /// The path to pass to the OS, which rejects the empty path.
 fn os_path(path: &Path) -> &Path {
-    if path.as_os_str().is_empty() {
+    if path.is_empty() {
         Path::new(".")
     } else {
         path

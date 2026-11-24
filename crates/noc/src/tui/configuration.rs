@@ -455,7 +455,7 @@ fn text(value: &str) -> Value {
 /// A path as the field shows it: under `home`, from `~`, as `config.toml` may write it.
 fn path_text(path: &Path, home: &Path) -> Value {
     let shown = match path.strip_prefix(home) {
-        Ok(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
+        Ok(rest) if rest.is_empty() => "~".to_owned(),
         Ok(rest) => format!("~/{}", rest.to_string_lossy()),
         Err(_) => path.to_string_lossy().into_owned(),
     };

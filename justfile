@@ -92,29 +92,8 @@ clean:
 # >>> custom
 # Commit the version bump, sign a tag for it, and push both, which starts release.yml (ADR 0014)
 [confirm("Commit, tag, and push this release?")]
-release-tag version:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    version={{ quote(version) }}
-    cargo_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
-    if [[ $version != "$cargo_version" ]]; then
-        echo "Cargo.toml has version $cargo_version, not $version" >&2
-        exit 1
-    fi
-    if ! grep -qF "## [$version] - " CHANGELOG.md; then
-        echo "CHANGELOG.md has no section for $version" >&2
-        exit 1
-    fi
-    if [[ $(git branch --show-current) != main ]]; then
-        echo "Releases are tagged on main" >&2
-        exit 1
-    fi
-    notes=$(packaging/release-notes.sh "$version")
-    git commit -m "chore(release): bump version to $version" -- Cargo.toml Cargo.lock CHANGELOG.md
-    # Until the draft is published, releases.atom shows the tag with its message, and feed readers
-    # keep that entry; whitespace keeps the notes' `#` headings, which strip would drop.
-    git tag -s --cleanup=whitespace "v$version" -m "Noon Commander $version" -m "$notes"
-    git push --atomic origin HEAD "v$version"
+push-version version:
+    packaging/push-version.sh {{ quote(version) }}
 
 # Print the release notes of a version, as release.yml takes them from CHANGELOG.md
 release-notes version:

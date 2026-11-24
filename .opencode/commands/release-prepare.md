@@ -6,7 +6,7 @@ agent: build
 # Prepare release $1
 
 Prepare the release of version `$1` of Noon Commander, up to the point where the maintainer runs
-`just release-tag $1` (see `packaging/README.md` and ADR 0014). Do not commit, tag, or push.
+`just push-version $1` (see `packaging/README.md` and ADR 0014). Do not commit, tag, or push.
 
 Today: !`date +%Y-%m-%d`
 
@@ -80,5 +80,5 @@ In the user's language:
 - What you dropped, moved, or fixed in the changelog and why (one line each), and the number of
   lines before and after.
 - The files changed (`git status --short`) and the results of the checks.
-- The next step: review `git diff`, then `just release-tag $1`, which commits `Cargo.toml`,
+- The next step: review `git diff`, then `just push-version $1`, which commits `Cargo.toml`,
   `Cargo.lock`, and `CHANGELOG.md`, signs the tag `v$1`, and pushes.

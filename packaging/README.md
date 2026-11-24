@@ -13,6 +13,7 @@ named `noon-commander`; `noc` is the binary inside them.
 | `aur/known_hosts` | The host keys of `aur.archlinux.org`, which the push checks |
 | `tarball/README.md` | The README of the release tarball, for users rather than contributors |
 | `release-notes.sh` | Prints a version's section of `CHANGELOG.md` as the notes of its release |
+| `push-version.sh` | Commits the version bump, signs its tag, and pushes both: `just push-version` |
 
 ## Making a release
 
@@ -23,7 +24,7 @@ named `noon-commander`; `noc` is the binary inside them.
 3. Commit, tag, and push, after a question:
 
    ```sh
-   just release-tag X.Y.Z
+   just push-version X.Y.Z
    ```
 
    It checks the version in `Cargo.toml`, the section in `CHANGELOG.md`, and that the branch

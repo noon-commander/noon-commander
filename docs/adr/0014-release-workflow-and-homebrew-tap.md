@@ -52,7 +52,7 @@ a contributor run the same checks. A release is not a check: nobody builds one l
 ## Consequences
 
 - A release is: set `version` in `Cargo.toml`, move `Unreleased` in `CHANGELOG.md` under the
-  version, and run `just release-tag X.Y.Z`, which commits, signs the tag, and pushes. The
+  version, and run `just push-version X.Y.Z`, which commits, signs the tag, and pushes. The
   recipe only tags; building stays in the workflow.
 - The tap and its `main` branch can require signed commits: the maintainer's are signed with
   SSH, the app's by GitHub.

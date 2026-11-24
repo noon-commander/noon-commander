@@ -23,9 +23,5 @@ indent_size = 2
 tab_width = 2
 indent_size = 2
 
-[*.{json,jsonc}]
-tab_width = 2
-indent_size = 2
-
 # >>> custom
 # <<< custom

@@ -1,12 +1,20 @@
 [package]
+# >>> custom package
 name = "noc-pattern"
-description = "Patterns typed to match names in Noon Commander: regular expressions or text as it is, with smart case"
+description = "Patterns typed to match names in Noon Commander"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 repository.workspace = true
-publish = false
+publish.workspace = true
+# <<< custom package
+license.workspace = true
+
+[lints]
+workspace = true
+
+# >>> custom
+[features]
 
 [dependencies]
 icu_casemap.workspace = true
@@ -15,5 +23,5 @@ regex.workspace = true
 thiserror.workspace = true
 unicode-segmentation.workspace = true
 
-[lints]
-workspace = true
+[dev-dependencies]
+# <<< custom

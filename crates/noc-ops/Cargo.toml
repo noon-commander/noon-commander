@@ -1,13 +1,19 @@
 [package]
+# >>> custom package
 name = "noc-ops"
-description = "File operation engine for Noon Commander: copy, move, delete, mkdir, checksum jobs"
+description = "File operation engine for Noon Commander"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 repository.workspace = true
-publish = false
+publish.workspace = true
+# <<< custom package
+license.workspace = true
 
+[lints]
+workspace = true
+
+# >>> custom
 [dependencies]
 blake3.workspace = true
 md-5.workspace = true
@@ -20,6 +26,4 @@ tokio-util.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-
-[lints]
-workspace = true
+# <<< custom

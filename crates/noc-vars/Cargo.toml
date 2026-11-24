@@ -1,15 +1,23 @@
 [package]
+# >>> custom package
 name = "noc-vars"
-description = "Variables in text for Noon Commander: $NAME and ${NAME}, read once, expanded where it runs"
+description = "Variables in text for Noon Commander"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 repository.workspace = true
-publish = false
+publish.workspace = true
+# <<< custom package
+license.workspace = true
+
+[lints]
+workspace = true
+
+# >>> custom
+[features]
 
 [dependencies]
 thiserror.workspace = true
 
-[lints]
-workspace = true
+[dev-dependencies]
+# <<< custom

@@ -1,12 +1,20 @@
 [package]
+# >>> custom package
 name = "noc-tools"
-description = "External programs that Noon Commander works with, such as zoxide"
+description = "External programs that Noon Commander works with"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 repository.workspace = true
-publish = false
+publish.workspace = true
+# <<< custom package
+license.workspace = true
+
+[lints]
+workspace = true
+
+# >>> custom
+[features]
 
 [dependencies]
 globset.workspace = true
@@ -22,6 +30,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-
-[lints]
-workspace = true
+# <<< custom

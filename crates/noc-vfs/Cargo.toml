@@ -1,12 +1,20 @@
 [package]
+# >>> custom package
 name = "noc-vfs"
-description = "Virtual file system for Noon Commander: local and SFTP backends, mounted volumes"
+description = "Virtual file system for Noon Commander"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
 repository.workspace = true
-publish = false
+publish.workspace = true
+# <<< custom package
+license.workspace = true
+
+[lints]
+workspace = true
+
+# >>> custom
+[features]
 
 [dependencies]
 bytes.workspace = true
@@ -19,6 +27,4 @@ tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-
-[lints]
-workspace = true
+# <<< custom

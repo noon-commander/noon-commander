@@ -1,14 +1,50 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# >>> custom workspace
+# <<< custom workspace
 
 [workspace.package]
+# >>> custom package
 version = "0.3.2"
 edition = "2024"
 rust-version = "1.88"
-license = "GPL-3.0-or-later"
+description = "A Rust-based terminal file manager for macOS and Linux, focused on seamless local and SFTP file operations."
 repository = "https://github.com/noon-commander/noon-commander"
+keywords = ["file-manager", "terminal", "tui", "sftp", "midnight-commander"]
+categories = ["command-line-utilities"]
+publish = false
+# <<< custom package
+license = "GPL-3.0-or-later"
 
+[workspace.lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+unreachable_pub = "warn"
+# >>> custom lints_rust
+unsafe_code = "deny"
+# <<< custom lints_rust
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+expect_used = "warn"
+unwrap_used = "warn"
+must_use_candidate = "allow"
+multiple_crate_versions = "allow"
+# >>> custom lints_clippy
+# <<< custom lints_clippy
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
+# >>> custom profile_release
+# <<< custom profile_release
+
+# >>> custom
 [workspace.dependencies]
 noc-config = { path = "crates/noc-config" }
 noc-locale = { path = "crates/noc-locale" }
@@ -95,24 +131,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 unicode-segmentation = "1"
 unicode-width = "0.2"
 zeroize = "1"
-
-[workspace.lints.rust]
-rust_2018_idioms = { level = "warn", priority = -1 }
-unreachable_pub = "warn"
-unsafe_code = "deny"
-
-[workspace.lints.clippy]
-pedantic = { level = "warn", priority = -1 }
-dbg_macro = "warn"
-expect_used = "warn"
-todo = "warn"
-unwrap_used = "warn"
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-module_name_repetitions = "allow"
-must_use_candidate = "allow"
-
-[profile.release]
-codegen-units = 1
-lto = "fat"
-strip = true
+# <<< custom

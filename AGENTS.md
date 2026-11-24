@@ -1,14 +1,25 @@
 # AGENTS.md
 
-Instructions for AI coding agents and humans working on Noon Commander.
+Guidelines for AI coding agents working in this repository. Human contributors should follow the same rules.
 
-**English only**: code, comments, docs, commits, logs, test names.
+## Basic
+
+- **English only.** All code, comments, docstrings, commit messages, TODO notes, log messages, and test descriptions must be written in English. No exceptions.
+- **Generated files.** `.editorconfig`, `.gitignore`, `.markdownlint-cli2.yaml`, `.markdownlint.yaml`, `.shellcheckrc`, `.taplo.toml`, `AGENTS.md`, `deny.toml`, `justfile` are generated. Edit them only inside the `>>> custom` / `<<< custom` blocks; any change outside them is overwritten on the next sync.
+  <!-- >>> custom basic -->
+  <!-- <<< custom basic -->
+
+## Code conventions
+
+- **Read `.editorconfig` before editing a file.** `.editorconfig` is the single source of truth for line width. The repo-root `.editorconfig` declares `max_line_length`. Code, comments, docstrings, Markdown prose, and any other text you write must respect this limit.
+- Do not hand-wrap narrower than `max_line_length`. Don't impose a personal 72/80-column habit on comments or docstrings. Let lines run up to the configured limit, then break.
+  <!-- >>> custom code_conventions -->
+  <!-- <<< custom code_conventions -->
 
 ## Hard rules
 
 - Never forward anything (ADR 0062): sessions always get `policy::SESSION_OPTIONS`, SFTP
   channels `policy::SFTP_CHANNEL_OPTIONS`, and the validator rejects forwarding arguments.
-- Never add an SSH implementation (`russh`, `ssh2`, `libssh2-sys`); `deny.toml` bans them.
 - Spawn `ssh` only from `noc-ssh`. Never through `sh -c`. Always `--` before the destination.
 - Spawn other programs only from `noc-tools` (ADR 0012). Never through a shell. `--` before
   paths. Kill on drop. Tests use a fake program. At build time, `crates/noc/build.rs` runs

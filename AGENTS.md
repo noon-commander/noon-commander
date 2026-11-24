@@ -52,6 +52,7 @@ Two-panel, Midnight Commander-style terminal file manager for macOS and Linux. A
 - After editing `assets/icons/logo.svg`, run `just render-logo`. A new PNG gets its own `_render-logo-png` line in the `render-logo` recipe.
 - Platforms: macOS and Linux, both in CI; Windows is out of scope. Unix APIs via `rustix`; `nix` only for the signal mask (ADR 0054) and the names of users and groups (ADR 0098). Code for one platform goes under `cfg(target_os = "macos")` or `cfg(target_os = "linux")`.
 - Keep `docs/architecture.md`, `docs/roadmap.md`, `docs/keymap-compare.md`, `docs/keymap-non-vim.md` in sync with code.
+- Keep the Development section of `README.md` in sync with the `justfile`, `ci.yml`, and `rust-version`: the build commands, and an install command for every tool a recipe runs.
 - User-visible changes go in `CHANGELOG.md` under `Unreleased`.
   <!-- <<< custom workflow -->
 

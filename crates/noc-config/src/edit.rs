@@ -6,7 +6,7 @@ use std::path::Path;
 
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Table, Value};
 
-use crate::write::write_atomic;
+use crate::write::{lock, write_atomic};
 use crate::{Config, ConfigError};
 
 /// Writes to the file at `path` the settings that differ between `old`, what the TUI showed,
@@ -26,6 +26,7 @@ use crate::{Config, ConfigError};
 /// TOML; [`ConfigError::HostsMoved`] or [`ConfigError::Parse`] if the changed file would not be
 /// a valid configuration; [`ConfigError::Write`] if it cannot be written.
 pub fn save_config(path: &Path, old: &Config, new: &Config) -> Result<(), ConfigError> {
+    let _lock = lock(path);
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(error) if error.kind() == io::ErrorKind::NotFound => String::new(),

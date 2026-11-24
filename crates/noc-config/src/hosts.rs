@@ -7,7 +7,7 @@ use noc_vars::Template;
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
-use crate::write::{write_atomic, write_new};
+use crate::write::{lock, write_atomic, write_new};
 use crate::{ConfigError, Run};
 
 /// Commented template of `hosts.toml` written by `noc config init`; it holds no hosts.
@@ -159,6 +159,7 @@ impl Hosts {
 /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Edit`] if it is not valid
 /// TOML, [`ConfigError::Write`] if it cannot be written.
 pub fn save_host(path: &Path, name: &str, host: Option<&HostConfig>) -> Result<(), ConfigError> {
+    let _lock = lock(path);
     let text = read(path)?.unwrap_or_default();
     let mut document: DocumentMut = text.parse().map_err(|source| ConfigError::Edit {
         path: path.to_path_buf(),

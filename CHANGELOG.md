@@ -31,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - F9 → Workspace, now Window, no longer lists the saved workspaces: Workspace list… (`t w`) opens their window, which restores them by name ([ADR 0091](docs/adr/0091-pull-down-menu-without-left-and-right.md)).
 
+### Fixed
+
+- Two Noon Commanders that change the settings, a host's settings, the workspaces, or the command history at once no longer lose one of the changes: each reads and writes the file while it holds a lock.
+
 ## [0.3.2] - 2026-11-16
 
 ### Added

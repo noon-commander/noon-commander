@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ConfigError;
 use crate::hosts::read;
-use crate::write::write_atomic;
+use crate::write::{lock, write_atomic};
 
 /// The top of `workspaces.toml`, before the workspaces.
 const HEADER: &str = "\
@@ -261,6 +261,7 @@ impl Workspaces {
 /// TOML or does not match the schema, [`ConfigError::InvalidWorkspace`] if it or `workspace`
 /// breaks a rule the schema cannot express, [`ConfigError::Write`] if it cannot be written.
 pub fn save_workspace(path: &Path, workspace: &Workspace) -> Result<Workspaces, ConfigError> {
+    let _lock = lock(path);
     let mut workspaces = Workspaces::load(path)?;
     match workspaces
         .workspaces
@@ -285,6 +286,7 @@ pub fn save_workspace(path: &Path, workspace: &Workspace) -> Result<Workspaces, 
 /// TOML or does not match the schema, [`ConfigError::InvalidWorkspace`] if a workspace in it
 /// breaks a rule the schema cannot express, [`ConfigError::Write`] if it cannot be written.
 pub fn remove_workspace(path: &Path, name: &str) -> Result<Workspaces, ConfigError> {
+    let _lock = lock(path);
     let mut workspaces = Workspaces::load(path)?;
     let count = workspaces.workspaces.len();
     workspaces
@@ -309,6 +311,7 @@ pub fn remove_workspace(path: &Path, name: &str) -> Result<Workspaces, ConfigErr
 /// breaks a rule the schema cannot express or `to` is blank, [`ConfigError::Write`] if it cannot
 /// be written.
 pub fn rename_workspace(path: &Path, from: &str, to: &str) -> Result<Workspaces, ConfigError> {
+    let _lock = lock(path);
     let mut workspaces = Workspaces::load(path)?;
     if from == to || workspaces.get(from).is_none() {
         return Ok(workspaces);

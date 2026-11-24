@@ -333,7 +333,7 @@ A workspace is the tabs of both panels, saved under a name ([ADR 0017](adr/0017-
   ```
 
 - Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the old tabs are dropped). The tab that shows on each side lists its location at once, connecting to its host if needed; a hidden one keeps its first request and sends it when it shows, so only the hosts that show connect. The cursor goes to the saved name once the listing arrives.
-- `noc-config` owns `workspaces.toml`; one task reads and changes it in turn, and each change reads the file again first, so another Noon Commander's changes are kept. The app reads it at start, and takes the workspaces back after each change.
+- `noc-config` owns `workspaces.toml`; one task reads and changes it in turn, and each change reads the file again first, under a lock on its directory, so another Noon Commander's changes are kept. The app reads it at start, and takes the workspaces back after each change.
 
 ### Configuration dialog
 
@@ -471,6 +471,8 @@ Noon Commander uses the XDG layout on every platform, including macOS, and respe
 | State (`history.toml`, `recent.toml`, last directories, `logs/`) | `~/.local/state/noc/` |
 | Cache (unused since [ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
+
+A change of `config.toml`, `hosts.toml`, `workspaces.toml`, or `history.toml` reads the file again and writes it whole while it holds a lock on the file's directory (`File::lock`), not on the file, which the write replaces; so two Noon Commanders that change one at once each keep the other's change. A directory that cannot be locked, as on some network file systems, is written without one.
 
 Unknown keys are errors, so a typo does not silently fall back to a default. `noc config init` writes the commented defaults, and a commented `hosts.toml` unless one exists. The Configuration dialog writes only the keys it changed, through `toml_edit`, keeping comments and the other keys; the result is checked against the schema and replaces the file atomically
 ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)).

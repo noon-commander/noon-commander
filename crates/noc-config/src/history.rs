@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::ConfigError;
 use crate::hosts::read;
-use crate::write::write_atomic;
+use crate::write::{lock, write_atomic};
 
 /// The top of `history.toml`, before the commands.
 const HEADER: &str = "\
@@ -97,6 +97,7 @@ impl History {
 /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid,
 /// [`ConfigError::Write`] if it cannot be written.
 pub fn add_command(path: &Path, entry: &HistoryEntry, size: usize) -> Result<History, ConfigError> {
+    let _lock = lock(path);
     let mut history = History::load(path)?;
     history
         .commands
@@ -122,6 +123,7 @@ pub fn remove_command(
     host: Option<&str>,
     command: &str,
 ) -> Result<History, ConfigError> {
+    let _lock = lock(path);
     let mut history = History::load(path)?;
     let count = history.commands.len();
     history.commands.retain(|kept| !kept.is(host, command));
@@ -213,6 +215,24 @@ mod tests {
         let history = remove_command(&path, Some("web"), "make").unwrap();
         assert_eq!(commands(&history), [("make", None)]);
         assert_eq!(remove_command(&path, Some("db"), "make").unwrap(), history);
+    }
+
+    #[test]
+    fn two_writers_at_once_keep_the_commands_of_both() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.toml");
+        std::thread::scope(|scope| {
+            for writer in ["a", "b"] {
+                let path = &path;
+                scope.spawn(move || {
+                    for time in 0..20 {
+                        add_command(path, &entry(&format!("{writer}{time}"), None, time), 100)
+                            .unwrap();
+                    }
+                });
+            }
+        });
+        assert_eq!(History::load(&path).unwrap().commands.len(), 40);
     }
 
     #[test]

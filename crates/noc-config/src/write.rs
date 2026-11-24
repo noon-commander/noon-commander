@@ -1,4 +1,4 @@
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write as _};
 use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
@@ -63,6 +63,19 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), ConfigErr
         let _ = fs::remove_file(&temporary);
     }
     result.map_err(write_error)
+}
+
+/// Locks the directory of the file at `path` until the lock is dropped, so that another process
+/// that reads and writes a file there through this crate waits for it, and neither loses the
+/// other's change; the directory, since writing replaces the file. A directory that cannot be
+/// locked, as on some network file systems, or does not exist yet, gives no lock.
+pub(crate) fn lock(path: &Path) -> Option<File> {
+    let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let dir = match target.parent() {
+        Some(parent) if !parent.is_empty() => parent,
+        _ => Path::new("."),
+    };
+    File::open(dir).ok().filter(|dir| dir.lock().is_ok())
 }
 
 /// A hidden name next to `path` that no other writer uses.

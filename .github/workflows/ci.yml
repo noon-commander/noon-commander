@@ -15,7 +15,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Every check is a recipe of the justfile, so CI runs what `just ci` and `just lint` run
+# CI runs `just ci`, everything that must pass, on macOS and Linux, so it checks what is checked
 # locally. Tools are built with `cargo install` at pinned versions; rust-cache keeps them in
 # ~/.cargo/bin between runs.
 env:
@@ -24,46 +24,8 @@ env:
   JUST_VERSION: 1.58.0
 
 jobs:
-  format:
-    name: rustfmt
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
-          rustup default stable
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo install --locked "just@$JUST_VERSION"
-      - run: just fix
-
-  clippy:
-    name: clippy (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-          - name: Linux
-            os: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --component clippy --no-self-update
-          rustup default stable
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo install --locked "just@$JUST_VERSION" cargo-insta@1.49.0
-      - run: just ci
-
-  test:
-    name: test (${{ matrix.name }})
+  ci:
+    name: ci (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -81,12 +43,30 @@ jobs:
           persist-credentials: false
       - name: Install Rust stable
         run: |
-          rustup toolchain install stable --profile minimal --no-self-update
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt \
+            --no-self-update
           rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo install --locked "just@$JUST_VERSION"
+      - run: >-
+          cargo install --locked "just@$JUST_VERSION" cargo-insta@1.49.0 cargo-deny@0.22.0
+          taplo-cli@0.10.0 cargo-shear@1.14.0 zizmor@1.30.1
+      # ShellCheck comes with the Linux runner only.
+      - if: runner.os == 'macOS'
+        name: Install ShellCheck
+        run: brew install shellcheck
+      # actionlint, shfmt, and markdownlint-cli2 are not Rust programs. markdownlint-cli2 is
+      # installed outside the checkout, so no linter sees its node_modules.
+      - name: Install actionlint, shfmt, and markdownlint-cli2
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          go install mvdan.cc/sh/v3/cmd/shfmt@v3.14.1
+          echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
+          cp .github-deps/markdownlint/package.json .github-deps/markdownlint/package-lock.json \
+            "$RUNNER_TEMP"
+          npm ci --prefix "$RUNNER_TEMP" --ignore-scripts
+          echo "$RUNNER_TEMP/node_modules/.bin" >>"$GITHUB_PATH"
       # Named rather than looked for, so that the SFTP tests fail instead of skipping without it.
-      - run: just test
+      - run: just ci
         env:
           SFTP_SERVER: ${{ matrix.sftp-server }}
 
@@ -144,48 +124,9 @@ jobs:
           rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo install --locked "just@$JUST_VERSION"
+      # The same rust-version that build-msrv reads.
       - name: Install the oldest supported Rust
-        run: rustup toolchain install "$(just --evaluate msrv)" --profile minimal --no-self-update
+        run: |
+          msrv=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          rustup toolchain install "$msrv" --profile minimal --no-self-update
       - run: just build-msrv
-
-  deny:
-    name: cargo-deny
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo install --locked "just@$JUST_VERSION" cargo-deny@0.20.2
-      - run: false && just deny
-
-  lint:
-    name: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install Rust stable
-        run: |
-          rustup toolchain install stable --profile minimal --no-self-update
-          rustup default stable
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: >-
-          cargo install --locked "just@$JUST_VERSION" taplo-cli@0.10.0 cargo-shear@1.14.0
-          zizmor@1.30.1
-      # ShellCheck comes with the runner; actionlint and markdownlint-cli2 are not Rust programs.
-      # markdownlint-cli2 is installed outside the checkout, so no linter sees its node_modules.
-      - name: Install actionlint and markdownlint-cli2
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
-          cp .github-deps/markdownlint/package.json .github-deps/markdownlint/package-lock.json \
-            "$RUNNER_TEMP"
-          npm ci --prefix "$RUNNER_TEMP" --ignore-scripts
-          echo "$RUNNER_TEMP/node_modules/.bin" >>"$GITHUB_PATH"
-      - run: just lint

@@ -10,6 +10,14 @@ msrv := `sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml`
 default:
     @just --list --unsorted
 
+_justfiles := '''
+    while IFS= read -r -d '' file; do
+        [[ -f $file ]] || continue
+        printf '%s --justfile %q\n' "$1" "$file"
+    done < <(git ls-files -z --cached --others --exclude-standard -- \
+        ':(glob,icase)**/justfile' ':(glob,icase)**/.justfile' ':(glob,icase)**/*.just')
+'''
+
 _shell_scripts := '''
     shebang='^#!.*[/[:space:]](sh|bash|dash|ksh)([[:space:]]|$)'
     scripts=()
@@ -17,7 +25,7 @@ _shell_scripts := '''
         [[ -f $file ]] || continue
         IFS= read -r line < "$file" || true
         [[ $line =~ $shebang ]] && scripts+=("$file")
-    done < <(git ls-files -z)
+    done < <(git ls-files -z --cached --others --exclude-standard)
     if [[ -n ${scripts[*]-} ]]; then
         printf '%s' "$1"
         printf ' %q' "${scripts[@]}"
@@ -26,6 +34,7 @@ _shell_scripts := '''
 
 # Lint the code and check its formatting without changing files.
 lint:
+    {{ shell(_justfiles, 'just --fmt --check') }}
     markdownlint-cli2
     RUST_LOG=warn taplo lint
     RUST_LOG=warn taplo fmt --check
@@ -42,10 +51,13 @@ lint:
 
 # Fix what lint finds, where a safe automatic fix exists.
 fix:
+    {{ shell(_justfiles, 'just --fmt') }}
     RUST_LOG=warn taplo fmt
     {{ shell(_shell_scripts, 'shfmt --write') }}
     zizmor --offline --pedantic --quiet --no-exit-codes --fix .
     cargo fmt --all
+    # >>> custom fix
+    # <<< custom fix
 
 # Run the tests.
 test:
@@ -93,42 +105,42 @@ clean:
     # <<< custom clean
 
 # >>> custom
-# Commit the version bump, sign a tag for it, and push both, which starts release.yml (ADR 0014)
+# Commit the version bump, sign a tag for it, and push both, which starts release.yml.
 [confirm("Commit, tag, and push this release?")]
 push-version version:
     packaging/push-version.sh {{ quote(version) }}
 
-# Print the release notes of a version, as release.yml takes them from CHANGELOG.md
+# Print the release notes of a version, as release.yml takes them from CHANGELOG.md.
 release-notes version:
-    @packaging/release-notes.sh {{ quote(version) }}
+    packaging/release-notes.sh {{ quote(version) }}
 
-# License, advisory, and ban checks (needs cargo-deny)
+# License, advisory, and ban checks.
 deny:
     cargo deny check
 
-# Run the tests and review the changed UI snapshots (needs cargo-insta)
+# Run the tests and review the changed UI snapshots.
 snap:
     cargo insta test --workspace --review
 
-# Fail if a snapshot file has no test left (needs cargo-insta)
+# Fail if a snapshot file has no test left.
 snap-stale:
     cargo insta test --workspace --unreferenced=reject
 
-# Build with the oldest supported Rust, as CI does (needs rustup)
+# Build with the oldest supported Rust, as CI does.
 msrv:
     @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }
-    rustup run {{msrv}} cargo check --workspace --all-targets --all-features --locked
+    rustup run {{ msrv }} cargo check --workspace --all-targets --all-features --locked
 
-# Take the screenshots of docs/demo/*.tape with made-up files and hosts (needs vhs, a Nerd Font)
+# Take the screenshots of docs/demo/*.tape with made-up files and hosts.
 demo:
     cargo build -p noc
     docs/demo/setup.sh
     mkdir -p assets/screenshots
     for tape in docs/demo/*.tape; do vhs "$tape"; done
 
-# Render every predefined PNG from the logo (needs resvg)
+# Render every predefined PNG from the logo.
 logo: (_logo-png "github" "512")
 
 _logo-png name size:
-    resvg --width {{size}} --height {{size}} {{logo_svg}} assets/icons/logo-{{name}}.png
+    resvg --width {{ size }} --height {{ size }} {{ logo_svg }} assets/icons/logo-{{ name }}.png
 # <<< custom

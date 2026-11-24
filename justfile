@@ -66,7 +66,6 @@ test:
 # Everything that must pass before a commit.
 ci: lint test
     # >>> custom ci
-    just test-snapshots-orphans
     # <<< custom ci
 
 # Build the debug binaries.

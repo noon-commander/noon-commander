@@ -8,8 +8,8 @@
 #
 # DIR (default /tmp/noc-demo) is removed and built again; it must be absent or made by this
 # script. Keep its path short: the control sockets live in it, and their paths may have at most
-# 104 bytes on macOS. Then DIR/bin/noc starts noc in that world. It runs NOC_BIN, by default the debug build
-# of this checkout (`cargo build -p noc`).
+# 104 bytes on macOS. Then DIR/bin/noc starts noc in that world. It runs NOC_BIN, a debug build
+# for its `--host-name`, by default that of this checkout (`cargo build -p noc`).
 #
 # The local panel shows the real path of DIR.
 set -eu
@@ -131,7 +131,7 @@ export XDG_STATE_HOME=${home}/.local/state XDG_CACHE_HOME=${home}/.cache
 export XDG_RUNTIME_DIR=${dir}/run _ZO_DATA_DIR=${dir}/zoxide
 export COLORTERM=truecolor TZ=UTC
 cd "\$HOME/projects/site"
-exec ${noc_bin} "\$@"
+exec ${noc_bin} --host-name laptop "\$@"
 EOF
 chmod +x "${dir}/bin/ssh" "${dir}/bin/noc"
 

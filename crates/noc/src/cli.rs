@@ -44,6 +44,12 @@ pub(crate) struct Cli {
     #[arg(long)]
     pub(crate) show_sizes: bool,
 
+    /// Debug builds only: show NAME as the host name of this machine, on the line of the mode,
+    /// in the prompt, and in the terminal title, so that screenshots do not show the real one.
+    #[cfg(debug_assertions)]
+    #[arg(long, value_name = "NAME")]
+    pub(crate) host_name: Option<String>,
+
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
 }

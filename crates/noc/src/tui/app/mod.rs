@@ -1523,7 +1523,7 @@ impl App {
     /// Debug builds only: windows take as long to grow or shrink as `debug` says, and show their
     /// sizes if it says so.
     #[cfg(debug_assertions)]
-    pub(crate) fn debug_windows(&mut self, debug: super::DebugOptions) {
+    pub(crate) fn debug_windows(&mut self, debug: &super::DebugOptions) {
         if let Some(whole) = debug.slow_windows {
             self.frames.stage.slow(whole);
         }

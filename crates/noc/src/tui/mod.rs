@@ -215,10 +215,10 @@ async fn region(context: &Context) -> Result<TimeZone> {
 }
 
 /// Debug builds only: how long results of background work are held back, so spinners stay
-/// long enough to watch, how long windows take to grow or shrink, and whether windows show
-/// their sizes.
+/// long enough to watch, how long windows take to grow or shrink, whether windows show their
+/// sizes, and the host name shown in place of this machine's.
 #[cfg(debug_assertions)]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct DebugOptions {
     /// Every result (`--slow-spinners`).
     pub(crate) slow_spinners: Option<Duration>,
@@ -231,14 +231,22 @@ pub(crate) struct DebugOptions {
     pub(crate) slow_windows: Option<Duration>,
     /// Each window writes its size on its frame (`--show-sizes`).
     pub(crate) show_sizes: bool,
+    /// The host name of this machine (`--host-name`).
+    pub(crate) host_name: Option<String>,
 }
 
 /// Debug builds only: slows down the windows of `app` and the answers of volumes in `tasks`,
-/// and has windows show their sizes, as `debug` says.
+/// has windows show their sizes, and renames this machine, as `debug` says.
 #[cfg(debug_assertions)]
 fn debug_app(app: &mut App, tasks: &mut Tasks, debug: DebugOptions) {
-    app.debug_windows(debug);
+    app.debug_windows(&debug);
     tasks.slow_volumes(debug.slow_volumes);
+    if let Some(host) = debug.host_name {
+        app.set_machine(machine::Machine {
+            host: Some(cells::sanitize(host.as_bytes())),
+            ..machine::Machine::current()
+        });
+    }
 }
 
 /// Debug builds only: holds back each result of background work as `debug` says, from when it
@@ -247,9 +255,10 @@ fn debug_app(app: &mut App, tasks: &mut Tasks, debug: DebugOptions) {
 #[cfg(debug_assertions)]
 fn slow_down(
     done: mpsc::UnboundedSender<Done>,
-    debug: DebugOptions,
+    debug: &DebugOptions,
 ) -> mpsc::UnboundedSender<Done> {
-    if debug.slow_spinners.is_none() && debug.slow_connections.is_none() {
+    let (slow_spinners, slow_connections) = (debug.slow_spinners, debug.slow_connections);
+    if slow_spinners.is_none() && slow_connections.is_none() {
         return done;
     }
     let (sender, mut results) = mpsc::unbounded_channel::<Done>();
@@ -257,9 +266,9 @@ fn slow_down(
     let connections = release(done);
     tokio::spawn(async move {
         while let Some(result) = results.recv().await {
-            let mut delay = debug.slow_spinners.unwrap_or_default();
+            let mut delay = slow_spinners.unwrap_or_default();
             let queue = if matches!(result, Done::Connected { .. } | Done::Closed { .. }) {
-                delay += debug.slow_connections.unwrap_or_default();
+                delay += slow_connections.unwrap_or_default();
                 &connections
             } else {
                 &others
@@ -345,7 +354,7 @@ pub(crate) async fn run(
     let context = Arc::new(context);
     let (done_tx, mut done) = mpsc::unbounded_channel();
     #[cfg(debug_assertions)]
-    let done_tx = slow_down(done_tx, debug);
+    let done_tx = slow_down(done_tx, &debug);
     let mut tasks = Tasks::start(Arc::clone(&context), done_tx).await;
     let (mut app, effects) = start_app(&context, (&start, log), (&tz, system), asked.modes.keys());
     #[cfg(debug_assertions)]

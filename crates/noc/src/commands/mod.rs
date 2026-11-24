@@ -36,6 +36,7 @@ pub(crate) async fn run(cli: Cli) -> Result<ExitCode> {
                     slow_volumes: cli.slow_volumes,
                     slow_windows: cli.slow_windows,
                     show_sizes: cli.show_sizes,
+                    host_name: cli.host_name,
                 },
             ))
             .await;

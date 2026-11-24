@@ -44,7 +44,7 @@ Guidelines for AI coding agents working in this repository. Human contributors s
 ## Commands
 
 ```sh
-just ci      # format-check, clippy, tests, cargo-deny
+just ci      # format-check, clippy, tests, snapshots, cargo-deny
 just lint    # Markdown, shell scripts, TOML, workflows, unused dependencies
 just run     # run noc from source; arguments go to noc
 ```

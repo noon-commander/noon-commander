@@ -65,6 +65,9 @@ test:
 
 # Everything that must pass before a commit.
 ci: lint test
+    # >>> custom ci
+    just test-snapshots-orphans
+    # <<< custom ci
 
 # Build the debug binaries.
 [positional-arguments]
@@ -125,7 +128,7 @@ test-snapshots-review:
 
 # Fail if a snapshot file has no test left.
 test-snapshots-orphans:
-    cargo insta test --workspace --unreferenced=reject
+    cargo insta test --workspace --check --unreferenced=reject
 
 # Take the screenshots of docs/demo/*.tape with made-up files and hosts.
 render-screenshots:

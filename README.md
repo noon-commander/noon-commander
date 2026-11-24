@@ -123,7 +123,7 @@ Homebrew sets none.
   [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories,
   [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files,
   [ShellCheck](https://www.shellcheck.net) checks the shell scripts,
-  [cargo-insta](https://insta.rs) reviews the UI snapshots,
+  [cargo-insta](https://insta.rs) checks and reviews the UI snapshots,
   [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies,
   [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files,
   [actionlint](https://github.com/rhysd/actionlint) checks the GitHub Actions workflows,
@@ -223,7 +223,7 @@ The project's tasks live in the [`justfile`](justfile)
 | Command | What it does |
 | --- | --- |
 | `just` | List the tasks |
-| `just ci` | Formatting, clippy, tests, and cargo-deny: everything that must pass; changes no files |
+| `just ci` | Formatting, clippy, tests, snapshots, and cargo-deny: everything that must pass; changes no files |
 | `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
 | `just push-version X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |

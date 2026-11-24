@@ -390,12 +390,38 @@ noc                          the TUI (needs a terminal)
 noc -V, --version            the version: noc 0.2.0
 noc config init              write the commented default config.toml
 noc config paths             show the files and directories in use
-noc debug version            version, build, system, terminal, editor, zoxide: one `key value` line each
+noc debug version            version, build, system, terminal, tools, region: one `key value` line each
 noc debug hosts              hosts from ssh_config with their addresses; runs ssh -G for each
 noc debug ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 ```
 
-`crates/noc/build.rs` records the commit, its time in UTC, and whether the sources differ from it, with `git`; without git they are `unknown`. `noc debug version` asks the terminal, in a blocking task: in raw mode on `/dev/tty`, and only when stdin is a terminal and `noc` is in the foreground, it sends XTVERSION, the kitty keyboard query, and primary device attributes, whose answer ends the wait (at most a second). It asks zoxide too, `zoxide --version`, as `[zoxide] program` names it. The facts are `about::Fact::ALL`, in order, which the About page of the help shows too, each under the title of its `Topic`; the help names each in a `match` that a new fact does not compile without.
+`crates/noc/build.rs` records the commit, its time in UTC, and whether the sources differ from it, with `git`; without git they are `unknown`. `noc debug version` asks the terminal, in a blocking task: in raw mode on `/dev/tty`, and only when stdin is a terminal and `noc` is in the foreground, it sends XTVERSION, the kitty keyboard query, and primary device attributes, whose answer ends the wait (at most a second). It asks zoxide, ripgrep, and fd too, with `--version`, as `[zoxide] program`, `[search] program`, and `[search] fd` name them. The facts are `about::Fact::ALL`, in order, which the About page of the help shows too, each under the title of its `Topic`; the help names each in a `match` that a new fact does not compile without.
+
+```text
+name         Noon Commander
+version      0.2.0
+commit       1a2b3c4d5e6f
+dirty        no
+commit-time  2026-10-12T14:03:27Z
+target       aarch64-apple-darwin
+profile      release
+os           macOS 26.0
+kernel       Darwin 25.0.0
+arch         arm64
+terminal     kitty 0.42.1
+term         xterm-kitty
+multiplexer  none
+colors       truecolor
+keyboard     kitty
+editor       nvim
+zoxide       zoxide 0.9.8
+ripgrep      ripgrep 15.2.0
+fd           fd 10.5.0
+language     en-US
+formats      en_US (system)
+```
+
+Each line is the key, spaces, and the value up to the end of the line, or `unknown`. Scripts can rely on the keys and their order; new keys are added at the end, as `noc debug version | awk '$1 == "commit" { print $2 }'` reads the commit. `commit-time` is in UTC; `dirty` says whether the sources differed from the commit. `terminal` is the name the terminal answers with (XTVERSION), else what its environment variables say. `colors` is `truecolor` or `256`. `keyboard` is `kitty` where the terminal speaks the kitty keyboard protocol and `legacy` where it does not. The terminal is asked on `/dev/tty`, so `noc debug version | pbcopy` asks it too; when it is not asked, `keyboard` is `unchecked` and `terminal` comes from the environment alone. `editor` is the command of F4: `$VISUAL`, else `$EDITOR`, else `vi`. `zoxide`, `ripgrep`, and `fd` are what those programs say they are, or `not found`. `language` is the language of the messages, `formats` where the formats of dates, numbers, and names come from ([ADR 0035](adr/0035-formats-of-the-region.md)).
 
 `--config FILE` replaces `~/.config/noc/config.toml`.
 

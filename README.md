@@ -2,183 +2,103 @@
 
 <img src="assets/icons/logo.svg" alt="Noon Commander logo" width="128" height="128" align="right">
 
-A Rust-based terminal file manager for macOS and Linux, focused on seamless local and SFTP file operations. The command is `noc`.
+A two-panel terminal file manager for macOS and Linux, written in Rust, where SFTP hosts work just like the local disk. The command is `noc`.
 
-> **Status: pre-alpha.** You can browse local directories and SFTP hosts, and copy, move, delete, view, and edit files between them; polish comes next. See the
-> [roadmap](docs/roadmap.md).
+> **Status: pre-alpha.** Browsing, copying, moving, deleting, viewing, and editing work, locally and over SFTP; polish comes next. See the [roadmap](docs/roadmap.md).
 
 <br clear="right">
 
 ![A local project in the left panel and the host prod-web over SFTP in the right one](assets/screenshots/panels.png)
 
-The same panels in the theme `mc-classic`, with the blue of Midnight Commander:
-
 ![The same two panels in the blue theme mc-classic](assets/screenshots/panels-mc-classic.png)
 
-## Why
+## Features
 
-- **Two panels, vim's keys, mc's F-keys.** Copy, move, rename, view, and delete files on your machine, between your machine and your servers, or between two servers. Keys work in vim's modes, Normal, Insert, and Visual, down to the text fields, with motions, operators, counts, and registers; the F-keys are the ones you know from Midnight Commander.
-- **SFTP at the core.** Remote hosts are not an add-on: Noon Commander was started to make SFTP feel as natural as the local disk, and remote files work just like local ones.
-- **Your `~/.ssh/config` just works.** Noon Commander never implements SSH. It runs the `ssh` you already use, so `ProxyJump`, `Match`, `Include`, agents, FIDO keys, certificates, and `known_hosts` behave exactly as in your terminal.
-- **Every disk and server in one place.** `g l` opens a menu of the mounted volumes and all hosts from your ssh config, as in Far Manager, with the ones you used last first and a filter that finds any of them; Ctrl+x `g l` opens it for the other panel.
-- **Tabs in each panel.** Keep several directories and servers open on each side, and switch between them with `g t` and `g T`.
-- **Workspaces.** Save the tabs of both panels under a name with t W, and bring the whole layout back with t w.
-- **zoxide built in.** `g z` jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide) ranks, and the directories you work in from Noon Commander count there too.
-- **Fuzzy search, as in fzf.** Quick search and the filters of every list (the location menu, the tab menu, the zoxide window, the workspaces, the command history) find `config.rs` from `cfg`, best match first, with smart case. Ctrl+s and a letter switch to the plain text or a regular expression, or tell case apart or not.
-- **Search with ripgrep and fd.** `f /` finds text in the files below, as you type, on a server too, where [ripgrep](https://github.com/BurntSushi/ripgrep) runs; F3 and F4 open a file at the line. `f f` finds names with [fd](https://github.com/sharkdp/fd).
+- **Vim's keys, mc's F-keys.** Normal, Insert, and Visual mode down to the text fields, with motions, operators, counts, and registers.
+- **Local and SFTP alike.** F5, F6, and F8 copy, move, and delete between your machine and a host, or between two hosts, with progress and cancellation; long jobs go to the background (`f j`).
+- **Your `~/.ssh/config` just works.** Noon Commander runs your `ssh`, so `ProxyJump`, `Match`, `Include`, agents, FIDO keys, certificates, and `known_hosts` behave as in your terminal. One login per host serves every panel and transfer; password, OTP, and host-key prompts show in the TUI.
+- **Location menu.** `g l` lists the mounted volumes and all hosts of your ssh config, the ones used last first, with a filter.
+- **Tabs and workspaces.** Each panel has its own tabs (`t n`, `t c`, `g t`, `g T`); `t W` saves the tabs of both panels under a name, `t w` brings them back.
+- **zoxide.** `g z` jumps to the directories [zoxide](https://github.com/ajeetdsouza/zoxide) ranks; those you work in from Noon Commander count too.
+- **Search in a tree.** `f /` finds text with [ripgrep](https://github.com/BurntSushi/ripgrep) as you type, `f f` names with [fd](https://github.com/sharkdp/fd), on hosts too; F3 and F4 open a file at the line.
+- **Fuzzy filters.** Quick search and every list match as fzf does (`cfg` finds `config.rs`); Ctrl+s switches to plain text, glob, or a regular expression, and sets the case.
+- **Viewer and editor.** F3 reads large files in parts, on hosts too, and `F` follows a growing file; F4 opens `$EDITOR`, on a local copy for a remote file.
+- **Shell command line.** `!` runs a command in the panel's directory, on a host too, with the aliases of your shell; `g <` shows the output.
+- **Checksums.** `f #`: SHA-256, SHA-512, SHA-1, MD5, and BLAKE3 of files and trees, compared with an expected value or the file in the other panel.
+- **Looks.** Themes `mc-classic`, `terminal`, `noon-dark`, `noon-light`, `catppuccin-mocha`, and `catppuccin-latte`; Nerd Font icons; the mouse.
 
 ## Philosophy
 
-- A full file manager: local and remote files are equally first-class. SFTP is the foundation, and more backends may follow.
-- The system OpenSSH client is the single source of truth for connections and authentication. Noon Commander never links an SSH library and never stores passwords.
-- SFTP channels get the same safety options as the stock `sftp(1)` client.
-- Port, agent, X11, and tunnel forwarding are always off, whatever the ssh config says ([ADR 0062](docs/adr/0062-forwarding-is-never-allowed.md)).
+- Local and remote files are equally first-class. SFTP comes first; more backends may follow.
+- The system OpenSSH client is the single source of truth for connections and authentication. Noon Commander links no SSH library and stores no passwords.
+- Port, agent, X11, and tunnel forwarding are always off, whatever the ssh config says ([ADR 0062](docs/adr/0062-forwarding-is-never-allowed.md)); SFTP channels get the safety options of the stock `sftp(1)`.
 - The UI never waits on the network: every remote operation is asynchronous, cancellable, and shows progress.
 
 Non-goals: forwarding of any kind, a built-in SSH implementation, a password manager, editing `~/.ssh/config` or `known_hosts`.
 
-## Planned features
-
-- A location menu with your favorite directories, the mounted volumes, and all hosts from `ssh_config`, the ones used last first.
-- Copy and move between local and remote, or between two remote hosts.
-- Password, OTP, and host-key prompts inside the TUI (via `SSH_ASKPASS`).
-- One authentication per host, shared by all panels and transfers (OpenSSH `ControlMaster`).
-- Configurable `ssh` binary and extra arguments.
-- Nerd Font icons, on by default.
-- Your own key bindings on top of vim's.
-
 ## Requirements
 
 - macOS, or Linux on x86-64 or 64-bit ARM.
-- OpenSSH 8.7 or newer: check with `ssh -V`.
-- Optional: [ripgrep](https://github.com/BurntSushi/ripgrep) and [fd](https://github.com/sharkdp/fd) for `f /` and `f f`, locally and on the hosts searched; [zoxide](https://github.com/ajeetdsouza/zoxide) for `g z`.
-- Rust 1.88 or newer to build from source.
+- OpenSSH 8.7 or newer (`ssh -V`).
+- A [Nerd Font](https://www.nerdfonts.com) in the terminal for the icons; without one, set `icons = false` under `[ui]`.
+- Optional:
+  - ripgrep for `f /`, locally and on the hosts searched;
+  - fd for `f f`, locally and on the hosts searched;
+  - zoxide for `g z`.
 
 ## Installing
 
-On macOS, with [Homebrew](https://brew.sh):
-
 ```sh
+# macOS, Homebrew
 brew install noon-commander/tap/noon-commander
-```
 
-On Arch Linux, from the AUR, with an AUR helper such as [paru](https://github.com/Morganamilo/paru): `noon-commander` builds the release from its sources, `noon-commander-bin` installs its binary, and `noon-commander-git` builds the latest commit:
-
-```sh
+# Arch Linux, AUR: with paru, yay, or pikaur
 paru -S noon-commander
+yay -S noon-commander
+pikaur -S noon-commander
 ```
 
-The [releases](https://github.com/noon-commander/noon-commander/releases) also have tarballs for Apple Silicon and Intel Macs and for Linux on x86-64 and 64-bit ARM, each with a build provenance attestation that `gh attestation verify` checks ([packaging/README.md](packaging/README.md#checking-a-download)). The Linux `noc` is static, so it runs on any distribution. The macOS binaries are not notarized, so macOS blocks `noc` from a tarball downloaded with a browser until `xattr -d com.apple.quarantine noc` removes the mark; Homebrew sets none.
+The AUR also has `noon-commander-bin` (the release binary) and `noon-commander-git` (the latest commit).
 
-## Building
+The [releases](https://github.com/noon-commander/noon-commander/releases) have tarballs for Apple Silicon and Intel Macs and static Linux binaries for x86-64 and 64-bit ARM, with build provenance attestations ([checking a download](packaging/README.md#checking-a-download)). The macOS binaries are not notarized: after a download with a browser, run `xattr -d com.apple.quarantine noc`.
 
-### Prerequisites
+## Development
 
-- A Rust toolchain, 1.88 or newer, installed with [rustup](https://rustup.rs):
-
-  ```sh
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-  rustup update stable
-  ```
-
-- A C toolchain for linking: `xcode-select --install` on macOS, or `build-essential` (Debian, Ubuntu) or `base-devel` (Arch) on Linux.
-- OpenSSH 8.7 or newer at runtime (`ssh -V`).
-- Development tools (optional): [just](https://github.com/casey/just) runs the project's tasks, [resvg](https://github.com/linebender/resvg) renders the logo, [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) checks licenses and advisories, [markdownlint-cli2](https://github.com/DavidAnson/markdownlint-cli2) checks the Markdown files, [ShellCheck](https://www.shellcheck.net) checks the shell scripts, [cargo-insta](https://insta.rs) checks and reviews the UI snapshots, [cargo-shear](https://github.com/Boshen/cargo-shear) finds unused dependencies, [taplo](https://taplo.tamasfe.dev) checks and formats the TOML files, [actionlint](https://github.com/rhysd/actionlint) checks the GitHub Actions workflows, [zizmor](https://docs.zizmor.sh) audits their security, [cargo-edit](https://github.com/killercup/cargo-edit) shows newer dependency versions, and [VHS](https://github.com/charmbracelet/vhs) takes the screenshots (only for `just render-screenshots`; it needs ttyd and ffmpeg, and a [Nerd Font](https://www.nerdfonts.com) for the icons):
-
-  ```sh
-  brew install just resvg cargo-deny markdownlint-cli2 shellcheck cargo-insta cargo-shear \
-      taplo actionlint zizmor cargo-edit vhs
-  # or, on any platform (ShellCheck, ttyd, and ffmpeg from your package manager):
-  cargo install just resvg cargo-deny cargo-insta cargo-shear taplo-cli zizmor cargo-edit \
-      --locked
-  npm install --global markdownlint-cli2
-  go install github.com/rhysd/actionlint/cmd/actionlint@latest
-  go install github.com/charmbracelet/vhs@latest
-  ```
-
-### Build and run
+Needs Rust 1.88 or newer ([rustup](https://rustup.rs)), [just](https://github.com/casey/just), and a C toolchain for linking: `xcode-select --install` on macOS, `build-essential` (Debian, Ubuntu) or `base-devel` (Arch) on Linux.
 
 ```sh
 git clone https://github.com/noon-commander/noon-commander.git
 cd noon-commander
-cargo build --release
-./target/release/noc --version
-./target/release/noc
+just build-release    # ./target/release/noc
+just run              # a debug build; arguments go to noc
 ```
 
-With [just](https://github.com/casey/just), `just build-release` builds the same binary and `just run` starts a development build; arguments after it go to `noc`, as in `just run --version`.
-
-`noc --version` prints the version, as in `noc 0.2.0`. `noc debug version` adds what a bug report needs, one fact per line: the key, spaces, and the value up to the end of the line, or `unknown`:
-
-```text
-name         Noon Commander
-version      0.2.0
-commit       1a2b3c4d5e6f
-dirty        no
-commit-time  2026-10-12T14:03:27Z
-target       aarch64-apple-darwin
-profile      release
-os           macOS 26.0
-kernel       Darwin 25.0.0
-arch         arm64
-terminal     kitty 0.42.1
-term         xterm-kitty
-multiplexer  none
-colors       truecolor
-keyboard     kitty
-editor       nvim
-zoxide       zoxide 0.9.8
-ripgrep      ripgrep 15.2.0
-fd           fd 10.5.0
-```
-
-`commit-time` is in UTC; `dirty` says whether the sources differed from the commit. `terminal` is the name the terminal answers with (XTVERSION), else what its environment variables say. `colors` is `truecolor` or `256`. `keyboard` is `kitty` where the terminal speaks the kitty keyboard protocol and `legacy` where it does not. The terminal is asked on `/dev/tty`, so `noc debug version | pbcopy` asks it too. When stdin is not a terminal, or `noc` runs in the background, it is not asked: `keyboard` is `unchecked`, and `terminal` comes from the environment alone. `editor` is the command of F4: `$VISUAL`, else `$EDITOR`, else `vi`. `zoxide`, `ripgrep`, and `fd` are what the programs of `[zoxide] program`, `[search] program`, and `[search] fd` say they are, or `not found`. The About page of the help (F1) shows the same facts. Scripts can rely on the keys and their order; new keys are added at the end. For example, the commit: `noc debug version | awk '$1 == "commit" { print $2 }'`.
-
-### Install
-
-To put `noc` into `~/.cargo/bin` (make sure it is on your `PATH`):
+The project is managed through [`just`](justfile) ([ADR 0013](docs/adr/0013-just-task-runner.md)), and CI runs the same recipes. Run `just --list` to see all of them; `just ci` must pass before a commit. The other tools they need:
 
 ```sh
-cargo install --path crates/noc --locked
+brew install rumdl taplo shellcheck shfmt actionlint zizmor cargo-shear cargo-deny \
+    cargo-insta cargo-edit resvg vhs
+# or, on any platform (ShellCheck, ttyd, and ffmpeg from your package manager):
+cargo install rumdl taplo-cli zizmor cargo-shear cargo-deny cargo-insta cargo-edit resvg \
+    --locked
+go install github.com/rhysd/actionlint/cmd/actionlint@latest
+go install mvdan.cc/sh/v3/cmd/shfmt@latest
+go install github.com/charmbracelet/vhs@latest
 ```
 
-### Tests
+VHS is needed only for `just render-screenshots`, with ttyd, ffmpeg, and a [Nerd Font](https://www.nerdfonts.com).
 
-```sh
-cargo test --workspace
-```
+The SFTP tests run against the local `sftp-server` over pipes, with no network and no real `ssh`. If it is not in a standard location, set `SFTP_SERVER` to its path; otherwise those tests are skipped.
 
-The SFTP tests run against the local `sftp-server` over pipes, with no network and no real `ssh`. If it is not in a standard location (`/usr/libexec/sftp-server` on macOS, `/usr/lib/openssh/sftp-server` on Debian and Ubuntu, `/usr/libexec/openssh/sftp-server` on Fedora, `/usr/lib/ssh/sftp-server` on Arch), set `SFTP_SERVER` to its path; otherwise those tests are skipped. CI runs the tests on macOS and Linux. The full set of checks is the `ci` recipe of the
-[`justfile`](justfile).
-
-### Tasks
-
-The project's tasks live in the [`justfile`](justfile) ([ADR 0013](docs/adr/0013-just-task-runner.md)), and CI runs the same recipes:
-
-| Command | What it does |
-| ------- | ------------ |
-| `just` | List the tasks |
-| `just ci` | Formatting, clippy, tests, snapshots, and cargo-deny: everything that must pass; changes no files |
-| `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
-| `just run` | Run `noc` from the sources; arguments go to `noc` |
-| `just push-version X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
-| `just test-snapshots-review` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
-| `just test-snapshots-orphans` | Fail if a snapshot file has no test left (needs cargo-insta) |
-| `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
-| `just render-logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
-| `just render-screenshots` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |
-
-`just render-logo` renders every PNG listed in the `render-logo` recipe, for now `assets/icons/logo-github.png` (512 × 512, the GitHub avatar). To add one, add a `(_render-logo-png "name" "size")` to that recipe.
-
-`just render-screenshots` builds `noc`, makes a world for it in `/tmp/noc-demo` with [`docs/demo/setup.sh`](docs/demo/setup.sh), and plays every `docs/demo/*.tape` in VHS, which writes the screenshots to `assets/screenshots/`. That world has its own home directory, settings, and `ssh_config`, and a fake `ssh` that serves the made-up hosts from local directories, so no real file, host, or name shows. The paths in the panel titles still show where it lives. The tapes use the font SauceCodePro Nerd Font Mono; with another one, change `Set FontFamily`.
+`noc debug version` prints what a bug report needs, one `key value` line per fact ([details](docs/architecture.md#command-line)).
 
 ## Configuration
 
-Configuration lives in `~/.config/noc/`, following the XDG layout on macOS too; `noc config init` writes the commented defaults, and `noc config paths` shows every file and directory Noon Commander uses.
+Configuration lives in `~/.config/noc/`, following the XDG layout on macOS too. `noc config init` writes the commented defaults; `noc config paths` shows every file and directory in use.
 
 ### The Option key on macOS
 
-A few keys use Alt: Alt and the highlighted letter of a command of the pull-down menu, or of a button, a field, a check box, or a choice of a dialog. In Insert and Visual mode, and in the panels, Alt and a key also stand for Esc and the key, as in vim, but on a password and in the dialogs and the menu. On macOS the Option key types characters such as `ø` instead, unless the terminal sends it as Alt:
+Alt and the highlighted letter pick a command of the pull-down menu or a control of a dialog; in Insert mode, Visual mode, and the panels, Alt and a key also stand for Esc and the key, as in vim. On macOS the Option key types characters such as `ø` instead, unless the terminal sends it as Alt:
 
 - Terminal.app: Settings → Profiles → Keyboard → Use Option as Meta key.
 - iTerm2: Settings → Profiles → Keys → Left Option key: Esc+.
@@ -194,8 +114,4 @@ See [AGENTS.md](AGENTS.md) for the project rules, layout, and commands. They app
 
 ## License
 
-Copyright (C) 2026 0ldkettle
-
-Noon Commander is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
-
-Noon Commander is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the [GNU General Public License](LICENSE) for more details.
+[GPL-3.0-or-later](LICENSE)

@@ -15,7 +15,7 @@ Templates of the packages that [`release.yml`](../.github/workflows/release.yml)
 
 ## Making a release
 
-1. Set `version` in the root `Cargo.toml`.
+1. Set `version` in the root `Cargo.toml` and run `just build`, which brings `Cargo.lock` to it: the release builds with `--locked`.
 2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and start a new, empty `## [Unreleased]` above it. `just release-notes X.Y.Z` prints the notes the release will get: the section with its wrapped lines joined, since GitHub breaks lines where they do.
 3. Commit, tag, and push, after a question:
 
@@ -61,15 +61,24 @@ The tag must be annotated and signed with a key added to GitHub as a signing key
 ```sh
 url=https://github.com/noon-commander/noon-commander/archive/refs/tags/vX.Y.Z.tar.gz
 VERSION=X.Y.Z REPOSITORY=noon-commander/noon-commander \
-  SHA256_SOURCE=$(curl -sL "$url" | sha256sum | cut -d ' ' -f 1) \
+  SHA256_SOURCE=$(curl -fsSL "$url" | sha256sum | cut -d ' ' -f 1) \
   packaging/aur/update.sh noon-commander /tmp/aur-noon-commander
 ```
 
+`noon-commander-bin` takes `SHA256_X86_64` and `SHA256_AARCH64`, the checksums of the two Linux tarballs, in place of `SHA256_SOURCE`; `noon-commander-git` takes `REPOSITORY` alone. The directory of the clone must not exist yet.
+
 ## Checking a download
 
-Each tarball has a build provenance attestation:
+Each tarball has a build provenance attestation, which this checks as `release.yml` does:
 
 ```sh
 gh attestation verify noon-commander-X.Y.Z-aarch64-apple-darwin.tar.gz \
-  --repo noon-commander/noon-commander --source-ref refs/tags/vX.Y.Z
+  --repo noon-commander/noon-commander --source-ref refs/tags/vX.Y.Z \
+  --signer-workflow noon-commander/noon-commander/.github/workflows/release.yml
+```
+
+Its SHA-256 is next to it in the release, for `shasum -a 256 -c` (`sha256sum -c` on Linux):
+
+```sh
+shasum -a 256 -c noon-commander-X.Y.Z-aarch64-apple-darwin.tar.gz.sha256
 ```

@@ -44,6 +44,7 @@ lint:
     zizmor --offline --pedantic --quiet --strict-collection .
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo shear --locked
+    cargo deny --workspace --locked check -D warnings
     cargo fmt --all --check
     # >>> custom lint
     scripts/glyphs.sh
@@ -64,7 +65,7 @@ test:
     cargo test --workspace --locked
 
 # Everything that must pass before a commit.
-ci: lint test deny
+ci: lint test
 
 # Build the debug binaries.
 [positional-arguments]
@@ -113,10 +114,6 @@ push-version version:
 # Print the release notes of a version, as release.yml takes them from CHANGELOG.md.
 release-notes version:
     packaging/release-notes.sh {{ quote(version) }}
-
-# License, advisory, and ban checks.
-deny:
-    cargo deny check
 
 # Run the tests and review the changed UI snapshots.
 snap:

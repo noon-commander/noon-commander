@@ -2465,8 +2465,8 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
   bar, the mark of secrets, and the icons of the Configuration dialog's categories.
   `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and
   `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the
-  viewer's `Styles`). `just glyphs`, part of `just lint`, fails on a special character written in
-  Rust code that draws, outside `glyphs.rs` and the tests.
+  viewer's `Styles`). `scripts/glyphs.sh`, part of `just lint`, fails on a special character
+  written in Rust code that draws, outside `glyphs.rs` and the tests.
 
 ## Releases
 

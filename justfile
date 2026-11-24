@@ -25,7 +25,7 @@ _shell_scripts := '''
 '''
 
 # Lint the code and check its formatting without changing files.
-lint: glyphs
+lint:
     markdownlint-cli2
     RUST_LOG=warn taplo lint
     RUST_LOG=warn taplo fmt --check
@@ -36,6 +36,9 @@ lint: glyphs
     cargo clippy --workspace --all-targets --locked -- -D warnings
     cargo shear --locked
     cargo fmt --all --check
+    # >>> custom lint
+    scripts/glyphs.sh
+    # <<< custom lint
 
 # Fix what lint finds, where a safe automatic fix exists.
 fix:
@@ -110,11 +113,6 @@ snap:
 # Fail if a snapshot file has no test left (needs cargo-insta)
 snap-stale:
     cargo insta test --workspace --unreferenced=reject
-
-# Fail if code that draws writes a special character itself, not from crates/noc/src/tui/glyphs.rs
-# (needs perl)
-glyphs:
-    scripts/glyphs.sh
 
 # Build with the oldest supported Rust, as CI does (needs rustup)
 msrv:

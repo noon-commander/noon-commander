@@ -129,7 +129,7 @@ Homebrew sets none.
   [actionlint](https://github.com/rhysd/actionlint) checks the GitHub Actions workflows,
   [zizmor](https://docs.zizmor.sh) audits their security,
   [cargo-edit](https://github.com/killercup/cargo-edit) shows newer dependency versions, and
-  [VHS](https://github.com/charmbracelet/vhs) takes the screenshots (only for `just demo`; it
+  [VHS](https://github.com/charmbracelet/vhs) takes the screenshots (only for `just render-screenshots`; it
   needs ttyd and ffmpeg, and a [Nerd Font](https://www.nerdfonts.com) for the icons):
 
   ```sh
@@ -227,17 +227,17 @@ The project's tasks live in the [`justfile`](justfile)
 | `just lint` | Markdown, shell scripts, TOML, workflows, and unused dependencies |
 | `just run` | Run `noc` from the sources; arguments go to `noc` |
 | `just push-version X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
-| `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
-| `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
+| `just test-snapshots-review` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
+| `just test-snapshots-orphans` | Fail if a snapshot file has no test left (needs cargo-insta) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
-| `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
-| `just demo` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |
+| `just render-logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
+| `just render-screenshots` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |
 
-`just logo` renders every PNG listed in the `logo` recipe, for now
+`just render-logo` renders every PNG listed in the `render-logo` recipe, for now
 `assets/icons/logo-github.png` (512 × 512, the GitHub avatar). To add one, add a
-`(_logo-png "name" "size")` to that recipe.
+`(_render-logo-png "name" "size")` to that recipe.
 
-`just demo` builds `noc`, makes a world for it in `/tmp/noc-demo` with
+`just render-screenshots` builds `noc`, makes a world for it in `/tmp/noc-demo` with
 [`docs/demo/setup.sh`](docs/demo/setup.sh), and plays every `docs/demo/*.tape` in VHS, which
 writes the screenshots to `assets/screenshots/`. That world has its own home directory, settings,
 and `ssh_config`, and a fake `ssh` that serves the made-up hosts from local directories, so no

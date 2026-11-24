@@ -1,7 +1,7 @@
 # The two panels of panels.tape in the theme mc-classic, with the VGA palette that Midnight
 # Commander's blue panels were made for.
 #
-#   just demo        (or: vhs docs/demo/panels-mc-classic.tape, after docs/demo/setup.sh)
+#   just render-screenshots   (or: vhs docs/demo/panels-mc-classic.tape, after docs/demo/setup.sh)
 
 Set Shell "bash"
 Set FontFamily "SauceCodePro Nerd Font Mono"

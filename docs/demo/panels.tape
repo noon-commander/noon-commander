@@ -1,6 +1,6 @@
 # Two panels: a local project on the left, a host over SFTP on the right.
 #
-#   just demo        (or: vhs docs/demo/panels.tape, after docs/demo/setup.sh)
+#   just render-screenshots   (or: vhs docs/demo/panels.tape, after docs/demo/setup.sh)
 
 Set Shell "bash"
 Set FontFamily "SauceCodePro Nerd Font Mono"

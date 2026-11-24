@@ -54,8 +54,8 @@ just run     # run noc from source; arguments go to noc
   never put raw commands in `ci.yml`.
 - Releases are the exception: `release.yml` builds from a signed `v*` tag (ADR 0014). Package
   templates live in `packaging/`. Packages are named `noon-commander`; `noc` is the binary.
-- After editing `assets/icons/logo.svg`, run `just logo`. A new PNG gets its own `_logo-png`
-  line in the `logo` recipe.
+- After editing `assets/icons/logo.svg`, run `just render-logo`. A new PNG gets its own
+  `_render-logo-png` line in the `render-logo` recipe.
 
 ## Project
 
@@ -238,8 +238,8 @@ Paths come from `crates/noc-config/src/paths.rs`.
 ## Testing
 
 - Unit tests next to the code in `#[cfg(test)] mod tests`.
-- UI: `insta` snapshots on ratatui's `TestBackend`. Review with `just snap`. After renaming or
-  removing a snapshot test, `just snap-stale` finds orphaned files.
+- UI: `insta` snapshots on ratatui's `TestBackend`. Review with `just test-snapshots-review`.
+  After renaming or removing a snapshot test, `just test-snapshots-orphans` finds orphaned files.
 - SFTP backends: local `sftp-server` over pipes, no network: `$SFTP_SERVER`, else the usual
   paths of macOS and Linux. CI sets it, so that the tests fail rather than skip without one.
 - ssh orchestration: set `ssh.program` to `crates/noc-ssh/tests/support/fake-ssh`. It emulates

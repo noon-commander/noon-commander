@@ -91,7 +91,7 @@ jobs:
           SFTP_SERVER: ${{ matrix.sftp-server }}
       # The tests above check the snapshots on both systems; which files they use is the same.
       - if: runner.os == 'macOS'
-        run: just snap-stale
+        run: just test-snapshots-orphans
 
   release:
     name: release build (${{ matrix.name }})

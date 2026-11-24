@@ -120,23 +120,23 @@ release-notes version:
     packaging/release-notes.sh {{ quote(version) }}
 
 # Run the tests and review the changed UI snapshots.
-snap:
+test-snapshots-review:
     cargo insta test --workspace --review
 
 # Fail if a snapshot file has no test left.
-snap-stale:
+test-snapshots-orphans:
     cargo insta test --workspace --unreferenced=reject
 
 # Take the screenshots of docs/demo/*.tape with made-up files and hosts.
-demo:
+render-screenshots:
     cargo build -p noc
     docs/demo/setup.sh
     mkdir -p assets/screenshots
     for tape in docs/demo/*.tape; do vhs "$tape"; done
 
 # Render every predefined PNG from the logo.
-logo: (_logo-png "github" "512")
+render-logo: (_render-logo-png "github" "512")
 
-_logo-png name size:
+_render-logo-png name size:
     resvg --width {{ size }} --height {{ size }} {{ logo_svg }} assets/icons/logo-{{ name }}.png
 # <<< custom

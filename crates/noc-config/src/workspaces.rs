@@ -166,6 +166,12 @@ impl From<Place> for String {
 
 impl Workspaces {
     /// Loads `workspaces.toml` from `path`; a missing file yields no workspaces.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid
+    /// TOML or does not match the schema, [`ConfigError::InvalidWorkspace`] if a workspace breaks
+    /// a rule the schema cannot express.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         match read(path)? {
             Some(text) => Self::from_toml(&text, path),
@@ -174,6 +180,12 @@ impl Workspaces {
     }
 
     /// Parses TOML text and checks the values; `origin` is only used in errors.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Parse`] if `text` is not valid TOML or does not match the schema,
+    /// [`ConfigError::InvalidWorkspace`] if a name is blank or used twice, or a side has no tabs
+    /// or more than one current tab.
     pub fn from_toml(text: &str, origin: &Path) -> Result<Self, ConfigError> {
         let workspaces: Self = toml::from_str(text).map_err(|source| ConfigError::Parse {
             path: origin.to_path_buf(),
@@ -242,6 +254,12 @@ impl Workspaces {
 /// one.
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid
+/// TOML or does not match the schema, [`ConfigError::InvalidWorkspace`] if it or `workspace`
+/// breaks a rule the schema cannot express, [`ConfigError::Write`] if it cannot be written.
 pub fn save_workspace(path: &Path, workspace: &Workspace) -> Result<Workspaces, ConfigError> {
     let mut workspaces = Workspaces::load(path)?;
     match workspaces
@@ -260,6 +278,12 @@ pub fn save_workspace(path: &Path, workspace: &Workspace) -> Result<Workspaces, 
 /// Returns all workspaces as the file now holds them. See [`save_workspace`].
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid
+/// TOML or does not match the schema, [`ConfigError::InvalidWorkspace`] if a workspace in it
+/// breaks a rule the schema cannot express, [`ConfigError::Write`] if it cannot be written.
 pub fn remove_workspace(path: &Path, name: &str) -> Result<Workspaces, ConfigError> {
     let mut workspaces = Workspaces::load(path)?;
     let count = workspaces.workspaces.len();
@@ -277,6 +301,13 @@ pub fn remove_workspace(path: &Path, name: &str) -> Result<Workspaces, ConfigErr
 /// as the file now holds them. See [`save_workspace`].
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid
+/// TOML or does not match the schema, [`ConfigError::InvalidWorkspace`] if a workspace in it
+/// breaks a rule the schema cannot express or `to` is blank, [`ConfigError::Write`] if it cannot
+/// be written.
 pub fn rename_workspace(path: &Path, from: &str, to: &str) -> Result<Workspaces, ConfigError> {
     let mut workspaces = Workspaces::load(path)?;
     if from == to || workspaces.get(from).is_none() {

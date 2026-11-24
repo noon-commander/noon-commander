@@ -41,6 +41,11 @@ pub struct Template {
 
 impl Template {
     /// Reads `text`.
+    ///
+    /// # Errors
+    ///
+    /// [`VarsError::Unclosed`] if a `${` has no `}` after it, [`VarsError::Name`] if braces hold
+    /// something that is not the name of a variable.
     pub fn parse(text: &str) -> Result<Self, VarsError> {
         let mut pieces = Vec::new();
         let mut literal = String::new();

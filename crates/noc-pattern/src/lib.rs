@@ -46,6 +46,11 @@ pub struct Options {
 }
 
 /// `pattern` built to match text.
+///
+/// # Errors
+///
+/// [`PatternError`] if the regex engine refuses `pattern`: a regular expression that is not
+/// valid, or a pattern too big to build.
 pub fn text(pattern: &str, options: Options) -> Result<regex::Regex, PatternError> {
     regex::RegexBuilder::new(&source(pattern, options))
         .case_insensitive(caseless(pattern, options))
@@ -54,6 +59,10 @@ pub fn text(pattern: &str, options: Options) -> Result<regex::Regex, PatternErro
 }
 
 /// `pattern` built to match bytes, such as names that are not UTF-8.
+///
+/// # Errors
+///
+/// [`PatternError`] if the regex engine refuses `pattern`, as for [`text`].
 pub fn bytes(pattern: &str, options: Options) -> Result<regex::bytes::Regex, PatternError> {
     regex::bytes::RegexBuilder::new(&source(pattern, options))
         .case_insensitive(caseless(pattern, options))

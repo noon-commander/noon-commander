@@ -104,6 +104,12 @@ pub fn local_dir(text: &str, home: &Path) -> Option<PathBuf> {
 
 impl Hosts {
     /// Loads `hosts.toml` from `path`; a missing file yields no hosts.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid
+    /// TOML or does not match the schema, [`ConfigError::InvalidHost`] if a host's `other_dir` is
+    /// not `/…`, `~`, or `~/…`.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         match read(path)? {
             Some(text) => Self::from_toml(&text, path),
@@ -112,6 +118,11 @@ impl Hosts {
     }
 
     /// Parses TOML text and checks the values; `origin` is only used in errors.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Parse`] if `text` is not valid TOML or does not match the schema,
+    /// [`ConfigError::InvalidHost`] if a host's `other_dir` is not `/…`, `~`, or `~/…`.
     pub fn from_toml(text: &str, origin: &Path) -> Result<Self, ConfigError> {
         let hosts: Self = toml::from_str(text).map_err(|source| ConfigError::Parse {
             path: origin.to_path_buf(),
@@ -142,6 +153,11 @@ impl Hosts {
 /// TOML is left alone. The file is replaced atomically, through a symbolic link if it is one.
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Edit`] if it is not valid
+/// TOML, [`ConfigError::Write`] if it cannot be written.
 pub fn save_host(path: &Path, name: &str, host: Option<&HostConfig>) -> Result<(), ConfigError> {
     let text = read(path)?.unwrap_or_default();
     let mut document: DocumentMut = text.parse().map_err(|source| ConfigError::Edit {
@@ -234,7 +250,10 @@ pub(crate) fn read(path: &Path) -> Result<Option<String>, ConfigError> {
 
 /// Writes [`DEFAULT_HOSTS`] to `path`, creating parent directories.
 ///
-/// Fails with [`ConfigError::AlreadyExists`] if `path` exists, unless `force` is set.
+/// # Errors
+///
+/// [`ConfigError::AlreadyExists`] if `path` exists, unless `force` is set;
+/// [`ConfigError::Write`] if the file or its parent directories cannot be created or written.
 pub fn write_default_hosts(path: &Path, force: bool) -> Result<(), ConfigError> {
     write_new(path, DEFAULT_HOSTS, force)
 }

@@ -19,6 +19,12 @@ use crate::{Config, ConfigError};
 /// one.
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Edit`] if it is not valid
+/// TOML; [`ConfigError::HostsMoved`] or [`ConfigError::Parse`] if the changed file would not be
+/// a valid configuration; [`ConfigError::Write`] if it cannot be written.
 pub fn save_config(path: &Path, old: &Config, new: &Config) -> Result<(), ConfigError> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,

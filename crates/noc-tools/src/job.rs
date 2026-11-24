@@ -105,6 +105,10 @@ impl Running {
     /// process's group. zsh runs the last command of `-c` in its own place, so it is that
     /// command that ends or is stopped, and nothing else would take the terminal back. A
     /// command that a shell runs as a job of its own is the shell's to stop.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if waiting for the program fails.
     pub async fn wait(&mut self) -> Result<Waited, ToolError> {
         let Self {
             child,
@@ -152,6 +156,10 @@ impl Running {
     }
 
     /// Gives the terminal back to a stopped program, and continues it.
+    ///
+    /// # Errors
+    ///
+    /// An I/O error if its group cannot be given the terminal or sent SIGCONT.
     pub fn resume(&mut self) -> io::Result<()> {
         match &self.job {
             Some(job) => job.to_foreground(),
@@ -163,6 +171,10 @@ impl Running {
     /// SIGCONT, so that it hears it, with the terminal, so that it can put the terminal back as
     /// it was. One that goes on after that, as a server that takes SIGHUP for reading its
     /// settings again, gets SIGKILL the next time; [`has_ended`](Self::has_ended) says so.
+    ///
+    /// # Errors
+    ///
+    /// An I/O error if SIGHUP, or SIGKILL the next time, cannot be sent to its group.
     pub fn end(&mut self) -> io::Result<()> {
         let Some(job) = &mut self.job else {
             return Ok(());
@@ -178,6 +190,11 @@ impl Running {
     /// shell passes SIGHUP on to its jobs: the signal of `ending`, then SIGCONT, so that a
     /// stopped one hears it; where it runs as a job, to all of its group, with the terminal, so
     /// that it can put the terminal back as it was. One that goes on after that may be let go.
+    ///
+    /// # Errors
+    ///
+    /// An I/O error if the signal of `ending`, or SIGCONT where it does not run as a job, cannot
+    /// be sent.
     pub fn pass_on(&mut self, ending: Ending) -> io::Result<()> {
         if let Some(job) = &self.job {
             return job.tell(ending.signal());

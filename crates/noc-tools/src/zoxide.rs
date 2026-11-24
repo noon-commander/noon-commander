@@ -47,6 +47,12 @@ impl Zoxide {
 
     /// Adds the directory `dir`, an absolute path, or raises its rank: `zoxide add -- <dir>`.
     /// zoxide leaves out what `_ZO_EXCLUDE_DIRS` excludes, the home directory by default.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if zoxide cannot be started, [`ToolError::Failed`] if it exits
+    /// unsuccessfully, [`ToolError::Timeout`] if it takes more than 5 seconds, or
+    /// [`ToolError::Io`] if reading its output fails.
     pub async fn add(&self, dir: &Path) -> Result<(), ToolError> {
         let args = [OsStr::new("add"), OsStr::new("--"), dir.as_os_str()];
         process::output(&self.program, args, TIMEOUT).await?;
@@ -55,6 +61,12 @@ impl Zoxide {
 
     /// What zoxide says it is, such as `zoxide 0.9.8`: `zoxide --version`, its first line.
     /// A program that is not there is [`ToolError::is_not_found`].
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if zoxide cannot be started, [`ToolError::Failed`] if it exits
+    /// unsuccessfully, [`ToolError::Timeout`] if it takes more than 5 seconds, or
+    /// [`ToolError::Io`] if reading its output fails.
     pub async fn version(&self) -> Result<String, ToolError> {
         let output = process::output(&self.program, ["--version"], TIMEOUT).await?;
         let text = String::from_utf8_lossy(&output);
@@ -64,6 +76,12 @@ impl Zoxide {
     /// The directories that match all `keywords`, best first, without `exclude`, the
     /// directory the panel shows: `zoxide query --list --score --exclude <dir> -- <keywords>`.
     /// No keywords list every directory. zoxide leaves out directories that are gone.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if zoxide cannot be started, [`ToolError::Failed`] if it exits
+    /// unsuccessfully, [`ToolError::Timeout`] if it takes more than 5 seconds, or
+    /// [`ToolError::Io`] if reading its output fails.
     pub async fn query(
         &self,
         keywords: &[String],

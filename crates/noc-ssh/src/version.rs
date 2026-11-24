@@ -42,6 +42,12 @@ fn leading_number(text: &str) -> Option<(u32, &str)> {
 }
 
 /// Runs `ssh -V` and checks that the client is a supported OpenSSH release.
+///
+/// # Errors
+///
+/// [`SshError::Timeout`] if ssh takes more than 10 seconds, [`SshError::Spawn`] if it cannot
+/// be started, [`SshError::NotOpenSsh`] if it prints no OpenSSH version, and
+/// [`SshError::TooOld`] if the version is older than [`OpenSshVersion::MINIMUM`].
 pub async fn check_version(settings: &SshSettings) -> Result<OpenSshVersion, SshError> {
     let output = tokio::time::timeout(Duration::from_secs(10), version_command(settings).output())
         .await

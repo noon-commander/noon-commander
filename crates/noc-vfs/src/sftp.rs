@@ -163,6 +163,11 @@ impl SftpFs {
     }
 
     /// Starts an SFTP session over the pipes of an `ssh -s … sftp` process (or `sftp-server`).
+    ///
+    /// # Errors
+    ///
+    /// [`VfsError::Sftp`] if the session does not start: the pipes break, or what is at the
+    /// other end does not answer as an SFTP server.
     pub async fn from_pipes<W, R>(stdin: W, stdout: R) -> Result<Self, VfsError>
     where
         W: AsyncWrite + Send + 'static,
@@ -175,12 +180,21 @@ impl SftpFs {
     }
 
     /// The remote home directory: canonical form of `.`.
+    ///
+    /// # Errors
+    ///
+    /// [`VfsError::NotFound`] or [`VfsError::PermissionDenied`] if the server reports so for
+    /// `.`, [`VfsError::Sftp`] for any other failure of the server or the session.
     pub async fn home(&self) -> Result<RemotePath, VfsError> {
         self.canonicalize(&RemotePath::from(".")).await
     }
 
     /// Closes the SFTP session. It waits for the readers and writers of its files to be
     /// dropped; drop them first.
+    ///
+    /// # Errors
+    ///
+    /// [`VfsError::Sftp`] if the session fails while it closes, such as when the pipes break.
     pub async fn close(self) -> Result<(), VfsError> {
         self.sftp.close().await.map_err(VfsError::Sftp)
     }

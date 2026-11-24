@@ -55,6 +55,10 @@ impl Editor {
     /// this process's terminal, which the caller has handed over, as a job where this process's
     /// group has the terminal, so that Ctrl+z in the editor stops it alone (ADR 0054). `file` is
     /// absolute, so no editor takes it for an option.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if the editor cannot be started.
     pub fn start(&self, file: &Path, line: Option<u64>) -> Result<Running, ToolError> {
         debug_assert!(file.is_absolute());
         let mut command = Command::new(&self.program);

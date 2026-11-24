@@ -35,8 +35,9 @@ pub struct Paths {
 impl Paths {
     /// Resolves the directories for the current user from the process environment.
     ///
-    /// Fails with [`ConfigError::NoHomeDir`] if [`std::env::home_dir`] finds no absolute home
-    /// directory.
+    /// # Errors
+    ///
+    /// [`ConfigError::NoHomeDir`] if [`std::env::home_dir`] finds no absolute home directory.
     pub fn from_env() -> Result<Self, ConfigError> {
         // A relative or empty home would put every path under the working directory.
         let home = std::env::home_dir()
@@ -114,8 +115,13 @@ impl Paths {
     /// that it is a private directory of the user: a real directory, not a symbolic link,
     /// owned by the user, and closed to group and others.
     ///
-    /// Only the last component is created; the parent must exist. Fails with
-    /// [`ConfigError::UnsafeRuntimeDir`] if the check fails.
+    /// Only the last component is created; the parent must exist.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Write`] if the directory cannot be created, as when the parent is missing;
+    /// [`ConfigError::Read`] if its metadata cannot be read; [`ConfigError::UnsafeRuntimeDir`] if
+    /// the check fails.
     pub fn ensure_runtime_dir(&self) -> Result<(), ConfigError> {
         let dir = &self.runtime_dir;
         match DirBuilder::new().mode(0o700).create(dir) {

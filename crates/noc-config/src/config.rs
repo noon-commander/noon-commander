@@ -543,6 +543,12 @@ impl Config {
     /// Loads the configuration from `path`; a missing file yields the defaults.
     ///
     /// A leading `~` is expanded to `home`, see [`expand_tilde`](Self::expand_tilde).
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::HostsMoved`] if it has a
+    /// `[hosts]` table, [`ConfigError::Parse`] if it is not valid TOML or does not match the
+    /// schema.
     pub fn load(path: &Path, home: &Path) -> Result<Self, ConfigError> {
         let text = match fs::read_to_string(path) {
             Ok(text) => text,
@@ -560,6 +566,11 @@ impl Config {
     }
 
     /// Parses TOML text; `origin` is only used in errors. Does not expand `~`.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::HostsMoved`] if `text` has a `[hosts]` table, [`ConfigError::Parse`] if it
+    /// is not valid TOML or does not match the schema.
     pub fn from_toml(text: &str, origin: &Path) -> Result<Self, ConfigError> {
         // Older versions kept the hosts here; say where they went rather than that the key is
         // unknown.
@@ -603,7 +614,10 @@ fn expand_tilde_in(path: &mut PathBuf, home: &Path) {
 
 /// Writes [`DEFAULT_CONFIG`] to `path`, creating parent directories.
 ///
-/// Fails with [`ConfigError::AlreadyExists`] if `path` exists, unless `force` is set.
+/// # Errors
+///
+/// [`ConfigError::AlreadyExists`] if `path` exists, unless `force` is set;
+/// [`ConfigError::Write`] if the file or its parent directories cannot be created or written.
 pub fn write_default_config(path: &Path, force: bool) -> Result<(), ConfigError> {
     write_new(path, DEFAULT_CONFIG, force)
 }

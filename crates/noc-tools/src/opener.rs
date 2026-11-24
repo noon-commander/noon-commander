@@ -42,6 +42,11 @@ impl Opener {
     /// Opens `path`, an absolute path: `open <path>`. `xdg-open` takes no `--`, so the path
     /// goes without one; being absolute, it is never taken for an option. The program that
     /// opens it runs on after Noon Commander quits.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if the opener cannot be started, [`ToolError::Failed`] if it exits
+    /// unsuccessfully within 5 seconds, or [`ToolError::Io`] if waiting for it fails.
     pub async fn open(&self, path: &Path) -> Result<(), ToolError> {
         debug_assert!(path.is_absolute());
         process::detached(&self.program, [path], TIMEOUT).await

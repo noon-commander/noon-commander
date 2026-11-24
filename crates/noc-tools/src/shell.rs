@@ -49,6 +49,10 @@ impl Shell {
     /// terminal, which the caller has handed over, as a job where this process's group has the
     /// terminal (ADR 0054). The command goes to the shell as it was typed, in one argument; it
     /// may span lines.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if the shell cannot be started, also when `dir` is gone.
     pub fn start(&self, dir: &Path, command: &str) -> Result<Running, ToolError> {
         let mut command_line = Command::new(&self.program);
         command_line.args(&self.args).arg(command).current_dir(dir);

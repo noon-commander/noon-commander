@@ -59,6 +59,11 @@ impl Target {
     }
 
     /// Checks the destination and the user-supplied arguments of `settings`.
+    ///
+    /// # Errors
+    ///
+    /// [`SshError::InvalidDestination`] if the destination is empty or starts with `-`,
+    /// [`SshError::Args`] if the policy refuses the arguments.
     pub fn validate(&self, settings: &SshSettings) -> Result<(), SshError> {
         if self.destination.is_empty() || self.destination.starts_with('-') {
             return Err(SshError::InvalidDestination(self.destination.clone()));

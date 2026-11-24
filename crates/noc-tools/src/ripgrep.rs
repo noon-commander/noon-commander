@@ -145,6 +145,10 @@ impl<R: AsyncRead + Unpin> Hits<R> {
 
     /// The next hit, or `None` at the end. Lines that are not rg's JSON, and JSON messages
     /// other than begin and match (end, summary, context), are skipped.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Io`] if reading the output fails.
     pub async fn next(&mut self) -> Result<Option<Hit>, ToolError> {
         if let Some(hit) = self.pending.take() {
             return Ok(Some(hit));
@@ -361,6 +365,12 @@ impl Ripgrep {
 
     /// What rg says it is, such as `ripgrep 15.2.0`: `rg --version`, its first line. A
     /// program that is not there is [`ToolError::is_not_found`].
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if rg cannot be started, [`ToolError::Failed`] if it exits
+    /// unsuccessfully, [`ToolError::Timeout`] if it takes more than 5 seconds, or
+    /// [`ToolError::Io`] if reading its output fails.
     pub async fn version(&self) -> Result<String, ToolError> {
         let output = process::output(&self.program, ["--version"], VERSION_TIMEOUT).await?;
         let text = String::from_utf8_lossy(&output);
@@ -371,6 +381,10 @@ impl Ripgrep {
     /// and stderr piped, killed when the child is dropped. Read stderr while reading stdout:
     /// rg stops when either pipe is full. A `dir` that is gone also reads as
     /// [`ToolError::is_not_found`].
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if rg cannot be started.
     pub fn spawn(&self, dir: &Path, query: &Query) -> Result<Child, ToolError> {
         Command::new(&self.program)
             .args(query.args())
@@ -401,6 +415,10 @@ pub struct Ended {
 /// it could not parse); `errors` counts the lines of stderr with text and `last_error` is the
 /// last of them, trimmed. Any other status (127 when a remote shell has no rg, a signal) is
 /// [`ToolError::Failed`] with `program` and the last line of stderr.
+///
+/// # Errors
+///
+/// [`ToolError::Failed`] if `status` is other than 0, 1, or 2, or a signal.
 pub fn ended(program: &Path, status: ExitStatus, stderr: &[u8]) -> Result<Ended, ToolError> {
     if !matches!(status.code(), Some(0..=2)) {
         return Err(ToolError::Failed {

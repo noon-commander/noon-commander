@@ -52,6 +52,10 @@ impl HistoryEntry {
 
 impl History {
     /// Loads `history.toml` from `path`; a missing file yields no commands.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         match read(path)? {
             Some(text) => Self::from_toml(&text, path),
@@ -60,6 +64,10 @@ impl History {
     }
 
     /// Parses TOML text; `origin` is only used in errors.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Parse`] if `text` is not valid TOML or does not match the schema.
     pub fn from_toml(text: &str, origin: &Path) -> Result<Self, ConfigError> {
         toml::from_str(text).map_err(|source| ConfigError::Parse {
             path: origin.to_path_buf(),
@@ -83,6 +91,11 @@ impl History {
 /// a symbolic link if it is one, and is new with mode 0600, since commands may hold secrets.
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid,
+/// [`ConfigError::Write`] if it cannot be written.
 pub fn add_command(path: &Path, entry: &HistoryEntry, size: usize) -> Result<History, ConfigError> {
     let mut history = History::load(path)?;
     history
@@ -99,6 +112,11 @@ pub fn add_command(path: &Path, entry: &HistoryEntry, size: usize) -> Result<His
 /// the commands as the file now holds them. See [`add_command`].
 ///
 /// Blocking: call it from a blocking thread.
+///
+/// # Errors
+///
+/// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid,
+/// [`ConfigError::Write`] if it cannot be written.
 pub fn remove_command(
     path: &Path,
     host: Option<&str>,

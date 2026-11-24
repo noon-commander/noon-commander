@@ -175,6 +175,12 @@ pub struct AskpassServer {
 impl AskpassServer {
     /// Binds the bridge socket in `runtime_dir`. `program` is the askpass executable: the
     /// noc binary. Must be called within a tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// An I/O error if the system gives no random numbers for the name and the token, if the
+    /// socket path is too long for a Unix socket (`InvalidInput`), or if the socket cannot be
+    /// bound.
     pub fn bind(
         runtime_dir: &Path,
         program: PathBuf,
@@ -431,6 +437,11 @@ impl Invocation {
     }
 
     /// Sends the prompt to Noon Commander and waits for the answer. Blocking.
+    ///
+    /// # Errors
+    ///
+    /// An I/O error if the socket cannot be reached, if writing the prompt or reading the
+    /// answer fails, or if the answer is not one Noon Commander sends.
     pub fn run(&self) -> io::Result<Outcome> {
         let mut stream = std::os::unix::net::UnixStream::connect(&self.socket)?;
         let request = RequestRef {

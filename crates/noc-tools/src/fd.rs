@@ -77,6 +77,11 @@ impl Query {
 
     /// What decides which names the globs that are not exclusions let through, and where a
     /// name matches the pattern; or why a glob, or the pattern, is not one.
+    ///
+    /// # Errors
+    ///
+    /// [`PatternError::Glob`] if a glob that is not an exclusion is not one;
+    /// [`PatternError::Regex`] if the regex engine refuses the pattern.
     pub fn names(&self) -> Result<Names, PatternError> {
         let mut names = GlobSetBuilder::new();
         let mut paths = GlobSetBuilder::new();
@@ -190,6 +195,10 @@ impl<R: AsyncRead + Unpin> Entries<R> {
     }
 
     /// The next entry, or `None` at the end.
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Io`] if reading fd's output fails.
     pub async fn next(&mut self) -> Result<Option<Entry>, ToolError> {
         while let Some(hit) = self.paths.next().await? {
             let Hit::File(mut path) = hit else {
@@ -225,6 +234,12 @@ impl Fd {
 
     /// What fd says it is, such as `fd 10.5.0`: `fd --version`, its first line. A program
     /// that is not there is [`ToolError::is_not_found`].
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if fd cannot be started, [`ToolError::Failed`] if it exits
+    /// unsuccessfully, [`ToolError::Timeout`] if it takes more than 5 seconds, or
+    /// [`ToolError::Io`] if reading its output fails.
     pub async fn version(&self) -> Result<String, ToolError> {
         let output = process::output(&self.program, ["--version"], VERSION_TIMEOUT).await?;
         let text = String::from_utf8_lossy(&output);
@@ -235,6 +250,10 @@ impl Fd {
     /// and stderr piped, killed when the child is dropped. Read stderr while reading stdout:
     /// fd stops when either pipe is full. A `dir` that is gone also reads as
     /// [`ToolError::is_not_found`].
+    ///
+    /// # Errors
+    ///
+    /// [`ToolError::Spawn`] if fd cannot be started.
     pub fn spawn(&self, dir: &Path, query: &Query) -> Result<Child, ToolError> {
         Command::new(&self.program)
             .args(query.args())
@@ -256,6 +275,10 @@ impl Fd {
 /// it could not read among them, and `last_error` is the last, without fd's prefix and the
 /// note after it. Any other status (127 when a remote shell has no fd, a signal) is
 /// [`ToolError::Failed`] with `program` and the last line of stderr.
+///
+/// # Errors
+///
+/// [`ToolError::Failed`] if `status` is other than 0 or 1, or a signal.
 pub fn ended(program: &Path, status: ExitStatus, stderr: &[u8]) -> Result<Ended, ToolError> {
     if !matches!(status.code(), Some(0 | 1)) {
         return Err(ToolError::Failed {

@@ -19,6 +19,13 @@ pub enum RenameError {
 /// differs only in case or Unicode normalization, on a file system that does not tell them
 /// apart, is the entry itself, which takes the new spelling; but where it leads to another
 /// entry, that one has the name.
+///
+/// # Errors
+///
+/// [`RenameError::Exists`] if another entry has the name and is a directory or `replace` is
+/// not set. [`RenameError::Vfs`] if `vfs` fails to tell of `from` or `to`, to list their
+/// directory, to remove the entry replaced, or to rename; `from` that is not there is
+/// [`VfsError::NotFound`].
 pub async fn rename<V: Vfs>(
     vfs: &V,
     from: &V::Path,

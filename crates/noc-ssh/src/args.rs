@@ -66,6 +66,12 @@ enum Class {
 }
 
 /// Checks user-supplied ssh arguments against the policy.
+///
+/// # Errors
+///
+/// The [`ArgsError`] of the first argument the policy refuses: one that is not an option, a
+/// flag ssh does not know or that misses its value, `-F`, or a flag or `-o` option that
+/// forwards or that Noon Commander sets itself.
 pub fn validate(args: &[String]) -> Result<(), ArgsError> {
     let mut args = args.iter();
     while let Some(arg) = args.next() {

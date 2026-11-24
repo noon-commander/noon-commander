@@ -48,6 +48,11 @@ impl ResolvedHost {
     }
 
     /// Parses the output of `ssh -G`.
+    ///
+    /// # Errors
+    ///
+    /// [`ParseError::Missing`] if it has no `user`, `hostname`, or `port`,
+    /// [`ParseError::InvalidPort`] if the port is not a number of 16 bits.
     pub fn parse(output: &str) -> Result<Self, ParseError> {
         let options: Vec<(String, String)> = output
             .lines()
@@ -91,6 +96,12 @@ pub enum ParseError {
 }
 
 /// Runs `ssh -G` for `target`.
+///
+/// # Errors
+///
+/// The errors of [`Target::validate`]; [`SshError::Timeout`] if ssh takes more than 15
+/// seconds, [`SshError::Spawn`] if it cannot be started, [`SshError::Exited`] if it fails, and
+/// [`SshError::Resolve`] if its output cannot be read.
 pub async fn resolve(settings: &SshSettings, target: &Target) -> Result<ResolvedHost, SshError> {
     target.validate(settings)?;
     let output = tokio::time::timeout(

@@ -117,6 +117,11 @@ impl Part {
 /// thread for blocking work.
 ///
 /// Cancel-safe: dropping the future closes the file; lines being made are thrown away.
+///
+/// # Errors
+///
+/// The [`VfsError`] of `vfs` if it fails to tell of `path`, to open it, or to read it;
+/// [`VfsError::Io`] if the thread that makes the lines fails.
 pub async fn read_part<V: Vfs>(
     vfs: &V,
     path: &V::Path,

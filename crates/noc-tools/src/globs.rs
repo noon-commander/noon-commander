@@ -6,6 +6,10 @@
 use globset::{Glob, GlobBuilder};
 
 /// `glob`, without its `!`, built as ripgrep and fd read it.
+///
+/// # Errors
+///
+/// A [`globset::Error`] if `glob` is not one, such as `[` or `a{b`.
 pub fn build(glob: &str) -> Result<Glob, globset::Error> {
     let glob = glob.strip_prefix('!').unwrap_or(glob);
     if glob.contains('/') {

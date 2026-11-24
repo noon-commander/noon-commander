@@ -213,6 +213,14 @@ struct Master {
 impl Session {
     /// Connects to `target`. With multiplexing this starts the master connection and returns
     /// once it has authenticated, which may involve prompts through `askpass`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Target::validate`]. With multiplexing also
+    /// [`SshError::ControlPathTooLong`] if the control socket in `runtime_dir` would not fit,
+    /// [`SshError::Spawn`] if ssh cannot be started, [`SshError::Exited`] if the master exits
+    /// before it has authenticated, [`SshError::Cancelled`] if `cancel` fires first, and
+    /// [`SshError::Io`] if no random name can be made or waiting for ssh fails.
     pub async fn connect(
         settings: &SshSettings,
         target: &Target,
@@ -272,6 +280,11 @@ impl Session {
     }
 
     /// Starts an `ssh -s … sftp` process. Must be called within a tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// [`SshError::Disconnected`] if the master connection is gone, [`SshError::Spawn`] if ssh
+    /// cannot be started, [`SshError::Io`] if it has no pipe for stdin or stdout.
     pub fn open_sftp(&self) -> Result<SftpChannel, SshError> {
         let role = match &self.master {
             Some(master) if master.exited.is_cancelled() => {
@@ -307,6 +320,10 @@ impl Session {
     /// if empty), as the last argument of `run`, whose variables the host's shell expands, over
     /// the master if there is one. The caller starts it with the terminal handed over, since
     /// the command gets a terminal of its own there (ADR 0019, ADR 0054).
+    ///
+    /// # Errors
+    ///
+    /// [`SshError::Disconnected`] if the master connection is gone.
     pub fn command_in(
         &self,
         dir: &[u8],
@@ -329,6 +346,11 @@ impl Session {
     /// `cd -- '<dir>' || exit`, then `exec` and the program and its arguments, each quoted for a
     /// POSIX shell, so that nothing in them is read as shell syntax (ADR 0028). Must be called
     /// within a tokio runtime.
+    ///
+    /// # Errors
+    ///
+    /// [`SshError::Disconnected`] if the master connection is gone, [`SshError::Spawn`] if ssh
+    /// cannot be started.
     pub fn spawn_in(
         &self,
         dir: &[u8],

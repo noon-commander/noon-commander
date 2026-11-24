@@ -35,6 +35,10 @@ pub struct Recent {
 
 impl Recent {
     /// Loads `recent.toml` from `path`; a missing file yields empty lists.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Read`] if the file cannot be read, [`ConfigError::Parse`] if it is not valid.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         match read(path)? {
             Some(text) => toml::from_str(&text).map_err(|source| ConfigError::Parse {
@@ -49,6 +53,10 @@ impl Recent {
     /// replaced atomically, through a symbolic link if it is one.
     ///
     /// Blocking: call it from a blocking thread.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Write`] if the file cannot be written.
     pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
         let text = self.to_text().map_err(|error| ConfigError::Write {
             path: path.to_path_buf(),

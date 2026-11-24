@@ -50,7 +50,6 @@ just run     # run noc from source; arguments go to noc
 ```
 
 - Done means `just ci` passes. It changes no files.
-- Other recipes: `just --list`. `just msrv` needs rustup; `just logo` needs `resvg`.
 - CI runs `justfile` recipes (ADR 0013). Add a new check as a recipe and call it from `ci.yml`;
   never put raw commands in `ci.yml`.
 - Releases are the exception: `release.yml` builds from a signed `v*` tag (ADR 0014). Package

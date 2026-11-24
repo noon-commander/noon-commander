@@ -3,7 +3,6 @@ set ignore-comments
 
 # >>> custom vars
 logo_svg := "assets/icons/logo.svg"
-msrv := `sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml`
 # <<< custom vars
 
 # List available recipes.
@@ -42,7 +41,7 @@ lint:
     {{ shell(_shell_scripts, 'shfmt --diff') }}
     actionlint
     zizmor --offline --pedantic --quiet --strict-collection .
-    cargo clippy --workspace --all-targets --locked -- -D warnings
+    cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
     cargo shear --locked
     cargo deny --workspace --locked check -D warnings
     cargo fmt --all --check
@@ -76,6 +75,11 @@ build *args:
 [positional-arguments]
 build-release *args:
     cargo build --workspace --locked --release "${@}"
+
+# Check the build with the oldest supported Rust, as CI does.
+build-msrv:
+    cargo +"$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)" \
+        check --workspace --all-targets --all-features --locked
 
 # Run the binary, passing the arguments to it.
 [positional-arguments]
@@ -122,11 +126,6 @@ snap:
 # Fail if a snapshot file has no test left.
 snap-stale:
     cargo insta test --workspace --unreferenced=reject
-
-# Build with the oldest supported Rust, as CI does.
-msrv:
-    @command -v rustup >/dev/null || { echo "just msrv needs rustup: https://rustup.rs" >&2; exit 1; }
-    rustup run {{ msrv }} cargo check --workspace --all-targets --all-features --locked
 
 # Take the screenshots of docs/demo/*.tape with made-up files and hosts.
 demo:

@@ -149,7 +149,7 @@ jobs:
       - run: cargo install --locked "just@$JUST_VERSION"
       - name: Install the oldest supported Rust
         run: rustup toolchain install "$(just --evaluate msrv)" --profile minimal --no-self-update
-      - run: just msrv
+      - run: just build-msrv
 
   deny:
     name: cargo-deny

@@ -229,7 +229,6 @@ The project's tasks live in the [`justfile`](justfile)
 | `just push-version X.Y.Z` | Commit the version bump, sign the tag, and push them, which starts a release ([packaging/README.md](packaging/README.md#making-a-release)) |
 | `just snap` | Run the tests and review the UI snapshots that changed (needs cargo-insta) |
 | `just snap-stale` | Fail if a snapshot file has no test left (needs cargo-insta) |
-| `just msrv` | Build with the oldest supported Rust (needs rustup) |
 | `just outdated` | Show newer versions of the dependencies, without changing anything (needs cargo-edit) |
 | `just logo` | Render the PNGs of `assets/icons/logo.svg`, without metadata (needs resvg) |
 | `just demo` | Take the screenshots of `docs/demo/*.tape` in a made-up home with made-up hosts (needs vhs) |

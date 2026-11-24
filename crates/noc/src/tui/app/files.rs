@@ -228,12 +228,10 @@ impl App {
                 self.panel_mut(self.active).end_rename();
             }
             // A key that is not the field's is the one command after Ctrl+o.
-            Some(_) => {
-                if let Some(field) = self.panel_mut(self.active).rename_field() {
-                    field.give_up();
-                }
+            Some(_) if let Some(field) = self.panel_mut(self.active).rename_field() => {
+                field.give_up();
             }
-            None => {}
+            _ => {}
         }
         Vec::new()
     }

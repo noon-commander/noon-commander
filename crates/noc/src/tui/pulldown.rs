@@ -517,10 +517,10 @@ impl PullDown {
                     self.open_at(selected, 0, status);
                 }
                 Action::Up | Action::Home if !self.open => {}
-                Action::Up | Action::Down => {
-                    if let Some(cursor) = self.step_round(action == Action::Down, status) {
-                        self.cursor = cursor;
-                    }
+                Action::Up | Action::Down
+                    if let Some(cursor) = self.step_round(action == Action::Down, status) =>
+                {
+                    self.cursor = cursor;
                 }
                 Action::Home => {
                     let cursor = self.next_enabled(0, true, status);
@@ -534,12 +534,11 @@ impl PullDown {
                     let cursor = self.next_enabled(last, false, status);
                     self.cursor = cursor.unwrap_or(self.cursor);
                 }
-                Action::Confirm => {
+                Action::Confirm
                     if let Some(item) = self.menu().item(self.cursor)
-                        && status(item.command).enabled
-                    {
-                        return PullDownEvent::Run(item.command);
-                    }
+                        && status(item.command).enabled =>
+                {
+                    return PullDownEvent::Run(item.command);
                 }
                 Action::Cancel if self.open => self.open = false,
                 Action::Cancel => return PullDownEvent::Closed,

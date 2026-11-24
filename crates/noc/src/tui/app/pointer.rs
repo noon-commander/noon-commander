@@ -531,53 +531,26 @@ impl App {
     /// dragged.
     fn scroll_list_to(&mut self, target: Scrolled, top: usize) {
         match target {
-            Scrolled::Menu => {
-                if let Some(menu) = &mut self.menu {
-                    menu.scroll_to(top);
-                }
+            Scrolled::Menu if let Some(menu) = &mut self.menu => menu.scroll_to(top),
+            Scrolled::TabMenu if let Some(menu) = &mut self.tab_menu => menu.scroll_to(top),
+            Scrolled::Jump if let Some(jump) = &mut self.jump => jump.scroll_to(top),
+            Scrolled::Workspaces if let Some(window) = &mut self.workspaces_window => {
+                window.scroll_to(top);
             }
-            Scrolled::TabMenu => {
-                if let Some(menu) = &mut self.tab_menu {
-                    menu.scroll_to(top);
-                }
+            Scrolled::History if let Some(window) = &mut self.history_window => {
+                window.scroll_to(top);
             }
-            Scrolled::Jump => {
-                if let Some(jump) = &mut self.jump {
-                    jump.scroll_to(top);
-                }
+            Scrolled::Find if let Some(window) = &mut self.find => window.scroll_to(top),
+            Scrolled::KeyHints if let Some(window) = &mut self.key_hints => window.scroll_to(top),
+            Scrolled::Choices
+                if let Some(target) =
+                    self.completion.as_ref().map(|completing| completing.target)
+                    && let Some(choices) = choices_for(&mut self.completion, target) =>
+            {
+                choices.scroll_to(top);
             }
-            Scrolled::Workspaces => {
-                if let Some(window) = &mut self.workspaces_window {
-                    window.scroll_to(top);
-                }
-            }
-            Scrolled::History => {
-                if let Some(window) = &mut self.history_window {
-                    window.scroll_to(top);
-                }
-            }
-            Scrolled::Find => {
-                if let Some(window) = &mut self.find {
-                    window.scroll_to(top);
-                }
-            }
-            Scrolled::KeyHints => {
-                if let Some(window) = &mut self.key_hints {
-                    window.scroll_to(top);
-                }
-            }
-            Scrolled::Choices => {
-                let target = self.completion.as_ref().map(|completing| completing.target);
-                if let Some(choices) =
-                    target.and_then(|target| choices_for(&mut self.completion, target))
-                {
-                    choices.scroll_to(top);
-                }
-            }
-            Scrolled::ComboBox => {
-                if let Some(combo) = self.open_combo_box_mut() {
-                    combo.scroll_to(top);
-                }
+            Scrolled::ComboBox if let Some(combo) = self.open_combo_box_mut() => {
+                combo.scroll_to(top);
             }
             _ => {}
         }

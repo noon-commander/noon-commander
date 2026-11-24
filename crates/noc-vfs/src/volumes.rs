@@ -1237,6 +1237,8 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     mod macos {
+        use std::assert_matches;
+
         use super::super::macos::{candidates, stat, to_late_volume, to_volume};
         use super::*;
 
@@ -1261,9 +1263,10 @@ mod tests {
             );
             let root = stat(Path::new("/")).map_err(|error| error.to_string());
             let answered = to_late_volume(PathBuf::from("/"), None, Some(root));
-            assert!(
-                matches!(answered, LateAnswer::Volume(volume) if volume.space.is_some()),
-                "the volume with its answer"
+            assert_matches!(
+                answered,
+                LateAnswer::Volume(volume) if volume.space.is_some(),
+                "the volume with its answer",
             );
             Ok(())
         }

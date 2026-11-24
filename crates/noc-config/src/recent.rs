@@ -106,6 +106,7 @@ fn utf8_paths<S: Serializer>(paths: &[PathBuf], serializer: S) -> Result<S::Ok, 
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt as _;
     use std::os::unix::fs::PermissionsExt as _;
@@ -149,10 +150,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("recent.toml");
         std::fs::write(&path, "host = [\"web\"]\n").unwrap();
-        assert!(matches!(
-            Recent::load(&path),
-            Err(ConfigError::Parse { .. })
-        ));
+        assert_matches!(Recent::load(&path), Err(ConfigError::Parse { .. }));
     }
 
     #[test]

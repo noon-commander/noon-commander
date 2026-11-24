@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
@@ -85,7 +87,7 @@ fn dots_alone_draw_half_as_often_as_a_shine() {
 
     // A panel reads its directory again: dots turn in its title, alone.
     let reload = app.handle(action(Action::Reload));
-    assert!(matches!(&reload[..], [Effect::List { .. }]), "{reload:?}");
+    assert_matches!(&reload[..], [Effect::List { .. }], "{reload:?}");
     screen_at(&mut app, 20, at(0));
     assert_eq!(app.spin_due(at(0)), Some(shows), "nothing shows before");
     screen_at(&mut app, 20, shows);
@@ -130,7 +132,7 @@ fn a_frame_for_time_alone_puts_back_what_the_panels_drew() {
 
     // A panel whose dots turn draws on every frame.
     let reload = app.handle(action(Action::Reload));
-    assert!(matches!(&reload[..], [Effect::List { .. }]), "{reload:?}");
+    assert_matches!(&reload[..], [Effect::List { .. }], "{reload:?}");
     let waits = screen_at(&mut app, 20, start);
     assert!(waits.contains("╔ / /srv"), "{waits}");
     app.frame_for_time(true);
@@ -209,10 +211,7 @@ fn the_work_dir_follows_the_local_directory_of_the_active_panel() {
     let (handle, _requests) = HostHandle::channel();
     let effects = app.connected("web", connection, handle);
     answer(&mut app, effects, &Listing::Dir(Vec::new()));
-    assert!(matches!(
-        app.panel(Side::Left).location(),
-        Location::Remote { .. }
-    ));
+    assert_matches!(app.panel(Side::Left).location(), Location::Remote { .. });
     assert_eq!(
         app.take_work_dir(),
         None,

@@ -1200,6 +1200,8 @@ fn rgb(color: Color) -> Option<(u8, u8, u8)> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use noc_vfs::Metadata;
 
     use super::*;
@@ -1515,8 +1517,9 @@ mod tests {
                     assert_ne!(focused.fg, focused.bg, "{name} {depth:?}: {tone}");
                     assert_ne!(focused.bg, body.bg, "{name} {depth:?}: {tone}");
                     if depth == ColorDepth::Indexed {
-                        assert!(
-                            matches!(background, Color::Indexed(16..)),
+                        assert_matches!(
+                            background,
+                            Color::Indexed(16..),
                             "{name}: {tone}: {background:?}"
                         );
                     }
@@ -1612,10 +1615,7 @@ mod tests {
                     assert_ne!(style.bg, Some(background), "{name} {depth:?}: {other}");
                 }
                 if depth == ColorDepth::Indexed {
-                    assert!(
-                        matches!(background, Color::Indexed(16..)),
-                        "{name}: {background:?}"
-                    );
+                    assert_matches!(background, Color::Indexed(16..), "{name}: {background:?}");
                 }
             }
         }
@@ -1734,13 +1734,10 @@ mod tests {
                 theme.fkey_number.bg,
             ];
             for (index, layer) in layers.iter().enumerate() {
-                assert!(
-                    matches!(layer, Some(Color::Indexed(16..))),
-                    "{name}: {layer:?}"
-                );
+                assert_matches!(layer, Some(Color::Indexed(16..)), "{name}: {layer:?}");
                 assert!(!layers[index + 1..].contains(layer), "{name}: {layer:?}");
             }
-            assert!(matches!(theme.directory.fg, Some(Color::Indexed(16..))));
+            assert_matches!(theme.directory.fg, Some(Color::Indexed(16..)));
         }
     }
 

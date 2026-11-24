@@ -114,6 +114,7 @@ impl ReadPipeline {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::sync::{Arc, Mutex};
 
     use super::*;
@@ -192,7 +193,7 @@ mod tests {
         let (_, fetch, _) = fake(1000, Some(320));
         let mut pipeline = ReadPipeline::new(fetch, 0..u64::MAX, 64, 4);
         let err = read_all(&mut pipeline).await.unwrap_err();
-        assert!(matches!(err, VfsError::PermissionDenied(..)), "{err:?}");
+        assert_matches!(err, VfsError::PermissionDenied(..));
         assert!(pipeline.read().await.unwrap().is_none(), "nothing after it");
     }
 

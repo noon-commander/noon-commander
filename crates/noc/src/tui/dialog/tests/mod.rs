@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
@@ -30,10 +32,7 @@ fn action(action: Action) -> Resolved {
 
 fn typed(dialog: &mut Dialog, text: &str) {
     for c in text.chars() {
-        assert!(matches!(
-            dialog.handle(Resolved::Insert(c)),
-            DialogEvent::Pending
-        ));
+        assert_matches!(dialog.handle(Resolved::Insert(c)), DialogEvent::Pending);
     }
 }
 

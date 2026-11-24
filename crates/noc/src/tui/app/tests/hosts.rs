@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
@@ -76,7 +78,7 @@ fn a_host_connects_once_and_then_lists_for_every_panel_that_waits() {
 
     // A connected host lists at once.
     let effects = enter_host(&mut app, Side::Left, 1);
-    assert!(matches!(&effects[..], [Effect::List { host: Some(_), .. }]));
+    assert_matches!(&effects[..], [Effect::List { host: Some(_), .. }]);
 }
 
 fn with_host(app: &mut App, name: &str, host: SftpHost) {
@@ -118,10 +120,7 @@ fn opening_a_host_sends_the_other_panel_to_its_other_dir_once() {
 
     // Other hosts leave the other panel alone.
     let effects = enter_host(&mut app, Side::Right, 2);
-    assert!(
-        matches!(&effects[..], [Effect::Connect { .. }]),
-        "{effects:?}"
-    );
+    assert_matches!(&effects[..], [Effect::Connect { .. }], "{effects:?}");
 }
 
 #[test]
@@ -376,11 +375,10 @@ fn f3_on_a_host_views_its_ssh_config_in_front_of_the_menu() {
     // It has no files around it to go to; e edits it, at the line on top.
     assert!(keys(&mut app, &["]", "f"]).is_empty());
     assert!(keys(&mut app, &["e"]).is_empty());
-    assert!(matches!(
+    assert_matches!(
         app.take_handover(),
-        Some(Handover::Edit { file, line: Some(3) })
-            if file == Path::new("/home/me/.ssh/conf.d/worker")
-    ));
+        Some(Handover::Edit { file, line: Some(3) }) if file == Path::new("/home/me/.ssh/conf.d/worker"),
+    );
     app.handle(action(Action::Quit));
     assert_eq!(
         app.context(),
@@ -424,8 +422,9 @@ fn f4_on_a_host_saves_its_settings() {
     let mut hosts = Hosts::default();
     hosts.hosts.insert("web".to_owned(), prod.clone());
     let effects = app.host_saved("web".to_owned(), None, Ok(Arc::new(hosts)));
-    assert!(
-        matches!(&effects[..], [Effect::ListPlaces { .. }]),
+    assert_matches!(
+        &effects[..],
+        [Effect::ListPlaces { .. }],
         "the menu reads the hosts again"
     );
 

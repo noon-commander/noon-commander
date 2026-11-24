@@ -58,6 +58,7 @@ pub async fn rename<V: Vfs>(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::fs;
     use std::path::Path;
 
@@ -99,9 +100,9 @@ mod tests {
         fs::write(dir.join("b"), "b").unwrap();
         fs::create_dir(dir.join("d")).unwrap();
         let taken = rename(&LocalFs, &dir.join("a"), &dir.join("b"), false).await;
-        assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+        assert_matches!(taken, Err(RenameError::Exists(FileKind::File)));
         let taken = rename(&LocalFs, &dir.join("a"), &dir.join("d"), true).await;
-        assert!(matches!(taken, Err(RenameError::Exists(FileKind::Dir))));
+        assert_matches!(taken, Err(RenameError::Exists(FileKind::Dir)));
         assert_eq!(names(dir), ["a", "b", "d"]);
 
         rename(&LocalFs, &dir.join("a"), &dir.join("b"), true)
@@ -132,14 +133,14 @@ mod tests {
             // And `OTHER` is `other`, which keeps it.
             fs::write(dir.join("other"), "y").unwrap();
             let taken = rename(&LocalFs, &dir.join("Name"), &dir.join("OTHER"), false).await;
-            assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+            assert_matches!(taken, Err(RenameError::Exists(FileKind::File)));
             assert_eq!(names(dir), ["Name", "other"]);
             assert_eq!(fs::read_to_string(dir.join("other")).unwrap(), "y");
         } else {
             // It tells them apart: `Name` is another file.
             fs::write(dir.join("Name"), "y").unwrap();
             let taken = rename(&LocalFs, &dir.join("name"), &dir.join("Name"), false).await;
-            assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+            assert_matches!(taken, Err(RenameError::Exists(FileKind::File)));
         }
     }
 
@@ -157,7 +158,7 @@ mod tests {
             RemotePath::from("c"),
         );
         let taken = rename(&sftp, &a, &b, false).await;
-        assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+        assert_matches!(taken, Err(RenameError::Exists(FileKind::File)));
         rename(&sftp, &a, &c, false).await.unwrap();
         rename(&sftp, &c, &b, true).await.unwrap();
         assert_eq!(names(root.path()), ["b"]);
@@ -172,7 +173,7 @@ mod tests {
             fs::write(root.path().join("other"), "other").unwrap();
             let other = RemotePath::from("OTHER");
             let taken = rename(&sftp, &RemotePath::from("B"), &other, false).await;
-            assert!(matches!(taken, Err(RenameError::Exists(FileKind::File))));
+            assert_matches!(taken, Err(RenameError::Exists(FileKind::File)));
         }
     }
 }

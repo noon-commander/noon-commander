@@ -94,6 +94,8 @@ impl Normalized {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -102,9 +104,9 @@ mod tests {
         assert_eq!(fold("Stra\u{df}e"), fold("STRASSE"));
         assert_eq!(fold("\u{3a3}\u{391}\u{3a3}"), fold("\u{3c3}\u{3b1}\u{3c2}"));
         assert_eq!(fold("ReadMe"), "readme");
-        assert!(matches!(fold("plain"), Cow::Borrowed("plain")));
+        assert_matches!(fold("plain"), Cow::Borrowed("plain"));
         assert_eq!(nfc("e\u{301}"), "\u{e9}");
-        assert!(matches!(nfc("ascii"), Cow::Borrowed(_)));
+        assert_matches!(nfc("ascii"), Cow::Borrowed(_));
     }
 
     #[test]

@@ -1485,6 +1485,8 @@ fn describe_completion(context: Context, action: Action) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use noc_scroll::Motion;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -1643,8 +1645,8 @@ mod tests {
         // Each title has points, and a blank line goes before the next.
         for (index, entry) in tips.iter().enumerate() {
             match entry {
-                Entry::Heading(_) => assert!(matches!(tips[index + 1], Entry::Point(_))),
-                Entry::Blank => assert!(matches!(tips[index + 1], Entry::Heading(_))),
+                Entry::Heading(_) => assert_matches!(tips[index + 1], Entry::Point(_)),
+                Entry::Blank => assert_matches!(tips[index + 1], Entry::Heading(_)),
                 Entry::Point(_) => {}
                 entry => panic!("{entry:?}"),
             }
@@ -1799,14 +1801,12 @@ mod tests {
             for (index, entry) in group.entries.iter().enumerate() {
                 if let Entry::Subheading(title) = entry {
                     let before = index.checked_sub(1).map(|before| &group.entries[before]);
-                    assert!(
-                        matches!(before, None | Some(Entry::Heading(_) | Entry::Blank)),
+                    assert_matches!(
+                        before,
+                        None | Some(Entry::Heading(_) | Entry::Blank),
                         "{title}"
                     );
-                    assert!(
-                        matches!(group.entries[index + 1], Entry::Keys { .. }),
-                        "{title}"
-                    );
+                    assert_matches!(group.entries[index + 1], Entry::Keys { .. }, "{title}");
                 }
             }
         }

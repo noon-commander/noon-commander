@@ -260,6 +260,7 @@ pub fn write_default_hosts(path: &Path, force: bool) -> Result<(), ConfigError> 
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::{Path, PathBuf};
@@ -481,10 +482,10 @@ mod tests {
         let path = tmp.path().join("hosts.toml");
         fs::write(&path, "[web\n").unwrap();
         let host = sftp(SftpHost::default());
-        assert!(matches!(
+        assert_matches!(
             save_host(&path, "db", Some(&host)),
             Err(ConfigError::Edit { .. })
-        ));
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), "[web\n");
     }
 

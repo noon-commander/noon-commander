@@ -341,6 +341,7 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::ffi::OsStr;
     use std::fs;
     use std::os::unix::ffi::OsStrExt as _;
@@ -683,14 +684,11 @@ location = \"/\"
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("workspaces.toml");
         fs::create_dir(&path).unwrap();
-        assert!(matches!(
-            Workspaces::load(&path),
-            Err(ConfigError::Read { .. })
-        ));
-        assert!(matches!(
+        assert_matches!(Workspaces::load(&path), Err(ConfigError::Read { .. }));
+        assert_matches!(
             save_workspace(&path, &named("a")),
             Err(ConfigError::Read { .. })
-        ));
+        );
     }
 
     #[test]
@@ -771,10 +769,10 @@ location = \"/\"
 
         assert_eq!(rename_workspace(&path, "x", "y").unwrap(), renamed);
         assert_eq!(rename_workspace(&path, "a", "a").unwrap(), renamed);
-        assert!(matches!(
+        assert_matches!(
             rename_workspace(&path, "a", " "),
             Err(ConfigError::InvalidWorkspace { .. })
-        ));
+        );
         assert_eq!(Workspaces::load(&path).unwrap(), renamed);
     }
 
@@ -794,11 +792,9 @@ location = \"/\"
                 rename_workspace(&path, "a", "b"),
             ];
             for result in results {
-                assert!(
-                    matches!(
-                        result,
-                        Err(ConfigError::Parse { .. } | ConfigError::InvalidWorkspace { .. })
-                    ),
+                assert_matches!(
+                    result,
+                    Err(ConfigError::Parse { .. } | ConfigError::InvalidWorkspace { .. }),
                     "{result:?} for {text:?}"
                 );
             }
@@ -831,10 +827,10 @@ location = \"/\"
                 ..named("a")
             },
         ] {
-            assert!(matches!(
+            assert_matches!(
                 save_workspace(&path, &workspace),
                 Err(ConfigError::InvalidWorkspace { .. })
-            ));
+            );
             assert_eq!(fs::read_to_string(&path).unwrap(), EXAMPLE);
         }
     }

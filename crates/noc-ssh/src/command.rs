@@ -367,6 +367,8 @@ fn detach_from_terminal(command: &mut Command) {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     fn strings(argv: &[OsString]) -> Vec<String> {
@@ -606,14 +608,14 @@ mod tests {
     #[test]
     fn destinations_starting_with_a_dash_are_rejected() {
         let settings = SshSettings::default();
-        assert!(matches!(
+        assert_matches!(
             Target::new("-oProxyCommand=x").validate(&settings),
             Err(SshError::InvalidDestination(_))
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             Target::new("").validate(&settings),
             Err(SshError::InvalidDestination(_))
-        ));
+        );
         assert!(Target::new("web").validate(&settings).is_ok());
     }
 

@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 use noc_vfs::LateAnswer;
 
@@ -53,9 +55,10 @@ fn g_l_and_ctrl_x_g_l_change_the_location_of_their_panel() {
     open_menu(&mut app, Side::Left);
     filter(&mut app, "w");
     let effect = one(keys(&mut app, &["enter"]));
-    assert!(
-        matches!(&effect, Effect::Connect { host, .. } if host == "web"),
-        "a host connects: {effect:?}"
+    assert_matches!(
+        &effect,
+        Effect::Connect { host, .. } if host == "web",
+        "a host connects: {effect:?}",
     );
     assert_eq!(app.active, Side::Right, "from the right panel too");
 }
@@ -180,7 +183,7 @@ fn f9_opens_the_pull_down_menu_and_its_commands_run() {
         "the host of the panel, by its location: {text}"
     );
     let effects = app.handle(Resolved::Hotkey('l'));
-    assert!(matches!(&effects[..], [Effect::ListPlaces { .. }]));
+    assert_matches!(&effects[..], [Effect::ListPlaces { .. }]);
     assert_eq!(app.menu.as_ref().map(LocationMenu::side), Some(Side::Right));
 }
 
@@ -238,7 +241,7 @@ fn ctrl_x_f9_acts_on_the_other_panel_and_tools_and_help_open_their_windows() {
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('t'));
     app.handle(Resolved::Hotkey('o'));
-    assert!(matches!(app.take_handover(), Some(Handover::UserScreen)));
+    assert_matches!(app.take_handover(), Some(Handover::UserScreen));
 
     app.handle(action(Action::PullDown));
     app.handle(Resolved::Hotkey('h'));
@@ -537,7 +540,7 @@ fn the_menu_disconnects_hosts_and_reads_its_listing_again() {
     );
     app.handle(action(Action::End));
     let effect = one(app.handle(action(Action::Confirm)));
-    assert!(matches!(effect, Effect::Connect { .. }));
+    assert_matches!(effect, Effect::Connect { .. });
     open_menu(&mut app, Side::Left);
     assert!(app.hosts.contains_key("worker"));
     app.handle(action(Action::End));
@@ -545,10 +548,7 @@ fn the_menu_disconnects_hosts_and_reads_its_listing_again() {
     assert!(!app.hosts.contains_key("worker"), "stopped connecting");
     // R asks again; the earlier listing no longer counts.
     let effects = app.handle(action(Action::Reload));
-    assert!(matches!(
-        &effects[..],
-        [Effect::ListPlaces { generation: 3 }]
-    ));
+    assert_matches!(&effects[..], [Effect::ListPlaces { generation: 3 }]);
     assert!(app.menu.is_some());
 }
 

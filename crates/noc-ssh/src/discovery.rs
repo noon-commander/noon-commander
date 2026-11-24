@@ -441,6 +441,7 @@ fn matching_entries(dir: &Path, wildcard: &glob::Pattern) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::os::unix::fs::PermissionsExt;
 
     use tempfile::TempDir;
@@ -1018,13 +1019,9 @@ mod tests {
         let discovery = tree.discover();
         assert_eq!(aliases(&discovery), ["system"]);
         assert_eq!(discovery.files, [system]);
-        assert!(
-            matches!(
-                discovery.warnings.as_slice(),
-                [DiscoveryWarning::Unreadable { file, .. }] if *file == secret
-            ),
-            "{:?}",
-            discovery.warnings
+        assert_matches!(
+            discovery.warnings.as_slice(),
+            [DiscoveryWarning::Unreadable { file, .. }] if *file == secret,
         );
     }
 
@@ -1034,13 +1031,9 @@ mod tests {
         let config = tree.mkdir("home/.ssh/config");
         let discovery = tree.discover();
         assert_eq!(discovery.files, [] as [PathBuf; 0]);
-        assert!(
-            matches!(
-                discovery.warnings.as_slice(),
-                [DiscoveryWarning::Unreadable { file, .. }] if *file == config
-            ),
-            "{:?}",
-            discovery.warnings
+        assert_matches!(
+            discovery.warnings.as_slice(),
+            [DiscoveryWarning::Unreadable { file, .. }] if *file == config,
         );
     }
 

@@ -121,38 +121,28 @@ impl VfsError {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
     fn maps_local_errors() {
         let path = Path::new("/x");
         let err = VfsError::local(io::ErrorKind::NotFound.into(), path);
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if p == "/x"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if p == "/x");
         let err = VfsError::local(io::ErrorKind::PermissionDenied.into(), path);
-        assert!(
-            matches!(&err, VfsError::PermissionDenied(p, _) if p == "/x"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::PermissionDenied(p, _) if p == "/x");
         let err = VfsError::local(io::ErrorKind::AlreadyExists.into(), path);
-        assert!(
-            matches!(&err, VfsError::AlreadyExists(p, _) if p == "/x"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::AlreadyExists(p, _) if p == "/x");
         let err = VfsError::local(io::ErrorKind::InvalidData.into(), path);
-        assert!(matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidData));
+        assert_matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidData);
     }
 
     #[test]
     fn keeps_the_code_of_the_system() {
         let path = Path::new("/x");
         let denied = VfsError::local(io::Error::from_raw_os_error(13), path);
-        assert!(
-            matches!(denied, VfsError::PermissionDenied(..)),
-            "{denied:?}"
-        );
+        assert_matches!(denied, VfsError::PermissionDenied(..));
         assert_eq!(denied.code(), Some(Code::Os(13)));
         let full = VfsError::local(io::Error::from_raw_os_error(28), path);
         assert_eq!(full.code(), Some(Code::Os(28)));

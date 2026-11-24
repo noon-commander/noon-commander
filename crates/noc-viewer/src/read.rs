@@ -265,6 +265,7 @@ fn whole_lines(bytes: &[u8], want: Want, end: bool) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::path::PathBuf;
     use std::sync::Mutex;
 
@@ -574,12 +575,12 @@ mod tests {
         assert_eq!(reports[0].total, 1_000_000);
         assert_eq!(reports[0].size, Some(1_000_000));
 
-        assert!(matches!(
+        assert_matches!(
             read_part(&LocalFs, &dir.path().join("missing"), new(0, 1), |_| {
                 ControlFlow::Continue(())
             })
             .await,
             Err(VfsError::NotFound(..))
-        ));
+        );
     }
 }

@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
@@ -317,10 +319,9 @@ fn rename_in_the_question_of_shift_f6_takes_a_name_in_the_directory() {
     app.handle(action(Action::Confirm));
     retype(&mut app, "other");
     let other = one(app.handle(action(Action::Confirm)));
-    assert!(
-        matches!(&other, Effect::Rename { replace: false, to: target, .. }
-            if *target == local("/srv/other.pdf")),
-        "{other:?}"
+    assert_matches!(
+        &other,
+        Effect::Rename { replace: false, to: target, .. } if *target == local("/srv/other.pdf"),
     );
     // Cancel there goes back to the question.
     app.entry_renamed(panel, &from, &local("/srv/other.pdf"), Ok(()));
@@ -390,10 +391,7 @@ fn shift_f6_renames_in_the_row_and_asks_before_replacing_a_file() {
     app.handle(action(Action::Left));
     app.handle(action(Action::Left));
     let again = one(app.handle(action(Action::Confirm)));
-    assert!(
-        matches!(&again, Effect::Rename { replace: true, to: target, .. } if *target == to),
-        "{again:?}"
-    );
+    assert_matches!(&again, Effect::Rename { replace: true, to: target, .. } if *target == to);
     let effects = app.entry_renamed(panel, &from, &to, Ok(()));
     assert_eq!(effects.len(), 2, "both panels show the directory");
     answer(&mut app, effects, &Listing::Dir(vec![file("taken.pdf", 1)]));

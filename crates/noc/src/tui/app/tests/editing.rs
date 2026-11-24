@@ -1,13 +1,15 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
 fn a_file_edited_at_a_line_hands_the_line_to_the_editor() {
     let mut app = with_files(&["a1"]);
     app.edit_file(local("/srv"), b"a1", Some(7));
-    assert!(matches!(
+    assert_matches!(
         app.take_handover(),
-        Some(Handover::Edit { file, line: Some(7) }) if file == Path::new("/srv/a1")
-    ));
+        Some(Handover::Edit { file, line: Some(7) }) if file == Path::new("/srv/a1"),
+    );
 }
 
 #[test]
@@ -186,7 +188,7 @@ fn an_unchanged_copy_goes_and_one_that_cannot_go_back_stays() {
     let copy = app.take_edit().unwrap();
     assert_eq!(Location::Local(copy.clone()), target);
     let effects = app.edited(Ok(false));
-    assert!(matches!(&effects[..], [Effect::Discard(path)] if *path == copy));
+    assert_matches!(&effects[..], [Effect::Discard(path)] if *path == copy);
 
     // The upload fails: the copy stays, and the user hears where it is.
     let (id, _, _, _, _) = copy_job(f4(&mut app));

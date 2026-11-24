@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::num::NonZeroUsize;
 
 use super::*;
@@ -287,10 +288,9 @@ fn a_rename_changes_and_a_write_retries_and_cancel_does_nothing() {
         .map(|field| field.text().to_owned());
     assert_eq!(typed.as_deref(), Some("b"));
     let again = one(app.handle(action(Action::Confirm)));
-    assert!(
-        matches!(&again, Effect::Rename { from: f, to: t, replace: false, .. }
-            if *f == from && *t == to),
-        "{again:?}"
+    assert_matches!(
+        &again,
+        Effect::Rename { from: f, to: t, replace: false, .. } if *f == from && *t == to,
     );
     app.entry_renamed(panel, &from, &to, busy());
     assert!(app.handle(action(Action::Cancel)).is_empty());
@@ -299,7 +299,7 @@ fn a_rename_changes_and_a_write_retries_and_cancel_does_nothing() {
     // A save that failed writes the same bytes again.
     let location = local("/srv/SUMS");
     let write = one(app.write_file(location.clone(), b"x".to_vec(), false));
-    assert!(matches!(write, Effect::WriteFile { .. }));
+    assert_matches!(write, Effect::WriteFile { .. });
     app.written(&location, busy());
     let Effect::WriteFile {
         location: again,
@@ -621,10 +621,10 @@ fn e_and_f4_in_the_viewer_edit_its_file_at_the_line_on_top_which_it_reads_again(
     );
     keys(&mut app, &["j", "j"]);
     assert!(keys(&mut app, &["e"]).is_empty(), "text, and small");
-    assert!(matches!(
+    assert_matches!(
         app.take_handover(),
-        Some(Handover::Edit { file, line: Some(3) }) if file == Path::new("/srv/a1")
-    ));
+        Some(Handover::Edit { file, line: Some(3) }) if file == Path::new("/srv/a1"),
+    );
     assert_eq!(app.context(), Context::Viewer, "it stays");
     // A file the editor changed is read again, from its start up to the line on top.
     let effects = app.edited(Ok(true));
@@ -752,9 +752,10 @@ fn a_remote_file_edited_from_the_viewer_is_read_again_once_it_went_back() {
 fn g_x_in_the_viewer_opens_its_file_externally_and_r_reads_it_again() {
     let mut app = viewing(&["a1"], forty_lines());
     let effects = keys(&mut app, &["g", "x"]);
-    assert!(
-        matches!(&effects[..], [Effect::Open(paths)] if paths == &[PathBuf::from("/srv/a1")]),
-        "{effects:?}"
+    assert_matches!(
+        &effects[..],
+        [Effect::Open(paths)] if paths == &[PathBuf::from("/srv/a1")],
+        "{effects:?}",
     );
     keys(&mut app, &["j", "j"]);
     assert_eq!(read_of(keys(&mut app, &["shift-r"])), (local("/srv/a1"), 0));

@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 /// What ripgrep found, as the search reports it.
@@ -93,7 +95,7 @@ fn f_slash_on_a_host_searches_through_its_connection() {
     answer(&mut app, effects, &Listing::Dir(Vec::new()));
     let effects = keys(&mut app, &["f", "/"]);
     let request = find_request(&effects);
-    assert!(matches!(request.location, Location::Remote { .. }));
+    assert_matches!(request.location, Location::Remote { .. });
     assert!(request.host.is_some(), "its connection");
 }
 
@@ -168,11 +170,10 @@ fn f3_views_a_file_found_at_its_line_and_f4_edits_it_there() {
     assert_eq!(app.context(), Context::Find);
     let effects = keys(&mut app, &["f4"]);
     answer_sniff(&mut app, effects, TEXT);
-    assert!(matches!(
+    assert_matches!(
         app.take_handover(),
-        Some(Handover::Edit { file, line: Some(3) })
-            if file == Path::new("/srv/src/run/main.rs")
-    ));
+        Some(Handover::Edit { file, line: Some(3) }) if file == Path::new("/srv/src/run/main.rs"),
+    );
 }
 
 #[test]
@@ -225,10 +226,10 @@ fn bracket_f_in_the_viewer_goes_through_the_files_found_with_the_cursor() {
     assert_eq!(app.context(), Context::Find);
     let effects = keys(&mut app, &["e"]);
     answer_sniff(&mut app, effects, TEXT);
-    assert!(matches!(
+    assert_matches!(
         app.take_handover(),
-        Some(Handover::Edit { file, line: Some(5) }) if file == Path::new("/srv/src/b.rs")
-    ));
+        Some(Handover::Edit { file, line: Some(5) }) if file == Path::new("/srv/src/b.rs"),
+    );
 }
 
 /// Forty lines, `line 1` to `line 40`.
@@ -254,11 +255,10 @@ fn g_f_and_e_view_and_edit_a_file_found_as_f3_and_f4_do() {
     assert_eq!(app.context(), Context::Find);
     let effects = keys(&mut app, &["e"]);
     answer_sniff(&mut app, effects, TEXT);
-    assert!(matches!(
+    assert_matches!(
         app.take_handover(),
-        Some(Handover::Edit { file, line: Some(3) })
-            if file == Path::new("/srv/src/run/main.rs")
-    ));
+        Some(Handover::Edit { file, line: Some(3) }) if file == Path::new("/srv/src/run/main.rs"),
+    );
 }
 
 #[test]

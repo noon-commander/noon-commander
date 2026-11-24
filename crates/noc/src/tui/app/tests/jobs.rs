@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
@@ -603,18 +605,18 @@ fn a_job_on_a_lost_host_waits_for_it_and_goes_on() {
     // A failure that came as the connection went asks, until the host is known to be lost.
     let (reply, mut first) = oneshot::channel();
     app.job_event(id, failed(www.clone(), "Broken pipe".to_owned(), reply));
-    assert!(matches!(
+    assert_matches!(
         app.dialogs.front().map(|open| &open.purpose),
         Some(Purpose::Failure { .. })
-    ));
+    );
     let effects = app.closed("web", connection, Some("Broken pipe"));
     assert!(effects.is_empty(), "the panel waits for an answer");
     assert_eq!(app.jobs.len(), 1, "the job waits");
     assert_eq!(app.dialogs.len(), 1, "no question about the job");
-    assert!(matches!(
+    assert_matches!(
         app.dialogs.front().map(|open| &open.purpose),
         Some(Purpose::Reconnect { .. })
-    ));
+    );
     let text = screen_of(&mut app, 16);
     assert!(text.contains("Lost the connection to web"), "{text}");
     // One that comes while it is lost waits too, without asking.

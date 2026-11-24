@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Modifier;
@@ -1457,7 +1459,7 @@ fn a_file_far_larger_than_those_behind_goes_at_the_pace_of_its_data() {
             run.file(bytes, small, (noise.around(0.02, 0.1), 0.002));
         }
         let fitted = run.view.forecast.sums.fitted();
-        assert!(matches!(fitted, Some((_, (true, true)))), "{fitted:?}");
+        assert_matches!(fitted, Some((_, (true, true))));
         run.report();
         run.at += 0.02;
         let start = run.at;
@@ -1492,7 +1494,7 @@ fn a_file_far_larger_than_small_ones_that_took_the_time_of_their_bytes_goes_at_i
         run.file(bytes, small, (noise.around(0.000_1, 0.1), 0.000_02));
     }
     let fitted = run.view.forecast.sums.fitted();
-    assert!(matches!(fitted, Some((_, (true, true)))), "{fitted:?}");
+    assert_matches!(fitted, Some((_, (true, true))));
     run.report();
     run.at += 0.000_1;
     let start = run.at;

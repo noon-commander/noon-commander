@@ -99,6 +99,8 @@ pub(crate) fn last_line(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     const SECOND: Duration = Duration::from_secs(1);
@@ -167,10 +169,7 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert!(
-            matches!(&error, ToolError::Timeout { program } if program == Path::new("/bin/sh")),
-            "{error:?}"
-        );
+        assert_matches!(&error, ToolError::Timeout { program } if program == Path::new("/bin/sh"));
         assert!(start.elapsed() < Duration::from_secs(10));
     }
 

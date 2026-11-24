@@ -312,6 +312,7 @@ pub fn ended(program: &Path, status: ExitStatus, stderr: &[u8]) -> Result<Ended,
     reason = "matches are ranges; one is common"
 )]
 mod tests {
+    use std::assert_matches;
     use std::os::unix::process::ExitStatusExt as _;
 
     use tokio::io::AsyncReadExt as _;
@@ -463,7 +464,7 @@ mod tests {
             globs: vec!["[".to_owned()],
             ..query("")
         };
-        assert!(matches!(glob.names(), Err(PatternError::Glob(_))));
+        assert_matches!(glob.names(), Err(PatternError::Glob(_)));
         let regex = Query {
             regex: true,
             ..query("(")
@@ -513,8 +514,9 @@ mod tests {
         assert_eq!(end.errors, 1);
         assert_eq!(end.last_error.as_deref(), Some("error: unclosed group"));
         let missing = ended(program, status(127), b"sh: fd: command not found\n").unwrap_err();
-        assert!(
-            matches!(missing, ToolError::Failed { ref stderr, .. } if stderr.contains("not found"))
+        assert_matches!(
+            missing,
+            ToolError::Failed { ref stderr, .. } if stderr.contains("not found"),
         );
     }
 

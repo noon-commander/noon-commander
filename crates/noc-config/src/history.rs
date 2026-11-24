@@ -141,6 +141,7 @@ fn write(path: &Path, history: &History) -> Result<(), ConfigError> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::os::unix::fs::PermissionsExt as _;
 
     use super::*;
@@ -219,10 +220,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("history.toml");
         std::fs::write(&path, "[[command]]\ncmd = \"ls\"\n").unwrap();
-        assert!(matches!(
+        assert_matches!(
             add_command(&path, &entry("ls", None, 1), 10),
             Err(ConfigError::Parse { .. })
-        ));
+        );
         assert!(std::fs::read_to_string(&path).unwrap().contains("cmd ="));
     }
 }

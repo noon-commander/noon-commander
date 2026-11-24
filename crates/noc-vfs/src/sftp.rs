@@ -524,6 +524,7 @@ fn kind(metadata: MetaData) -> FileKind {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::path::PathBuf;
     use std::process::Stdio;
     use std::time::{Duration, SystemTime};
@@ -685,10 +686,7 @@ mod tests {
         assert_eq!(sub.kind, FileKind::Dir);
 
         let err = server.fs.metadata(&"dangling".into()).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if p == "dangling"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if p == "dangling");
         server.stop().await;
     }
 
@@ -884,7 +882,7 @@ mod tests {
             .set_modified(&"file".into(), before_1970)
             .await
             .unwrap_err();
-        assert!(matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidInput));
+        assert_matches!(&err, VfsError::Io(e) if e.kind() == io::ErrorKind::InvalidInput);
         server.stop().await;
     }
 
@@ -933,7 +931,7 @@ mod tests {
         assert!(server.fs.space(&"".into()).await.unwrap().is_some(), "home");
 
         let err = server.fs.space(&"missing".into()).await.unwrap_err();
-        assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
+        assert_matches!(err, VfsError::NotFound(..));
         server.stop().await;
     }
 
@@ -976,38 +974,23 @@ mod tests {
         };
 
         let err = server.fs.list_dir(&"missing".into()).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if p == "missing"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if p == "missing");
         let err = server.fs.metadata(&"missing".into()).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if p == "missing"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if p == "missing");
         // sftp-server reports ENOTDIR as "no such file".
         let err = server.fs.list_dir(&"file.txt".into()).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if p == "file.txt"),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if p == "file.txt");
         // ENAMETOOLONG is a "bad message".
         let long = RemotePath::new("a".repeat(300));
         let err = server.fs.list_dir(&long).await.unwrap_err();
-        assert!(
-            matches!(
-                err,
-                VfsError::Sftp(openssh_sftp_client::Error::SftpError(..))
-            ),
-            "{err:?}"
+        assert_matches!(
+            err,
+            VfsError::Sftp(openssh_sftp_client::Error::SftpError(..))
         );
         if let Some(locked) = &locked {
             let path = remote(&locked.path);
             let err = server.fs.list_dir(&path).await.unwrap_err();
-            assert!(
-                matches!(&err, VfsError::PermissionDenied(p, _) if *p == path.display()),
-                "{err:?}"
-            );
+            assert_matches!(&err, VfsError::PermissionDenied(p, _) if *p == path.display());
         }
 
         // The session survives errors.

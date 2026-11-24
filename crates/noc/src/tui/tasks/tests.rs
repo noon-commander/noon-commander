@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::path::Path;
 use std::process::Stdio;
 
@@ -662,13 +663,13 @@ async fn a_checksum_job_reports_its_sums_then_its_end() {
     let targets = vec![(vec![Location::Local(file.clone())], None)];
     let cancel = CancellationToken::new();
     let end = run_checksum(7, targets, Algorithm::Sha256, cancel, &done).await;
-    assert!(matches!(
+    assert_matches!(
         end,
         Done::Job {
             id: 7,
             event: JobEvent::Finished { complete: true }
         }
-    ));
+    );
     let mut sums = None;
     while let Ok(report) = reports.try_recv() {
         if let Done::Job {

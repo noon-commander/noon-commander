@@ -6,6 +6,7 @@
     reason = "the helpers, which `allow-unwrap-in-tests` leaves out"
 )]
 
+use std::assert_matches;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -194,23 +195,20 @@ async fn checks_the_openssh_version() {
         OpenSshVersion { major: 9, minor: 9 }
     );
     let old = Fake::new(&[("FAKE_SSH_BANNER", "OpenSSH_8.2p1 Ubuntu-4ubuntu0.5")]);
-    assert!(matches!(
+    assert_matches!(
         check_version(&old.settings).await,
         Err(SshError::TooOld { .. })
-    ));
+    );
     let other = Fake::new(&[("FAKE_SSH_BANNER", "Dropbear v2022.83")]);
-    assert!(matches!(
+    assert_matches!(
         check_version(&other.settings).await,
         Err(SshError::NotOpenSsh { .. })
-    ));
+    );
     let missing = SshSettings {
         program: PathBuf::from("/nonexistent/ssh"),
         ..SshSettings::default()
     };
-    assert!(matches!(
-        check_version(&missing).await,
-        Err(SshError::Spawn { .. })
-    ));
+    assert_matches!(check_version(&missing).await, Err(SshError::Spawn { .. }));
 }
 
 #[tokio::test]
@@ -334,12 +332,12 @@ async fn runs_a_command_in_a_directory_over_the_master() {
     let printed = std::fs::read_to_string(fake.root.path().join("args")).unwrap();
     assert_eq!(printed, "it's $HOME *|1|/bin/shx|");
     session.close().await;
-    assert!(matches!(
+    assert_matches!(
         session_after_close(&fake)
             .await
             .command_in(b"", &run, "true"),
         Err(SshError::Disconnected { .. })
-    ));
+    );
 }
 
 fn os_args(args: &[&str]) -> Vec<OsString> {
@@ -388,10 +386,10 @@ async fn spawns_a_program_without_a_terminal_and_reads_its_output() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty(), "{output:?}");
     session.close().await;
-    assert!(matches!(
+    assert_matches!(
         session_after_close(&fake).await.spawn_in(b"", "true", &[]),
         Err(SshError::Disconnected { .. })
-    ));
+    );
 }
 
 #[tokio::test]
@@ -487,7 +485,7 @@ async fn cancels_a_pending_connection() {
         cancel.cancel();
     };
     let (result, ()) = tokio::join!(connect, canceller);
-    assert!(matches!(result, Err(SshError::Cancelled)), "{result:?}");
+    assert_matches!(result, Err(SshError::Cancelled));
     let pids = fake.pids();
     assert_eq!(pids.len(), 1);
     assert!(is_gone(pids[0]), "the master is still running");
@@ -507,10 +505,7 @@ async fn notices_when_the_master_goes_away() {
         .expect("the session did not notice that the master exited");
     assert!(session.is_closed());
     assert!(session.exit_status().is_some_and(|status| status.success()));
-    assert!(matches!(
-        session.open_sftp(),
-        Err(SshError::Disconnected { .. })
-    ));
+    assert_matches!(session.open_sftp(), Err(SshError::Disconnected { .. }));
     session.close().await;
 }
 
@@ -596,10 +591,10 @@ async fn passes_prompts_to_the_askpass_program() {
     }
     let fake = Fake::new(&[("FAKE_SSH_PASSWORD", "hunter2")]);
     // Without askpass, ssh cannot prompt and authentication fails.
-    assert!(matches!(
+    assert_matches!(
         fake.connect(&fake.settings).await,
         Err(SshError::Exited { .. })
-    ));
+    );
 
     let askpass = fake.dir.path().join("askpass");
     write_program(&askpass, "#!/bin/sh\nprintf '%s\\n' hunter2\n");

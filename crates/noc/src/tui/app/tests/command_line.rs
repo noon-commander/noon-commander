@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
@@ -14,8 +16,9 @@ fn bang_runs_a_shell_command_in_the_panels_directory() {
         "{text}"
     );
     let effects = without_zoxide(app.handle(action(Action::Confirm)));
-    assert!(
-        matches!(&effects[..], [Effect::History(HistoryChange::Add { .. })]),
+    assert_matches!(
+        &effects[..],
+        [Effect::History(HistoryChange::Add { .. })],
         "{effects:?}"
     );
     assert_eq!(app.context(), Context::Panel);
@@ -200,11 +203,11 @@ fn alt_h_takes_a_command_from_the_history_window_and_delete_removes_one() {
 fn ctrl_o_shows_the_output_from_a_panel_and_the_command_line() {
     let mut app = loaded();
     app.handle(action(Action::UserScreen));
-    assert!(matches!(app.take_handover(), Some(Handover::UserScreen)));
+    assert_matches!(app.take_handover(), Some(Handover::UserScreen));
     app.handle(action(Action::Shell));
     type_text(&mut app, "ls");
     app.handle(action(Action::UserScreen));
-    assert!(matches!(app.take_handover(), Some(Handover::UserScreen)));
+    assert_matches!(app.take_handover(), Some(Handover::UserScreen));
     assert_eq!(
         app.command_line.as_ref().map(CommandLine::text),
         Some("ls"),
@@ -226,10 +229,7 @@ fn ctrl_o_shows_the_output_over_whatever_is_in_front_which_stays() {
         let context = app.context();
         assert_ne!(context, Context::Panel, "{opens:?} opens something");
         app.handle(action(Action::UserScreen));
-        assert!(
-            matches!(app.take_handover(), Some(Handover::UserScreen)),
-            "{opens:?}"
-        );
+        assert_matches!(app.take_handover(), Some(Handover::UserScreen), "{opens:?}");
         assert_eq!(app.context(), context, "{opens:?} stays in front");
     }
 }

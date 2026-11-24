@@ -147,6 +147,7 @@ fn to_edit(value: &toml::Value) -> Value {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::fs;
 
     use super::*;
@@ -258,16 +259,16 @@ mod tests {
         let path = dir.path().join("config.toml");
         fs::write(&path, "[ui\n").unwrap();
         let new = changed(|config| config.ui.icons = false);
-        assert!(matches!(
+        assert_matches!(
             save_config(&path, &Config::default(), &new),
             Err(ConfigError::Edit { .. })
-        ));
+        );
         // Valid TOML that the schema rejects stays too.
         fs::write(&path, "[ui]\ncolour = true\n").unwrap();
-        assert!(matches!(
+        assert_matches!(
             save_config(&path, &Config::default(), &new),
             Err(ConfigError::Parse { .. })
-        ));
+        );
         assert_eq!(fs::read_to_string(&path).unwrap(), "[ui]\ncolour = true\n");
     }
 }

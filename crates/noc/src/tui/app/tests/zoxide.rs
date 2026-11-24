@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 #[test]
@@ -113,7 +115,7 @@ fn mkdir_and_delete_count_and_remote_directories_never_do() {
     let mut app = on_a_host().0;
     app.config.zoxide.record = true;
     let here = app.panel(app.active).location().clone();
-    assert!(matches!(here, Location::Remote { .. }), "{here:?}");
+    assert_matches!(here, Location::Remote { .. });
     assert_eq!(zoxide_adds(&app.note(&here)), [] as [PathBuf; 0]);
 }
 

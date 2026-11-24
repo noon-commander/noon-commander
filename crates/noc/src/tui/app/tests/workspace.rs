@@ -1,3 +1,5 @@
+use std::assert_matches;
+
 use super::*;
 
 /// Saves the tabs of both panels as `name` with t W, and returns what is saved.
@@ -92,10 +94,10 @@ fn alt_shift_w_saves_the_tabs_of_both_panels_under_a_name() {
         text.contains("{ Yes } [ No ]"),
         "Yes is the default: {text}"
     );
-    assert!(matches!(
+    assert_matches!(
         one(app.handle(action(Action::Confirm))),
         Effect::Workspaces(WorkspaceChange::Save(_))
-    ));
+    );
     // An empty name saves nothing.
     app.handle(action(Action::SaveWorkspace));
     app.handle(action(Action::DeleteToStart));
@@ -214,11 +216,9 @@ fn the_workspaces_window_saves_restores_renames_and_deletes() {
     photos.name = "photos".to_owned();
     holds(&mut app, &[noon(), photos, saved.clone()]);
     assert_eq!(app.context(), Context::Workspaces, "still open");
-    assert!(
-        matches!(
-            &app.handle(action(Action::Confirm))[..],
-            [Effect::List { .. }, ..]
-        ),
+    assert_matches!(
+        &app.handle(action(Action::Confirm))[..],
+        [Effect::List { .. }, ..],
         "the cursor went to the new one, which restores at once"
     );
     assert_eq!(app.workspace.as_deref(), Some("srv"));
@@ -273,9 +273,10 @@ fn the_workspaces_window_saves_restores_renames_and_deletes() {
     app.handle(action(Action::Delete));
     assert!(screen_of(&mut app, 16).contains("Delete workspace \"photos\"?"));
     let effects = app.handle(action(Action::Confirm));
-    assert!(
-        matches!(&effects[..], [Effect::Workspaces(WorkspaceChange::Remove(name))] if name == "photos"),
-        "{effects:?}"
+    assert_matches!(
+        &effects[..],
+        [Effect::Workspaces(WorkspaceChange::Remove(name))] if name == "photos",
+        "{effects:?}",
     );
 
     // Enter restores and closes the window.
@@ -397,11 +398,9 @@ fn a_renamed_workspace_takes_the_cursor_to_where_its_name_sorts() {
     app.handle(action(Action::DeleteToStart));
     typed(&mut app, "zoo");
     let effects = app.handle(action(Action::Confirm));
-    assert!(
-        matches!(
-            &effects[..],
-            [Effect::Workspaces(WorkspaceChange::Rename { .. })]
-        ),
+    assert_matches!(
+        &effects[..],
+        [Effect::Workspaces(WorkspaceChange::Rename { .. })],
         "{effects:?}"
     );
     // The file renames it in place; the window shows it last.
@@ -436,10 +435,7 @@ fn a_file_that_cannot_be_read_or_written_says_why() {
     assert!(screen_of(&mut app, 16).contains("Cannot read the workspaces"));
     // Retry reads it again.
     let again = one(app.handle(action(Action::Confirm)));
-    assert!(
-        matches!(again, Effect::Workspaces(WorkspaceChange::Load)),
-        "{again:?}"
-    );
+    assert_matches!(again, Effect::Workspaces(WorkspaceChange::Load));
     let removed = WorkspaceChange::Remove("noon".to_owned());
     app.workspaces_changed(removed, Err("cannot write".to_owned().into()));
     let text = screen_of(&mut app, 16);
@@ -451,15 +447,12 @@ fn a_file_that_cannot_be_read_or_written_says_why() {
     let (old, new) = (Box::new(Config::default()), Box::new(app.config.clone()));
     app.config_saved(old, new, Err("cannot write".to_owned().into()));
     let again = one(app.handle(action(Action::Confirm)));
-    assert!(matches!(again, Effect::SaveConfig { .. }), "{again:?}");
+    assert_matches!(again, Effect::SaveConfig { .. });
     let change = HistoryChange::Remove {
         host: None,
         command: "ls".to_owned(),
     };
     app.history_changed(change.clone(), Err("cannot write".to_owned().into()));
     let again = one(app.handle(action(Action::Confirm)));
-    assert!(
-        matches!(&again, Effect::History(asked) if *asked == change),
-        "{again:?}"
-    );
+    assert_matches!(&again, Effect::History(asked) if *asked == change);
 }

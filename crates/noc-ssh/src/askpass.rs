@@ -468,6 +468,8 @@ impl Invocation {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     fn invocation(env: &AskpassEnv, prompt: &str, hint: Option<&str>) -> Invocation {
@@ -526,10 +528,7 @@ mod tests {
             } else {
                 drop(prompt);
             }
-            assert!(matches!(
-                outcome.await.unwrap().unwrap(),
-                Outcome::Cancelled
-            ));
+            assert_matches!(outcome.await.unwrap().unwrap(), Outcome::Cancelled);
         }
     }
 
@@ -614,10 +613,10 @@ mod tests {
             other => panic!("expected a notice, got {other:?}"),
         };
         drop(stream);
-        assert!(matches!(
+        assert_matches!(
             events.recv().await,
-            Some(AskpassEvent::Closed { id: closed }) if closed == id
-        ));
+            Some(AskpassEvent::Closed { id: closed }) if closed == id,
+        );
     }
 
     #[tokio::test]
@@ -626,10 +625,7 @@ mod tests {
         let mut client = invocation(&server.env("web"), "Password: ", None);
         client.token = "0".repeat(32);
         let outcome = tokio::task::spawn_blocking(move || client.run());
-        assert!(matches!(
-            outcome.await.unwrap().unwrap(),
-            Outcome::Cancelled
-        ));
+        assert_matches!(outcome.await.unwrap().unwrap(), Outcome::Cancelled);
         assert!(events.try_recv().is_err());
     }
 

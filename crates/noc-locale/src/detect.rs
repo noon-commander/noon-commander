@@ -206,7 +206,7 @@ mod tests {
     fn without_variables_the_system_or_lang_decides() {
         let formats = auto(&env(&[("LANG", "und")]));
         #[cfg(target_os = "macos")]
-        assert!(matches!(formats.dates_from(), Origin::System(_)));
+        std::assert_matches!(formats.dates_from(), Origin::System(_));
         #[cfg(not(target_os = "macos"))]
         assert_eq!(
             formats.dates_from(),

@@ -308,6 +308,7 @@ fn kind_of(file_type: fs::FileType) -> FileKind {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::time::UNIX_EPOCH;
 
     use super::*;
@@ -349,9 +350,9 @@ mod tests {
         assert_eq!(sub.kind, FileKind::Dir);
 
         let err = LocalFs.metadata(&path("dangling")).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if *p == path("dangling").display().to_string()),
-            "{err:?}"
+        assert_matches!(
+            &err,
+            VfsError::NotFound(p, _) if *p == path("dangling").display().to_string(),
         );
     }
 
@@ -367,7 +368,7 @@ mod tests {
 
         let missing = dir.path().join("missing");
         let err = LocalFs.space(&missing).await.unwrap_err();
-        assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
+        assert_matches!(err, VfsError::NotFound(..));
     }
 
     #[tokio::test]
@@ -444,7 +445,7 @@ mod tests {
         // The file is opened all the same.
         let missing = dir.path().join("missing");
         let err = LocalFs.open_file_range(&missing, 0, 0).await.unwrap_err();
-        assert!(matches!(err, VfsError::NotFound(..)), "{err:?}");
+        assert_matches!(err, VfsError::NotFound(..));
     }
 
     #[tokio::test]
@@ -518,20 +519,11 @@ mod tests {
         let expected = missing.display().to_string();
 
         let err = LocalFs.list_dir(&missing).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if *p == expected),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if *p == expected);
         let err = LocalFs.metadata(&missing).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if *p == expected),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if *p == expected);
         let err = LocalFs.canonicalize(&missing).await.unwrap_err();
-        assert!(
-            matches!(&err, VfsError::NotFound(p, _) if *p == expected),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::NotFound(p, _) if *p == expected);
     }
 
     #[tokio::test]
@@ -542,10 +534,7 @@ mod tests {
         };
         let err = LocalFs.list_dir(&locked.path).await.unwrap_err();
         let expected = locked.path.display().to_string();
-        assert!(
-            matches!(&err, VfsError::PermissionDenied(p, _) if *p == expected),
-            "{err:?}"
-        );
+        assert_matches!(&err, VfsError::PermissionDenied(p, _) if *p == expected);
     }
 
     #[tokio::test]
@@ -570,7 +559,7 @@ mod tests {
             .list_dir(&dir.path().join("file.txt"))
             .await
             .unwrap_err();
-        assert!(matches!(err, VfsError::Io(_)), "{err:?}");
+        assert_matches!(err, VfsError::Io(_));
     }
 
     #[cfg(target_os = "linux")]

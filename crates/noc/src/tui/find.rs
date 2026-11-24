@@ -1017,6 +1017,7 @@ fn line_spans(
     reason = "matches are ranges; one is common"
 )]
 mod tests {
+    use std::assert_matches;
     use std::time::Instant;
 
     use noc_config::SearchMode;
@@ -1252,7 +1253,7 @@ mod tests {
             FindEvent::Search,
             "the other mode"
         );
-        assert!(matches!(window.query(), FindQuery::Names(_)));
+        assert_matches!(window.query(), FindQuery::Names(_));
         assert_eq!(window.dialog.letters(), ['m', 't', 'f', 'g'], "Go to alone");
         assert_eq!(
             hotkey(&mut window, 'v'),
@@ -1438,7 +1439,7 @@ mod tests {
         press(&mut window, Action::Toggle);
         press(&mut window, Action::Home);
         assert_eq!(press(&mut window, Action::Confirm), FindEvent::Search);
-        assert!(matches!(window.query(), FindQuery::Lines(_)));
+        assert_matches!(window.query(), FindQuery::Lines(_));
         assert!(draw(&mut window, 70).contains("View"));
     }
 

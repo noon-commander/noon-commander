@@ -116,7 +116,7 @@ fn formatter(pattern: &str) -> Retained<NSDateFormatter> {
 
 fn format(formatter: &NSDateFormatter, at: DateTime) -> String {
     let seconds = at
-        .to_zoned(jiff::tz::TimeZone::UTC)
+        .to_zoned_datetime(jiff::tz::TimeZone::UTC)
         .map_or(0, |zoned| zoned.timestamp().as_second());
     #[expect(
         clippy::cast_precision_loss,

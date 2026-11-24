@@ -47,7 +47,9 @@ deny = [
 ]
 # Duplicates pulled in by up-to-date dependencies; drop an entry once cargo-deny reports it unused.
 skip = [
-    { crate = "hashbrown@0.16.1", reason = "kasuari (via ratatui-core) has not moved to hashbrown 0.17" },
+    { crate = "lock_api@0.4.14", reason = "crossterm and i18n-embed still use parking_lot 0.12" },
+    { crate = "parking_lot@0.12.5", reason = "crossterm and i18n-embed still use parking_lot 0.12" },
+    { crate = "parking_lot_core@0.9.12", reason = "crossterm and i18n-embed still use parking_lot 0.12" },
     { crate = "syn@2.0.119", reason = "the ecosystem is still migrating to syn 3" },
     { crate = "thiserror@1.0.69", reason = "i18n-embed and i18n-config still use thiserror 1" },
     { crate = "thiserror-impl@1.0.69", reason = "i18n-embed and i18n-config still use thiserror 1" },

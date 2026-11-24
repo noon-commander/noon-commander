@@ -1,12 +1,8 @@
 # Architecture
 
-Noon Commander (`noc`) is a Rust-based, two-panel terminal file manager for macOS and Linux,
-focused on seamless local and SFTP file operations. SFTP is its foundation and the reason it
-exists. It never implements SSH: every connection is a process of the system OpenSSH client, and
-Noon Commander speaks the SFTP protocol over that process's stdin and stdout.
+Noon Commander (`noc`) is a Rust-based, two-panel terminal file manager for macOS and Linux, focused on seamless local and SFTP file operations. SFTP is its foundation and the reason it exists. It never implements SSH: every connection is a process of the system OpenSSH client, and Noon Commander speaks the SFTP protocol over that process's stdin and stdout.
 
-This document describes the planned design; see the [roadmap](roadmap.md) for what exists. Key
-decisions are recorded as [ADRs](adr/).
+This document describes the planned design; see the [roadmap](roadmap.md) for what exists. Key decisions are recorded as [ADRs](adr/).
 
 ## Crates
 
@@ -42,36 +38,13 @@ noc-viewer  → noc-vfs, noc-text, noc-scroll, noc-locale
 noc         → all of them
 ```
 
-Library crates contain no UI code and no user-facing text; they return typed errors and events,
-and the UI turns them into messages. `noc-viewer` is the exception
-([ADR 0015](adr/0015-viewer-and-text-crates.md)): a piece of the UI, with Fluent text of its own,
-that knows nothing of the keymap, the theme, or the app. The app maps its keys to the viewer's
-commands, gives it the styles of its theme, reads the parts it asks for (`Viewer::want`) with
-`noc_viewer::read_part` in a task of its own, which also makes their lines away from the thread
-that draws, gives them back (`Viewer::take`), and closes the viewer itself. Text that the app
-holds, such as the lines of checksums, it cuts into parts with `noc_viewer::part_of` at once
-([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). `noc-scroll` draws
-too, the scroll bar, but has no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code
-that two crates need goes into a crate of its own topic, such as `noc-text`, or `noc-pattern`,
-which builds the regular expressions of fd's search in `noc-tools` and of the regex mode in the
-app, or `noc-vars`, which reads the variables of `shell.run` for `noc-config`, expands them for
-`noc-tools`, and gives their pieces to `noc-ssh` to quote, rather than into a common `core`
-crate.
+Library crates contain no UI code and no user-facing text; they return typed errors and events, and the UI turns them into messages. `noc-viewer` is the exception ([ADR 0015](adr/0015-viewer-and-text-crates.md)): a piece of the UI, with Fluent text of its own, that knows nothing of the keymap, the theme, or the app. The app maps its keys to the viewer's commands, gives it the styles of its theme, reads the parts it asks for (`Viewer::want`) with `noc_viewer::read_part` in a task of its own, which also makes their lines away from the thread that draws, gives them back (`Viewer::take`), and closes the viewer itself. Text that the app holds, such as the lines of checksums, it cuts into parts with `noc_viewer::part_of` at once ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). `noc-scroll` draws too, the scroll bar, but has no text ([ADR 0023](adr/0023-paging-stops-at-the-end.md)). Code that two crates need goes into a crate of its own topic, such as `noc-text`, or `noc-pattern`, which builds the regular expressions of fd's search in `noc-tools` and of the regex mode in the app, or `noc-vars`, which reads the variables of `shell.run` for `noc-config`, expands them for `noc-tools`, and gives their pieces to `noc-ssh` to quote, rather than into a common `core` crate.
 
-ssh runs only from `noc-ssh`, and every other program only from `noc-tools`
-([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths,
-without input for background ones, and killed when their future is dropped or they time out.
-A program that is not installed is told apart from one that fails. The shell of the command
-line, `shell.run`, is the one program started through a shell, since the command is the user's
-([ADR 0019](adr/0019-shell-command-line.md), [ADR 0054](adr/0054-shell-run.md)). The desktop's
-opener of `g x` is the one program left running: it starts programs that outlive it and Noon
-Commander, so its output goes nowhere, it is never killed, and it takes absolute paths without
-`--`, which `xdg-open` refuses ([ADR 0026](adr/0026-open-externally.md)).
+ssh runs only from `noc-ssh`, and every other program only from `noc-tools` ([ADR 0012](adr/0012-external-tools-and-zoxide.md)): without a shell, with `--` before paths, without input for background ones, and killed when their future is dropped or they time out. A program that is not installed is told apart from one that fails. The shell of the command line, `shell.run`, is the one program started through a shell, since the command is the user's ([ADR 0019](adr/0019-shell-command-line.md), [ADR 0054](adr/0054-shell-run.md)). The desktop's opener of `g x` is the one program left running: it starts programs that outlive it and Noon Commander, so its output goes nowhere, it is never killed, and it takes absolute paths without `--`, which `xdg-open` refuses ([ADR 0026](adr/0026-open-externally.md)).
 
 ## Processes
 
-Each connected host has one master connection; everything else is multiplexed over its control
-socket ([ADR 0002](adr/0002-controlmaster-per-host.md)):
+Each connected host has one master connection; everything else is multiplexed over its control socket ([ADR 0002](adr/0002-controlmaster-per-host.md)):
 
 ```text
 ssh <master options> -M -N -S <sock> -o ControlPersist=no -- <alias>  # authenticates once
@@ -83,159 +56,38 @@ ssh -S <sock> -t -- <alias> 'cd <dir> && exec $SHELL -l'              # console 
 ssh -F /dev/null -S <sock> -O exit -- noc                             # disconnect
 ```
 
-The SFTP protocol client is `openssh-sftp-client`, whose `Sftp::new` works over the pipes of any
-child process. Every ssh child runs in its own session (`setsid`), without a controlling
-terminal, so it can neither read from nor draw on the TUI's terminal; the one exception is a
-command of the [command line](#command-line-of--and-), which gets the terminal with the panels
-hidden. ssh runs in the home
-directory (`SshSettings::work_dir`), not in the working directory of the process, which
-follows the active panel: a long-lived master or channel would hold that directory, and its
-volume could not be unmounted.
+The SFTP protocol client is `openssh-sftp-client`, whose `Sftp::new` works over the pipes of any child process. Every ssh child runs in its own session (`setsid`), without a controlling terminal, so it can neither read from nor draw on the TUI's terminal; the one exception is a command of the [command line](#command-line-of--and-), which gets the terminal with the panels hidden. ssh runs in the home directory (`SshSettings::work_dir`), not in the working directory of the process, which follows the active panel: a long-lived master or channel would hold that directory, and its volume could not be unmounted.
 
-`noc-ssh` API in short: `version::check_version` runs `ssh -V`; `resolve::resolve` runs
-`ssh -G`; `Session::connect` starts the master (or nothing, without multiplexing);
-`Session::open_sftp` returns the pipes of a new SFTP channel, which `SftpFs::from_pipes` in
-`noc-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes
-leftovers of crashed instances.
+`noc-ssh` API in short: `version::check_version` runs `ssh -V`; `resolve::resolve` runs `ssh -G`; `Session::connect` starts the master (or nothing, without multiplexing); `Session::open_sftp` returns the pipes of a new SFTP channel, which `SftpFs::from_pipes` in `noc-vfs` turns into a file system; `Session::close` shuts down; `cleanup_stale` removes leftovers of crashed instances.
 
-The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories, reads
-metadata with and without following symlinks (locally with the device and inode numbers, which tell
-that two paths lead to one object; SFTP v3 has none), tells the size and free space of the file
-system that holds a path (`None` from an SFTP server without `statvfs@openssh.com`), canonicalizes
-paths, creates and removes directories, removes files, renames, reads and makes symlinks (their
-targets stored as given, never resolved), sets permissions and modification times, and reads and
-writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show
-when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight,
-as `sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is
-asked again for the rest. A file opened for a range of its bytes (`Vfs::open_file_range`, which
-`open_file` and `open_file_at` read through, to the end of the file) is asked for nothing past
-the range: what a server is asked for it sends, wanted or not. A write goes out as it is made,
-and counts once the server has taken it (`FileWriter::written`); `settle` waits for more of
-those on their way
-([ADR 0052](adr/0052-bytes-written-count-once-they-arrive.md)). A listing tells of each symlink
-the kind of its target and the target as stored; over SFTP each link asks both at once, 64 links
-at a time. Symlinks go to the server in OpenSSH's argument order (target first), which the client
-uses and which differs from the protocol draft; a server that follows the draft would store them
-the other way round. Its futures are cancel-safe: a dropped one leaks nothing, though a change
-already sent may still happen. Errors are
-typed, and the UI words them: not found, permission denied, already exists, the source itself (from
-a job), or the error of the OS or the server. SFTP v3 has no code for a name that is taken, so
-`SftpFs` reports a plain failure to create or rename as `AlreadyExists` when something has that
-name. `rename` replaces an existing file where that takes one step: locally, and over SFTP with
-`posix-rename@openssh.com`. SFTP keeps times as whole seconds from 1970 to 2106 and sets the access
-time with the modification time, so the access time becomes the current time on both backends. Local
-times are set by path (`utimensat`), since opening a FIFO would block.
+The `Vfs` trait of `noc-vfs`, implemented by `LocalFs` and `SftpFs`, lists directories, reads metadata with and without following symlinks (locally with the device and inode numbers, which tell that two paths lead to one object; SFTP v3 has none), tells the size and free space of the file system that holds a path (`None` from an SFTP server without `statvfs@openssh.com`), canonicalizes paths, creates and removes directories, removes files, renames, reads and makes symlinks (their targets stored as given, never resolved), sets permissions and modification times, and reads and writes files as chunks (`FileReader`, `FileWriter`, whose `finish` reports errors that only show when a file is closed). Over SFTP, reads and writes of a file keep 64 requests of 32 KiB in flight, as `sftp(1)` does, so a long round trip does not idle the link; a read that comes back short is asked again for the rest. A file opened for a range of its bytes (`Vfs::open_file_range`, which `open_file` and `open_file_at` read through, to the end of the file) is asked for nothing past the range: what a server is asked for it sends, wanted or not. A write goes out as it is made, and counts once the server has taken it (`FileWriter::written`); `settle` waits for more of those on their way ([ADR 0052](adr/0052-bytes-written-count-once-they-arrive.md)). A listing tells of each symlink the kind of its target and the target as stored; over SFTP each link asks both at once, 64 links at a time. Symlinks go to the server in OpenSSH's argument order (target first), which the client uses and which differs from the protocol draft; a server that follows the draft would store them the other way round. Its futures are cancel-safe: a dropped one leaks nothing, though a change already sent may still happen. Errors are typed, and the UI words them: not found, permission denied, already exists, the source itself (from a job), or the error of the OS or the server. SFTP v3 has no code for a name that is taken, so `SftpFs` reports a plain failure to create or rename as `AlreadyExists` when something has that name. `rename` replaces an existing file where that takes one step: locally, and over SFTP with `posix-rename@openssh.com`. SFTP keeps times as whole seconds from 1970 to 2106 and sets the access time with the modification time, so the access time becomes the current time on both backends. Local times are set by path (`utimensat`), since opening a FIFO would block.
 
-Every ssh command line is assembled in `noc-ssh`, in this order: program → forced options →
-`ssh.args` → role options → `--` → destination. Per-host options belong in ssh_config
-([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)). ssh keeps the first value it sees
-for an option, so `-o` values in user arguments cannot override forced options; flags are covered
-by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). Nothing is ever
-forwarded ([ADR 0062](adr/0062-forwarding-is-never-allowed.md)).
+Every ssh command line is assembled in `noc-ssh`, in this order: program → forced options → `ssh.args` → role options → `--` → destination. Per-host options belong in ssh_config ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)). ssh keeps the first value it sees for an option, so `-o` values in user arguments cannot override forced options; flags are covered by validation ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). Nothing is ever forwarded ([ADR 0062](adr/0062-forwarding-is-never-allowed.md)).
 
 ## Locations
 
-A panel always shows a directory: a `Location` is `Local(PathBuf)` or `Remote { host, path }`.
-Volumes and hosts are chosen in the [location menu](#location-menu), which replaced the virtual
-root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
+A panel always shows a directory: a `Location` is `Local(PathBuf)` or `Remote { host, path }`. Volumes and hosts are chosen in the [location menu](#location-menu), which replaced the virtual root of [ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md)
 ([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)).
 
-- `..` follows paths, as in mc: from `/Volumes/USB` to `/Volumes`. A local `/` and a remote `/`
-  have no `..`, and going up from them does nothing (`Location::parent` is `None`).
-- Volumes come from `noc_vfs::volumes`: on macOS `/` and the entries of `/Volumes`, without
-  symlinks and without mounts marked `nobrowse` (Time Machine snapshots, for instance); on
-  Linux the mounts of `/proc/self/mountinfo` that are `/`, on a `/dev/` device, or a network
-  file system, without pseudo file systems or those under `/proc`, `/sys`, `/dev`, `/run`
-  (but `/run/media`), `/snap`, and `/boot`; elsewhere only `/`. Their sizes come from
-  `statfs`/`statvfs` on blocking threads (on macOS `statfs` also tells a mount point from a
-  directory, its type, and whether it is local). A query still running is shared by path: a
-  listing that finds it waits for its answer and never asks again while it runs, since a dead
-  network mount can block forever. `noc_vfs::volumes_within` lists the volumes after at most a
-  given time, those that did not answer by then as they are without an answer, each with its
-  answer to come (`Late`); `noc_vfs::volumes`, for `noc ls`, waits up to 500 ms and drops the
-  answers still to come. `[volumes] hide` leaves out mount points by pattern; the system volume
-  always stays. A volume is named by its label or else its mount point, and opens at its mount
-  point, the system volume at `/`.
-- The app reads the volumes once at start, in the background, to know which volume a panel is
-  on; the location menu reads them again each time it opens. Answers that come after a listing
-  (`Done::VolumeAnswered`) replace their volumes in both; a newer listing stops waiting for those
-  of the one before it, and waits for the answers still to come itself
-  ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
-- Hosts come from discovery in config order, named by their alias, as everywhere
-  ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)); their address comes from this run's
-  `ssh -G` alone. `[discovery] hide` leaves out hosts by pattern.
-- Opening a host connects in the background and opens, shown as an absolute path, the last
-  directory shown on it in this session if `remember_dir` is set and the directory is still
-  there, else the configured `start_dir`, else the remote home directory. If the host has an
-  `other_dir`, the other panel opens it at the same time. While a panel waits for the
-  connection, braille dots in the color of a host connecting turn in place of the host's icon in its
-  title, before the path it opens, `⠹ web:/var/www`, and Esc stops it.
-- A failed connection, the first attempt or a lost one, opens a dialog, Connection, that says
-  `Cannot connect to web: reason` or `Lost the connection to web: reason`, with Retry (the
-  default) and Cancel. While it is open, the panels that wait for the host keep waiting, with
-  the host's marker of a failure in their titles, still, so the event loop sleeps until the answer.
-  On a lost connection, the panels on the host, in every tab, keep their entries, toned down,
-  and wait to read the same directory, with the cursor where it was. Retry connects again, and
-  the waiting panels read their directories once it is connected, keeping the marks on names
-  still there. Cancel after a failed first attempt leaves the panel where it was; after a lost
-  connection, it leaves the panels on the host with their entries toned down. No second dialog
-  says why again. Jobs on a lost host end with it.
-- A panel on a host that is not connected draws what it kept dim, without bold, over its colors
-  (`Theme::offline`): rows, status line, the total of the marked entries, and the totals on the
-  frame, not the frame, title, or headers. The cursor and marks stay; a rename in its row ends.
-- In it, the keys that look through the entries work: moving the cursor and scrolling, quick
-  search, sorting, marking, Visual mode (`works_offline` in `app/hosts.rs`). A key that needs the host
-  opens the dialog Connection, `Not connected to web`, with Connect (the default), which reads
-  the directory again, Local, which goes to the last local directory of the panel's jump list or
-  else the home directory, and Cancel; so do the keys that look through entries where the panel
-  has none. Keys that do not touch the panel's entries work without it: other panels and tabs,
-  menus, help, jobs, Quit, Go to directory, the jump list, workspaces, hidden files
-  (`works_unconnected`). `R` connects at once
-  ([ADR 0039](adr/0039-errors-of-panels-in-dialogs.md)).
-- F8 or `d d` in the location menu, or Disconnect in the menus of F9, closes the connection to a
-  host, or stops connecting to it. Panels on a connected host stay there with their entries
-  toned down, as after a lost connection, and no dialog asks; a panel that only waited for the
-  host stays where it was.
-- An error that has a way on offers it first, the default, then Cancel (`App::show_problem_way`,
-  [ADR 0063](adr/0063-errors-in-parts-and-the-order-of-buttons.md)): Retry does the same again
-  (`Again`); where a host it needs is not connected, Connect in its place connects and does it
-  once the host is (`App::pending`, run by `App::connected`, dropped when the host is given up
-  or disconnected); Change… opens Shift+F6, F5, F6, or F7 again with what was typed. Errors
-  that Retry would not mend, such as a name typed wrong, keep OK.
-- A directory that cannot be read opens a dialog, Error, as every error dialog shows a problem:
-  `Cannot open the directory`, the path on a line of its own, and the reason under a line across
-  the frame (`Dialog::failure`, `Problem`). The panel keeps what it showed. Retry reads it again;
-  Up, where it leads elsewhere, goes to the nearest parent, on the directory it came from, past
-  parents that are not there either; Go to opens Go to directory with the path; Cancel stays. The
-  default is Up where the panel has nothing to show, its directory gone or never shown, and Retry
-  otherwise. A panel has one such dialog at a time, the last failure's.
-- F4 in the location menu edits the settings of a host in a dialog (remote directory, other
-  panel directory, the words that run commands, remember the last directory); Use Current fills
-  in the directory a panel shows on the host. They are saved to `hosts.toml` in the background,
-  and the menu reads the hosts again.
-- In the location menu, the icon in front of each host shows its state, in a color of its own:
-  a server, gray when not connected and green when connected; a spinner while connecting; a
-  server with a cross, red, when the last attempt failed, the connection was lost, or a dialog
-  asks whether to retry. In the `terminal` theme, which has no colors, connected hosts are bold
-  and the others dim. Without icons, the markers are `○`, `●`, the spinner, and `✗`. Every row
-  has one cell in front of its name, so names line up across the home directory, volumes, and
-  hosts.
-- Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily.
-  The SFTP client library still requires UTF-8 names; see the known issues in the
-  [roadmap](roadmap.md).
-- Names from the server that are empty or contain `/` or NUL are dropped from listings: joined
-  to a local path, they could point outside the target directory.
+- `..` follows paths, as in mc: from `/Volumes/USB` to `/Volumes`. A local `/` and a remote `/` have no `..`, and going up from them does nothing (`Location::parent` is `None`).
+- Volumes come from `noc_vfs::volumes`: on macOS `/` and the entries of `/Volumes`, without symlinks and without mounts marked `nobrowse` (Time Machine snapshots, for instance); on Linux the mounts of `/proc/self/mountinfo` that are `/`, on a `/dev/` device, or a network file system, without pseudo file systems or those under `/proc`, `/sys`, `/dev`, `/run` (but `/run/media`), `/snap`, and `/boot`; elsewhere only `/`. Their sizes come from `statfs`/`statvfs` on blocking threads (on macOS `statfs` also tells a mount point from a directory, its type, and whether it is local). A query still running is shared by path: a listing that finds it waits for its answer and never asks again while it runs, since a dead network mount can block forever. `noc_vfs::volumes_within` lists the volumes after at most a given time, those that did not answer by then as they are without an answer, each with its answer to come (`Late`); `noc_vfs::volumes`, for `noc ls`, waits up to 500 ms and drops the answers still to come. `[volumes] hide` leaves out mount points by pattern; the system volume always stays. A volume is named by its label or else its mount point, and opens at its mount point, the system volume at `/`.
+- The app reads the volumes once at start, in the background, to know which volume a panel is on; the location menu reads them again each time it opens. Answers that come after a listing (`Done::VolumeAnswered`) replace their volumes in both; a newer listing stops waiting for those of the one before it, and waits for the answers still to come itself ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
+- Hosts come from discovery in config order, named by their alias, as everywhere ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)); their address comes from this run's `ssh -G` alone. `[discovery] hide` leaves out hosts by pattern.
+- Opening a host connects in the background and opens, shown as an absolute path, the last directory shown on it in this session if `remember_dir` is set and the directory is still there, else the configured `start_dir`, else the remote home directory. If the host has an `other_dir`, the other panel opens it at the same time. While a panel waits for the connection, braille dots in the color of a host connecting turn in place of the host's icon in its title, before the path it opens, `⠹ web:/var/www`, and Esc stops it.
+- A failed connection, the first attempt or a lost one, opens a dialog, Connection, that says `Cannot connect to web: reason` or `Lost the connection to web: reason`, with Retry (the default) and Cancel. While it is open, the panels that wait for the host keep waiting, with the host's marker of a failure in their titles, still, so the event loop sleeps until the answer. On a lost connection, the panels on the host, in every tab, keep their entries, toned down, and wait to read the same directory, with the cursor where it was. Retry connects again, and the waiting panels read their directories once it is connected, keeping the marks on names still there. Cancel after a failed first attempt leaves the panel where it was; after a lost connection, it leaves the panels on the host with their entries toned down. No second dialog says why again. Jobs on a lost host end with it.
+- A panel on a host that is not connected draws what it kept dim, without bold, over its colors (`Theme::offline`): rows, status line, the total of the marked entries, and the totals on the frame, not the frame, title, or headers. The cursor and marks stay; a rename in its row ends.
+- In it, the keys that look through the entries work: moving the cursor and scrolling, quick search, sorting, marking, Visual mode (`works_offline` in `app/hosts.rs`). A key that needs the host opens the dialog Connection, `Not connected to web`, with Connect (the default), which reads the directory again, Local, which goes to the last local directory of the panel's jump list or else the home directory, and Cancel; so do the keys that look through entries where the panel has none. Keys that do not touch the panel's entries work without it: other panels and tabs, menus, help, jobs, Quit, Go to directory, the jump list, workspaces, hidden files (`works_unconnected`). `R` connects at once ([ADR 0039](adr/0039-errors-of-panels-in-dialogs.md)).
+- F8 or `d d` in the location menu, or Disconnect in the menus of F9, closes the connection to a host, or stops connecting to it. Panels on a connected host stay there with their entries toned down, as after a lost connection, and no dialog asks; a panel that only waited for the host stays where it was.
+- An error that has a way on offers it first, the default, then Cancel (`App::show_problem_way`, [ADR 0063](adr/0063-errors-in-parts-and-the-order-of-buttons.md)): Retry does the same again (`Again`); where a host it needs is not connected, Connect in its place connects and does it once the host is (`App::pending`, run by `App::connected`, dropped when the host is given up or disconnected); Change… opens Shift+F6, F5, F6, or F7 again with what was typed. Errors that Retry would not mend, such as a name typed wrong, keep OK.
+- A directory that cannot be read opens a dialog, Error, as every error dialog shows a problem: `Cannot open the directory`, the path on a line of its own, and the reason under a line across the frame (`Dialog::failure`, `Problem`). The panel keeps what it showed. Retry reads it again; Up, where it leads elsewhere, goes to the nearest parent, on the directory it came from, past parents that are not there either; Go to opens Go to directory with the path; Cancel stays. The default is Up where the panel has nothing to show, its directory gone or never shown, and Retry otherwise. A panel has one such dialog at a time, the last failure's.
+- F4 in the location menu edits the settings of a host in a dialog (remote directory, other panel directory, the words that run commands, remember the last directory); Use Current fills in the directory a panel shows on the host. They are saved to `hosts.toml` in the background, and the menu reads the hosts again.
+- In the location menu, the icon in front of each host shows its state, in a color of its own: a server, gray when not connected and green when connected; a spinner while connecting; a server with a cross, red, when the last attempt failed, the connection was lost, or a dialog asks whether to retry. In the `terminal` theme, which has no colors, connected hosts are bold and the others dim. Without icons, the markers are `○`, `●`, the spinner, and `✗`. Every row has one cell in front of its name, so names line up across the home directory, volumes, and hosts.
+- Remote paths are bytes, because SFTP v3 does not guarantee UTF-8, and are displayed lossily. The SFTP client library still requires UTF-8 names; see the known issues in the [roadmap](roadmap.md).
+- Names from the server that are empty or contain `/` or NUL are dropped from listings: joined to a local path, they could point outside the target directory.
 
 ### Location menu
 
-`g l` opens a menu for the active panel, and Ctrl+x `g l` for the other one, as Far Manager's
-Alt+F1 and Alt+F2 open its menus to change the drive of the left or the right panel (F9 → Go →
-Change location… too). noc binds no Alt+F1 and Alt+F2, which desktops take
-([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)), and names the panel as active or
-other, not by its side ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). The
-menu is centered over both panels, as every window is, and its title, Location, names no side:
-the panel drawn active is the one it changes, after Ctrl+x the other one. It is the one place to
-choose a volume or a host, grouped under headings:
+`g l` opens a menu for the active panel, and Ctrl+x `g l` for the other one, as Far Manager's Alt+F1 and Alt+F2 open its menus to change the drive of the left or the right panel (F9 → Go → Change location… too). noc binds no Alt+F1 and Alt+F2, which desktops take ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md)), and names the panel as active or other, not by its side ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). The menu is centered over both panels, as every window is, and its title, Location, names no side: the panel drawn active is the one it changes, after Ctrl+x the other one. It is the one place to choose a volume or a host, grouped under headings:
 
 ```text
  ╔══════════════════ Location ══════════════════╗
@@ -261,28 +113,9 @@ choose a volume or a host, grouped under headings:
  ╚══════════════════════════════════════════════╝
 ```
 
-- Favorites holds `Home`, which opens the home directory, with the free space and the size of
-  the volume that holds it; the user's favorites will join it. Mounts holds the volumes, with
-  their free space and size, and SFTP the hosts, whose addresses are in their cards
-  ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)). Each of the two numbers
-  takes as many cells as the widest of the rows shown, so the slashes between them line up; a
-  volume that did not tell its space, or tells a size of 0, says `size unknown` there, faint
-  ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
-  Plugins for other backends will be a group of their own. A group without rows is not drawn.
-- The rows show after at most 150 ms, as long as a wait goes before its spinner shows
-  (`places::FIRST_ANSWER`). The sizes of a volume that has not answered by then, and of the home
-  directory on it, are a skeleton as wide as the sizes known in the other rows, or as wide as
-  sizes take at most while none is known, which one shine crosses (`window::cell_skeleton`); no
-  dots turn in the title. They show once its answer comes; 5 s after it was asked
-  (`menu::NO_ANSWER`), the skeleton turns to `not responding`, in the colors of warnings
-  (`theme.dialog_warning_text`), which an answer that comes later still replaces. On macOS a
-  `statfs` that answers that the path is no mount point, or a mount not to browse, takes its row
-  away; a query that fails after it hung, as a soft network mount gives up, leaves it, not
-  responding (`LateAnswer::Failed`, `Places::failed`)
-  ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
-- Under the rows, a card of the place under the cursor, two lines under a line that names, at its
-  right end in the color of the title, its kind
-  ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)):
+- Favorites holds `Home`, which opens the home directory, with the free space and the size of the volume that holds it; the user's favorites will join it. Mounts holds the volumes, with their free space and size, and SFTP the hosts, whose addresses are in their cards ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)). Each of the two numbers takes as many cells as the widest of the rows shown, so the slashes between them line up; a volume that did not tell its space, or tells a size of 0, says `size unknown` there, faint ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)). Plugins for other backends will be a group of their own. A group without rows is not drawn.
+- The rows show after at most 150 ms, as long as a wait goes before its spinner shows (`places::FIRST_ANSWER`). The sizes of a volume that has not answered by then, and of the home directory on it, are a skeleton as wide as the sizes known in the other rows, or as wide as sizes take at most while none is known, which one shine crosses (`window::cell_skeleton`); no dots turn in the title. They show once its answer comes; 5 s after it was asked (`menu::NO_ANSWER`), the skeleton turns to `not responding`, in the colors of warnings (`theme.dialog_warning_text`), which an answer that comes later still replaces. On macOS a `statfs` that answers that the path is no mount point, or a mount not to browse, takes its row away; a query that fails after it hung, as a soft network mount gives up, leaves it, not responding (`LateAnswer::Failed`, `Places::failed`) ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md)).
+- Under the rows, a card of the place under the cursor, two lines under a line that names, at its right end in the color of the title, its kind ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)):
 
   ```text
   ╟───────────────── apfs · local ─╢   ╟────────────────────────────────────────── sftp ─╢
@@ -290,77 +123,17 @@ choose a volume or a host, grouped under headings:
   ║   12.0G free of 64.0G (18%)    ║   ║   Not connected                                 ║
   ```
 
-  The first line starts with the icon of the row, a host's in the color of its status, then says
-  what the place is, and against the right end where it comes from, which takes what the start
-  leaves, but at least half the line (`Look::first_line`, `menu::ends`), and loses its start
-  where it is too long ([ADR 0084](adr/0084-cards-show-a-place-and-where-it-comes-from.md)); the
-  second stands under its text. The home directory shows its path and the name of its volume,
-  then the space of the volume, with the type of the file system of the volume and its kind over
-  them, as the card of the volume. A volume shows its mount point and what it mounts
-  (`Volume::source`, without the password of a URL): a skeleton while it is to come with the
-  sizes, `source unknown` in the colors of warnings once the volume has not answered, faint where
-  it told none; then its free space, its size, and the share free, a skeleton while they are to
-  come, `Not responding` in the colors of warnings, or `Size unknown`, faint. A host shows `sftp`
-  over the card; then not its alias, which the row shows, but its address and `ProxyJump`, from
-  this run's `ssh -G`, which runs once the cursor rests on the host, else a skeleton until
-  `ssh -G` tells them, or `ssh -G failed` in the colors of errors (`theme.dialog_error_text`, not
-  crossed out), why going to the log
-  ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); against the
-  right end the file and line of its `Host` line
-  ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). Then `Not connected`, `Connected`,
-  `Connecting…`, or why its last attempt failed in the colors of errors (`App::failed` keeps it
-  until a new attempt); where opening it goes shows in the dialog of F4 alone
-  ([ADR 0083](adr/0083-a-host-not-connected-says-so.md)). The row of the rest names the places
-  it stands for over both lines, whole names first. Every card has two lines, so the box keeps
-  its height
-  ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
-- Mounts and SFTP put the places used last first, then the others in their usual order: the
-  system volume, then the others by mount point; the hosts by name, as the panels order names
-  (`panel::name_key`, `ui.natural_sort`), which the menu sorts once a listing comes
-  ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md)). Each group shows
-  its first ten places (a constant, not a setting), and always the volume or host the panel is
-  on and the hosts that are connected, connecting, or waiting for Retry. A last row,
-  `24 more…`, after a chevron down in the column of the icons (`glyphs.more`), faint but under
-  the cursor, as everything that says how many more a list has than it shows, stands for the
-  rest: the cursor and the mouse select it, and Enter on it shows the whole group until the menu
-  closes.
-- The menu opens in Insert mode, as the other [lists](#lists) do, with the filter taking the keys
-  and the cursor on the home directory or the volume that holds the panel's directory, whichever
-  is nearer, or on its host. Up and Down move, and Enter opens the row in that panel; the keys stay
-  with the active panel, as after Ctrl+w f and Ctrl+w v. After Esc, `j` and `k` move too, and
-  `g g` and `G` go to the first and the last row.
-- The filter, which `/` types in again, finds the places by name, path or mount point,
-  alias, and the address `ssh -G` told in this run (`LocationMenu::set_addresses`), and
-  finds every one, hidden ones too; the rows of more go away while
-  the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the
-  default, best first, without the headings of the groups; or a row's text must hold the filter,
-  or match it as a regular expression, in their order, with smart case. The cursor goes to the
-  first row. The filter is a text field, edited with the keys of `input`; Esc goes back to the
-  rows with the filter kept. F3, or `g f` on the rows, views the `ssh_config` file that defines
-  the host under the cursor from its `Host` line, the file and the line its card shows, in front
-  of the menu, which is there again once the viewer closes (`Viewing::menu`); F4, or `e` on the
-  rows, edits the settings of the host, F8, or `d d` on the rows, disconnects it or stops
-  connecting to it, `R` on the rows reads the volumes and hosts again, and Esc or `q` on the rows,
-  Ctrl+c, or F10 closes the menu.
-- `recent.toml` in the state directory keeps the places used last: the aliases of hosts and
-  the mount points of volumes, most recent first, up to 50 of each. A host counts as used when
-  a connection to it succeeds; a volume when a panel arrives in a directory on it in any way:
-  the menu, Go to directory, zoxide, Enter, or a workspace. The app reads the file at start, and
-  after a turn of the event loop that changed the lists, a task writes it through `noc-config`,
-  whole and atomically, one change after another. Mount points that are not UTF-8 are not kept,
-  since TOML cannot hold them.
-- The menu is modal (keymap context `location_menu`). Each time it opens, and on `R`, a
-  background task reads the volumes and scans the ssh config;
-  that listing carries a generation of its own, so a stale one is dropped. A host that connects
-  or disconnects while the menu is open shows its new state at once, and the cursor stays on
-  its row.
+  The first line starts with the icon of the row, a host's in the color of its status, then says what the place is, and against the right end where it comes from, which takes what the start leaves, but at least half the line (`Look::first_line`, `menu::ends`), and loses its start where it is too long ([ADR 0084](adr/0084-cards-show-a-place-and-where-it-comes-from.md)); the second stands under its text. The home directory shows its path and the name of its volume, then the space of the volume, with the type of the file system of the volume and its kind over them, as the card of the volume. A volume shows its mount point and what it mounts (`Volume::source`, without the password of a URL): a skeleton while it is to come with the sizes, `source unknown` in the colors of warnings once the volume has not answered, faint where it told none; then its free space, its size, and the share free, a skeleton while they are to come, `Not responding` in the colors of warnings, or `Size unknown`, faint. A host shows `sftp` over the card; then not its alias, which the row shows, but its address and `ProxyJump`, from this run's `ssh -G`, which runs once the cursor rests on the host, else a skeleton until `ssh -G` tells them, or `ssh -G failed` in the colors of errors (`theme.dialog_error_text`, not crossed out), why going to the log ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)); against the right end the file and line of its `Host` line ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). Then `Not connected`, `Connected`, `Connecting…`, or why its last attempt failed in the colors of errors (`App::failed` keeps it until a new attempt); where opening it goes shows in the dialog of F4 alone ([ADR 0083](adr/0083-a-host-not-connected-says-so.md)). The row of the rest names the places it stands for over both lines, whole names first. Every card has two lines, so the box keeps its height ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md)).
+
+- Mounts and SFTP put the places used last first, then the others in their usual order: the system volume, then the others by mount point; the hosts by name, as the panels order names (`panel::name_key`, `ui.natural_sort`), which the menu sorts once a listing comes ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md)). Each group shows its first ten places (a constant, not a setting), and always the volume or host the panel is on and the hosts that are connected, connecting, or waiting for Retry. A last row, `24 more…`, after a chevron down in the column of the icons (`glyphs.more`), faint but under the cursor, as everything that says how many more a list has than it shows, stands for the rest: the cursor and the mouse select it, and Enter on it shows the whole group until the menu closes.
+- The menu opens in Insert mode, as the other [lists](#lists) do, with the filter taking the keys and the cursor on the home directory or the volume that holds the panel's directory, whichever is nearer, or on its host. Up and Down move, and Enter opens the row in that panel; the keys stay with the active panel, as after Ctrl+w f and Ctrl+w v. After Esc, `j` and `k` move too, and `g g` and `G` go to the first and the last row.
+- The filter, which `/` types in again, finds the places by name, path or mount point, alias, and the address `ssh -G` told in this run (`LocationMenu::set_addresses`), and finds every one, hidden ones too; the rows of more go away while the filter has text. It matches them in the [search mode](#search-modes): as fzf does, the default, best first, without the headings of the groups; or a row's text must hold the filter, or match it as a regular expression, in their order, with smart case. The cursor goes to the first row. The filter is a text field, edited with the keys of `input`; Esc goes back to the rows with the filter kept. F3, or `g f` on the rows, views the `ssh_config` file that defines the host under the cursor from its `Host` line, the file and the line its card shows, in front of the menu, which is there again once the viewer closes (`Viewing::menu`); F4, or `e` on the rows, edits the settings of the host, F8, or `d d` on the rows, disconnects it or stops connecting to it, `R` on the rows reads the volumes and hosts again, and Esc or `q` on the rows, Ctrl+c, or F10 closes the menu.
+- `recent.toml` in the state directory keeps the places used last: the aliases of hosts and the mount points of volumes, most recent first, up to 50 of each. A host counts as used when a connection to it succeeds; a volume when a panel arrives in a directory on it in any way: the menu, Go to directory, zoxide, Enter, or a workspace. The app reads the file at start, and after a turn of the event loop that changed the lists, a task writes it through `noc-config`, whole and atomically, one change after another. Mount points that are not UTF-8 are not kept, since TOML cannot hold them.
+- The menu is modal (keymap context `location_menu`). Each time it opens, and on `R`, a background task reads the volumes and scans the ssh config; that listing carries a generation of its own, so a stale one is dropped. A host that connects or disconnects while the menu is open shows its new state at once, and the cursor stays on its row.
 
 ### Pull-down menu
 
-F9 (or `g m`) opens the menu bar, as Far does: the bar alone with `File` selected. Shift+F9 opens
-it on the command that ran last, as Far's Shift+F10. Every command acts on the active panel, and
-Ctrl+x F9 (or Ctrl+x `g m`) opens the bar for the other panel and gives the keys back once the
-command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An open menu:
+F9 (or `g m`) opens the menu bar, as Far does: the bar alone with `File` selected. Shift+F9 opens it on the command that ran last, as Far's Shift+F10. Every command acts on the active panel, and Ctrl+x F9 (or Ctrl+x `g m`) opens the bar for the other panel and gives the keys back once the command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An open menu:
 
 ```text
   File     View     Go     Search     Tools     Window     Help     2 jobs 37%
@@ -385,106 +158,37 @@ command ends ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md)). An
  ╚═════════════════════════╝
 ```
 
-- **File** has F3, F4, Open externally (`g x`), Checksums… (`f #`), F5 … F8, `g +`, `g -`, `g *`,
-  and Exit.
-- **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names
-  (`✓` while on), Rescan, and Redraw screen.
-- **Go** has Change location… (`g l`) with Edit host settings… and Disconnect host for the active
-  panel's host, which the panels have no keys for, [Go to directory](#go-to-directory) (`g d`), the
-  [zoxide](#zoxide) window (`g z`), Jump back (`Ctrl+o`) and Jump forward (`Ctrl+i`) through the
-  jump list, dimmed where it has nowhere to go, and where the other panel goes: Open in the other
-  panel (`Ctrl+w f`) and This directory in the other panel (`Ctrl+w v`).
-- **Search** has Quick search… (`/`), Next match (`n`) and Previous match (`N`), dimmed until a
-  quick search ends, Find text… (`f /`), and Find files and dirs… (`f f`).
-- **Tools** has Shell command… (`!`), Command history… (`q :`), Command output (`g <`),
-  Background jobs (`f j`), and [Configuration…](#configuration-dialog) (`o o`).
-- **Window** has Swap panels (`Ctrl+w x`), the active panel's [tabs](#tabs) (New tab, Close tab,
-  Next tab, Previous tab, Tab list…; all but the first and the last dimmed with one tab), Save
-  workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
+- **File** has F3, F4, Open externally (`g x`), Checksums… (`f #`), F5 … F8, `g +`, `g -`, `g *`, and Exit.
+- **View** has the sort order (`•` marks the current one), Show hidden files and Show whole names (`✓` while on), Rescan, and Redraw screen.
+- **Go** has Change location… (`g l`) with Edit host settings… and Disconnect host for the active panel's host, which the panels have no keys for, [Go to directory](#go-to-directory) (`g d`), the [zoxide](#zoxide) window (`g z`), Jump back (`Ctrl+o`) and Jump forward (`Ctrl+i`) through the jump list, dimmed where it has nowhere to go, and where the other panel goes: Open in the other panel (`Ctrl+w f`) and This directory in the other panel (`Ctrl+w v`).
+- **Search** has Quick search… (`/`), Next match (`n`) and Previous match (`N`), dimmed until a quick search ends, Find text… (`f /`), and Find files and dirs… (`f f`).
+- **Tools** has Shell command… (`!`), Command history… (`q :`), Command output (`g <`), Background jobs (`f j`), and [Configuration…](#configuration-dialog) (`o o`).
+- **Window** has Swap panels (`Ctrl+w x`), the active panel's [tabs](#tabs) (New tab, Close tab, Next tab, Previous tab, Tab list…; all but the first and the last dimmed with one tab), Save workspace…, and Workspace list…, the window of the saved [workspaces](#workspaces).
 - **Help** has Help (`g ?`), Key hints… (`Ctrl+k`), and View the log (`Ctrl+\`).
-- `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check
-  boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles
-  (`dialog_symbol`) but on the cursor and on a command that cannot run now. A menu taller than the
-  screen scrolls with the cursor.
-- Commands do what their keys do, through the same `Action`s. Each shows the key that does
-  it in the active panel's context (`Keymap::key`). Commands that cannot run now are dimmed, in the
-  theme's `disabled`, and the cursor skips them.
-- On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the bar;
-  Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages, which
-  `Label` in `tui/label.rs` reads, for the menus and the [dialogs](#ui) alike) opens it,
-  `G` (End) opens it on its last command, and `k` (Up) and `g g` (Home) do nothing. In an open menu,
-  `h` and `l` open the next one, round the bar too; `k` and `j` move round it, from the last command
-  to the first and back, and the mouse wheel stops at its ends; `g g` and `G` go to its first and
-  last command, and stay there, as vim's do; Enter or Alt and the command's highlighted letter runs
-  it. Esc, `q`, F9, or F10 goes back to the bar, and closes the bar from there. Running a command
-  closes it first.
-- The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps
-  only the `Action` that ran last, so Shift+F9 Enter repeats it. A command that cannot run now
-  passes the cursor on to the next one.
-- `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line
-  of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as
-  mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
-- The menu is modal (keymap context `pull_down`), in Normal mode; Alt and a letter or a digit reach
-  its hotkeys, so the plain letters stay vim's motions. The keymap hands them to the menu as
-  `Resolved::Hotkey`, as it does to the dialogs, and Alt and a letter that nothing has do nothing.
+- `•` is the dot of the lists of combo boxes, for one among others, and `✓` the check of check boxes, for a setting that is on; Nerd Font ones with icons, in the color of titles (`dialog_symbol`) but on the cursor and on a command that cannot run now. A menu taller than the screen scrolls with the cursor.
+- Commands do what their keys do, through the same `Action`s. Each shows the key that does it in the active panel's context (`Keymap::key`). Commands that cannot run now are dimmed, in the theme's `disabled`, and the cursor skips them.
+- On the bar, `h` and `l` (Left and Right, Shift+Tab and Tab) select the next menu, round the bar; Enter, `j` (Down), or Alt and the menu's highlighted letter (`&` in the Fluent messages, which `Label` in `tui/label.rs` reads, for the menus and the [dialogs](#ui) alike) opens it, `G` (End) opens it on its last command, and `k` (Up) and `g g` (Home) do nothing. In an open menu, `h` and `l` open the next one, round the bar too; `k` and `j` move round it, from the last command to the first and back, and the mouse wheel stops at its ends; `g g` and `G` go to its first and last command, and stay there, as vim's do; Enter or Alt and the command's highlighted letter runs it. Esc, `q`, F9, or F10 goes back to the bar, and closes the bar from there. Running a command closes it first.
+- The menu keeps nothing when it closes, and a menu opens at its first command. The app keeps only the `Action` that ran last, so Shift+F9 Enter repeats it. A command that cannot run now passes the cursor on to the next one.
+- `ui.menu_bar` decides where the bar is: `on-demand` (the default) draws it over the top line of the panels only while a menu is open, as Far does; `always` keeps it above the panels, as mc does, which takes a row from them. The jobs indicator sits at the right end of that row.
+- The menu is modal (keymap context `pull_down`), in Normal mode; Alt and a letter or a digit reach its hotkeys, so the plain letters stay vim's motions. The keymap hands them to the menu as `Resolved::Hotkey`, as it does to the dialogs, and Alt and a letter that nothing has do nothing.
 
 ### Go to directory
 
-`g d`, as mc's Quick cd, asks for a path in a dialog for the active panel, or after Ctrl+x for
-the other one, as the [location menu](#location-menu) does, and opens the path in that panel, as
-`cd` in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home
-directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and
-`host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it
-and `~` is the remote home. `:` without a host is local, from a host too: `:` alone is the panel's
-last local directory, with the cursor where it was, and `:path` starts there
-([ADR 0065](adr/0065-a-colon-without-a-host-is-local.md)). [Completion](#completion) reads from
-the panel's directory too.
-`cd ..` puts the cursor on the directory left, as `h` does; a
-path that is not there leaves the panel where it is, with the reason below the listing. The Go to
-button of a listing that failed opens it for the panel that failed. It is in F9 → Go.
+`g d`, as mc's Quick cd, asks for a path in a dialog for the active panel, or after Ctrl+x for the other one, as the [location menu](#location-menu) does, and opens the path in that panel, as `cd` in a shell reads it: relative to the panel's directory, `/…` absolute, `~` and `~/…` the home directory, `..` and `.` resolved by name, `-` the directory the tab showed before, and `host:path` on a host, scp-style, which connects to it if needed. On a host, paths stay on it and `~` is the remote home. `:` without a host is local, from a host too: `:` alone is the panel's last local directory, with the cursor where it was, and `:path` starts there ([ADR 0065](adr/0065-a-colon-without-a-host-is-local.md)). [Completion](#completion) reads from the panel's directory too. `cd ..` puts the cursor on the directory left, as `h` does; a path that is not there leaves the panel where it is, with the reason below the listing. The Go to button of a listing that failed opens it for the panel that failed. It is in F9 → Go.
 
 ### Completion
 
-Tab completes the path before the cursor in the fields of Go to directory, F5, F6, and F7, in Insert
-mode (keymap context `path_input`), and the word before the cursor on the [command
-line](#command-line-of--and-), as vim's command line completes with defaults.vim's 'wildmenu'
-(`tui/complete.rs`), from a listing of the directory it names, read as the dialog reads its text:
+Tab completes the path before the cursor in the fields of Go to directory, F5, F6, and F7, in Insert mode (keymap context `path_input`), and the word before the cursor on the [command line](#command-line-of--and-), as vim's command line completes with defaults.vim's 'wildmenu' (`tui/complete.rs`), from a listing of the directory it names, read as the dialog reads its text:
 
-- The last part, after the last `/`, is completed. Nothing matching, nothing happens; one match goes
-  in, with `/` after a directory and `:` after a host; of several, the first goes in whole, and a
-  list under the field shows them all, as a column, as vim's pop-up menu (context `completion`).
-  There, as in vim's 'wildmenu', Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab,
-  Ctrl+p, and Up the one before, PgDn and PgUp a page on, round through what was typed, which comes
-  back after the last; Left completes again in the directory above the one listed and Right in the
-  directory chosen, as in vim's pop-up menu ('wildoptions' pum, `wildmenu_process_key_filenames`);
-  Ctrl+y keeps the match and Ctrl+e puts back what was typed, both closing the list; any other key
-  closes it, keeps the match, and goes to the field: Enter confirms the dialog with it, as vim's
-  Enter runs the command line, Esc goes to Normal mode, and Ctrl+c closes the dialog or the command
-  line. A click puts a match in; a double click keeps it.
-- On the command line of `!` and `:` (context `command_completion`, which falls back to
-  `completion`, then to the command line), as vim's `:!`: the word starts after the last space, tab,
-  or line break not escaped with a backslash, and its escapes are taken out to match. In a local
-  panel the first word of the command, without a `/`, completes as the executable files of the
-  directories of `$PATH`, read once at startup, and with a `/` as the executable files and the
-  directories there; the others as files and directories of the panel's directory, where the command
-  runs, with `~` and absolute paths as Go to directory reads them. On a host every word completes
-  as its files, through its session, and the first as a command never. Names go in escaped for
-  `sh` with backslashes, as vim's do; the list shows over the line.
-- Names that start with a dot count only after a typed dot. Case never counts, as vim's
-  'fileignorecase' has it on macOS. Names that are not UTF-8 or hold control characters cannot be
-  typed and are left out.
-- Go to directory and F7 offer directories and links to them; F5 and F6 files too. Before a
-  `:`, Go to directory offers every host of the ssh config, F5 and F6 the connected ones, F7 none.
-- Local directories are read in the background, remote ones through the session of their
-  host; a host that is not connected offers nothing, and a Tab never connects. Each listing
-  has a generation, and a reply for text that changed since is dropped.
+- The last part, after the last `/`, is completed. Nothing matching, nothing happens; one match goes in, with `/` after a directory and `:` after a host; of several, the first goes in whole, and a list under the field shows them all, as a column, as vim's pop-up menu (context `completion`). There, as in vim's 'wildmenu', Tab, Ctrl+n, and Down put the next match in the field, Shift+Tab, Ctrl+p, and Up the one before, PgDn and PgUp a page on, round through what was typed, which comes back after the last; Left completes again in the directory above the one listed and Right in the directory chosen, as in vim's pop-up menu ('wildoptions' pum, `wildmenu_process_key_filenames`); Ctrl+y keeps the match and Ctrl+e puts back what was typed, both closing the list; any other key closes it, keeps the match, and goes to the field: Enter confirms the dialog with it, as vim's Enter runs the command line, Esc goes to Normal mode, and Ctrl+c closes the dialog or the command line. A click puts a match in; a double click keeps it.
+- On the command line of `!` and `:` (context `command_completion`, which falls back to `completion`, then to the command line), as vim's `:!`: the word starts after the last space, tab, or line break not escaped with a backslash, and its escapes are taken out to match. In a local panel the first word of the command, without a `/`, completes as the executable files of the directories of `$PATH`, read once at startup, and with a `/` as the executable files and the directories there; the others as files and directories of the panel's directory, where the command runs, with `~` and absolute paths as Go to directory reads them. On a host every word completes as its files, through its session, and the first as a command never. Names go in escaped for `sh` with backslashes, as vim's do; the list shows over the line.
+- Names that start with a dot count only after a typed dot. Case never counts, as vim's 'fileignorecase' has it on macOS. Names that are not UTF-8 or hold control characters cannot be typed and are left out.
+- Go to directory and F7 offer directories and links to them; F5 and F6 files too. Before a `:`, Go to directory offers every host of the ssh config, F5 and F6 the connected ones, F7 none.
+- Local directories are read in the background, remote ones through the session of their host; a host that is not connected offers nothing, and a Tab never connects. Each listing has a generation, and a reply for text that changed since is dropped.
 
 ### zoxide
 
-[zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in
-([ADR 0012](adr/0012-external-tools-and-zoxide.md)). `g z` opens a window of its best
-directories for the active panel, or after Ctrl+x for the other one, as the
-[location menu](#location-menu) does; Enter opens the directory in that panel:
+[zoxide](https://github.com/ajeetdsouza/zoxide) ranks the directories the user works in ([ADR 0012](adr/0012-external-tools-and-zoxide.md)). `g z` opens a window of its best directories for the active panel, or after Ctrl+x for the other one, as the [location menu](#location-menu) does; Enter opens the directory in that panel:
 
 ```text
 ╔═════════════════════════════ zoxide ═════════════════════════════╗
@@ -495,43 +199,19 @@ directories for the active panel, or after Ctrl+x for the other one, as the
 ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-- In the fzf and regex [search modes](#search-modes), the window asks
-  `zoxide query --list --score --exclude <dir> --` once, for every directory but that panel's,
-  and what is typed filters them: as fzf does, best match first and those as good in zoxide's
-  order, as `zi` does with fzf, or as a regular expression, in zoxide's order. In the plain
-  mode what is typed is zoxide keywords, as `z foo bar` in a shell; each change asks
-  `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running
-  is dropped. Going to or from the plain mode asks zoxide again. zoxide ignores case: where it
-  counts, a directory shows only if it has each keyword in its case. As the other
-  [lists](#lists), the window opens in Insert mode, typing keywords, as `zi` does: Esc goes to
-  the rows, in Normal mode, where `/` types again and Esc closes the window. Directories under
-  the home directory show from `~`, and the window matches them as shown.
-- A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it,
-  at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel
-  shows it, F7, F3 or F4 on a file, `g x`, checksums, or a jump there. Passing through, marking,
-  searching, sorting, and `R` do not count. Each tab remembers whether its visit counted;
-  going to another directory starts a new one. One task adds them in turn, so no two zoxide
-  processes write its database at once.
-- `zoxide.record` turns recording off; without zoxide the window says it is not installed,
-  and recording is logged once and stops until `zoxide.program` changes.
+- In the fzf and regex [search modes](#search-modes), the window asks `zoxide query --list --score --exclude <dir> --` once, for every directory but that panel's, and what is typed filters them: as fzf does, best match first and those as good in zoxide's order, as `zi` does with fzf, or as a regular expression, in zoxide's order. In the plain mode what is typed is zoxide keywords, as `z foo bar` in a shell; each change asks `zoxide query --list --score --exclude <dir> -- <keywords>` again, and a query still running is dropped. Going to or from the plain mode asks zoxide again. zoxide ignores case: where it counts, a directory shows only if it has each keyword in its case. As the other [lists](#lists), the window opens in Insert mode, typing keywords, as `zi` does: Esc goes to the rows, in Normal mode, where `/` types again and Esc closes the window. Directories under the home directory show from `~`, and the window matches them as shown.
+- A local directory goes to zoxide (`zoxide add -- <dir>`) once the user does something in it, at most once a visit: a copy, move, or delete from it, a copy or move into it when a panel shows it, F7, F3 or F4 on a file, `g x`, checksums, or a jump there. Passing through, marking, searching, sorting, and `R` do not count. Each tab remembers whether its visit counted; going to another directory starts a new one. One task adds them in turn, so no two zoxide processes write its database at once.
+- `zoxide.record` turns recording off; without zoxide the window says it is not installed, and recording is logged once and stops until `zoxide.program` changes.
 
 ### Search modes
 
-Every field that searches matches what is typed in one of its ways, with its case
-([ADR 0030](adr/0030-search-modes.md), [ADR 0044](adr/0044-one-base-for-search-fields.md),
+Every field that searches matches what is typed in one of its ways, with its case ([ADR 0030](adr/0030-search-modes.md), [ADR 0044](adr/0044-one-base-for-search-fields.md),
 [ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md),
 [ADR 0046](adr/0046-case-and-the-keys-of-search-fields.md),
-[ADR 0047](adr/0047-search-fields-remember-their-way-and-case.md)). `tui/search.rs` says which:
-each kind of field is a `search::Kind`, with its ways in the order `Ctrl+s Ctrl+s` goes round
-them, the way it starts in for each value of `ui.default_search_mode`, `fzf` by default, and the
-cases it can take; a field while it is open is a `search::Input`, with its way and its case, which
-switches them, builds its `Matcher`, and gives the glyphs at the end of the field. A field never
-chooses its ways itself. A field of a dialog searches when the dialog gives it an `Input`
-(`Dialog::with_search`); the dialog then draws its glyphs, takes the keys after Ctrl+s and the
-clicks on the glyphs, and says its way and case (`Dialog::search`).
+[ADR 0047](adr/0047-search-fields-remember-their-way-and-case.md)). `tui/search.rs` says which: each kind of field is a `search::Kind`, with its ways in the order `Ctrl+s Ctrl+s` goes round them, the way it starts in for each value of `ui.default_search_mode`, `fzf` by default, and the cases it can take; a field while it is open is a `search::Input`, with its way and its case, which switches them, builds its `Matcher`, and gives the glyphs at the end of the field. A field never chooses its ways itself. A field of a dialog searches when the dialog gives it an `Input` (`Dialog::with_search`); the dialog then draws its glyphs, takes the keys after Ctrl+s and the clicks on the glyphs, and says its way and case (`Dialog::search`).
 
 | Field | `search::Kind` | Ways, as `Ctrl+s Ctrl+s` goes | Cases | `fzf` starts it in |
-| --- | --- | --- | --- | --- |
+| ----- | -------------- | ----------------------------- | ----- | ------------------ |
 | Quick search, `/` and `?` | `QUICK_SEARCH` | plain, fzf, regex | all | fzf |
 | Filters of the lists | `FILTER` | plain, fzf, regex | all | fzf |
 | Filter of the zoxide window | `FILTER_PATHS` | plain, fzf, regex, on paths | all | fzf |
@@ -540,89 +220,32 @@ clicks on the glyphs, and says its way and case (`Dialog::search`).
 | Files of the search of a tree, Files and dirs | `FILES_FD` | glob | case | glob |
 | Pattern of `g +` and `g -` | `MARK` | glob, plain, regex | all | glob |
 
-The filters of the lists are those of the location menu, the tab menu, the Workspaces window, the
-command history, and the list of the key hints. Each field keeps its way and its case until Noon
-Commander quits (`search::Memory`, by `search::Slot`, nothing on disk): the next time it opens, it
-opens as it was. One slot is quick search in both panels, `/` and `?`; each list has its own; the
-text of the search of a tree is one in both its modes, its globs another, and `g +` and `g -`
-share one. A field opens in `ui.default_search_mode` the first time, or in its own way if it has
-not that one: `fzf` is regex for the text of the search of a tree and glob for `g +`. Changing the
-setting leaves the fields that have opened as they were. The App keeps how each open field is
-after each key and press of the mouse (`App::remember_searches`), so Esc keeps a switch too. `n`
-and `N` match as the last search did.
+The filters of the lists are those of the location menu, the tab menu, the Workspaces window, the command history, and the list of the key hints. Each field keeps its way and its case until Noon Commander quits (`search::Memory`, by `search::Slot`, nothing on disk): the next time it opens, it opens as it was. One slot is quick search in both panels, `/` and `?`; each list has its own; the text of the search of a tree is one in both its modes, its globs another, and `g +` and `g -` share one. A field opens in `ui.default_search_mode` the first time, or in its own way if it has not that one: `fzf` is regex for the text of the search of a tree and glob for `g +`. Changing the setting leaves the fields that have opened as they were. The App keeps how each open field is after each key and press of the mouse (`App::remember_searches`), so Esc keeps a switch too. `n` and `N` match as the last search did.
 
-Case (`search::Case`, which is `noc_pattern::Case`) is smart in every field and every way to
-start: it counts only once what is typed has a capital letter, as ripgrep and fd have it; then
-ignored, or counted, as the field is switched. A kind says the cases it can take (`Kind::cases`):
-one alone takes no click on its glyph and no key after Ctrl+s. The search of a tree gives the case
-of the text to ripgrep (`--smart-case`, `--ignore-case`, `--case-sensitive`) and fd (its default,
-`--ignore-case`, `--case-sensitive`). The case of the globs is glob by glob: ripgrep takes each as
-`--glob` where case counts for it and `--iglob` where not; fd has no `--exclude` that ignores case,
-so by name the field has only case, and ripgrep's comes back in the Text mode.
+Case (`search::Case`, which is `noc_pattern::Case`) is smart in every field and every way to start: it counts only once what is typed has a capital letter, as ripgrep and fd have it; then ignored, or counted, as the field is switched. A kind says the cases it can take (`Kind::cases`): one alone takes no click on its glyph and no key after Ctrl+s. The search of a tree gives the case of the text to ripgrep (`--smart-case`, `--ignore-case`, `--case-sensitive`) and fd (its default, `--ignore-case`, `--case-sensitive`). The case of the globs is glob by glob: ripgrep takes each as `--glob` where case counts for it and `--iglob` where not; fd has no `--exclude` that ignores case, so by name the field has only case, and ripgrep's comes back in the Text mode.
 
-Two glyphs at the end of the field say the case, then the way, in every field: at the right end
-of the line of the mode while quick search takes it, and at the end of the field of the filters
-and of the dialogs. A blank goes before them and one after each, in the colors of the field
-(`Filter: text   Aa ~`, and a blank): kitty draws a Nerd Font icon over two cells when the cell
-after it is blank, and spills it over what comes next otherwise. In `glyphs.rs`: for the case,
-nf-md-format_letter_case_upper, nf-md-format_letter_case_lower, nf-cod-case_sensitive (`Aa`, `aa`,
-`AA` without icons); for the way, nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex,
-nf-seti-shell (`=`, `~`, `.*`, `*`). The glyph of the way is crossed out, in the color of a
-broken link, while the text is no regular expression, when the lists say what is wrong with it in
-place of the rows, and while a glob of the Files field is none that globset reads
-(`noc_tools::globs`). A glyph that a click does not switch, as the field has one way or one case,
-shows in the theme's `disabled`, as a command of the pull-down menu that cannot run: the glyph of
-shell patterns of the Files field, and by name its case too. What is wrong shows over it.
+Two glyphs at the end of the field say the case, then the way, in every field: at the right end of the line of the mode while quick search takes it, and at the end of the field of the filters and of the dialogs. A blank goes before them and one after each, in the colors of the field (`Filter: text   Aa ~`, and a blank): kitty draws a Nerd Font icon over two cells when the cell after it is blank, and spills it over what comes next otherwise. In `glyphs.rs`: for the case, nf-md-format_letter_case_upper, nf-md-format_letter_case_lower, nf-cod-case_sensitive (`Aa`, `aa`, `AA` without icons); for the way, nf-cod-whole_word, nf-md-approximately_equal, nf-cod-regex, nf-seti-shell (`=`, `~`, `.*`, `*`). The glyph of the way is crossed out, in the color of a broken link, while the text is no regular expression, when the lists say what is wrong with it in place of the rows, and while a glob of the Files field is none that globset reads (`noc_tools::globs`). A glyph that a click does not switch, as the field has one way or one case, shows in the theme's `disabled`, as a command of the pull-down menu that cannot run: the glyph of shell patterns of the Files field, and by name its case too. What is wrong shows over it.
 
-The keys switch the field that has the focus, and no other: quick search, the filter of a list
-while it takes the keys, in Insert mode, and a field of a dialog that searches, in either mode.
-Ctrl+s leads them: `Ctrl+s Ctrl+s` or `Ctrl+s s` the next way, `Ctrl+s p`, `f`, `r`, `g` a way by
-its letter, `Ctrl+s c` the next case, and `Ctrl+s a`, `i`, `m` smart case, case ignored, or case.
-Elsewhere, on the rows of a list or on a check box or a button, they do nothing. A click on the
-glyph of the case does what `Ctrl+s c` does, and on that of the way what `Ctrl+s Ctrl+s` does,
-giving the field the focus first: a list goes to its filter, in Insert mode. The keys live in the
-keymap context `search_input`, which goes in front of the chain of where the keys go while such a
-field has the focus: `App::key_place` gives the keymap a `keymap::Place`, the mode, the context,
-and the kind of the field, and `Place::chain` puts `search_input` first. So the F-key bar, the
-help, and the key hints show them where they work, and nowhere else; the key hints leave out the
-ways the kind has not (`Place::allows`), whose keys do nothing rather than type.
+The keys switch the field that has the focus, and no other: quick search, the filter of a list while it takes the keys, in Insert mode, and a field of a dialog that searches, in either mode. Ctrl+s leads them: `Ctrl+s Ctrl+s` or `Ctrl+s s` the next way, `Ctrl+s p`, `f`, `r`, `g` a way by its letter, `Ctrl+s c` the next case, and `Ctrl+s a`, `i`, `m` smart case, case ignored, or case. Elsewhere, on the rows of a list or on a check box or a button, they do nothing. A click on the glyph of the case does what `Ctrl+s c` does, and on that of the way what `Ctrl+s Ctrl+s` does, giving the field the focus first: a list goes to its filter, in Insert mode. The keys live in the keymap context `search_input`, which goes in front of the chain of where the keys go while such a field has the focus: `App::key_place` gives the keymap a `keymap::Place`, the mode, the context, and the kind of the field, and `Place::chain` puts `search_input` first. So the F-key bar, the help, and the key hints show them where they work, and nowhere else; the key hints leave out the ways the kind has not (`Place::allows`), whose keys do nothing rather than type.
 
-The [search of a whole tree](#search-of-a-whole-tree) has no fzf way, ripgrep and fd
-matching a pattern rather than ranking names, so `fzf` starts it in regex. The ways:
+The [search of a whole tree](#search-of-a-whole-tree) has no fzf way, ripgrep and fd matching a pattern rather than ranking names, so `fzf` starts it in regex. The ways:
 
-- **Plain**: the text anywhere. The rows keep their order, and quick search goes down them as
-  vim's search does.
+- **Plain**: the text anywhere. The rows keep their order, and quick search goes down them as vim's search does.
 - **fzf**: as below.
-- **Regex**: a regular expression, built by the `noc-pattern` crate as the search of a tree
-  builds its patterns for fd: the `regex` crate, where a capital that is escaped, as in `\S`,
-  does not make case count, and the last line of what the engine says is wrong. The rows keep
-  their order, as in the plain mode.
-- **Glob**: a shell pattern, as mc's `+` and `-` read it (`tui/pattern.rs`): `*`, `?`,
-  `[a-z]`, `{a,b}`, and `\`; the whole name matches. What does not parse is taken as it is, so
-  nothing is ever wrong with it.
+- **Regex**: a regular expression, built by the `noc-pattern` crate as the search of a tree builds its patterns for fd: the `regex` crate, where a capital that is escaped, as in `\S`, does not make case count, and the last line of what the engine says is wrong. The rows keep their order, as in the plain mode.
+- **Glob**: a shell pattern, as mc's `+` and `-` read it (`tui/pattern.rs`): `*`, `?`, `[a-z]`, `{a,b}`, and `\`; the whole name matches. What does not parse is taken as it is, so nothing is ever wrong with it.
 
-The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps
-`nucleo-matcher`, Helix's port of fzf's algorithm:
+The fzf mode follows [ADR 0016](adr/0016-fuzzy-search.md). `tui/fuzzy.rs` wraps `nucleo-matcher`, Helix's port of fzf's algorithm:
 
-- The letters typed must come in order, not necessarily together: `cfg` finds `config.rs`.
-  Runs of them, and letters that start a word (after a space, `/`, or punctuation, or a
-  capital after a small letter), score higher; in the zoxide window, after `/` most.
-- Words separated by spaces must all match, in any order. As in fzf's extended search,
-  `'word` matches as it is, `^word` at the start, `word$` at the end, and `!word` only where
-  it is not; `\` takes a space or one of these as it is.
-- Case counts as the field says, smart case to start; letters with accents match those
-  without.
-- Lists sort their rows by the match, best first, and keep their order among matches as good;
-  the cursor goes to the first ([ADR 0040](adr/0040-one-picker-for-every-list.md)). The
-  location menu drops the headings of its groups meanwhile. Quick search keeps the order of the
-  listing and goes to the best match.
+- The letters typed must come in order, not necessarily together: `cfg` finds `config.rs`. Runs of them, and letters that start a word (after a space, `/`, or punctuation, or a capital after a small letter), score higher; in the zoxide window, after `/` most.
+- Words separated by spaces must all match, in any order. As in fzf's extended search, `'word` matches as it is, `^word` at the start, `word$` at the end, and `!word` only where it is not; `\` takes a space or one of these as it is.
+- Case counts as the field says, smart case to start; letters with accents match those without.
+- Lists sort their rows by the match, best first, and keep their order among matches as good; the cursor goes to the first ([ADR 0040](adr/0040-one-picker-for-every-list.md)). The location menu drops the headings of its groups meanwhile. Quick search keeps the order of the listing and goes to the best match.
 - Tab completion in path fields still completes the start of a name.
 
 ### Search of a whole tree
 
-`f /` in a panel, or F9 → Search → Find text…, opens a dialog over both panels that searches the
-files below the active panel's directory with ripgrep; `f f`, or F9 → Search → Find files and
-dirs…, opens it in its Files and dirs mode, which finds their names with fd
+`f /` in a panel, or F9 → Search → Find text…, opens a dialog over both panels that searches the files below the active panel's directory with ripgrep; `f f`, or F9 → Search → Find files and dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
 [ADR 0029](adr/0029-files-and-directories-with-fd.md)):
 
@@ -647,211 +270,54 @@ dirs…, opens it in its Files and dirs mode, which finds their names with fd
 ╚════════════════════════════════════════════════════════════════════╝
 ```
 
-- A `Dialog` (`tui/dialog/`) with rows, a picker without a filter (`Picker::without_filter`,
-  `Dialog::with_picker`): two fields, the text and the
-  globs of the files, split at blanks, `!` before one leaving those out; the rows; and four
-  buttons. The text is a regular expression in the regex and fzf [search modes](#search-modes) and
-  as it is in the plain one, with smart case; the keys after Ctrl+s in its field switch both, and
-  the glyphs at the end of the field say which (`Dialog::with_search`). The globs are shell
-  patterns, their field's one way, whose case the keys after Ctrl+s switch too. Both fields open
-  as they were last. With no text it lists the files. The dialog is a large window
-  (`Dialog::large`, [ADR 0088](adr/0088-large-windows.md)). The picker keeps
-  the cursor of the rows and scrolls them, its rows filling the room the dialog leaves them
-  (`Body.fill`); `FindWindow` (`tui/find.rs`) keeps what was found, gives the picker as many
-  rows, and draws each row.
-- Two modes, in a combo box above the fields (Mode, [ADR 0057](adr/0057-combo-boxes.md)): Text,
-  with ripgrep (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons
-  are Go to
-  and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a
-  regular expression or as it is, with the case of the text; `!` globs go to it as `--exclude`,
-  which tells case apart, as do the others then (`search::Kind::FILES_FD`), and
-  `noc_tools::fd::Names` keeps what the other globs let through and finds where the name
-  matches, with fd's regex engine, for `find_match`. On a host `fd` runs,
-  or `fdfind` where the shell says 127. Its rows (`Finding::Entry`) are the files and
-  directories, each with its icon and its path, which loses its start when too long
-  (`cells::fit_spans_end`); Go to goes into a directory (`FindEvent::Open`).
-- Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task
-  (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep`: locally in the directory, as
-  `[search] program`; on a host, `rg` through the host's task and `Session::spawn_in`, over the
-  master without a terminal ([ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md)). It
-  reads ripgrep's JSON (`Hits`) while a task of its own drains stderr, reports what it found at
-  most every 50 ms (`Done::Found`), stops ripgrep after `[search] max_results` lines (or files),
-  takes `[search] max_per_file` lines of a file at most (`--max-count`, `100+` by the file),
-  then reports how it ended (`Done::FindEnded`): the limit, and the errors ripgrep told of. Each
-  search has a generation, so the reports of an earlier one are dropped; the dialog holds the
-  `CancellationToken` of the last, so a new search or closing the dialog stops it.
-- Its keys are those of dialogs (contexts `find_input` in a field, `find` elsewhere): it opens in
-  Insert mode, typing in the text; Tab, Up, and Down go through the fields, the rows, and the
-  buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the rows have the
-  focus, the motions and the page keys move their cursor. F3 and F4 work wherever the focus is,
-  and `g f` and `e` as they do off the fields, the keys after Ctrl+s in the field of the text,
-  and the letters of the dialog work as in every dialog
-  ([ADR 0033](adr/0033-letters-in-dialogs.md)). The wheel scrolls the rows.
-- The rows are the files, in the order of their paths, each with how many lines matched, and their
-  lines with their numbers, the matches in a color of their own (`find_match`), apart from the
-  cursor's; a line too long starts a little before its first match. The rows of a search stay until
-  the next one finds something or ends, the cursor on the row it was on. While it searches, the dots
-  turn in front of the title, a skeleton stands in place of the rows until the first come, and the
-  status line under them a skeleton bar, which the shine crosses with the row. Once it ends, the
-  status says how many lines it found in how many files; that it stopped at the limit; and the
-  errors. A pattern that is not a regular expression, a missing ripgrep, or a host that is not
-  connected says why in place of the rows.
-- Go to, the default button, goes to the file in the active panel: its directory, with the cursor
-  on it; where the panel was goes to the jump list. View (F3) views it with the line at the top,
-  and Edit (F4) edits it at the line (`Editor::edit_at`), a remote one through a local copy; the
-  dialog is there again after both. On a file's row they take its first line that matched.
-- It is not in the queue of dialogs, which shows only the one in front, over everything: it
-  stays under the viewer, the jobs, the help, and the dialogs, as the window it was.
+- A `Dialog` (`tui/dialog/`) with rows, a picker without a filter (`Picker::without_filter`, `Dialog::with_picker`): two fields, the text and the globs of the files, split at blanks, `!` before one leaving those out; the rows; and four buttons. The text is a regular expression in the regex and fzf [search modes](#search-modes) and as it is in the plain one, with smart case; the keys after Ctrl+s in its field switch both, and the glyphs at the end of the field say which (`Dialog::with_search`). The globs are shell patterns, their field's one way, whose case the keys after Ctrl+s switch too. Both fields open as they were last. With no text it lists the files. The dialog is a large window (`Dialog::large`, [ADR 0088](adr/0088-large-windows.md)). The picker keeps the cursor of the rows and scrolls them, its rows filling the room the dialog leaves them (`Body.fill`); `FindWindow` (`tui/find.rs`) keeps what was found, gives the picker as many rows, and draws each row.
+- Two modes, in a combo box above the fields (Mode, [ADR 0057](adr/0057-combo-boxes.md)): Text, with ripgrep (`FindQuery::Lines`), and Files and dirs, with fd (`FindQuery::Names`), whose buttons are Go to and Cancel (`Dialog::set_buttons`). By name, fd matches the text against the names, as a regular expression or as it is, with the case of the text; `!` globs go to it as `--exclude`, which tells case apart, as do the others then (`search::Kind::FILES_FD`), and `noc_tools::fd::Names` keeps what the other globs let through and finds where the name matches, with fd's regex engine, for `find_match`. On a host `fd` runs, or `fdfind` where the shell says 127. Its rows (`Finding::Entry`) are the files and directories, each with its icon and its path, which loses its start when too long (`cells::fit_spans_end`); Go to goes into a directory (`FindEvent::Open`).
+- Each change starts a search 150 ms after the last key (`FIND_DELAY`), the first at once. A task (`Effect::Find`) runs ripgrep through `noc_tools::ripgrep`: locally in the directory, as `[search] program`; on a host, `rg` through the host's task and `Session::spawn_in`, over the master without a terminal ([ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md)). It reads ripgrep's JSON (`Hits`) while a task of its own drains stderr, reports what it found at most every 50 ms (`Done::Found`), stops ripgrep after `[search] max_results` lines (or files), takes `[search] max_per_file` lines of a file at most (`--max-count`, `100+` by the file), then reports how it ended (`Done::FindEnded`): the limit, and the errors ripgrep told of. Each search has a generation, so the reports of an earlier one are dropped; the dialog holds the `CancellationToken` of the last, so a new search or closing the dialog stops it.
+- Its keys are those of dialogs (contexts `find_input` in a field, `find` elsewhere): it opens in Insert mode, typing in the text; Tab, Up, and Down go through the fields, the rows, and the buttons; Esc leaves Insert mode in a field, and again closes the dialog. While the rows have the focus, the motions and the page keys move their cursor. F3 and F4 work wherever the focus is, and `g f` and `e` as they do off the fields, the keys after Ctrl+s in the field of the text, and the letters of the dialog work as in every dialog ([ADR 0033](adr/0033-letters-in-dialogs.md)). The wheel scrolls the rows.
+- The rows are the files, in the order of their paths, each with how many lines matched, and their lines with their numbers, the matches in a color of their own (`find_match`), apart from the cursor's; a line too long starts a little before its first match. The rows of a search stay until the next one finds something or ends, the cursor on the row it was on. While it searches, the dots turn in front of the title, a skeleton stands in place of the rows until the first come, and the status line under them a skeleton bar, which the shine crosses with the row. Once it ends, the status says how many lines it found in how many files; that it stopped at the limit; and the errors. A pattern that is not a regular expression, a missing ripgrep, or a host that is not connected says why in place of the rows.
+- Go to, the default button, goes to the file in the active panel: its directory, with the cursor on it; where the panel was goes to the jump list. View (F3) views it with the line at the top, and Edit (F4) edits it at the line (`Editor::edit_at`), a remote one through a local copy; the dialog is there again after both. On a file's row they take its first line that matched.
+- It is not in the queue of dialogs, which shows only the one in front, over everything: it stays under the viewer, the jobs, the help, and the dialogs, as the window it was.
 
 ### Lists
 
-The location menu, the tab menu, the zoxide window, the Workspaces window, and the command history
-list rows to choose from. Each opens in Insert mode, with its filter taking the keys ([ADR
-0036](adr/0036-lists-open-in-insert-mode.md)): characters are text, the keys of `input` edit it
-(Ctrl+r types a register, which the app reads, and Ctrl+o, which has no Normal mode to go to, does
-nothing), Up, Down, Ctrl+p, Ctrl+n, and the page keys move, Enter takes the row under the cursor,
-and Ctrl+c or F10 closes the window. Esc goes to the rows, with the filter kept, in Normal mode
-(keymap context `list`, which each one's context falls back to): `j`, `k`, Ctrl+j, Ctrl+d,
-Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, and the rows scroll as the panels' do, headings among
-them, a count repeats a motion, Enter takes the row, `d d` and F8 delete it where the window can,
-as many rows as a count says (`3d d`, as vim's deletes three lines), `/` types in the
-filter again, and Esc, `q`, Ctrl+c, or F10 closes the window. Text pasted while the rows have the keys
-goes to the filter, in Insert mode. There are no digit hotkeys.
+The location menu, the tab menu, the zoxide window, the Workspaces window, and the command history list rows to choose from. Each opens in Insert mode, with its filter taking the keys ([ADR 0036](adr/0036-lists-open-in-insert-mode.md)): characters are text, the keys of `input` edit it (Ctrl+r types a register, which the app reads, and Ctrl+o, which has no Normal mode to go to, does nothing), Up, Down, Ctrl+p, Ctrl+n, and the page keys move, Enter takes the row under the cursor, and Ctrl+c or F10 closes the window. Esc goes to the rows, with the filter kept, in Normal mode (keymap context `list`, which each one's context falls back to): `j`, `k`, Ctrl+j, Ctrl+d, Ctrl+u, Ctrl+f, Ctrl+b, `g g`, and `G` move, and the rows scroll as the panels' do, headings among them, a count repeats a motion, Enter takes the row, `d d` and F8 delete it where the window can, as many rows as a count says (`3d d`, as vim's deletes three lines), `/` types in the filter again, and Esc, `q`, Ctrl+c, or F10 closes the window. Text pasted while the rows have the keys goes to the filter, in Insert mode. There are no digit hotkeys.
 
-- All share `tui/picker.rs` ([ADR 0040](adr/0040-one-picker-for-every-list.md)): the filter, a
-  text field with a cursor (`dialog::Field`), drawn in the colors of the fields of dialogs after
-  its prompt (`search::Mark::render_field`), which matches in the
-  [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which each draws
-  centered over both panels, the menus of one panel and the zoxide window too. The only lines
-  across a list are under the filter and over the whole row under the cursor, and they join the
-  frame (`╟───╢`) as the line
-  over the buttons of a dialog does; a heading is its text alone, in the color of titles. Each
-  holds its own rows, says what the filter finds them by, and draws them. A row may show only
-  while the filter is empty, as the rows of more in the location menu do, or only while it has
-  text, as the places behind them do.
-- A picker is also a part of a dialog (`Dialog::with_picker`;
-  [ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)), as in the window of the checksums of
-  several files: the dialog draws the frame, the title, and the buttons, and the picker its filter,
-  its rows, and its footer between them (`Picker::render_in`); its owner gives it the lines and
-  draws the rows (`Dialog::render_picker`). Its rows are a stop of the focus (`Focus::Picker`):
-  there the motions move the cursor and stop at the first row and the last, and Tab, Shift+Tab,
-  Left, and Right go to the stop after or before; on the buttons the motions go round, back to
-  the rows, and `/` from anywhere types in the filter. Enter and Space on a row
-  press the default button.
-- The zoxide window gives its own prompt, matches paths as paths, after `/` best, and in the
-  plain mode lets zoxide pick its rows from the keywords typed: the picker says the filter changed
-  (`Pick::Filtered`), and the window asks zoxide again.
-- The location menu and the zoxide window wait for their rows from a task, through
-  `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front
-  of the title, at first and while they ask again; the skeleton, as tall as the last list without
-  a filter; and why no rows came, in their place.
-- The list of the key hints shows what the command under the cursor does, whole, in two lines
-  under the rows, broken between words, without its keys, while it has rows (`Body.full`;
-  [ADR 0041](adr/0041-lists-always-show-the-whole-row.md),
-  [ADR 0088](adr/0088-large-windows.md)). It is a large window, whose column of keys takes as many
-  cells as the longest keys shown, up to a third of a row. The tab menu and the zoxide window,
-  whose rows are paths that nearly always fit, show
-  none ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command
-  history shows where the command ran there instead
-  ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)), the location menu a
-  card of the place under the cursor
-  ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)), and the
-  Workspaces
-  window where the tabs of the workspace are, in two columns (`Body.footer`, `Body.footer_column`),
-  whose line joins the line over them and the bottom of the frame (`┬`, `╧`). A skeleton that
-  stands for the rows of the last list takes the lines of the whole row too, in a window that has
-  it (`Body.has_full`), so that the box does not grow when the rows come. `K` is the panels' alone.
+- All share `tui/picker.rs` ([ADR 0040](adr/0040-one-picker-for-every-list.md)): the filter, a text field with a cursor (`dialog::Field`), drawn in the colors of the fields of dialogs after its prompt (`search::Mark::render_field`), which matches in the [search mode](#search-modes); the cursor, scrolling, the mouse, and the box, which each draws centered over both panels, the menus of one panel and the zoxide window too. The only lines across a list are under the filter and over the whole row under the cursor, and they join the frame (`╟───╢`) as the line over the buttons of a dialog does; a heading is its text alone, in the color of titles. Each holds its own rows, says what the filter finds them by, and draws them. A row may show only while the filter is empty, as the rows of more in the location menu do, or only while it has text, as the places behind them do.
+- A picker is also a part of a dialog (`Dialog::with_picker`; [ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)), as in the window of the checksums of several files: the dialog draws the frame, the title, and the buttons, and the picker its filter, its rows, and its footer between them (`Picker::render_in`); its owner gives it the lines and draws the rows (`Dialog::render_picker`). Its rows are a stop of the focus (`Focus::Picker`): there the motions move the cursor and stop at the first row and the last, and Tab, Shift+Tab, Left, and Right go to the stop after or before; on the buttons the motions go round, back to the rows, and `/` from anywhere types in the filter. Enter and Space on a row press the default button.
+- The zoxide window gives its own prompt, matches paths as paths, after `/` best, and in the plain mode lets zoxide pick its rows from the keywords typed: the picker says the filter changed (`Pick::Filtered`), and the window asks zoxide again.
+- The location menu and the zoxide window wait for their rows from a task, through `tui/loading.rs` (`Loading`): the answer they wait for, an older one dropped; the dots in front of the title, at first and while they ask again; the skeleton, as tall as the last list without a filter; and why no rows came, in their place.
+- The list of the key hints shows what the command under the cursor does, whole, in two lines under the rows, broken between words, without its keys, while it has rows (`Body.full`; [ADR 0041](adr/0041-lists-always-show-the-whole-row.md), [ADR 0088](adr/0088-large-windows.md)). It is a large window, whose column of keys takes as many cells as the longest keys shown, up to a third of a row. The tab menu and the zoxide window, whose rows are paths that nearly always fit, show none ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md)). The command history shows where the command ran there instead ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)), the location menu a card of the place under the cursor ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md)), and the Workspaces window where the tabs of the workspace are, in two columns (`Body.footer`, `Body.footer_column`), whose line joins the line over them and the bottom of the frame (`┬`, `╧`). A skeleton that stands for the rows of the last list takes the lines of the whole row too, in a window that has it (`Body.has_full`), so that the box does not grow when the rows come. `K` is the panels' alone.
 
 ### Tabs
 
-Each side has tabs of its own ([ADR 0011](adr/0011-tabs-per-panel.md)). A side with more than
-one shows them, numbered, on a line above the panels (`ui.tab_bar = "line"`, the default):
+Each side has tabs of its own ([ADR 0011](adr/0011-tabs-per-panel.md)). A side with more than one shows them, numbered, on a line above the panels (`ui.tab_bar = "line"`, the default):
 
 ```text
 ║ 1 src │ 2 noon │ 3 web:log          ║║ 1 ~                              ║
 ╠ /Users/me/projects/noon ══════════╣╠ /Users/me ═══════════════════════╣
 ```
 
-or in the top line of the panel's frame, in place of its title (`"frame"`), which costs no
-row and names the tab that shows by its whole location:
+or in the top line of the panel's frame, in place of its title (`"frame"`), which costs no row and names the tab that shows by its whole location:
 
 ```text
 ╔ 1 src ═ 2 /Users/me/projects/noon ═ 3 web:log ═╗
 ```
 
-- A tab is a whole `Panel` (listing, cursor, marks, sort order, quick search), so switching
-  shows it at once. Hidden tabs list nothing: when a job or F7 changes a directory that a
-  hidden tab shows, the tab is marked stale and reads it again when it shows.
-- `t n` opens a new tab after the one that shows, on the same directory with the same listing
-  and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next
-  one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes
-  to the tab of that number, as in vim, and so does Alt and its digit, as in ranger (`go_to_tab`,
-  the digit in `Extra::char`); Alt+0 goes to the last, as vim's `:tablast`. A number past the
-  last tab does nothing. `t t` opens the tab menu of the active panel, as vim's
-  `:tabs` lists them: the tabs with their whole locations, centered over both panels, to show
-  one, under the title `Tabs`, which names no side; it is as wide as the other lists, 76 cells.
-  Ctrl+x
-  before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count after
-  Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under
-  the cursor there as `t c`
-  closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. F9 →
-  Window has New tab, Close tab, Next tab, Previous tab, and Tab list… for the active panel.
-- Names on the line of tabs are brief: the last component of a directory, `~` for the home
-  directory, `host:name` on a host, and the host alone in its start directory. The frame's
-  verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it,
-  so the two sides stay apart. When the tabs do not fit, the names of hidden
-  tabs shrink first, then the one that shows, none below eight cells; then tabs far from it
-  are left out, and `«` and `»` say so.
-- Panels are named by a `PanelId`, their side and tab number, which is never used again.
-  Listings, new directories, and the dialogs of `g +`, `g -`, F5, F6, and F7 carry it, so a reply
-  reaches the tab that asked even after a switch, and one for a closed tab is dropped. What
-  acts on the other side (Ctrl+w f, Ctrl+w v, Ctrl+x, F5's target, `other_dir`) acts on the tab
-  that shows there. Disconnecting or losing a host leaves every tab on it there, hidden or not,
-  without its entries; after a lost connection they wait for Retry and read their directories
-  when the host is back.
-- Tabs look like tabs: the line is dark (`tab`: gray on black in mc-classic, as the F-key
-  bar; `crust` in Catppuccin; dim text in `terminal`), and the tab that shows takes the
-  panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the
-  side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in
-  the frame take the same styles, with the frame's line between them.
+- A tab is a whole `Panel` (listing, cursor, marks, sort order, quick search), so switching shows it at once. Hidden tabs list nothing: when a job or F7 changes a directory that a hidden tab shows, the tab is marked stale and reads it again when it shows.
+- `t n` opens a new tab after the one that shows, on the same directory with the same listing and cursor, without marks; `t c` closes the tab that shows (the last one stays), and the next one shows. `g t` and `g T`, or `] t` and `[ t`, go round the tabs, and `g t` with a count goes to the tab of that number, as in vim, and so does Alt and its digit, as in ranger (`go_to_tab`, the digit in `Extra::char`); Alt+0 goes to the last, as vim's `:tablast`. A number past the last tab does nothing. `t t` opens the tab menu of the active panel, as vim's `:tabs` lists them: the tabs with their whole locations, centered over both panels, to show one, under the title `Tabs`, which names no side; it is as wide as the other lists, 76 cells. Ctrl+x before `t t`, `t n`, `t c`, `g t`, and `g T` does it in the other panel, with a count after Ctrl+x (`Ctrl+x 2g t`), as before any command. `d d` and F8 (`close_tab`) close the tab under the cursor there as `t c` closes the one that shows (`Tabs::close_at`), and the menu stays open with the rest. F9 → Window has New tab, Close tab, Next tab, Previous tab, and Tab list… for the active panel.
+- Names on the line of tabs are brief: the last component of a directory, `~` for the home directory, `host:name` on a host, and the host alone in its start directory. The frame's verticals close each side's line, and its top corners become tees (`╠`, `╣`) that join it, so the two sides stay apart. When the tabs do not fit, the names of hidden tabs shrink first, then the one that shows, none below eight cells; then tabs far from it are left out, and `«` and `»` say so.
+- Panels are named by a `PanelId`, their side and tab number, which is never used again. Listings, new directories, and the dialogs of `g +`, `g -`, F5, F6, and F7 carry it, so a reply reaches the tab that asked even after a switch, and one for a closed tab is dropped. What acts on the other side (Ctrl+w f, Ctrl+w v, Ctrl+x, F5's target, `other_dir`) acts on the tab that shows there. Disconnecting or losing a host leaves every tab on it there, hidden or not, without its entries; after a lost connection they wait for Retry and read their directories when the host is back.
+- Tabs look like tabs: the line is dark (`tab`: gray on black in mc-classic, as the F-key bar; `crust` in Catppuccin; dim text in `terminal`), and the tab that shows takes the panel's colors as if it grew out of it (`tab_active`), with its number in an accent on the side that has the keys (`tab_number`) and plainer on the other (`tab_active_idle`). Tabs in the frame take the same styles, with the frame's line between them.
 - Ctrl+w x swaps the sides with their tabs. `o h` and the settings apply to every tab.
-- Each tab keeps a jump list of its own, as vim's windows do, and none goes to a workspace: see
-  [Panels](#ui).
+- Each tab keeps a jump list of its own, as vim's windows do, and none goes to a workspace: see [Panels](#ui).
 
 ### Workspaces
 
-A workspace is the tabs of both panels, saved under a name
-([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location,
-sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
+A workspace is the tabs of both panels, saved under a name ([ADR 0017](adr/0017-workspaces.md)): for each side its tabs in order, each with its location, sort order, and the name under its cursor, and the tab that shows; and the side with the keys.
 
-- `t W`, or F9 → Window → Save workspace…, asks for a name, offering
-  that of the workspace restored or saved last, and saves the tabs under it; the name of a
-  workspace asks before replacing it, as `W` in the window does: Yes by default over the one
-  restored or saved last, No over another one. A location that `workspaces.toml` cannot hold,
-  such as a name that is not UTF-8, is saved as the nearest directory above it that it can
-  hold, or else as `~`.
-- `t w`, or F9 → Window → Workspace list…, opens a window of the saved
-  workspaces, one of the [lists](#lists), with a filter, which matches in the
-  [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` or F7 saves the
-  tabs as a new workspace, starting with an empty name, `W` or F2 saves them in place of the
-  workspace under the cursor after a question, No by default, Yes over the one restored or saved
-  last, `r` or F6 renames, and `d d` or F8 deletes after a question. F2, F6, F7, and F8 work while
-  the filter takes text too. A workspace
-  just saved or renamed there gets the cursor. The window opens with the cursor on the workspace
-  restored or saved last, which `•` marks in the color of titles
-  (`dialog_symbol`), in a room of two cells in front of every name; that one is the app's
-  (`App::workspace`), of this run only.
-- The window shows the workspaces in the order of their names, as the panels
-  order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order
-  they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row
-  counts the tabs of the left panel, then those of the right; the count of the side with the keys
-  is bold, in the color of titles. Under the rows, a column for each
-  panel lists where the tabs of the workspace under the cursor are, one to a line, cut at the
-  start where they do not fit, in as many lines as the workspace with the most tabs on a side
-  needs, four at most, the last saying how many more, faint, after the chevron down of the
-  location menu. The columns name no side: a triangle (`Glyphs.active`), in the color of titles,
-  goes before the tab that shows on the side with the keys, or before how many more if that tab
-  is among them; the tab that shows on each side is bold.
+- `t W`, or F9 → Window → Save workspace…, asks for a name, offering that of the workspace restored or saved last, and saves the tabs under it; the name of a workspace asks before replacing it, as `W` in the window does: Yes by default over the one restored or saved last, No over another one. A location that `workspaces.toml` cannot hold, such as a name that is not UTF-8, is saved as the nearest directory above it that it can hold, or else as `~`.
+- `t w`, or F9 → Window → Workspace list…, opens a window of the saved workspaces, one of the [lists](#lists), with a filter, which matches in the [search mode](#search-modes) (keymap context `workspaces`): Enter restores, `a` or F7 saves the tabs as a new workspace, starting with an empty name, `W` or F2 saves them in place of the workspace under the cursor after a question, No by default, Yes over the one restored or saved last, `r` or F6 renames, and `d d` or F8 deletes after a question. F2, F6, F7, and F8 work while the filter takes text too. A workspace just saved or renamed there gets the cursor. The window opens with the cursor on the workspace restored or saved last, which `•` marks in the color of titles (`dialog_symbol`), in a room of two cells in front of every name; that one is the app's (`App::workspace`), of this run only.
+- The window shows the workspaces in the order of their names, as the panels order names (`ui.natural_sort`, the formats in use); `workspaces.toml` keeps them in the order they were saved ([ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md)). Each row counts the tabs of the left panel, then those of the right; the count of the side with the keys is bold, in the color of titles. Under the rows, a column for each panel lists where the tabs of the workspace under the cursor are, one to a line, cut at the start where they do not fit, in as many lines as the workspace with the most tabs on a side needs, four at most, the last saying how many more, faint, after the chevron down of the location menu. The columns name no side: a triangle (`Glyphs.active`), in the color of titles, goes before the tab that shows on the side with the keys, or before how many more if that tab is among them; the tab that shows on each side is bold.
 
   ```text
   ╔═══════════════════════ Workspaces ═══════════════════════╗
@@ -866,18 +332,12 @@ sort order, and the name under its cursor, and the tab that shows; and the side 
   ╚════════════════════════════╧═════════════════════════════╝
   ```
 
-- Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the
-  old tabs are dropped). The tab that shows on each side lists its location at once, connecting
-  to its host if needed; a hidden one keeps its first request and sends it when it shows, so
-  only the hosts that show connect. The cursor goes to the saved name once the listing arrives.
-- `noc-config` owns `workspaces.toml`; one task reads and changes it in turn, and each change
-  reads the file again first, so another Noon Commander's changes are kept. The app reads it
-  at start, and takes the workspaces back after each change.
+- Restoring replaces every tab of both panels with new ones (new `PanelId`s, so replies for the old tabs are dropped). The tab that shows on each side lists its location at once, connecting to its host if needed; a hidden one keeps its first request and sends it when it shows, so only the hosts that show connect. The cursor goes to the saved name once the listing arrives.
+- `noc-config` owns `workspaces.toml`; one task reads and changes it in turn, and each change reads the file again first, so another Noon Commander's changes are kept. The app reads it at start, and takes the workspaces back after each change.
 
 ### Configuration dialog
 
-Tools → Configuration…, or `o o`, shows the settings of `config.toml` by category, as a
-modern settings window: there is no OK or Cancel, and every change takes effect as it is made
+Tools → Configuration…, or `o o`, shows the settings of `config.toml` by category, as a modern settings window: there is no OK or Cancel, and every change takes effect as it is made
 ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)):
 
 ```text
@@ -893,95 +353,35 @@ modern settings window: there is no OK or Cancel, and every change takes effect 
   ╚══════════════════════════════════════════════════════════════════╝
 ```
 
-- Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only);
-  the settings of the chosen one are on the right: check boxes `[✓]`, combo boxes `[… ▼]`, and
-  text fields. Every option of `config.toml` is there, so that nobody has to edit the file:
-  Interface (`[ui]`), Animations (`[animations]`), Transfers (`[transfer]`), SSH (`[ssh]` and
-  the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line
-  (`[shell]`), and Search (`[search]`).
-- The dialog is a large window, 80% of the width and of the height of the screen
-  ([ADR 0088](adr/0088-large-windows.md)).
-- Paths under the home directory show from `~`, and are written as typed. Lists, such as
-  `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell
-  reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
-- Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`, between `▲`
-  and `▼`, Nerd Font carets with `ui.icons`) shows on the right of the frame, as everywhere
-  ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)). The two lines below
-  them, set apart by a line across the dialog, say what the setting under the cursor does and
-  whether it takes effect only after a restart, or, in the colors of errors, why the text
-  typed cannot be used.
-- Tab moves between the categories and the settings; `j` and `k` (Down and Up) move within
-  them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text
-  field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a
-  text field in Insert mode takes a first Esc to Normal mode).
-- Alt+1 … Alt+9 and Alt+0 open the categories, from anywhere in the dialog, the digit shown in
-  front of each, and each setting has a letter, unique within its page: Alt and it do what Space
-  or Enter does on the row, or put the focus in its text field, in Insert mode, as the letters of
-  every dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
-- Space or Enter switches a check box or opens the list of a combo box, where Enter takes the
-  choice, and `h` and `l` take the choice before and the next without the list: each takes effect
-  at once. The dialog opens on the language, a text field, in Insert mode; a text field
-  the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes to Insert mode,
-  and one it comes to with Tab or Shift+Tab, a click, or from a field in Insert mode, in Insert mode
-  (see [Text fields](#ui)); what Visual mode selects shows in reverse. A text field takes effect
-  when the cursor leaves it (Up, Down, Tab, `g g`, `G`) or on Enter, and as the dialog closes. A
-  count before `j` or `k` moves as many rows, past the text fields too. Its value is checked first:
-  the language tag, the formats (`auto`, `iso`, or a tag), a whole number of parallel jobs, a
-  program for ssh, and the extra ssh arguments,
-  through the same validator as at start ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)).
-  An invalid one keeps the cursor in the field; Esc puts back what it had and closes the dialog.
-- A change is used at once, but the language, which the next start reads: the interface
-  redraws, new formats are made in a task and the panels sort again, copies and the job queue
-  follow `[transfer]`, and the settings in `Context`, which
-  sit behind a lock, change for new connections, `ssh -G`, and listings, so the location menu
-  lists the volumes and hosts with them the next time it opens. Connections that are open stay
-  as they are.
-- Each change writes its keys to the config file in the background. One task writes them in
-  turn, so that a change never overtakes the one before it; a failure shows an error.
+- Categories are on the left, with a Nerd Font icon each (without `ui.icons`, names only); the settings of the chosen one are on the right: check boxes `[✓]`, combo boxes `[… ▼]`, and text fields. Every option of `config.toml` is there, so that nobody has to edit the file: Interface (`[ui]`), Animations (`[animations]`), Transfers (`[transfer]`), SSH (`[ssh]` and the hidden hosts of `[discovery]`), Volumes (`[volumes]`), zoxide (`[zoxide]`), Command line (`[shell]`), and Search (`[search]`).
+- The dialog is a large window, 80% of the width and of the height of the screen ([ADR 0088](adr/0088-large-windows.md)).
+- Paths under the home directory show from `~`, and are written as typed. Lists, such as `ssh.args` and the hidden hosts and volumes, are words separated by spaces, as a shell reads them: `"…"` around a word with spaces, `\` before a character to take it as it is.
+- Settings that do not fit scroll with the cursor, and a scroll bar (`█` on `░`, between `▲` and `▼`, Nerd Font carets with `ui.icons`) shows on the right of the frame, as everywhere ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)). The two lines below them, set apart by a line across the dialog, say what the setting under the cursor does and whether it takes effect only after a restart, or, in the colors of errors, why the text typed cannot be used.
+- Tab moves between the categories and the settings; `j` and `k` (Down and Up) move within them, and `g g` and `G` go to the first and last of them; `h` (Left) on anything but a text field goes back to the categories; Esc, `q`, or F10 closes the dialog, in Normal mode (a text field in Insert mode takes a first Esc to Normal mode).
+- Alt+1 … Alt+9 and Alt+0 open the categories, from anywhere in the dialog, the digit shown in front of each, and each setting has a letter, unique within its page: Alt and it do what Space or Enter does on the row, or put the focus in its text field, in Insert mode, as the letters of every dialog do ([ADR 0033](adr/0033-letters-in-dialogs.md)).
+- Space or Enter switches a check box or opens the list of a combo box, where Enter takes the choice, and `h` and `l` take the choice before and the next without the list: each takes effect at once. The dialog opens on the language, a text field, in Insert mode; a text field the cursor comes to with `j` or `k` is in Normal mode, where `i`, `a`, or `A` goes to Insert mode, and one it comes to with Tab or Shift+Tab, a click, or from a field in Insert mode, in Insert mode (see [Text fields](#ui)); what Visual mode selects shows in reverse. A text field takes effect when the cursor leaves it (Up, Down, Tab, `g g`, `G`) or on Enter, and as the dialog closes. A count before `j` or `k` moves as many rows, past the text fields too. Its value is checked first: the language tag, the formats (`auto`, `iso`, or a tag), a whole number of parallel jobs, a program for ssh, and the extra ssh arguments, through the same validator as at start ([ADR 0004](adr/0004-forwarding-compile-time-feature.md)). An invalid one keeps the cursor in the field; Esc puts back what it had and closes the dialog.
+- A change is used at once, but the language, which the next start reads: the interface redraws, new formats are made in a task and the panels sort again, copies and the job queue follow `[transfer]`, and the settings in `Context`, which sit behind a lock, change for new connections, `ssh -G`, and listings, so the location menu lists the volumes and hosts with them the next time it opens. Connections that are open stay as they are.
+- Each change writes its keys to the config file in the background. One task writes them in turn, so that a change never overtakes the one before it; a failure shows an error.
 
 ## Host discovery
 
-OpenSSH cannot list hosts, and `ssh -G` resolves a single host while executing `Match exec`
-predicates. So:
+OpenSSH cannot list hosts, and `ssh -G` resolves a single host while executing `Match exec` predicates. So:
 
-1. A tolerant scanner reads only `Host`, `Match`, and `Include` (recursive, with globs, `~`, and
-   `${ENV}`) from `~/.ssh/config` and `/etc/ssh/ssh_config`, or from `ssh.config_file`, which,
-   like `ssh -F`, replaces both. It skips every other keyword and never fails on unknown ones.
-2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be
-   expanded statically; they are skipped and logged.
-3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, which runs
-   when the TUI connects to a host, once a run for a host that the cursor of the location menu
-   rests on for 150 ms, which, once started, runs to its end
-   ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), or for
-   `noc debug hosts`, for every host, with bounded parallelism; never for every host at startup
-   of the TUI. A failure shows in the card of the host until R in the menu. Results live in the
-   app for the run (`App::ssh_g`) and are never cached
-   ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)).
+1. A tolerant scanner reads only `Host`, `Match`, and `Include` (recursive, with globs, `~`, and `${ENV}`) from `~/.ssh/config` and `/etc/ssh/ssh_config`, or from `ssh.config_file`, which, like `ssh -F`, replaces both. It skips every other keyword and never fails on unknown ones.
+2. Concrete patterns (no `*`, `?`, or `!`) become hosts. `Include` lines with `%` tokens cannot be expanded statically; they are skipped and logged.
+3. Effective values (user, hostname, port, proxy jump) come only from `ssh -G`, which runs when the TUI connects to a host, once a run for a host that the cursor of the location menu rests on for 150 ms, which, once started, runs to its end ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md)), or for `noc debug hosts`, for every host, with bounded parallelism; never for every host at startup of the TUI. A failure shows in the card of the host until R in the menu. Results live in the app for the run (`App::ssh_g`) and are never cached ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)).
 4. `discovery.hide` hides patterns such as `github.com`.
 
 ## Authentication
 
-Prompts go through the askpass bridge ([ADR 0003](adr/0003-askpass-bridge.md)): ssh runs
-`noc` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket
-and returns the answer. The command-line subcommands answer prompts on `/dev/tty`; the TUI
-shows them as dialogs:
+Prompts go through the askpass bridge ([ADR 0003](adr/0003-askpass-bridge.md)): ssh runs `noc` as its `SSH_ASKPASS` program, which forwards the prompt to the TUI over a Unix socket and returns the answer. The command-line subcommands answer prompts on `/dev/tty`; the TUI shows them as dialogs:
 
 - passwords, passphrases, PINs, and codes: a masked field, OK, and Cancel;
 - host keys: ssh's question in the colors of warnings, Yes, and No, which is the default;
-- confirmations, and yes/no questions of a server: the question, Yes, and No, which is the
-  default; for a server's question No answers `no`, where declining would answer nothing;
-- notices, such as a request to touch a security key: shown until ssh is done, the dots turning
-  in front of the title, with Cancel, which stops connecting: the touch is not done in the
-  dialog, so it has nothing to confirm.
+- confirmations, and yes/no questions of a server: the question, Yes, and No, which is the default; for a server's question No answers `no`, where declining would answer nothing;
+- notices, such as a request to touch a security key: shown until ssh is done, the dots turning in front of the title, with Cancel, which stops connecting: the touch is not done in the dialog, so it has nothing to confirm.
 
-Dialogs queue: a new prompt, say from a second host, waits until the one in use is answered,
-so it never takes over the keys mid-password. A dialog closes by itself when ssh stops
-waiting. Cancel or Esc on a password, a code, or a server's question stops connecting, as ssh
-would take the refusal for an empty answer and ask again; the prompt goes unanswered until the
-attempt ends, so the empty answer never reaches the server. The typed secret lives in memory
-reserved up front, so it is never copied by growing, and is wiped when the dialog closes; it is
-passed on as a `SecretString` and never logged.
-Messages from ssh, which may quote the server, are shown terminal-safe.
+Dialogs queue: a new prompt, say from a second host, waits until the one in use is answered, so it never takes over the keys mid-password. A dialog closes by itself when ssh stops waiting. Cancel or Esc on a password, a code, or a server's question stops connecting, as ssh would take the refusal for an empty answer and ask again; the prompt goes unanswered until the attempt ends, so the empty answer never reaches the server. The typed secret lives in memory reserved up front, so it is never copied by growing, and is wiped when the dialog closes; it is passed on as a `SecretString` and never logged. Messages from ssh, which may quote the server, are shown terminal-safe.
 
 ## Command line
 
@@ -995,325 +395,58 @@ noc debug hosts              hosts from ssh_config with their addresses; runs ss
 noc debug ls [LOCATION]      a local path or host:path; without one, the mount points and hosts
 ```
 
-`crates/noc/build.rs` records the commit, its time in UTC, and whether the sources differ from
-it, with `git`; without git they are `unknown`. `noc debug version` asks the terminal, in a
-blocking task: in raw mode on `/dev/tty`, and only when stdin is a terminal and `noc` is in the
-foreground, it sends XTVERSION, the kitty keyboard query, and primary device attributes, whose
-answer ends the wait (at most a second). It asks zoxide too, `zoxide --version`, as `[zoxide]
-program` names it. The facts are `about::Fact::ALL`, in order, which the About page of the help
-shows too, each under the title of its `Topic`; the help names each in a `match` that a new fact
-does not compile without.
+`crates/noc/build.rs` records the commit, its time in UTC, and whether the sources differ from it, with `git`; without git they are `unknown`. `noc debug version` asks the terminal, in a blocking task: in raw mode on `/dev/tty`, and only when stdin is a terminal and `noc` is in the foreground, it sends XTVERSION, the kitty keyboard query, and primary device attributes, whose answer ends the wait (at most a second). It asks zoxide too, `zoxide --version`, as `[zoxide] program` names it. The facts are `about::Fact::ALL`, in order, which the About page of the help shows too, each under the title of its `Topic`; the help names each in a `match` that a new fact does not compile without.
 
 `--config FILE` replaces `~/.config/noc/config.toml`.
 
-Only the TUI logs, to a file of its own for each run in `~/.local/state/noc/logs/`,
-`noc-<UTC start, 20261105T142301Z>-<pid>.log`, mode 0600; the subcommands write no log
-([ADR 0067](adr/0067-a-log-file-for-each-run.md)). `crates/noc/src/logging.rs` starts it once the
-config is read and the terminal checked, and removes the `noc-*.log` files last written to more
-than `log.keep_days` days ago (0 keeps them all), never this run's. `log.level`, or `log.filter`
-(`EnvFilter` directives) unless empty, sets the filter, which the Configuration dialog changes at
-once through `tracing_subscriber::reload`. Each event goes whole over a channel to the thread
-`noc-log`, which writes the file, so no event waits for the disk; ending the log, after the TUI,
-waits for the last lines. Spans at level info give the events their context and close with how
-long they took: `host`, `ssh_master`, `job`, `search`, and `askpass`. A log that cannot be written
-is an error dialog at the start and `none:` on the About page. Ctrl+\\ views the log of this run
-in the TUI (see UI).
+Only the TUI logs, to a file of its own for each run in `~/.local/state/noc/logs/`, `noc-<UTC start, 20261105T142301Z>-<pid>.log`, mode 0600; the subcommands write no log ([ADR 0067](adr/0067-a-log-file-for-each-run.md)). `crates/noc/src/logging.rs` starts it once the config is read and the terminal checked, and removes the `noc-*.log` files last written to more than `log.keep_days` days ago (0 keeps them all), never this run's. `log.level`, or `log.filter` (`EnvFilter` directives) unless empty, sets the filter, which the Configuration dialog changes at once through `tracing_subscriber::reload`. Each event goes whole over a channel to the thread `noc-log`, which writes the file, so no event waits for the disk; ending the log, after the TUI, waits for the last lines. Spans at level info give the events their context and close with how long they took: `host`, `ssh_master`, `job`, `search`, and `askpass`. A log that cannot be written is an error dialog at the start and `none:` on the About page. Ctrl+\\ views the log of this run in the TUI (see UI).
 
 ## Async model
 
 - tokio runtime; ratatui with the crossterm `EventStream`.
-- One-way data flow: events (keys, VFS replies, job progress, connection state) →
-  `update(state, msg)` → effects (spawned tasks with a `CancellationToken`) → render. Reports
-  that queue up, such as the progress of a job, are all taken before the next frame, so a job
-  that reports every entry does not draw every entry. Results of background work draw at most
-  once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, thousands a second, each
-  apart from the next, and drew a frame for each. Its reports of progress reach the loop in
-  batches, at most one each 20 ms, each report with the time the job made it, so that the loop
-  turns once a batch rather than once a report
-  ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). Keys and the mouse draw at once, and so do
-  results after a quiet spell. A report of a job draws only when what the screen shows of it
-  changes (`App::job_report`, `App::sight`): its window while it is in front; from the
-  background its row while the list of jobs is open, and else the percentage in the corner. The
-  window's `Look` holds what it shows before it is put in words: entries, sizes as they read,
-  the whole percent that the gauge follows too, the second that the time shows, and the speed
-  and the time left held for that second. Making it takes no formatting, which goes through the
-  system on macOS, so it is made for every report, and the window draws from it. A row's
-  `RowLook`, taken from it, holds less: the state or the percent, the time left, and the entry at
-  hand. The time of a working job wakes the loop when the second it shows changes
-  (`JobView::next_tick`), not at a fixed rate; for a row, only when the job moves data, whose
-  row shows the time left.
-- Every request carries a generation number, so stale replies (for example, a listing of a
-  directory the user has already left) are dropped.
+- One-way data flow: events (keys, VFS replies, job progress, connection state) → `update(state, msg)` → effects (spawned tasks with a `CancellationToken`) → render. Reports that queue up, such as the progress of a job, are all taken before the next frame, so a job that reports every entry does not draw every entry. Results of background work draw at most once every 40 ms (`Pace` in `tui/mod.rs`): a copy reports every chunk, thousands a second, each apart from the next, and drew a frame for each. Its reports of progress reach the loop in batches, at most one each 20 ms, each report with the time the job made it, so that the loop turns once a batch rather than once a report ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). Keys and the mouse draw at once, and so do results after a quiet spell. A report of a job draws only when what the screen shows of it changes (`App::job_report`, `App::sight`): its window while it is in front; from the background its row while the list of jobs is open, and else the percentage in the corner. The window's `Look` holds what it shows before it is put in words: entries, sizes as they read, the whole percent that the gauge follows too, the second that the time shows, and the speed and the time left held for that second. Making it takes no formatting, which goes through the system on macOS, so it is made for every report, and the window draws from it. A row's `RowLook`, taken from it, holds less: the state or the percent, the time left, and the entry at hand. The time of a working job wakes the loop when the second it shows changes (`JobView::next_tick`), not at a fixed rate; for a row, only when the job moves data, whose row shows the time left.
+- Every request carries a generation number, so stale replies (for example, a listing of a directory the user has already left) are dropped.
 - The UI task never awaits network I/O.
-- One task per host owns its ssh session and SFTP channel. The app sends it listing requests
-  over a channel and gets told when the host is connected and when the connection ends: on
-  request, when the master exits, or, without multiplexing, when the channel's ssh exits.
-  Quitting restores the terminal first, then stops the jobs and gives them a few seconds to
-  clean up through sessions that are still there, then gives the connections a few seconds
-  to close.
-- The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when
-  the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM,
-  SIGHUP, SIGINT, and the terminal going away end the event loop like a quit.
-- Another program (the editor of F4, a command of the command line, the output of commands of
-  `g <`) gets the terminal as the shell would give it: the event loop shows the cursor, gives it
-  the terminal's own shape back, leaves the alternate
-  screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds
-  crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go
-  before the program starts, or its reader eats the first key, and the new one is made after it. The
-  loop waits for the program, then takes the terminal back and draws everything. Meanwhile it
-  takes the jobs' reports of progress as they come, which their windows count without drawing,
-  so that a copy's thousands a second do not pile up until the terminal is back; the rest of what
-  background work sends, questions among it, waits in the order it came until the app has taken
-  the program's end ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The editor and a
-  local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and
-  Ctrl+z reach them alone (`noc_tools::job`, [ADR 0054](adr/0054-shell-run.md)); the SIGINT
-  stream is still made anew. SIGTERM, SIGHUP, and the terminal going away, which `tui::told`
-  hears for the whole run, end every wait for a key there, and the event loop ends without a new
-  stream: a terminal that went away leaves crossterm's reader of the last stream spinning at the
-  end of its input with the lock that a new stream would wait for, forever
-  ([crossterm#793](https://github.com/crossterm-rs/crossterm/issues/793)). The kernel sends
-  SIGHUP to the leader of the terminal's session alone, which may ignore it rather than pass it
-  on, as `nohup`, `trap '' HUP`, or `sudo` may; so a thread watches a copy of stdin with mio
-  (epoll, kqueue) for the end of its input, which a key does not wake it for twice. poll(2) on
-  macOS does not tell of that end, and tokio's `AsyncFd` takes `unsafe`. ssh children are in
-  sessions of their own and see none of it. The same signals and the end of the terminal end the
-  start too, while `supports_keyboard_enhancement` waits for the terminal's answer: its reader
-  spins the same way where the terminal went away, and is left behind, since `main` waits only
-  200 ms for blocking work. On the way out the `Terminal` goes without its drop where it cannot
-  show the cursor, and `Restore` calls `ratatui::try_restore`: ratatui's own print why they failed
-  to stderr, the terminal that is gone, and printing there panics, which in a panic hook aborts.
-- The working directory of the process follows the active panel: after each turn of the
-  event loop, a local directory the active panel now shows (once its listing arrived)
-  goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only.
-  A remote panel leaves it where it was. Programs that the app starts, such as the editor,
-  inherit it.
+- One task per host owns its ssh session and SFTP channel. The app sends it listing requests over a channel and gets told when the host is connected and when the connection ends: on request, when the master exits, or, without multiplexing, when the channel's ssh exits. Quitting restores the terminal first, then stops the jobs and gives them a few seconds to clean up through sessions that are still there, then gives the connections a few seconds to close.
+- The terminal is restored on every exit: a guard leaves raw mode and the alternate screen when the TUI returns or fails, ratatui's panic hook does it before a panic message, and SIGTERM, SIGHUP, SIGINT, and the terminal going away end the event loop like a quit.
+- Another program (the editor of F4, a command of the command line, the output of commands of `g <`) gets the terminal as the shell would give it: the event loop shows the cursor, gives it the terminal's own shape back, leaves the alternate screen and raw mode, and drops its `EventStream` first. The stream's reader thread holds crossterm's input lock while it waits, and a new stream takes that lock, so the old one must go before the program starts, or its reader eats the first key, and the new one is made after it. The loop waits for the program, then takes the terminal back and draws everything. Meanwhile it takes the jobs' reports of progress as they come, which their windows count without drawing, so that a copy's thousands a second do not pile up until the terminal is back; the rest of what background work sends, questions among it, waits in the order it came until the app has taken the program's end ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The editor and a local command run as jobs, in process groups of their own with the terminal, so Ctrl+c and Ctrl+z reach them alone (`noc_tools::job`, [ADR 0054](adr/0054-shell-run.md)); the SIGINT stream is still made anew. SIGTERM, SIGHUP, and the terminal going away, which `tui::told` hears for the whole run, end every wait for a key there, and the event loop ends without a new stream: a terminal that went away leaves crossterm's reader of the last stream spinning at the end of its input with the lock that a new stream would wait for, forever ([crossterm#793](https://github.com/crossterm-rs/crossterm/issues/793)). The kernel sends SIGHUP to the leader of the terminal's session alone, which may ignore it rather than pass it on, as `nohup`, `trap '' HUP`, or `sudo` may; so a thread watches a copy of stdin with mio (epoll, kqueue) for the end of its input, which a key does not wake it for twice. poll(2) on macOS does not tell of that end, and tokio's `AsyncFd` takes `unsafe`. ssh children are in sessions of their own and see none of it. The same signals and the end of the terminal end the start too, while `supports_keyboard_enhancement` waits for the terminal's answer: its reader spins the same way where the terminal went away, and is left behind, since `main` waits only 200 ms for blocking work. On the way out the `Terminal` goes without its drop where it cannot show the cursor, and `Restore` calls `ratatui::try_restore`: ratatui's own print why they failed to stderr, the terminal that is gone, and printing there panics, which in a panic hook aborts.
+- The working directory of the process follows the active panel: after each turn of the event loop, a local directory the active panel now shows (once its listing arrived) goes to a task that `chdir`s to it in `spawn_blocking`, the latest of the waiting ones only. A remote panel leaves it where it was. Programs that the app starts, such as the editor, inherit it.
 
 ## File operations
 
-`noc-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs in a task
-of its own with `LocalFs` or with the session of a host. A job reaches a host through a
-`HostLink`, which follows the host from one connection to the next (`Relink`, which the app
-tells of each); its session (`Rejoin`, a `Vfs`) takes the one of the connection the host has,
-which its task shares (`Arc<SftpFs>`), when it first needs one, and that of the next connection
-once the host is connected again ([ADR 0064](adr/0064-jobs-wait-for-a-lost-host.md)). So a copy
-between two hosts has both; it shares the panels' SFTP channel, so on a slow link listings wait
-behind its data. Separate transfer channels may follow. When a host's task ends while a job
-holds its session, the session goes with the job, which fails soon with the channel gone. If the
-connection was lost, the job waits: the app holds the answer to its failure until the host is
-back, then answers Retry, and the job goes on through the new session; if the user gives the
-host up or disconnects it, the app ends the job. A copy that failed and could not remove what it
-wrote replaces that, or removes it, on its next attempt. A job talks
-to the UI through a `Reporter`: it sends `Event`s (`Scanning` with the entries found, after
-each entry it was given and each directory it lists; `Progress` with the entry at hand and
-done/total counts; `Failed` with the path, the `Step` that failed on it, such as listing, reading,
-or creating, and the error), and when an operation fails it waits for a `Resolution`: Retry,
-Skip, or Abort for this failure, and for the later ones, ask, skip all, or skip those with the
-`Code` of this one (`VfsError::code`: the `errno`, or the SFTP status), which the `Reporter`
-then skips without asking. A `CancellationToken` stops it between
-operations and while it waits for a decision, for data, or for a host to open a file or set its
-attributes; so does a UI that stops listening. A request to a host that stopped answering never
-ends, so the task that runs a job gives it two seconds once cancelled (`noc_ops::in_time`), then
-drops it, which abandons what it waited for; work on a host is cancel-safe. A job dropped ends
-as not complete, without the sums a checksum found; what it asked of the host before, such as
-removing a file it did not finish, still happens there, in order, while the session lasts. It
-returns an `Outcome`: entries done, entries skipped, and whether it was aborted.
+`noc-ops` holds jobs that work on any `Vfs` backend: generic code, which the UI runs in a task of its own with `LocalFs` or with the session of a host. A job reaches a host through a `HostLink`, which follows the host from one connection to the next (`Relink`, which the app tells of each); its session (`Rejoin`, a `Vfs`) takes the one of the connection the host has, which its task shares (`Arc<SftpFs>`), when it first needs one, and that of the next connection once the host is connected again ([ADR 0064](adr/0064-jobs-wait-for-a-lost-host.md)). So a copy between two hosts has both; it shares the panels' SFTP channel, so on a slow link listings wait behind its data. Separate transfer channels may follow. When a host's task ends while a job holds its session, the session goes with the job, which fails soon with the channel gone. If the connection was lost, the job waits: the app holds the answer to its failure until the host is back, then answers Retry, and the job goes on through the new session; if the user gives the host up or disconnects it, the app ends the job. A copy that failed and could not remove what it wrote replaces that, or removes it, on its next attempt. A job talks to the UI through a `Reporter`: it sends `Event`s (`Scanning` with the entries found, after each entry it was given and each directory it lists; `Progress` with the entry at hand and done/total counts; `Failed` with the path, the `Step` that failed on it, such as listing, reading, or creating, and the error), and when an operation fails it waits for a `Resolution`: Retry, Skip, or Abort for this failure, and for the later ones, ask, skip all, or skip those with the `Code` of this one (`VfsError::code`: the `errno`, or the SFTP status), which the `Reporter` then skips without asking. A `CancellationToken` stops it between operations and while it waits for a decision, for data, or for a host to open a file or set its attributes; so does a UI that stops listening. A request to a host that stopped answering never ends, so the task that runs a job gives it two seconds once cancelled (`noc_ops::in_time`), then drops it, which abandons what it waited for; work on a host is cancel-safe. A job dropped ends as not complete, without the sums a checksum found; what it asked of the host before, such as removing a file it did not finish, still happens there, in order, while the session lasts. It returns an `Outcome`: entries done, entries skipped, and whether it was aborted.
 
-`Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's
-size at once and goes back to the start of a file that is retried. `bytes_total` starts as the
-sizes the job found as it counted, and takes what each file holds as it is read: bytes beyond
-its size add to it as they come, and what a finished file held short of it comes off, so that
-`bytes_done` comes to it and never goes past it, whether the file grew or shrank since it was
-counted. `bytes_copied` counts only
-bytes read and written and never goes back, so the UI derives the speed from it and the time
-left from both. Both count a byte written once it has arrived: a copy reports as the writer's
-`written` grows, and after the last chunk of a file reports what arrives as it settles the rest,
-so that an upload follows the link rather than running up to 2 MiB ahead of it. The task that runs a
-job passes its reports on as it takes them (`forward` in `tui/tasks/batching.rs`), in the job's own
-task, with the time it takes each: when the job made it. Reports of progress go in batches, the
-first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and those that wait go
-before a question or the end. Reports of counting go in the same batches, only the last of those
-that wait, with the time of the first, and in order with the progress around them. The window
-counts each report of a batch
-(`JobView::passed`) and shows the last (`JobView::working`), so the speed and the time left are
-those of the reports one by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The
-window counts each report and
-question at that time, not when the UI takes it: a report waits for its batch, and a question
-asked while the terminal is handed over to another program waits until it is back, while the UI
-takes the reports of progress meanwhile. One taken more than a quarter of a second after the
-speed and the time left of the second were worked out makes them be worked out again, the time
-left counting down from the one of the second before, as it would have. The job's
-window times only work: its stopwatch starts with the
-first `Progress` and stands from a `Failed` or `Exists` question, from when the job asked it,
-until the answer, including while the question waits behind other dialogs; and while the job
-counts after some work, from when it began to, until its next `Progress`. The speed is that of
-the last five seconds of work, by
-the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second
-apart, and divides what was copied since the last of them five seconds back by the time since.
-A slow start is behind it after five seconds; when no data comes it falls to zero. The time
-left looks further back, so that it does not swing with the speed
-([ADR 0050](adr/0050-time-left-of-a-job.md)): its `Forecast` sums the time, the bytes copied, and
-the entries done over stretches of work, each weighing a third as much every half minute older
-(`ETA_HORIZON`), and forgets a group of them that has faded to nothing. What a byte and an entry
-cost come from least squares of the time of the stretches between finished entries on their
-bytes and their entries, when both stand clear of the noise: jobs report as an entry starts,
-before it opens, and close it after their last report. Else a byte costs what it does in the
-stretches in which no entry was done but for those that start with an entry's opening (as do
-the job's first report and a question, after which Retry opens the entry again with no report
-first), and an entry what its stretches took beyond their bytes; among small files only, the
-least squares still give the cost of an entry if it stands clear; else bytes alone count. While
-the entry under way has moved more than ten times the bytes of the largest entry finished
-(`AHEAD`), a byte costs what it does in the stretches of data streaming, whatever the least
-squares say: finished entries tell nothing of what its bytes cost, which may go at another pace,
-as into a cache that a big file fills, or over a link whose window holds a small file whole. An
-entry left then costs no less than nothing, but one behind costs what it took beyond its bytes
-at that cost, even less than nothing, as where small files took the time of their bytes, which
-went faster: at no cost, they made the pace and the time left too short. The time left is the
-bytes and entries left at those costs and that pace. It is unknown while the
-entries left are on average more than ten times as large as those done since the forecast's
-first report (`AHEAD`), not the renames of a move, until the work has told what a byte costs:
-data has streamed within an entry, or finished entries with data had sizes at least twice apart.
-It is unknown once no report has come for longer than twice the longest pause between reports
-in the last minute (`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk
-that pauses as it works keeps a time left; of such a stall only the usual pause counts for the
-pace. Skipping is a pause: the stretch between two reports that skipped data is left out, and
-the stretch of work under way ends at the report before it, however short, so that skipped files
-among copied ones, hundreds in a quarter of a second on a fast disk, leave the work around them.
-What is left to skip counts as work, which nothing tells apart, so the time left is unknown while
-more than two thirds of the work of the last five seconds, and 30 entries at least, was skipped
-(`SKIPPING`, `SKIPS_SPAN`), bytes and entries each at its cost; once it was, until less than a
-third is (`SKIPPING_ENDS`), so that it does not come and go. A failure is a pause too
-(`JobView::failed`): from the report before the `Failed` question to the first stretch after it
-that does more, the try that failed and what the job does once answered, such as opening the
-entry again for Retry, are no pace, and the entry it was at tells no cost. An `Exists` question
-is not, as nothing failed before it. It is unknown, too, until the last three
-forecasts, a second of work apart, agree within a quarter, each less the time since it was made
-(`ETA_SETTLE`, `ETA_AGREE`), or the job has done half a minute of work that tells the pace,
-neither skipping nor standing still (`ETA_SETTLE_MAX`), as early forecasts know little of the
-pace. A job that counts after some work, as a move does before it copies what it could not
-rename, starts the speed and the time left over (`JobView::scanning`), and its stopwatch stands
-while it counts, as before a job's first report; the move reports that it counts even where it
-lists no directory, as for files alone. Both are worked out once
-in each second that the time shows and held until
-the next, so they change with it rather than with every frame. The
-time left shown follows the end that the forecast says, smoothed over 9% of the time left, from
-a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`), which a forecast that is right does
-not move (`count_down`); 9%, so that following a forecast that stands still, it lags no further
-than the tenth beyond which it moves halfway. It counts down by the clock, a second each
-second, while it keeps within 1% of the forecast smoothed (`ETA_NEAR`), and else shows the
-nearer edge of that band, so that it holds still where the forecast does rather than go up and
-down; beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second, and
-more than twice as long, or less than half (`ETA_JUMP`), it is the forecast at once. It keeps its
-fraction of a second and shows rounded. All of this stays as it is
-([ADR 0056](adr/0056-the-time-left-of-a-job-stays-as-it-is.md)): it changes for defects only,
-and a scenario it gets wrong is written down there as a limit.
+`Progress` carries two byte counts. `bytes_done` drives the gauge: it takes a skipped file's size at once and goes back to the start of a file that is retried. `bytes_total` starts as the sizes the job found as it counted, and takes what each file holds as it is read: bytes beyond its size add to it as they come, and what a finished file held short of it comes off, so that `bytes_done` comes to it and never goes past it, whether the file grew or shrank since it was counted. `bytes_copied` counts only bytes read and written and never goes back, so the UI derives the speed from it and the time left from both. Both count a byte written once it has arrived: a copy reports as the writer's `written` grows, and after the last chunk of a file reports what arrives as it settles the rest, so that an upload follows the link rather than running up to 2 MiB ahead of it. The task that runs a job passes its reports on as it takes them (`forward` in `tui/tasks/batching.rs`), in the job's own task, with the time it takes each: when the job made it. Reports of progress go in batches, the first after a quiet spell at once, then at most one each 20 ms (`BATCH`), and those that wait go before a question or the end. Reports of counting go in the same batches, only the last of those that wait, with the time of the first, and in order with the progress around them. The window counts each report of a batch (`JobView::passed`) and shows the last (`JobView::working`), so the speed and the time left are those of the reports one by one ([ADR 0055](adr/0055-a-job-s-reports-go-in-batches.md)). The window counts each report and question at that time, not when the UI takes it: a report waits for its batch, and a question asked while the terminal is handed over to another program waits until it is back, while the UI takes the reports of progress meanwhile. One taken more than a quarter of a second after the speed and the time left of the second were worked out makes them be worked out again, the time left counting down from the one of the second before, as it would have. The job's window times only work: its stopwatch starts with the first `Progress` and stands from a `Failed` or `Exists` question, from when the job asked it, until the answer, including while the question waits behind other dialogs; and while the job counts after some work, from when it began to, until its next `Progress`. The speed is that of the last five seconds of work, by the stopwatch: the window keeps `bytes_copied` at moments of work at least a quarter of a second apart, and divides what was copied since the last of them five seconds back by the time since. A slow start is behind it after five seconds; when no data comes it falls to zero. The time left looks further back, so that it does not swing with the speed ([ADR 0050](adr/0050-time-left-of-a-job.md)): its `Forecast` sums the time, the bytes copied, and the entries done over stretches of work, each weighing a third as much every half minute older (`ETA_HORIZON`), and forgets a group of them that has faded to nothing. What a byte and an entry cost come from least squares of the time of the stretches between finished entries on their bytes and their entries, when both stand clear of the noise: jobs report as an entry starts, before it opens, and close it after their last report. Else a byte costs what it does in the stretches in which no entry was done but for those that start with an entry's opening (as do the job's first report and a question, after which Retry opens the entry again with no report first), and an entry what its stretches took beyond their bytes; among small files only, the least squares still give the cost of an entry if it stands clear; else bytes alone count. While the entry under way has moved more than ten times the bytes of the largest entry finished (`AHEAD`), a byte costs what it does in the stretches of data streaming, whatever the least squares say: finished entries tell nothing of what its bytes cost, which may go at another pace, as into a cache that a big file fills, or over a link whose window holds a small file whole. An entry left then costs no less than nothing, but one behind costs what it took beyond its bytes at that cost, even less than nothing, as where small files took the time of their bytes, which went faster: at no cost, they made the pace and the time left too short. The time left is the bytes and entries left at those costs and that pace. It is unknown while the entries left are on average more than ten times as large as those done since the forecast's first report (`AHEAD`), not the renames of a move, until the work has told what a byte costs: data has streamed within an entry, or finished entries with data had sizes at least twice apart. It is unknown once no report has come for longer than twice the longest pause between reports in the last minute (`PAUSES`), five seconds (`RECENT`) at least, so that a slow link or disk that pauses as it works keeps a time left; of such a stall only the usual pause counts for the pace. Skipping is a pause: the stretch between two reports that skipped data is left out, and the stretch of work under way ends at the report before it, however short, so that skipped files among copied ones, hundreds in a quarter of a second on a fast disk, leave the work around them. What is left to skip counts as work, which nothing tells apart, so the time left is unknown while more than two thirds of the work of the last five seconds, and 30 entries at least, was skipped (`SKIPPING`, `SKIPS_SPAN`), bytes and entries each at its cost; once it was, until less than a third is (`SKIPPING_ENDS`), so that it does not come and go. A failure is a pause too (`JobView::failed`): from the report before the `Failed` question to the first stretch after it that does more, the try that failed and what the job does once answered, such as opening the entry again for Retry, are no pace, and the entry it was at tells no cost. An `Exists` question is not, as nothing failed before it. It is unknown, too, until the last three forecasts, a second of work apart, agree within a quarter, each less the time since it was made (`ETA_SETTLE`, `ETA_AGREE`), or the job has done half a minute of work that tells the pace, neither skipping nor standing still (`ETA_SETTLE_MAX`), as early forecasts know little of the pace. A job that counts after some work, as a move does before it copies what it could not rename, starts the speed and the time left over (`JobView::scanning`), and its stopwatch stands while it counts, as before a job's first report; the move reports that it counts even where it lists no directory, as for files alone. Both are worked out once in each second that the time shows and held until the next, so they change with it rather than with every frame. The time left shown follows the end that the forecast says, smoothed over 9% of the time left, from a second to half a minute (`ETA_SMOOTH`, `ETA_SMOOTH_MAX`), which a forecast that is right does not move (`count_down`); 9%, so that following a forecast that stands still, it lags no further than the tenth beyond which it moves halfway. It counts down by the clock, a second each second, while it keeps within 1% of the forecast smoothed (`ETA_NEAR`), and else shows the nearer edge of that band, so that it holds still where the forecast does rather than go up and down; beyond a tenth from the forecast (`ETA_SLACK`), it moves halfway there each second, and more than twice as long, or less than half (`ETA_JUMP`), it is the forecast at once. It keeps its fraction of a second and shows rounded. All of this stays as it is ([ADR 0056](adr/0056-the-time-left-of-a-job-stays-as-it-is.md)): it changes for defects only, and a scenario it gets wrong is written down there as a limit.
 
-Renaming one entry in its directory (`rename`) is no job: one call with no progress, which
-the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a
-remote one. It returns `RenameError::Exists` with the kind of a taken name, and replaces a
-file there only when asked.
+Renaming one entry in its directory (`rename`) is no job: one call with no progress, which the UI runs like a new directory, through the host's shared session (`Arc<SftpFs>`) for a remote one. It returns `RenameError::Exists` with the kind of a taken name, and replaces a file there only when asked.
 
-A file system that ignores case, or Unicode normalization, as macOS's do by default (and
-others: an SMB share, a host with such a disk), takes `Name` for `name`: a name spelled
-otherwise leads to an entry that its directory lists under another. A name is the entry's own
-spelled otherwise (`spelling.rs`) when its directory does not list it byte for byte and it is
-the same object: by device and inode locally; over SFTP, which tells neither, an entry of the
-same directory with the same metadata (kind, size, permissions, time, and owner). A file system
-that tells case apart lists every name byte for byte, so none of this happens there. Renaming to
-the entry's own name spelled otherwise gives it that spelling; one that leads to another entry
-finds the name taken.
+A file system that ignores case, or Unicode normalization, as macOS's do by default (and others: an SMB share, a host with such a disk), takes `Name` for `name`: a name spelled otherwise leads to an entry that its directory lists under another. A name is the entry's own spelled otherwise (`spelling.rs`) when its directory does not list it byte for byte and it is the same object: by device and inode locally; over SFTP, which tells neither, an entry of the same directory with the same metadata (kind, size, permissions, time, and owner). A file system that tells case apart lists every name byte for byte, so none of this happens there. Renaming to the entry's own name spelled otherwise gives it that spelling; one that leads to another entry finds the name taken.
 
-Deleting counts the entries first, so that progress has a total, then removes the deepest
-first. Listings report symlinks without following them, so a link goes and its target stays.
-A directory in which something stays (skipped, or unreadable) is left alone without asking
-again, and an entry that is already gone counts as deleted.
+Deleting counts the entries first, so that progress has a total, then removes the deepest first. Listings report symlinks without following them, so a link goes and its target stays. A directory in which something stays (skipped, or unreadable) is left alone without asking again, and an entry that is already gone counts as deleted.
 
-Copying works between any two backends (`copy` takes an `Endpoint` for each side: a `Vfs`
-and how its paths are reported). If the target is a directory, the sources go into it under
-their own names; otherwise a single source becomes the target, and several make it a new
-directory. Directories merge into a directory of the same name; symlinks are copied as
-symlinks, with their targets as stored; FIFOs, sockets, and devices fail. The job counts
-entries and bytes first, then copies parents before what they hold, reporting progress as the
-data of each chunk arrives. With `preserve`, copies get the modification times and permission
-bits of their sources, and directories that the copy made get theirs once the copy is past the
-last entry within them, the deepest first, since writing into a directory changes its time
-([ADR 0053](adr/0053-a-directory-is-finished-once-all-in-it-is-done.md)): among the entries,
-where the time left counts it, and before an abort; directories that were there keep their own.
-With `atomic`, each file is written under a hidden temporary name next to its target
-(`.name.noc-PID-N`) and renamed when complete, so the target never holds part of a file; its
-failures name the target, not the name the user never sees. Without it, the target is written
-directly. Either way, a file that does not finish (an error, Skip, or cancellation) is removed;
-written directly over an existing file, that file is gone too. Cancelled while a host opens it, a
-temporary file goes as well, once made; a target written directly stays, empty, if the host does
-not open it within the two seconds a cancelled job has, since it may be one that another hand
-made just then.
+Copying works between any two backends (`copy` takes an `Endpoint` for each side: a `Vfs` and how its paths are reported). If the target is a directory, the sources go into it under their own names; otherwise a single source becomes the target, and several make it a new directory. Directories merge into a directory of the same name; symlinks are copied as symlinks, with their targets as stored; FIFOs, sockets, and devices fail. The job counts entries and bytes first, then copies parents before what they hold, reporting progress as the data of each chunk arrives. With `preserve`, copies get the modification times and permission bits of their sources, and directories that the copy made get theirs once the copy is past the last entry within them, the deepest first, since writing into a directory changes its time ([ADR 0053](adr/0053-a-directory-is-finished-once-all-in-it-is-done.md)): among the entries, where the time left counts it, and before an abort; directories that were there keep their own. With `atomic`, each file is written under a hidden temporary name next to its target (`.name.noc-PID-N`) and renamed when complete, so the target never holds part of a file; its failures name the target, not the name the user never sees. Without it, the target is written directly. Either way, a file that does not finish (an error, Skip, or cancellation) is removed; written directly over an existing file, that file is gone too. Cancelled while a host opens it, a temporary file goes as well, once made; a target written directly stays, empty, if the host does not open it within the two seconds a cancelled job has, since it may be one that another hand made just then.
 
-When the name of a file or symlink is taken, the job sends `Exists` with both paths, the metadata
-of both, for sizes and times, and a name free beside the target (`free_name.rs`: the name with 2,
-3, and so on before its extension, after the last space, `_`, or `-` in it, else after `_`), and
-waits for a `Conflict` (ADR 0060). Its `Choice` is for this target: Overwrite, Skip, Rename to a
-path on the target's file system, which asks again if that is taken too, or Abort. Its `Rest` is
-for the later ones: ask about each, the same as this one (a renamed one's directory gets the free
-names of the rest), or overwrite those older, smaller, or larger than their sources, or not of
-their size, and keep the others; unknown times and sizes keep the target. A move that cannot
-rename a source it asked about copies it where the answer said, without asking again. With
-`overwrite`, the job replaces without asking, as when an edited file goes back where it came
-from. A directory where a file would go is a failure, not a question. A symlink in the way is
-removed first, so that a file written directly never goes through it; renaming replaces it
-anyway. Without `posix-rename`, the target is removed before the rename.
+When the name of a file or symlink is taken, the job sends `Exists` with both paths, the metadata of both, for sizes and times, and a name free beside the target (`free_name.rs`: the name with 2, 3, and so on before its extension, after the last space, `_`, or `-` in it, else after `_`), and waits for a `Conflict` (ADR 0060). Its `Choice` is for this target: Overwrite, Skip, Rename to a path on the target's file system, which asks again if that is taken too, or Abort. Its `Rest` is for the later ones: ask about each, the same as this one (a renamed one's directory gets the free names of the rest), or overwrite those older, smaller, or larger than their sources, or not of their size, and keep the others; unknown times and sizes keep the target. A move that cannot rename a source it asked about copies it where the answer said, without asking again. With `overwrite`, the job replaces without asking, as when an edited file goes back where it came from. A directory where a file would go is a failure, not a question. A symlink in the way is removed first, so that a file written directly never goes through it; renaming replaces it anyway. Without `posix-rename`, the target is removed before the rename.
 
-A copy never goes over its source, which writing it directly would empty first: a target that is
-the source by device and inode, under a name spelled otherwise, through a directory spelled
-otherwise on the way, or a hard link, is a failure (`VfsError::SameFile`), not a question, and so
-is a directory that is its own source to go into. Within one file system (`copy_within`, which
-the UI runs for a copy on one host or on the local file system), one source to its own name spelled
-otherwise is that failure too, before anything is counted, over SFTP as well. Over SFTP the
-directories on the way are taken as typed: a copy into its own directory spelled otherwise there
-asks, as for any taken name, and its temporary file keeps the source whole, unless
-`atomic_upload` is off.
+A copy never goes over its source, which writing it directly would empty first: a target that is the source by device and inode, under a name spelled otherwise, through a directory spelled otherwise on the way, or a hard link, is a failure (`VfsError::SameFile`), not a question, and so is a directory that is its own source to go into. Within one file system (`copy_within`, which the UI runs for a copy on one host or on the local file system), one source to its own name spelled otherwise is that failure too, before anything is counted, over SFTP as well. Over SFTP the directories on the way are taken as typed: a copy into its own directory spelled otherwise there asks, as for any taken name, and its temporary file keeps the source whole, unless `atomic_upload` is off.
 
-Moving places sources as copying does. Between file systems (local and a host, or two
-hosts), it is a copy with `remove_sources`: each file or symlink goes from the source once
-it is copied, and each directory once everything in it has gone, as soon as the copy is past
-it, so whatever is skipped or fails stays, with the directories around it. Within one file
-system (`move_within`), each source is renamed, after the same question if its name is taken
-by something a rename replaces; a directory whose name is taken by a directory merges into it
-by copying and removing, and so does anything the rename refuses as crossing file systems
-(`EXDEV` locally, or a plain failure over SFTP v3, which has no code for it). One source to its
-own name spelled otherwise is renamed to that spelling, without a question and without a copy, a
-directory too, where it would otherwise go into itself; a target that is the source by device and
-inode is a failure, since a rename onto itself does nothing. Moves keep times and permissions.
+Moving places sources as copying does. Between file systems (local and a host, or two hosts), it is a copy with `remove_sources`: each file or symlink goes from the source once it is copied, and each directory once everything in it has gone, as soon as the copy is past it, so whatever is skipped or fails stays, with the directories around it. Within one file system (`move_within`), each source is renamed, after the same question if its name is taken by something a rename replaces; a directory whose name is taken by a directory merges into it by copying and removing, and so does anything the rename refuses as crossing file systems (`EXDEV` locally, or a plain failure over SFTP v3, which has no code for it). One source to its own name spelled otherwise is renamed to that spelling, without a question and without a copy, a directory too, where it would otherwise go into itself; a target that is the source by device and inode is a failure, since a rename onto itself does nothing. Moves keep times and permissions.
 
-Checksums (`Checksum`) hash files with SHA-256, SHA-512, SHA-1, MD5, or BLAKE3 (RustCrypto's
-`sha2`, `sha1`, and `md-5`, and `blake3`). A job may span several endpoints, such as a local
-file and one on a host to compare: it scans every group of targets first, so that progress
-has one total, then hashes them in turn. Symlinks among the targets are followed; inside
-directories, symlinks to files are hashed and other symlinks left out, so that a walk never
-loops, and FIFOs, sockets, and devices are left out without being opened, since reading a
-FIFO would wait for a writer. Directories are walked in the order of their names, and each
-file is named relative to the targets' directory (`dir/sub/file`), as `sha256sum` would name
-it from there. Files are read as streams through the `Vfs`, over SFTP too, and hashed off the
-async thread (`spawn_blocking`) in batches of 256 KiB while the next batch is read. A failure
-asks as other jobs do: Retry hashes the file from its start, with no report before it opens
-it again, as a copy does, and a skipped file has no checksum. The job returns its sums with
-its outcome; an aborted one shows none.
+Checksums (`Checksum`) hash files with SHA-256, SHA-512, SHA-1, MD5, or BLAKE3 (RustCrypto's `sha2`, `sha1`, and `md-5`, and `blake3`). A job may span several endpoints, such as a local file and one on a host to compare: it scans every group of targets first, so that progress has one total, then hashes them in turn. Symlinks among the targets are followed; inside directories, symlinks to files are hashed and other symlinks left out, so that a walk never loops, and FIFOs, sockets, and devices are left out without being opened, since reading a FIFO would wait for a writer. Directories are walked in the order of their names, and each file is named relative to the targets' directory (`dir/sub/file`), as `sha256sum` would name it from there. Files are read as streams through the `Vfs`, over SFTP too, and hashed off the async thread (`spawn_blocking`) in batches of 256 KiB while the next batch is read. A failure asks as other jobs do: Retry hashes the file from its start, with no report before it opens it again, as a copy does, and a skipped file has no checksum. The job returns its sums with its outcome; an aborted one shows none.
 
 ## Configuration and paths
 
-Noon Commander uses the XDG layout on every platform, including macOS, and respects the `XDG_*`
-variables:
+Noon Commander uses the XDG layout on every platform, including macOS, and respects the `XDG_*` variables:
 
 | Purpose | Path |
-| --- | --- |
+| ------- | ---- |
 | Settings, keymap, themes | `~/.config/noc/` (`config.toml`, `hosts.toml`, `keymap.toml`, `themes/`) |
 | Data (workspaces, bookmarks) | `~/.local/share/noc/` (`workspaces.toml`) |
 | State (`history.toml`, `recent.toml`, last directories, `logs/`) | `~/.local/state/noc/` |
 | Cache (unused since [ADR 0079](adr/0079-ssh-g-results-are-not-cached.md)) | `~/.cache/noc/` |
 | Runtime (control sockets, askpass socket, F4 temp files) | `$XDG_RUNTIME_DIR/noc/` or `$TMPDIR/noc-$UID/`, mode 0700 |
 
-Unknown keys are errors, so a typo does not silently fall back to a default. `noc config init`
-writes the commented defaults, and a commented `hosts.toml` unless one exists. The
-Configuration dialog writes only the keys it changed, through `toml_edit`, keeping comments and
-the other keys; the result is checked against the schema and replaces the file atomically
+Unknown keys are errors, so a typo does not silently fall back to a default. `noc config init` writes the commented defaults, and a commented `hosts.toml` unless one exists. The Configuration dialog writes only the keys it changed, through `toml_edit`, keeping comments and the other keys; the result is checked against the schema and replaces the file atomically
 ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md)).
 
 ```toml
@@ -1383,15 +516,7 @@ keep_days = 7                    # days a log file stays after its last write; 0
 
 Preserving attributes is a choice in the copy dialog, as in mc, not a setting.
 
-Host settings live in `hosts.toml` next to `config.toml`, one table per host with a required
-`type` that decides its other keys ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)).
-A host has no other name than its alias: `label` is an error, as every key the schema does not
-know ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)).
-F4 on a host in the location menu rewrites only its table through `toml_edit`, keeping comments
-and the other tables, and replaces the file atomically. Its field of `run` shows `shell.run`,
-faint, while it is empty (`Dialog::with_placeholder`), since that is what counts then; a
-placeholder is never the field's text. The settings sit behind a lock in the
-shared `Context`, so the TUI and the host tasks see a change at once.
+Host settings live in `hosts.toml` next to `config.toml`, one table per host with a required `type` that decides its other keys ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md)). A host has no other name than its alias: `label` is an error, as every key the schema does not know ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md)). F4 on a host in the location menu rewrites only its table through `toml_edit`, keeping comments and the other tables, and replaces the file atomically. Its field of `run` shows `shell.run`, faint, while it is empty (`Dialog::with_placeholder`), since that is what counts then; a placeholder is never the field's text. The settings sit behind a lock in the shared `Context`, so the TUI and the host tasks see a change at once.
 
 ```toml
 ["prod-web"]                     # an ssh_config alias; decorates it, never duplicates it
@@ -1402,10 +527,7 @@ remember_dir = true              # reopen the last directory of this session
 run = ["$SHELL", "-c"]           # runs ! there instead of shell.run; $SHELL is the host's
 ```
 
-Workspaces live in `workspaces.toml` in the data directory ([ADR 0017](adr/0017-workspaces.md)).
-Noon Commander writes the whole file on each change, behind a header that says so; unknown keys,
-a blank or repeated name, a side without tabs, or two current tabs on a side are errors, and a
-file with one is left alone.
+Workspaces live in `workspaces.toml` in the data directory ([ADR 0017](adr/0017-workspaces.md)). Noon Commander writes the whole file on each change, behind a header that says so; unknown keys, a blank or repeated name, a side without tabs, or two current tabs on a side are errors, and a file with one is left alone.
 
 ```toml
 [[workspace]]
@@ -1426,9 +548,7 @@ descending = true
 location = "/"
 ```
 
-The places used last live in `recent.toml` in the state directory, for the
-[location menu](#location-menu). Noon Commander writes the whole file on each change, behind a
-header that says so; deleting it only forgets their order.
+The places used last live in `recent.toml` in the state directory, for the [location menu](#location-menu). Noon Commander writes the whole file on each change, behind a header that says so; deleting it only forgets their order.
 
 ```toml
 hosts = ["prod-web", "db"]       # aliases, most recent first, up to 50
@@ -1437,1041 +557,57 @@ volumes = ["/Volumes/USB", "/"]  # mount points, the same way; only those that a
 
 ## UI
 
-- **Keys.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md));
-  see the keymap below. The panels take keys in Normal mode, as vim's buffers do; text fields, quick
-  search, the command line, and the filters of the lists in Insert mode. The line above the F-key
-  bar shows on the left the mode, in bold capitals as lualine shows it, `NORMAL`, `INSERT`,
-  `VISUAL`, or `VISUAL LINE`, and after Ctrl+o `(insert)`; then, after `·`, the kind of window
-  that has the keys, named by its keymap context so that it says which keys work
-  ([ADR 0032](adr/0032-line-of-the-mode.md)):
-  `Rename`, `List` for the location menu, the tab menu, the zoxide window, the
-  workspaces, the command history, and the list of the key hints, `Menu` for F9, `Dialog` for
-  every dialog, the Configuration dialog, the search of a tree, the jobs, and the checksums,
-  `Help`, and `Viewer`; `window_kind` maps every context, and none to the contexts that are
-  only fallbacks, such as `search_input`. The panels show the mode alone. Where
-  the line is short the kind goes first, then the mode is cut. On the right it shows the count,
-  register, operator, or keys of a command typed so far, as typed, Ctrl+x as `^X`, or how much
-  Visual mode selects, as vim's `showcmd` does; while the command of Ctrl+x has the keys, the mode
-  starts with `(^X)`, as vim's `(insert)` after Ctrl+o. Unlike vim's `showmode`, it shows every mode
-  everywhere, Normal mode too. A message, such as that a search went round, takes the place
-  of the mode until the next key, as vim's messages do on its command line. Left of the cells of
-  what is typed it shows who is where in the active panel, `alice@mac` or `deploy@web`, as long
-  as it fits after the mode or the message ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The
-  command line and [quick search](#quick-search) take the line while they have the keys, as vim's
-  command line and search do ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md)); a
-  window over them, such as the command history of `q :`, takes the line back. The cursor is a
-  bar in Insert mode and a block in the others (DECSCUSR), and the terminal's own shape comes back
-  whenever another program gets the terminal, and on quitting.
-- **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories,
-  then files, by name as the language of the formats orders names, with the numbers in them by
-  value (`ui.natural_sort`; off, by their characters ignoring case). A layout
-  (`panel::layout::Layout`, [ADR 0096](adr/0096-layouts-of-a-panel.md)) lists the details of the
-  columns and of the status line, before the name and after it; the name takes what they leave,
-  and narrow panels drop the details at the end of the list first. The one built-in layout has
-  the columns name, size, and
-  modification time (local time: the date, with its year, and the time, in the formats of the
-  region, as `12.10.26 05:05`), so narrow panels drop the time, then the size. Sizes have a
-  unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in
-  a color too, as the theme's `size_units` say. The status line shows, after the name, every byte
-  of the entry under the cursor, a directory's too, its mode (`-rw-r--r--`), and its owner by
-  name where known, else in digits not grouped (`alice:20`), those it has, while the name keeps
-  8 cells, an owner too long losing the ends of its names evenly first, down to 4 cells each; a
-  line `│` in the color of the frame before each; a symlink's own. It cuts the name at
-  its end, `»` before the details (ADR 0094). A column of owners is always 11 cells. The mode and
-  the owner set apart what is ours
-  ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions
-  that applies, as the system checks them, and the uid and gid that are ours, as they are, the
-  rest dim; no set for uid 0, a symlink's mode dim whole. Local panels go by the process
-  (`Machine.identity`: `geteuid`, `getegid`, `getgroups`); a host's task asks `id -u` and
-  `id -G` through `Session::spawn_in` once it connects, over the master only, and the app keeps
-  the answer with the connection (`Done::Identified`, `HostState.identity`). Names of owners
-  ([ADR 0098](adr/0098-owners-by-name-where-known.md)): a local listing comes with those of its
-  uids and gids (`Listed.owners`, `Names::local`: `nix`'s `User` and `Group` in
-  `spawn_blocking`, no longer than 500 ms); a host's are those of `id -un` and `id -Gn`, of its
-  user and groups alone (`Identity.names`). The size column is
-  as wide as the longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time
-  column as the longest time of the formats. Each panel has its own sort order:
-  name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`);
-  time and size start newest and largest first, the same key again reverses, ties go by name,
-  and an arrow in the header marks the order. Directories stay first. Names that start with a
-  dot are shown unless `ui.show_hidden` is off; `o h` switches them in both panels.
-  Sorting and hiding keep the cursor on its entry.
-- **Names that do not fit** ([ADR 0025](adr/0025-marks-of-text-cut-short.md)) lose their middle to
-  `»` (a Nerd Font chevron with icons, `Theme.glyphs.marks`), in the theme's bold accent
-  everywhere (`truncated`; `truncated_cursor` under the cursor, `truncated_dialog` in dialogs and
-  lists, `truncated_menu` in the menus of F9, `truncated_bar` on the bars, `truncated_error` in
-  error dialogs), and paths their start, as titles do (`«/deploy/site`); `noc_text::fit_cut` says
-  where the mark goes, and `cells::fit`, `cells::fitted`, and `cells::spans` draw it as spans.
-  `K` makes the status lines of both panels two rows high, the name under the cursor going on in
-  the second, plain, after `»` as the viewer's wrapped rows, without the details, until `K` or Esc
-  (`App.whole`,
-  `View.whole`, not saved;
-  [ADR 0094](adr/0094-k-shows-the-whole-name-on-the-status-line.md)). The
-  z keys scroll the names of all rows as vim scrolls lines that do not wrap (`Panel.shift`, back
-  to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the column, `z s` the
-  start, `z e` the end of the name under the cursor into view; `z l` and `z L` stop with the end
-  of the longest name on screen at the right edge (`Panel::shift_limit`), and each render brings
-  the scroll back as far as the names on screen need. Only the names scroll: the icon or marker
-  stays in front, and a scrolled name shows `«` over its first cell after it and `»` where it is
-  cut. Each name scrolls no further than its end comes to the right edge, so that a name that fits
-  does not move ([ADR 0095](adr/0095-a-name-scrolls-no-further-than-its-end.md)). The status line
-  scrolls as many cells, plain, `«` over its first, but no further than its end comes to the right
-  edge of its last row, of both while `K` shows them (ADR 0094), and that far once the name under
-  the cursor shows its end in its row (ADR 0096). Ctrl+g says where the panel is
-  on the line of the mode until the next key, as vim's, plain, where the messages that warn take
-  the theme's color for them (`Message`): its path in quotes, as the title shows it,
-  or whole, without `~`, after a count; then the row under the cursor of the rows, `..` counting
-  as in `5G`, and how far down, as the viewer's title writes them (`"~/src" 5/42 11%`).
-- **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window
-  (`tui/scroll.rs`, a port of vim's `move.c` for lines one row high, checked against vim on random
-  keys): five rows stay above and below the cursor, as vim's `defaults.vim` sets 'scrolloff'
-  (`scroll::SCROLLOFF`, no setting), fewer at the ends and in a low window; a jump far off the
-  screen puts the cursor in the middle. Ctrl+d and Ctrl+u scroll half a window and move the cursor
-  as far, Ctrl+f and Ctrl+b scroll a window less two rows, with a count that many windows at once,
-  and put the cursor at its top or bottom. Unlike vim's, Ctrl+f stops with the last row at the
-  bottom, and once it shows, puts the cursor on it, as mc's PgDn does. The wheel scrolls as vim's
-  Ctrl+e and Ctrl+y, but never past the last row either; where it cannot scroll, as when the rows
-  all fit, it moves the cursor as far, as in mc and Far. The view is worked out before each frame,
-  as vim does it before it redraws; when the window grows or the list shrinks, the rows come down
-  so that none show empty after the last while rows hide above. When the rows do not fit, a scroll
-  bar runs down the right of the frame along them, as in Far
-  ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)).
-- **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor
-  is (the checksum comparison reads the file there): its row gets a background of its own
-  under the row's colors, which stay (a mark too). The theme sets it as `cursor_inactive`:
-  the dark gray of the 16 colors in `mc-classic`, dimmed reverse video in `terminal`, the
-  dialogs' `surface0` in the Catppuccin themes, and in the Noon themes the text fields' blue
-  (`#2D4672`) in `noon-dark`, as the dialogs' one is a single step of gray above the panels in
-  256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
-- **The cursor where the user is root.** In a local panel while Noon Commander runs as root, and
-  in a panel on a host whose ssh user is root, the cursor is on red: `root_cursor` takes the
-  place of `cursor` in the theme that panel is drawn with ([ADR 0031](adr/0031-who-and-where-on-screen.md)).
-- **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the
-  file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is
-  read with every listing, so it changes when a job reads the panel again or on `R`; a panel
-  on another directory of the same file system keeps what it read last. Locally it waits at
-  most as long as a volume in the location menu, so a dead network mount leaves it out; over
-  SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system
-  that reports no size, or a panel too narrow for it, shows none.
-- **Total of the directory.** At the left of the same line, the size of the files shown and how
-  many files and directories are shown: `12M in 45 files, 3 dirs`, the size as the Size column
-  writes it. Hidden files count while the panel shows them, `..` does not, and a link to a
-  directory is a directory. A panel on a host that is not connected shows none. Where the panel
-  is too narrow for both, the free space is left out first.
-- **Targets of symlinks.** With a symlink under the cursor, the status line shows its target as
-  stored in the link, as mc does: `config -> /etc/app/config.toml`, read with the listing; with
-  `ui.icons` a Nerd Font arrow (nf-md-arrow_right) takes the place of `->`. The name stays plain,
-  as its row above already shows its kind; the arrow is toned down as an icon; the target has the
-  color of its kind (`directory`, `file`, `device`, `special`, `stale_link` where nothing is
-  there; never `executable`, as the target's permissions are not read). The target tells its
-  kind too: with icons by the icon of a directory, a file (devicons' by its last name), or a
-  broken link in front of it, in its color toned down; without them by
-  mc's marker after it where `ls -F` puts one, `/opt/`, and `!` after a broken one. Where the
-  name and the target do not both fit, they share the room evenly, what one does not need going to
-  the other: the name loses its end, the target its start, as a path in the title does, its icon
-  and marker kept; with less than 4 cells for either the name shows alone.
-- **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down,
-  as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing
-  once; `g *` inverts the marks on files, leaving directories as they are; `..`
-  cannot be marked. A marked row keeps the colors of its name, as the inactive cursor does: a bar
-  `▌` in the panel's frame beside it shows the mark, in the theme's `mark` (yellow in mc-classic),
-  and the Noon and Catppuccin themes put `marked` under the row, the color of the mark faint over
-  the panel's, apart from the inactive cursor in 256 colors too; mc-classic, whose 16 colors have
-  none between blue and yellow, and `terminal` have the bar alone. Under the cursor a marked row
-  looks as any other, beside its bar. The line below the listing shows the size of the marked files
-  and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they survive
-  sorting and `R` (for names still there); another directory starts unmarked, and entries that get
-  hidden lose their marks, so that no operation acts on what is not shown. `g +` marks and `g -` unmarks
-  the names that match a shell pattern, in a dialog with mc's option Files only (off). Patterns are
-  read as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside the set), `{a,b}`, and `\`
-  for the next character as it is; the whole name must match, and what does not parse is literal.
-  The keys after Ctrl+s take the pattern as text or as a regular expression too, and switch its
-  case, smart at first, in place of mc's Case sensitive ([search modes](#search-modes)). The dialog
-  opens with the last pattern (`*` at first), its way and case, and Files only.
-- **Visual mode.** `v` or `V` selects rows from the one under the cursor to wherever the cursor
-  goes, as vim's Visual mode selects lines, and with a count as many rows (`3V`), or, after a
-  command of Visual mode, as many as it took times the count, as vim's `resel_VIsual`; `o` goes to
-  the other end, `g v` selects the rows selected last again, and Esc ends it, as does the key of `v`
-  and `V` that started it, while the other switches its kind, as vim's; after `V` the line of the
-  mode says `VISUAL LINE`. Space marks the rows selected; `y`, `x`, `d`, `D`, `X`, F5, F6, F8,
-  `f #`, and `g x` make them the marked entries and act on them, as on any marks, and put the
-  cursor on the first row, as vim's operators do. The line of the mode shows how many entries it
-  selects, without `..`. The other F-keys and the commands of the pull-down menu end Visual mode
-  and do what they do in Normal mode. Visual mode is the tab's, as its cursor is: Ctrl+w and Tab to
-  the other panel, a click there, and Alt+1 … Alt+9 and Alt+0 to another tab leave it in the panel
-  or the tab left, which draws the rows it selects and has it again with the keys; Ctrl+x runs its
-  command there in Visual mode, and gives the keys back once that panel is in Normal mode or still
-  in the Visual mode it kept ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). The
-  selection is held by the entries on its ends,
-  so that a listing of the same directory or another sort order keeps it on them.
-- **Jumps.** Each tab keeps a jump list, as vim does with `jumpoptions=stack`: going to another
-  directory (Enter, `h`, Go to directory, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`,
-  and a quick search that found a match put where the panel was on it, up to 100 places, even when
-  they stay on the row, as vim's; a jump after Ctrl+o keeps the place Ctrl+o went to, and drops
-  those after it. `n` with a count puts it there once, and one that finds nothing, never; nor does a
-  directory that cannot be read. Ctrl+o goes back, and Ctrl+i forward again (Tab too without the
-  kitty keyboard protocol), with a count too, without changing the places, as vim's; after a jump
-  that stayed on the row, the first Ctrl+o stays there too. A count past the end of the list goes
-  nowhere and keeps it as it is, as vim's; a place in this directory moves the cursor at once,
-  another one reads its directory.
-- **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, in Insert
-  mode with the cursor after it; Ctrl+u clears it. The name may be a relative path, an absolute
-  one, or start with `~` for the home directory (the remote one on a host; `\~` for a name that
-  starts with `~`); missing parents are not made. The directory is made in the background,
-  locally or by the host's task, and panels on the directory it is in read it again, the one
-  that asked with the cursor on it. An error shows in a red dialog, as mc shows errors.
-- **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks
-  where to, opening with the other panel's location (`host:/path` for a host), and whether to
-  preserve attributes (times and permission bits; on, and remembered). F5, F6, and Shift+F5
-  share the dialog (`tui/transfer.rs`, [ADR 0043](adr/0043-one-dialog-for-copy-and-move.md)):
-  the same field and check box, only the words differ. A typed target is `host:path` for a
-  host the app knows, or a path from the active panel's directory, as F7 takes it. A target
-  that is the source directory, a source, or in one of the sources, is an error; so is, from
-  the job, a source under its name spelled otherwise, where the file system ignores case (see
-  File operations).
-  The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks as a
-  warning (ADR 0060): the path of the file there; New and Existing, each with its size and
-  time, on a line that views the file, over every window but the dialogs, the question back in
-  front once the viewer closes; a combo box for the rest of the taken names, but at the last
-  entry; and Overwrite, Skip (the default), Rename…, and Abort, without Skip for the only entry,
-  where Abort is the default. Rename… asks for a name or a path from the file's directory,
-  offering the free name. A rename and a save ask the same question, for one file
-  (`App::taken_dialog`). Copies are written under a temporary name and renamed when
-  complete, unless `transfer.atomic_upload` is off.
-  When the job ends, panels on the target, its parent, and the source directory read them
-  again.
-- **Shift+F5 copies the entry under the cursor** (`y p`, as vim's `y y p` puts a copy of a
-  line under it), not the marked ones, which stay marked, as mc's and Far's Shift+F5: the dialog
-  of F5 opens with its name, in Insert mode with the cursor where Shift+F6 puts it, before a
-  file's last extension, so that the copy goes beside it under the name typed (`report
-  (1).pdf`). A path or `host:path` there copies elsewhere, as with F5; the name unchanged is an
-  error, the source itself; a name that is not UTF-8 cannot be edited, which an error says: F5
-  copies it. In Visual mode and in quick search, Shift+F5 ends them first, as the other F-keys
-  do.
-- **F3 views** the file under the cursor, as mc does (on a directory it opens it): the viewer
-  (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far
-  the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when
-  the text does not fit, and its own F-key bar. It reads the file in parts of `viewer.part_mib`,
-  1 MiB by default, so that the first screen waits for little, or, through the host's shared
-  session, of `viewer.host_part_kib`, 256 KiB, as every part read there is sent; in the
-  background (closing the viewer stops that), asking for the size of the file and for the bytes
-  of the part, no more, at once (`Vfs::open_file_range`), each ending after its last
-  line feed, or going on to the first for up to 16 MiB where a line is longer than the part
-  (`Want::most`), the next when a move down shows the end of what it holds, and keeps a window of
-  `viewer.window_mib`, reading a part it dropped again when a move up reaches it
-  ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). A local file of at most 16 MiB is
-  read whole behind the screen once its first part shows, with no window (`Want::ahead`), so
-  that its lines are all counted
-  ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md)). Until the end is known
-  the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends
-  the text. `G`, End, and a thumb dragged far past what was read jump: the viewer reads the part
-  there alone, the last one of the file for its end, from the start of a line
-  (`Want::after_feed`), apart from the parts read in order (`Parts`); a local file is read on in
-  order instead where that is no more than 16 MiB. The lines of the parts apart
-  have no numbers, so the position is `at/size percent%` in bytes, short, until scrolling up has
-  read what lies between and the parts meet; nothing counts lines behind the screen. A line to
-  go to, as a search result, is reached in order, through the parts before it
-  ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md)). A read longer than 150 ms
-  shows the `Reading` dialog (`tui/reading.rs`, a `Dialog` that `Reading` wraps): where the part
-  starts, a gauge (`Text::Gauge`), and Cancel alone, which
-  Enter and Esc press too, and which stops the read and keeps what was read
-  ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). A file that grew between
-  parts, as a log that is being written, goes on past what was its end; one that shrank, or
-  whose time changed with the same size, is read again from the start. Text is UTF-8; invalid
-  bytes and what the terminal would act on show as `·` in the theme's faint `hidden`, as mc's `.`
-  (`Theme.glyphs.hidden`); tabs go to stops of 8, and
-  `\r\n` ends lines.
-  Long lines wrap, each row after the first starting with `»`, as vim's 'showbreak' (F2 cuts
-  them, `«` and `»` mark where they go on past the screen, as vim's 'listchars', and Left and
-  Right, `h`, `l`, and the z keys as vim's scroll then, no further than the end of the longest
-  line on screen at the right edge, and back as far as the lines on screen need after paging or
-  widening); the position is a line and a row within it, so that only the lines in view are
-  wrapped, whatever the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and
-  the arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f`
-  and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's
-  'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line
-  across the text, `──── EOF ────`, follows the last line (`noc-scroll` has
-  the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G`
-  and Home/End the ends, and F3, F10, `q`, or Esc to close; F1 or `g ?` shows the help over
-  it.
-- **The viewer edits, opens, and goes on**
-  ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md)), in every viewer of a
-  file, but not of text that the app holds (the checksums, a file a save would write): `e` and
-  F4 edit it as F4 does in the panels, at the line on top where the lines have numbers, once its
-  start is read (F4 shows on its F-key bar only then); the viewer stays, and reads the file again
-  (`Viewer::reload`) once the editor changed it, or, on a host, once the copy went back
-  (`Then::Discard`). `g x` opens it externally, as in the panels; `R` reads it again, up to the
-  line on top, as less's `R`. `] f` and `[ f` view the next file and the one before, with a
-  count that many, no further than the last or the first, its lines wrapped or cut as they were
-  (`Viewing.neighbours`): those of the panel it was viewed from, as the panel shows them, whose
-  cursor goes along; those the search of a tree found, its cursor going along too, each from its
-  first line that matched; or those of the directory of the log, listed then
-  (`Effect::ListSiblings`) and sorted as the active panel sorts; the `ssh_config` of a host and
-  the file of a question about a taken name have none. `F` follows the end as it grows, as
-  `tail -f` and less's `F`: once a second (`Effect::Poll`) the app asks the size and the time of
-  the file (`Viewer::check`); one that only grew is read on from its end, or again where its last
-  line had no line feed yet (`Part::open`), as what was added goes on with that line; one that
-  shrank or changed otherwise is read again, to its end. `Follow` takes the place of `End` in the
-  position; a move up or `F` again stops it, and so does a file that can no longer be looked at,
-  which the line of the mode says.
-- **Ctrl+\\ views the log** of this run (Ctrl+4 without the kitty keyboard protocol, which sends
-  the same byte), in every mode, and Help → View the log: the viewer on the file of the log,
-  from its end (`App::view_log`). As the viewer of a question about a taken name, it stands in front
-  of every window, the menus, the help, Configuration, the pull-down menu, and find among them
-  (`App::viewer_over`), and in front of the dialogs open when it opened too, whose ids it keeps
-  (`Viewing.log`): `App::dialog_in_front` leaves them out of the keys, the mouse, and the screen
-  while it shows, and they stay as they were, so everything is there again once it closes. A dialog
-  that comes in front of them later stands in front of it: one over them, or a prompt of ssh while
-  no other dialog waits; queued behind them, it waits as it would anyway. Again, it reads
-  the log anew, in place of the viewer on screen. Without a log it says why, as the About page does.
-- **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at
-  spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is
-  copied, with its times and permission bits, to `edit-PID-N-host/name` in the runtime
-  directory (`editing::copy_path`): a directory of its own, closed to group and others, which
-  the copy job makes first, and the file's own name, by which the editor knows its kind, as
-  `Makefile` or `.bashrc`; a `/` in the host becomes `_`, and the host is cut to fit a name of
-  255 bytes. When the editor exits and the copy's size or time changed, it goes back over the
-  original by the copy job, with `overwrite` and as `transfer.atomic_upload` says, keeping the
-  original's permissions. Both copies show the job's window. The local copy is removed once it
-  went back, or at once if it did not change, and its directory with it unless something else
-  is left there, such as a backup the editor wrote; one that did not go back (a failure, Abort,
-  or the host gone) stays, and a red dialog says where. Panels on the file's directory read it
-  again. First, F4 reads the size
-  of the file and its first 8000 bytes, through the host's session for a remote one, before
-  anything is copied (`Effect::Sniff`): a file with a NUL among them looks binary, as git tells
-  one (`noc_text::is_binary`), and one larger than `edit.large_mib`, 64 MiB by default, as the
-  editor of mc's `filesize_threshold`, is large; for either, a question in the colors of warnings,
-  Cancel the default, comes before the editor, saying that a host's file is copied first
-  (`Purpose::EditAnyway`). One that cannot be read goes to the editor all the same, which says
-  why. The viewer knows both from the part it read first, and asks at once.
-- **`g x` opens externally** the marked entries, or the one under the cursor, as vim's `gx`
-  opens what is under its cursor: each with the program the desktop has for it, as a double
-  click would, through `open` on macOS and `xdg-open` on Linux, one after another
-  (`noc_tools::opener`). A directory opens in the desktop's file manager. The opener runs
-  without a shell, input, or output, in a process group of its own, and is never killed: a
-  program it starts runs on after Noon Commander quits. One still running after five seconds
-  counts as having opened its file. The first failure stops the rest and shows in a red dialog,
-  with the exit code, since the opener's output goes nowhere. Remote entries do not open yet:
-  on a host, the line of the mode says that only local files open externally, and the command
-  is dimmed in the File menu.
-- **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog
-  of F5 (`Move "x" to:`). Preserve attributes, shared with copies, applies where a move copies;
-  a rename keeps them anyway. A new name in the
-  field renames in place, as in mc, its own name in another case too, where the file system
-  ignores case. Locally, and within one host, the job renames (`move_within`); between the
-  local file system and a host, or two hosts, it copies and removes each source once all of it
-  is copied. Its window says Moving; when it ends, the
-  panels on both sides read their directories again.
-- **Shift+F6 renames in place** the entry under the cursor, not the marked ones: its
-  row becomes a text field from the name on, over the columns after it, in Insert mode
-  with the cursor before a file's last extension (after the whole name of a directory, a
-  dotfile, or a name that ends with a dot), so that Ctrl+u takes away the rest of the name.
-  Enter renames in every mode; Esc goes to Normal mode, where vim's motions and operators edit
-  the name, and Esc there keeps the name; Ctrl+c keeps it in every mode; other panel keys do
-  nothing (`Context::Rename`). The status line stays as it was, with the old name and its size.
-  An empty or unchanged name
-  renames nothing; one with `/` or NUL, or `.` or `..`, is an error and the field stays. A name
-  that is not UTF-8 cannot be edited, which an error says: F6 renames it. `noc_ops::rename`
-  checks the new name first: a directory's is an error, a file's asks the question of a copy
-  about a taken name, for one file (Overwrite, Rename… to another name in the directory, and
-  Cancel, the default), and the entry's own name spelled otherwise, differing only in case or
-  normalization where the file system ignores them (see File operations), renames it; spelled
-  so, another entry's name is taken. Without `posix-rename` the file there goes first. A reload
-  keeps the field on its entry; the field goes with the entry or when the panel goes elsewhere.
-- **F8 deletes** the marked entries, or the one under the cursor, after a red question with Yes as
-  the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or
-  `Delete 2 files and 1 directory?`. mc asks a second time before it goes into a directory that is
-  not empty; Noon Commander says so in the first question instead. The job runs in a task of its
-  own, with a window that shows what it counts, the entry at hand, a gauge,
-  and done/total; Esc or Abort stops it. A failure asks in a red dialog what the job could not do
-  by its `Step` (`Cannot delete`, `Cannot read`, `Cannot create`, …), the path on a line of its
-  own, and under a line the reason and its code (`Code: 13`, `SFTP code: 3`, or `Code: —` where
-  the system gave none); then, under a line, the combo box The rest (ask each time, skip every
-  failure, skip failures with the same code, where there is a code), and Retry, the default,
-  Skip, and Abort. Only what does something shows: no Retry where it would fail again (the
-  target is the source itself), no The rest at the last entry, no Skip for the only one, whose
-  Skip is Abort; the window of the job knows how far it is (`JobView::more`,
-  `JobView::single`). When the job ends,
-  panels on the directory read it again, and a
-  cursor whose entry is gone stays on its row. If the host's connection is lost, the job waits
-  for it, `Waiting for web to connect…`, while Connection asks whether to connect again; Retry
-  there goes on where the job was once the host is back, and Cancel ends the job.
-- **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job
-  behind the panels, which take the keys again, and Esc aborts, as in mc. It is a `Dialog`, which
-  `JobView` wraps: five lines of text, the gauge among them (`Text::Gauge`), which follow the job
-  at each frame (`Dialog::replace_text`), and its keys and mouse are a dialog's, a count too
-  ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). As many jobs run
-  at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and
-  starts when one ends, the oldest first. Abort takes a waiting job away at once. The jobs
-  of F4 never wait, but count while they run. `f j` lists the jobs, as mc's Background
-  jobs: a row for each, with what it does, how far it is (a percentage, `counting`,
-  `waiting`, or `aborting`), and the entry at hand, and Show (the default), Abort, and OK.
-  It is a `Dialog` with a picker without a filter or a line over its rows (`Picker::bare`),
-  which `JobsList` wraps: the rows are a stop of the focus, where Enter, Space, and a double
-  click press Show, and Tab, Left, and Right go to the buttons; the wheel scrolls the rows.
-  Show brings the selected job to the front, in its window; the selection follows its job
-  while jobs above it end, and the next row once it ends itself. Questions from jobs
-  behind the panels open over whatever is on screen, in turn with other dialogs, and the top
-  right corner, where Far has its clock, says how many run and how far they are together
-  (`2 jobs 37%`, the mean of their gauges); a click there opens the list. The jobs of F4 stay
-  in front, so that the editor does not open in the middle of other work. F10 always asks
-  before quitting, with Yes as the default, or No while jobs run; quitting stops them and waits
-  up to five seconds, so that a copy removes its unfinished file before the connections close.
-- **Checksums.** `f #` (not in mc) asks for an algorithm (a combo box, the last one chosen,
-  SHA-256 at first) for the marked entries, or the one under the cursor; files
-  in directories count. For one file, the dialog has a field for the checksum it should have,
-  pasted from a download page or a line of `sha256sum` (the first word counts, in any case);
-  hex of another length picks the algorithm that has it, and anything else is an error. If
-  the other panel's cursor is on a file, a check box compares the two (checked when they have
-  the same name), which hashes both. The job has the usual window, Background, and list.
-  When it ends, a window shows the checksums: with several files, a list with each checksum
-  shortened in the middle and a mark (✓, ✗, or `-` for skipped), under a filter that finds a
-  file by its name or its checksum, and under the list, apart from it by a line as in the
-  location menu, the name and the whole checksum of the file under the cursor, in as many lines
-  whichever it is ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)): the
-  checksum in groups of 8 digits, at most 4 to a line, and with `ui.icons` the file's icon in
-  front of the name and a pound sign in front of the checksum
-  ([ADR 0087](adr/0087-the-whole-checksum-under-the-list-is-in-blocks.md)). The
-  window opens on the rows, in Normal mode (`checksums`, falling back to `dialog`); `/` types in
-  the filter. One file, or two compared, are a dialog: each name with its whole checksum, then,
-  between two lines, the verdict (✓ matches or ✗ not, the same or different), in color.
-  To clipboard puts the checksum of the file under the cursor, or of the first file, on the
-  clipboard, All to clipboard every line in the format of `sha256sum` (`<hex>  <name>`; names
-  with a backslash or a line break escaped as GNU coreutils does), View (F3) shows those lines
-  in the viewer, in place of the window, which comes back when it closes, and Save… writes them
-  to a file through the dialog of saving, from the panel's directory (`name.sha256` for one
-  file, `SHA256SUMS` for several; `b3`, `md5`, … for the others). A dialog has no View. No
-  message follows a button. Windows of jobs that end while one is open wait their turn. The
-  window is a `Dialog`, which `SumsWindow` (`tui/sums.rs`) wraps, as `FindWindow` wraps the
-  search of a tree ([ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)): its picker for
-  several files, and for one file or two lines of text (`Dialog::with_text`): each name, which
-  loses its middle where too long, its checksum in lines of equal length (`Text::Even`), and the
-  verdict (`Text::Verdict`).
-- **Saving a file** ([ADR 0059](adr/0059-one-dialog-saves-a-file.md)). What has a file to save,
-  so far Save… of the checksums, gives `tui/save.rs` a `Save`: the title, the directory, the
-  name offered, and the bytes. Its dialog has one field, `File name:`, with that name; it takes a
-  name, a relative path, an absolute one, or `~/…`, as F7 does (`panel::resolve`), on the host
-  of the directory, and Tab completes files and directories from there, not from the panel,
-  which may have gone elsewhere. OK writes the file (`Effect::WriteFile`), locally or through
-  SFTP, never over one: a name that is taken asks the question of a copy about a taken name, for
-  one file, where New views what would be written; Overwrite writes over it, Rename… under another
-  name, and Cancel is the default. An error is a window of its own; once it is written, the panels
-  on its directory read it
-  again and show it, and nothing else says so.
-- **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence
-  between frames, and the terminal puts the text on the clipboard of the machine it runs on,
-  over ssh too. Nothing tells whether it did, so the UI says nothing after it; the buttons that
-  copy say they put the text on the clipboard. Noon Commander never reads the clipboard
-  ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
-- **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the
-  terminal's window or tab with OSC 0 between frames: the active panel's directory
-  (`~/src — noc`, `host:path` with the host's alias), after `[root]` while Noon Commander runs as
-  root or the active panel is on a host as root, sanitized like every name. Before the first
-  title it saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from
-  there (`CSI 23 t`) on quitting and before handing the terminal to another program, which gets the
-  shell's title and may set its own.
-- **The other panel.** As vim's windows: Ctrl+w w, Ctrl+w Ctrl+w, or Ctrl+w p makes the other
-  panel active; Ctrl+w x or Ctrl+w r swaps the panels, as mc's Ctrl+u, and the active one stays
-  active on the other side; Ctrl+w f opens the directory under the cursor in the other panel, as
-  mc's Alt+o (from a file, the parent directory with the cursor on this one) and moves the cursor
-  down; Ctrl+w v shows this directory in the other panel with the cursor on the same name, as
-  mc's Alt+i. Panels keep their identity when swapped (only where they are drawn changes), so a
-  listing still in flight reaches the panel that asked for it. Sort order and errors go with the
-  panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that
-  side active, whichever it is after Ctrl+w x. Keys act on the active panel; Ctrl+x runs the next
-  command in the other panel, then gives the keys back, as vim's Ctrl+o in Insert mode runs one
-  command of Normal mode ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It
-  comes with the command, as a register does (`Extra`), with the count and the register after it
-  (`Ctrl+x 2g t`); those typed before it go, and Esc and Ctrl+x again give it up. `App::typed`
-  makes the other panel active for the command and keeps where the keys were and the mode it had
-  (`returns`), so any command works there as in the active panel, those of the cursor, the marks,
-  and the files too, and needs nothing of its own. `App::come_back` gives the keys back once the
-  panel has them in Normal mode, or in the Visual mode it kept
-  ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)), with nothing in front and no program
-  to hand the terminal to: after the key, or, as the event loop asks before each frame, once the
-  mouse closed its window or the program it ran returned. Windows of a panel open centered over
-  both, as every window does; the panel drawn active, after Ctrl+x the other one, says which they
-  act on.
-- <a id="quick-search"></a>**Quick search.** `/` starts quick search, typed as vim's search, in
-  Insert mode, and `?` starts it up the rows; typing in a panel in Normal mode does nothing but its
-  commands, and `i`, `!`, and `:` open the [command line](#command-line-of--and-). As vim's search,
-  it is typed on the line of the mode, after `/` or `?`, in place of the mode while it has the
-  keys, and the status line of the panel keeps the name under the cursor
-  ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md)). It looks from the row after the
-  one where it started, round, or after `?` up from the row before it, round to the bottom, and a
-  count before `/` or `?` goes to the match of that number (`2/`). It matches in the
-  [search mode](#search-modes), with smart case, which the keys after Ctrl+s, or a click on a glyph
-  at the right end of its line, switch while it runs. As fzf, the default, the cursor
-  jumps to the best match as fzf ranks it, the first after where it started of those as good, and
-  Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after
-  where it started that holds the text anywhere, or that matches it as a regular
-  expression, as the filters of the lists match, and Ctrl+g to the next one, round to the top, as
-  many as the count. It runs as vim's incremental search (`panel::Search`, with vim's `search_start`,
-  `match_start`, and `old_viewstate`): every edit of the text searches again from where it searches
-  from, with the rows on screen as they were before it. As in mc, a character after which no name
-  matches is not typed, and nothing moves; one that leaves a regular expression unfinished is
-  ([ADR 0042](adr/0042-quick-search-types-only-what-matches.md)). While nothing matches, after
-  a switch or with the last search brought back, the cursor stays where it searches from and the text
-  as it is. Ctrl+g and Ctrl+t move where it searches from as vim's do, so that an
-  edit after them searches on from the match before, and Enter stays on the match. The listing keeps
-  its order. While it runs, every name on screen shows where it matches in the colors of what is
-  found (`find_match`, as in the [search of a whole tree](#search-of-a-whole-tree)), the cursor's
-  too: each place it holds the text or matches the regular expression, or the letters fzf matched
-  (`Matcher::positions`), in what of the name shows. The text, kept as typed, is a field with a
-  cursor, edited with the keys that every text field shares in Insert mode (`input`): Left,
-  Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as on vim's command line),
-  Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's
-  command line, Delete at the end of the text deletes the character before, Shift and Ctrl with Left
-  and Right go by what spaces part. Unlike vim's, Backspace and Delete with nothing typed keep the
-  search open, as on the command line, so that one too many does not go to the parent directory. As
-  in vim, Enter (and Ctrl+j) ends the search: it searches once more from where it searches from,
-  with the count, and goes to the match, or says "Pattern not found", keeping the text for `n`
-  either way; Esc or Ctrl+c (`abort`) gives it up and puts back the cursor and the rows on screen as
-  they were when it started, keeping nothing for `n`. Ctrl+g goes to the next match down and Ctrl+t
-  to the next up, after `?` too, as in vim. The arrows, the page keys, and the F-keys of the panel
-  end the search and do what they do, as in mc; Shift+F7 goes to the next match. While it runs,
-  every character is text, even one that a panel binds, such as `*`. A search that finds a match
-  puts where it started in the jump list, as vim's, and so does one that finds none after Ctrl+g or
-  Ctrl+t moved where it searches from. The app keeps what the last search found, whichever panel it
-  ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search
-  again) go to the next and the previous name that matches it, round, the way it went and the other
-  way, so up after `?`, and Ctrl+g with nothing typed yet searches for it again, as mc's Ctrl+s
-  Ctrl+s does. As vim's, they say when they go round past the last row or the first ("search hit
-  BOTTOM, continuing at TOP"), when nothing matches ("Pattern not found: name"), and that there was
-  no search before, on the line of the mode until the next key; so does Enter in quick search, when
-  its last search went round (a count can take it round too; after Ctrl+g or Ctrl+t it does not),
-  but in the fzf mode, which ranks the rows rather than go down them. Long names lose their middle,
-  marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters, and
-  marks that join the next character, become `?`. Listings run in background tasks; a reply
-  carries the generation of its request, so a stale one is dropped. If a directory cannot be read,
-  the panel stays where it was and says why below the listing. Going up puts the cursor on the
-  directory just left. A panel shows a [`Location`](#locations), always a directory.
-- <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR
-  0019](adr/0019-shell-command-line.md)). In a local panel, `i` or `!` opens a line above the F-key
-  bar for a shell command, after a prompt as a shell's: `alice@mac:~/src $`, with `~` for home, and
-  `#` where the user is root. It takes a third of the width at most: the middle of the directory goes
-  first, then the user, then the directory. `:` opens it for commands of Noon Commander, of which
-  `!command` is the only one so far. In a panel on a connected host the prompt has the user that
-  `ssh -G` gave and the host's alias, `deploy@web:/var/www $`. The
-  line opens in Insert mode, as vim's command line, where every character is text. Ctrl+j, or Enter
-  after an odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap,
-  and the line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and
-  Down move between lines, Home and End (Ctrl+b, Ctrl+e) go to the ends of the line. Tab completes
-  the word before the cursor, as vim's `:!` does (see [Completion](#completion)). Ctrl+f goes to
-  Normal mode where the cursor is, in place of vim's window of the command line: vim's motions,
-  operators, registers, and undo edit the command there, Esc then leaves Insert mode, as in that
-  window, rather than close the line, and Ctrl+c and F10 close it in any mode; `j` and `k` go
-  through its lines, in the column of the first of them, or after `v` ended Visual mode, or after
-  the end of the line where Ctrl+o left Insert mode, or at the ends after `$` and End, as vim's
-  `curswant`, which the next Ctrl+o keeps, and then the history, which goes on from the command an
-  undo brings back (in Visual mode only its lines), and `q :` opens the window of the history. Enter
-  hands the command to the event loop, which suspends the TUI as for F4 and runs it with
-  `noc-tools`' `Shell`: the words of `shell.run`, `$SHELL -i -c` by default, with the variables of
-  Noon Commander's environment in them (`/bin/sh` for a program that comes out empty), then the
-  command in one argument as typed, in the panel's directory; `-i` gives the shell the aliases and
-  functions of its rc files ([ADR 0054](adr/0054-shell-run.md)). The shell runs as a job, as a shell
-  runs one, and so does the editor of F4: `noc_tools::job` puts it in a process group of its own
-  with the terminal, and `Running::wait` waits for SIGCHLD and asks `waitid` whether it ended or
-  was stopped, then takes the terminal back (`tcsetpgrp` with SIGTTOU blocked, through `nix`'s
-  `pthread_sigmask`), which zsh, which `exec`s the last command of `-c`, never gives back. One
-  stopped by Ctrl+z gets `[stopped]` under its output, as a mark of a failure, and the keys of a
-  dialog, which are read (`output::finish`): Enter continues it (`Running::resume`), Esc ends it
-  with SIGHUP (`Running::end`), and after that kills it, `[stopped] Enter continue · Esc kill`,
-  if it went on. A `Running` dropped before it ends kills all of its group. What ends Noon
-  Commander while it runs goes on to it, as a shell passes SIGHUP on (`Running::pass_on`, from
-  `output::finish`): SIGHUP, or SIGTERM, then SIGCONT, to its group, which has a second to end
-  and is then let go (`Running::let_go`), not killed. On a host, the
-  host's task builds the ssh command from its session (`Session::command_in`) and the event loop
-  runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and
-  the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each
-  variable, which the host's shell expands as `"$NAME"`, then the command quoted, `'` and `\`
-  outside the quotes after a `\`, as POSIX shells and fish both read them. What ends Noon
-  Commander goes on to that ssh, which ends the session, so that the host ends the command.
-  `tui/output.rs` shows the command after its
-  prompt first, bold, and afterwards ends its output on a line of its own as zsh does (a dim `⏎`,
-  spaces to the last column, `\r`, a cleared line); then a line in reverse video asks for a key,
-  with the exit status of a failure, unless `shell.pause` says not to wait, and after the key `[exit
-  N]` takes its place for a command that failed. The event loop then takes the terminal back; both
-  panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes the line, as on vim's
-  command line, in Insert mode and in Normal mode; Backspace on an empty line does not. `g <`, a
-  `global` key, as vim shows the output of its last command, hands the terminal over without a
-  program wherever it is pressed but in Insert mode: its own screen shows, with the output of the
-  commands, until a key that the `user_screen` context binds to Cancel (`g <`, Enter, `q`, Esc), and
-  then whatever was in front, a dialog, a menu, the viewer, or the line, is there again as it was.
-  Shift+Enter starts a new line too where the terminal speaks the kitty keyboard protocol: at start
-  the event loop asks for it with `supports_keyboard_enhancement` (in `spawn_blocking`, before the
-  stream of events takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and
-  `REPORT_ALTERNATE_KEYS`, so that Alt with a symbol typed with Shift, such as Alt++, arrives as
-  that symbol (Ctrl+[, Ctrl+m, and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymap
-  binds them wherever it binds those). The preset lists the keys of such a terminal, where Tab in
-  the panels goes to the other panel and Ctrl+i forward through the jump list; the app builds its
-  keymap with `Keyboard::Kitty` there, and else with `Keyboard::Legacy`, which drops the bindings of
-  Tab and gives Tab those of Ctrl+i, the key it arrives as. The event loop pops the modes, and turns
-  bracketed paste off, whenever another
-  program gets the terminal, on exit, and on a panic. With bracketed paste a paste arrives as one
-  event: the command line takes it whole, line breaks included, and runs nothing; text fields, quick
-  search, and the menus' filters take its characters without line breaks; panels, the pull-down
-  menu, dialogs' buttons, and the viewer ignore it. Each command that ran, unless it starts with a
-  space, goes to `history.toml` in the state directory with its host (the alias; none for a local
-  one), directory, and time: `noc-config`'s `add_command` reads the file again, replaces the same
-  command on the same host, keeps the newest `shell.history_size`, and writes it whole and
-  atomically, mode 0600; one task makes the changes in turn, and the app keeps the commands in
-  memory. Up on the first line of a command, or Ctrl+p, goes back through the commands of the
-  panel's host, and Down on the last line, or Ctrl+n, forward to what was typed, as on vim's command
-  line; the line of `:` shows them after `!`, which runs them. `q :` in a panel, or on the line in
-  Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists): the
-  commands of the panel's host, or of all of them after Tab, newest first, filtered as quick search
-  matches, each by its first line, and below them where the command under the cursor ran: its
-  host's alias, or `local`, then its directory, each line after its icon (`Glyphs.ran`),
-  and when it ran on the line over them, in the color of the title (`Body.footer_label`;
-  [ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)); Enter puts it on the
-  line, with the prompt reversed until the next key if it ran on another host, and F8, or `d d` on
-  the rows, removes it.
-- **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR
-  0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode
-  (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`,
-  `rename`, `command_line`, `command_history`, `find`, `user_screen`, `list`, `location_menu`,
-  `tab_menu`, `jump`, `workspaces`, `checksums`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`,
-  `completion`, `viewer`), in the order the help lists them. A context with many keys binds them in
-  groups (`Bound::Groups`, `keymap::Group`): the panels in Normal and Visual mode, the text fields
-  in each mode, and the viewer; the help and the list of the key hints show each group under its
-  name, and the keys of the other contexts under the context's
-  ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md)). The app says which mode and context the
-  next key goes to (`App::place`): the mode is that of the text field with the keys, Visual mode
-  while a panel selects rows, and else Normal mode. Each context falls back along a chain in its
-  mode (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`,
-  `rename`, `dialog_input`, `command_line`) to `input`, which holds the keys that edit text in each
-  mode, and the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`,
-  `command_history`) to `list`, which holds the keys they share, then, in Insert mode only, to
-  `input` for their filters; the search of a tree falls back as a dialog does, `find` to `dialog`
-  and its fields, `find_input`, to `dialog_input`; the window of the checksums of several files,
-  `checksums`, to `dialog`, and while its filter takes text to `list` and `input`. Every one but
-  `user_screen` falls back to
-  `global` last, whose keys are the same in every mode: the key hints, the output of commands, and
-  Ctrl+l, which redraws the screen; the app takes them before whatever is in front, which stays as
-  it was. The first context that knows a key sequence decides, except that a sequence it only starts
-  does what a later context binds it to. Bindings are key sequences matched by prefix with a
-  1-second timeout (`g g`, `Z Z`, `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the
-  panels, as vim's windows), `t` (tabs and workspaces), `o` (sort order and hidden names), and `f`
-  (`f j` the jobs, `f #` the checksums, `f /` and `f f` the search of the files below by text and
-  by name, the rest of mc's Ctrl+x letters left for later). In Insert mode a character is text
-  unless the context itself binds it, and in Normal and Visual mode a
-  character nothing binds does nothing. The keymap reads what vim lets come with a command and hands
-  it to the app with the action (`Typed`, `Extra`): a count before it (digits, `0` only after
-  another), a register after `"`, the character after the actions that take one (`f`, `t`, `F`,
-  `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode), and, in the panels, noc's Ctrl+x before
-  it, which runs it in the other panel. The app repeats a motion over rows a count's
-  times, and gives the count to what takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the
-  text fields, whose editor (`tui/edit/`) reads it itself. `Esc` acts at once: it never waits for
-  a key after it, and while a command is pending it gives the command up; so does a key that cannot
-  go on with it, which in Normal and Visual mode goes too, as in vim (`g x` and Ctrl+w `e` do
-  nothing), unless what came before it does something alone. The keymap says so
-  (`KeyState::take_dropped`), and the app then gives up the part a text field holds, such as an
-  operator that waits for its motion, or the one command after Ctrl+o. A count typed after a
-  register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and that
-  key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds, any key
-  but `Esc`, go to the keymap as `Esc`, then as the key in the mode `Esc` left (`App::key`, with
-  `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. vim gets
-  them so without the kitty keyboard protocol; with it, which Noon Commander asks for, vim would
-  type the key with the eighth bit set, and Noon Commander does as nvim does in Insert and Visual
-  mode ([ADR 0022](adr/0022-vim-modes.md)). The pull-down menu and the dialogs (contexts
-  `pull_down`, `dialog`, `dialog_input`, `path_input`, `completion`, `find`, `find_input`, and
-  `checksums`, which `Context::alt_letters_are_hotkeys` names) take Alt and a key otherwise, in
-  every mode: Alt and a letter or a digit that nothing binds go to the app as `Resolved::Hotkey`,
-  the letter of a
-  menu, a command, or an element of the dialog, and do nothing where nothing has the letter, and
-  Alt never stands for Esc there ([ADR 0033](adr/0033-letters-in-dialogs.md)), as it never did on
-  a password, where the `Esc` would close its dialog and send the key to the panels. Keys are
-  written with `crokey` names. User overrides of the keymap are planned. The F-key
-  bar is generated from the keymap in the mode and context of the next key, and so is the help
-  screen (F1): the keys of each mode and context, with what they do, for what the app can do
-  already; a prompt from ssh shows over it. It is a large window, 80% of the width and of the
-  height of the screen, and, as the Configuration dialog, lists its sections on the left
-  (`tui/sidebar.rs`, which both draw): About, with the license and the report of `crate::about`
-  that `noc debug version` prints too (the build; the system, read once at start; the terminal,
-  from its variables and the keyboard protocol the TUI found, without asking for its name; and the
-  external tools, the editor, zoxide, ripgrep, and fd, which are asked in the background at start
-  and again when `[zoxide] program`, `[search] program`, or `[search] fd` changes,
-  `Effect::Detect`), and the files the app keeps; and Keys, which folds, with a group for each part
-  of the app (panels, text fields, search and renaming, the command line, lists and menus, menus
-  and dialogs, the viewer) and tips, each under its title in points after a bullet (`•`, `-`
-  without icons). It opens at the top of About
-  first, and then where it was when it closed last (`help::Spot`, which the app keeps): the section,
-  Keys open or folded, what had the keys, and how far down the text was. The titles of the parts of
-  a section are bold on a line across (`── Panels ──`), the names of the groups of keys of a
-  context (`keymap::Group`) alone over them, in the color of titles, and the keys and the names of
-  the facts take
-  the theme's `keys`, a color apart from the titles, as the keys of the key hints and of their list
-  (Ctrl+k) do, and those of the menus of F9 in `menu_keys`. Tab moves between the sections and the
-  text; in the sections `j` and `k` choose, `l` or Enter opens Keys or goes to the text, and `h`
-  goes up to Keys and folds it; in the text `h` goes back. Each section has a letter, highlighted
-  in its name: Alt and it show the section from anywhere, opening Keys for a group, and give the
-  text the keys, as the letters of dialogs do. A click chooses a section, and one on Keys opens or
-  folds it. The text scrolls as the viewer does, with the keys it does not take in the
-  sections and with the wheel too, stopping with its last line at the bottom, with no line after it,
-  a scroll bar, and how far down it is in its bottom frame.
-- **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit/`
-  `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the
-  cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u,
-  Ctrl+r and a register, and Ctrl+v edit around it. Ctrl+v types the next character, or Tab, as it
-  is; unlike vim's, it gives up on any other control key, so that no control character gets into a
-  name or a command. As vim's 'backspace' has them, Ctrl+w and Ctrl+u stop once where Insert mode
-  started, but on the command line, whose keys are those of vim's, and at the start of a line join
-  it to the line above; a move of the cursor, Ctrl+u, and the focus coming back start a new change
-  for undo, and a new insert at the next change, as vim's `Insstart` and `Insstart_orig`, and so do
-  Home and End where the cursor is already, as vim's `start_arrow`: right after a move, Ctrl+w and
-  Ctrl+u still stop where the insert started, and after a move to the right with something typed, or
-  after Ctrl+u, they keep stopping there. Ctrl+u is a change of its own because vim's `defaults.vim`
-  maps it after Ctrl+g u; Ctrl+w, which it does not map, deletes within the change, as in vim. On
-  the command line, in quick search, and in the filters, as on vim's command line, Delete at the end
-  deletes the character before, and Shift and Ctrl with Left and Right go by what spaces part, Right
-  on to the space after. Ctrl+o, in the fields that have a Normal mode, runs one command of it,
-  after which, or after Esc, Insert mode is back; from after the end of a line the command starts on
-  its last character, and the cursor goes back after it if it is still there, as in vim, and so
-  after a command that deletes to the end of the line and after the text that `p` and `P` put, but
-  not after `0`, `^`, and Home, which vim's `ins_at_eol` leaves before the character they go to,
-  even the last; Insert mode then starts on that last character, before the cursor goes past it, so
-  the first Ctrl+w or Ctrl+u deletes only it, as vim's `Insstart` is set. `$`, End, and Backspace
-  onto the line above leave the cursor after the end of the line, as vim's do under `restart_edit`,
-  so Insert mode starts there; and the end of the line is a place for Backspace to stop, as in
-  Visual mode. A key that is not the field's, such as `j` to the next field of a dialog, or Ctrl+l,
-  is that one command too. Esc goes to Normal mode, with the cursor on the character before it.
-  Normal mode has vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`,
-  `F`, `T`, `;`, `,`, and `-`, `+`, and `_`, which go to the first character that is not blank of
-  the line above, below, or this one, and take lines whole after an operator, so `d _` is `d d`),
-  the operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`, `s`, `S`, `C`, `D`,
-  `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual mode, whose motions select
-  and whose `d`, `c`, `y`, and `~` act on the selection, and where, as in vim, the cursor can go
-  past the last character of a line (`l`, Space, `$`, `w`, `e` at the end, a count before `v`,
-  Backspace from the line below), so that the selection takes the line break too where a line
-  follows; a count before `v` selects that many characters, or, after a command of Visual mode, as
-  much as it took times the count, as vim's `resel_VIsual` (to the ends of lines after `$`); Space
-  and Backspace move as `l` and `h`, and on the command line go on to the next line and back to the
-  one before, as vim's 'whichwrap' has them. As in vim, `w` and `b` stop on an empty line, as on a
-  word, and after an operator `w` from an empty line stops at the start of the next line, so that `d
-  w` deletes it whole, `C` and `D` take a count of lines as `$` does, and more lines than one from
-  the last line go nowhere (`2 d d`, `3 D`), `cw` changes to the end of the word, which is the
-  cursor on its last character, `c b` at the start of the text goes nowhere, `^` on a line of blanks
-  is the last of them, and `~` keeps a character whose other case would take more than one, and is a
-  change for undo even on one without a case. On the command line, operators take what vim's rules
-  give them: an exclusive motion that ends at the start of a line ends at the end of the line
-  before, or takes the lines whole from the indent (`:help exclusive`, so `d w` on an empty line
-  takes it), and a delete over lines from the indent to the end of a line takes them whole (`:help
-  d`, as `d 2 $`); Backspace from the start of a line to the start of a line above deletes the
-  characters but keeps lines in the register, as vim's `op_yank`. A count repeats a motion or a
-  change, and multiplies with the count of an operator (`2d3w`); it stops where the motion can go no
-  further. Undo takes back one change at a time, and all that one stay in Insert mode typed, a
-  change of an operator `c` with it, and, as in vim, a change that changes nothing (`x` on an empty
-  line, `d 0` at its start, Delete at the end in Insert mode, `C` on an empty line) is one too, so
-  that `u` after it takes back nothing to see; but after `d d` deleted the only line, vim's
-  `ML_EMPTY`, deletes are no change at all. It keeps 1000, and undo and redo leave the cursor where
-  the change starts, as vim's do, on its line and in its column (after `d b` at the start of the
-  word deleted; after `d d`, `c c`, and `S` of one line on its first character that is not blank, if
-  the cursor was after it, as 'startofline' moves it first; from a line that is gone, on the first
-  character of the last one that is not blank). The registers (`edit::Registers`) live in the app,
-  which every field and the command line share: the unnamed one, which every yank and delete fills,
-  a yank of nothing and `C` on an empty line with nothing, as vim's, but not a delete after `d d`
-  deleted the only line, and `a` … `z`, of which `A` … `Z` append; `_` keeps nothing. `"` names one
-  in `global`, wherever keys are commands, so that the name never runs as a command; after an
-  operator that waits, as in vim, `"` gives it up and names none, and the key after it is a command
-  of its own (the app tells the keymap, `KeyState::set_operator`). None reads or writes the system
-  clipboard. Pasted text is one change, as vim puts it: at the cursor in Insert mode; in Normal mode
-  as if typed in Insert mode, then Esc, so before the cursor at the start of a line and after it
-  elsewhere, with the cursor on its last character; and in place of the selection in Visual mode,
-  which goes to the unnamed register. After Ctrl+o, Normal mode stays after it, and an operator that
-  waits is given up, and the paste with it, as in vim. What a delete appends to a register (`"Ad
-  w`), the unnamed register keeps alone, as vim's register 1, which it reads then. A field holds one
-  line, and a line put in it becomes text, its breaks spaces; the command line holds lines, and `d
-  d`, `y y`, and `p` take and put them whole. A secret field stays in Insert mode, keeps no undo,
-  and never copies its text into a register; what reads its text reads it into memory reserved up
-  front and wiped when it goes.
-- **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence, or
-  every key of a context, with what the help says they do (`Keymap::hints`, drawn by
-  `tui/which_key.rs` in columns across the bottom of the panels; where not all fit, the last cell
-  says how many do not, faint, after the chevron down of the location menu). A key that does
-  nothing alone and starts one sequence shows that sequence whole, as `] t`, with what it does,
-  and shares a row with the keys that do the same, as `Z Z, F10`. The event loop owns
-  the `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with
-  `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its
-  last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints
-  list every key of the panel. In Insert mode the hints leave out characters, which are text. While
-  hints show, the next key runs as it would have, or shows the keys that can follow it; `Esc`
-  closes them and `Backspace` takes back the last key, or with none closes them, and so do `Ctrl+[`
-  and `Ctrl+h`, which the kitty keyboard protocol tells apart from them. `Esc` never starts a
-  sequence, and never shows hints. The `KeyState` also keeps what the pending command has typed,
-  which the line above the F-key bar shows (`KeyState::showcmd`).
-- **The list of the key hints.** The action `key_hints`, Ctrl+k everywhere, in every mode, bound
-  once in the `global` context, opens `tui/key_hints.rs` at once
-  ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md)): the keymap resolves it with the count,
-  the register, and Ctrl+x typed before it, and leaves in the `KeyState` the hints of the keys typed
-  before it, whether the strip showed them or not (`KeyState::take_listed`); with nothing typed,
-  or from F9 → Help → Key hints…, they are every key of the mode and context (`Keymap::every_key`).
-  The app takes it before whatever is in front, which stays open under the list, the dialogs too
-  (`Context::KeyHints`, which falls back to `list`); in the list itself it does nothing. The list
-  has every sequence of the hints, whole, after the keys typed (`Keymap::sequences`), one row for
-  each command, under the name of its group or of the context that binds it (`keymap::Heading`), the
-  headings left out while fzf ranks the rows or while one heading has them all; it opens with its
-  filter taking the keys, Enter closes it and runs the command where the keys went before, with
-  that count and register, and Esc goes to the rows, where Esc again closes it.
-- **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop
-  captures the mouse while it is on and turns crossterm's events into `Pointer`s
-  (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a
-  step of the wheel, or a drag with the left button; moves are dropped without a redraw, and
-  so are drags while no thumb of a scroll bar is held. Rendering records where the
-  F-key slots, the panels, their rows, the tabs, the menu bar, the corner of the jobs, and each
-  window's rows and buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front
-  first, as keys go. A click on an F-key slot presses its key, and one on the corner of the jobs
-  opens their list; in a panel a click moves the cursor and gives
-  the panel the keys, a double click does what Enter does, a right click marks the row as in
-  mc and Far, and the wheel scrolls the panel under it, by `ui.wheel` lines or a page, or moves
-  its cursor as far where it cannot scroll; a click
-  on a tab shows it, and in the viewer the wheel scrolls. In the pull-down menu a click opens
-  a menu or runs a command; in a dialog a click chooses, puts the cursor in a field, switches
-  a check box, or presses a button. Other windows and menus take the wheel as Up and Down, a
-  click on a row or a button, and in menus a double click that opens and a click outside
-  that closes. Scroll bars end in arrows; as in Far, a click on one does what a step of the
-  wheel does there, a click on the track pages towards it, and the thumb, pressed, drags
-  (`noc_scroll::scrollbar::Bar`); `App::scroll_bars` lists those of what is in front, with
-  what each scrolls (`Scrolled`). Widgets
-  move their own cursor or focus and return the key a press stands for,
-  which they then take as if typed, so the mouse reuses what the keys do. A double click
-  counts only if its first click left the same thing in front, so one that closed a menu or
-  a dialog does not reach what is under it. While the mouse is captured, the terminal selects
-  text with a modifier held: Shift in most terminals, Option in iTerm2.
-- **Dialogs.** Modal and centered over the panels, those for one panel too, such as Go to
-  directory and those of `g +` and `g -`, with buttons: `{ OK }`, in bold, marks the default
-  one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart
-  from what is above them, in every dialog and window. A dialog has a message, combo boxes, text
-  fields, check boxes, items, and buttons, each optional but the buttons, with lines between
-  them where they need them; an item is a line that opens what it names, such as a file to view,
-  with what it says of it on the right, and the dialog stays while it is open;
-  ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue
-  knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and
-  `dialog_input`). A dialog whose first focus is a text field opens in Insert mode, with the cursor
-  after the field's text, and any other in Normal mode. In Normal mode `j`, `k`, `h`, `l`, the
-  arrows, and Tab move between the combo boxes, the fields, the check boxes, the items, and the
-  buttons, as many as a count says, past the fields too, `g g` and `G` (Home, End, Ctrl+b, Ctrl+f)
-  go to the first of them and the last, Space opens the list of a combo box, switches a check box,
-  opens an item, or presses a button, Enter opens the item or presses the button with the focus
-  (the default one from elsewhere), and Esc, `q`,
-  Ctrl+c, or F10 cancels. A field takes the keys of a
-  [text field](#ui) in its mode: in Insert mode every character is text, Space too, Tab, Up, and
-  Down still move the focus, Enter presses the default button, Esc goes to Normal mode, and Ctrl+c
-  or F10 cancels; in Normal mode, Esc gives up an operator that waits, then cancels. The focus comes
-  to a field in Insert mode with Tab, a click, or from a field in Insert mode, and else in Normal
-  mode. Long text stays where it is while the cursor shows, and else scrolls to put the cursor in
-  the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message
-  taller than the screen scrolls between the top and the rest of the dialog, which keeps its
-  buttons, with a scroll bar on the frame that the mouse and the wheel move. A dialog counts its
-  own moves, the rows of its picker too (`App::counts_moves`: the dialogs of the queue, the
-  search of a tree, the window of checksums): the app gives it the count with the key, as the
-  editor of a field reads it; elsewhere, in the lists, the app repeats a motion as many times,
-  and gives a list the count before Ctrl+f or Ctrl+b, which scrolls as many pages at once.
-- **Size of a window.** Dialogs, lists, and the windows of jobs, progress, and reading, windows
-  to choose from and close, are 76 cells wide, borders included (`window::WIDTH`), and as tall as
-  what they show. Windows to read and scroll through are large: 80% of the width and of the height
-  of the screen, whatever they show, but never narrower than 76 cells where the screen has room
-  (`window::large`): the help, the list of the key hints, the Configuration dialog, and the
-  search of a tree; a list is large by `Body.large`, a dialog by `Dialog::large`
-  ([ADR 0088](adr/0088-large-windows.md)).
-  `tui/window/` holds what they share: the sizes, the colors by tone (`Colors`, `Tone`), the
-  frame, the buttons, and the skeleton with its shine.
-  `window::draw_box` draws the frame of every window, as wide as the
-  window asks but leaving two cells free on either side of the screen, for the margin and the
-  shadow (`window::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is
-  narrower. What lays out text to that width asks `window::inner_width`. The key hints along the
-  bottom of the screen span it (`window::draw_frame`).
-- **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]`
-  after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the
-  colors of text fields (`dialog_input`), its brackets faint (`dialog_bracket`) and its arrow in
-  the color of titles (`dialog_symbol`), as the brackets and the check of a check box, `[✓]`
-  (`󰄬` with `ui.icons`); with the focus, either is in its colors alone. In errors and warnings
-  they take the tone's (`error_input`, `warning_input`, and their brackets and symbols;
-  [ADR 0048](adr/0048-errors-and-warnings-in-dialogs.md)), and with the focus the colors of the
-  tone's focus. `ComboBox` is in
-  `tui/combo_box.rs`, which the dialogs
-  (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration
-  dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where
-  there is more room, as the list of completions (`window::pop_up`), over the dialog and past its
-  frame, in the colors of fields too, apart from the dialog's: at most ten rows that scroll with a
-  scroll bar, the choice marked with the dot of a radio button, `•` (`󰧞` with `ui.icons`), in the
-  color of titles, the cursor on it. The
-  row under the cursor, and a box with the focus, are in the colors of the focus, or in those of
-  fields reversed where fields have the focus's (mc-classic, the terminal theme); in the
-  Configuration dialog the name of the setting shows the cursor, and the box stays as a field. The
-  list has the keys until it closes (context
-  `combo_box`, the line of the mode says `Combo box`): `j`, `k`, the page keys, `g g`, and `G`
-  move its cursor, a count too, and the wheel as Up and Down; Enter, Space, a click, or Alt and the
-  letter of a row takes it and closes the list; Esc, `q`, Ctrl+c, F10, or a click outside closes it
-  with the choice it had, and the second click of a double click that closed it ends there. Moving
-  does not change the choice: Enter does. On a closed box, Enter presses the default button, as on
-  a check box, and `j` and `k` move the focus. The box has no text of its own yet; one that takes
-  typed text, as a combo box of Far or Qt can, may come.
-- **Letters of dialogs** ([ADR 0033](adr/0033-letters-in-dialogs.md)). As in Far and mc, every
-  element of a dialog but Cancel has a letter, which an `&` marks in its Fluent text (`Label`, in
-  `tui/label.rs`, as for the menus of F9) and which shows in the theme's `dialog_hotkey`, or
-  `error_hotkey` in red dialogs, as mc's `dhotnormal` and `errdhotnormal`, and on what has the
-  focus in `dialog_hotkey_focused` or `error_hotkey_focused`, as mc's `dhotfocus` and
-  `errdhotfocus`: the color of titles, not bold, and underlined where that color would not show
-  (the cursor, red dialogs, a title's own color). Alt and it act on the
-  element from anywhere in the dialog, in every mode, while typing in a field too: a text field
-  gets the focus, in Insert mode, as with Tab; a check box switches and the list of a combo box
-  opens, each getting the focus; a button is pressed. In the open list, Alt and the letter of a
-  choice take it, as the algorithms have theirs. The one field of a form without a label (Copy,
-  Move, Create a new directory, Go to directory, Save workspace, Rename workspace, Save
-  checksums) takes its letter from the prompt over it, as `&Copy "x" to:`. What ssh asks is ssh's
-  text, with no letter, but the buttons of its dialogs have theirs. Names that the user gave, of
-  files, paths, workspaces, and hosts, have their `&` doubled before they go into a label, so they
-  never make a letter. The window of a job, the jobs, the checksums, and the Configuration dialog
-  have letters too. Letters are unique within a dialog, which a test checks.
-- **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with
-  `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only
-  `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`).
-  Arguments are inserted without Unicode isolation marks, which terminals would show. Numbers
-  are passed to messages as numbers, so that plural forms see them, and written by
-  `noc_locale::fluent`, the formatter of every bundle, in the formats of the region. A prompt
-  with what is typed in it (`Filter: …`) is split where its message puts the typed text
-  (`search::Prompt`), so a translation may put it anywhere.
-- **Formats of the region** ([ADR 0035](adr/0035-formats-of-the-region.md)). `noc-locale` writes
-  numbers, dates, and times, and compares names, as `ui.formats` says: `auto` takes each part
-  from `LC_ALL`, its own `LC_TIME`, `LC_NUMERIC`, or `LC_COLLATE`, then, on macOS, System
-  Settings through Foundation's formatters, which apply the user's own date format, separators,
-  and 24-hour time, then `LANG`; `iso` is neutral (`2025-10-17 14:05`, `1234.5`); a language tag
-  names a region's formats in CLDR, through ICU4X. A time shows its date, with the year, and its
-  time of day, in digits; every number is grouped. The formats in use are
-  global (`noc_locale::current`); a change of the setting makes new ones in a task
-  (`Effect::Formats`) and sorts the panels again. Help → About shows where they come from. Each
-  `Formats` keeps the texts it wrote, 4,096 at most, so rows drawn again ask the system nothing
-  ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
-- **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan
-  cursor that replaces the row's colors, a dark gray one under them in the inactive panel,
-  yellow headers; directories white, executables green, broken links red, devices magenta; gray
-  dialogs with mc's shadow; a black-and-cyan F-key bar; red error dialogs, and warnings black
-  on yellow); `terminal`, the
-  terminal's own colors with reverse video; `noon-dark` and `noon-light`, the colors of the
-  logo (`assets/icons/logo.svg`); and `catppuccin-mocha` and `catppuccin-latte`, the dark and
-  light flavors of [Catppuccin](https://catppuccin.com)
-  ([ADR 0010](adr/0010-truecolor-themes.md)).
-  `ui.theme` picks one; an unknown name is an error. `mc-classic` uses the 16 ANSI colors, so
-  the terminal's palette decides its shades. The Catppuccin themes are built by one function
-  from a palette of named colors, so both flavors give each color the same role: panels on
-  `base`, dialogs, menus, and the F-key labels on `surface0`, text fields on `surface1`, the
-  idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the
-  active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog
-  titles, and the checks of check boxes and arrows of combo boxes, their brackets `overlay1`,
-  warnings on `peach`, darkened in Latte; directories `blue`, executables `green`,
-  symlinks `teal`, broken links `red`,
-  devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state; the units of sizes G in
-  `peach`, the color Catppuccin gives numbers, and T `red`. The Noon themes are
-  built the same way from a palette of roles taken from the logo: the cursor, the active
-  panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar on
-  its amber frame (`#996400`), with cream text; error dialogs and the cursor where the user is
-  root are on a deep red (`#A63A32`) with cream text, as the gold is deep, rather than on the
-  bright red of text, which glares as a background; warnings are on a dark orange, nearly brown
-  (`#8F4F0C`), with cream text, in 256 colors on `#D75F00`, as the nearest is the menu bar's,
-  and in `noon-light` on a light orange (`#F9955F`) with navy text
-  ([ADR 0048](adr/0048-errors-and-warnings-in-dialogs.md)); the F-key bar is dark, its
-  numbers bold in the color of the headers; `noon-dark` has the logo's navy panels and dialogs a
-  shade lighter, cream directories, and bright gold headers (`#FFC24A`), which read better on navy;
-  `noon-light` has cream panels (`#FFFBEA`) with navy text, pale blue-gray dialogs, the gold
-  and the amber twice as light (`#FFC24A`, `#FFB833`) and a pale red (`#F2A39A`) with navy
-  text, and a dark amber for headers, which the bright gold is too pale for on cream. These
-  themes are 24-bit RGB where `COLORTERM` is `truecolor` or `24bit`; elsewhere each is the
-  nearest of the 6×6×6 cube and the gray ramp of the 256-color palette, never the 16 colors
-  below them, which the terminal's palette redefines. User themes in `themes/` are planned for M4.
-  Panels and dialogs are framed with double lines unless `ui.borders` is `single`; as in mc,
-  a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too
-  small for it.
-- **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for
-  directories, `..`, links, broken links, FIFOs, sockets, devices, and executables, and in the
-  location menu for the home directory, volumes, network volumes, and hosts (which tell their
-  state); `devicons` for files by name or extension. devicons asks the disk whether a name it
-  does not know is a directory, so names go to it inside a path with a NUL byte, which names
-  nothing: drawing stays free of I/O, and remote names are never looked up locally. Without
-  icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*`
-  executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the
-  home directory is `~`.
-- **Animated windows.** With `animations.windows` (the default; [ADR
-  0034](adr/0034-animated-windows.md)), a window's frame grows from its middle as it opens and
-  shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors, with its
-  shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering: `App::render`
-  draws each window through `Stage::show` under a `zoom::Window` that tells it apart (a dialog by
-  its id, a job by its own), which marks every cell before the window draws to tell the cells it
-  drew, even as they were, and finds the frame among them (its first top left corner, and the blank
-  cells drawn around it); a window new since the last frame
-  grows, its cells under it put back from before, and one of the last frame that is gone shrinks
-  over everything at the end, unless another opened in its place. Keys reach the window at once;
-  only the screen waits. The event loop wakes for the next size at `App::frame_due`. The first
-  frame, a new size of the screen, the viewer coming or going, and the terminal coming back from
-  another program show their windows at once. Completion lists and the key hints of which-key appear
-  at once, as they come while typing. In debug builds, `--slow-windows SECONDS` has a frame take
-  that long to grow or shrink, its six sizes shown for equal parts of it (`Stage::slow`), so each
-  can be watched; `--show-sizes` has each window write the size of its frame as `WIDTHxHEIGHT` at
-  the right of its bottom line, once it shows whole, animations on or off (`Stage::show_sizes`).
-  Only windows drawn through `Stage::show` have it; the panels, the bars, and which-key do not.
-- **Spinners.** Whatever waits for work in the background shows one spinner, next to what tells what
-  it waits for ([ADR 0037](adr/0037-spinners.md)). `tui/spinner.rs` keeps its clock. Braille dots
-  turn, in the theme's `busy` color, where one cell is all there is: in place of the icon in front
-  of the path in a panel's title (a folder, or a host in the color of its status), which shows the
-  directory it reads at once (and while a directory of F7 or a rename it started is done, with the
-  reading after it in one wait: `Panel::begin_work`), so the path never moves; the dots take the
-  color of the host's status while it connects. A panel that reads another location, or its first,
-  is veiled (`Panel::veiled`): its rows take no keys, clicks, or wheel, and only the keys that need
-  no entries, sorting, and the command line work (`App::holds_back`); from when the dots show, a
-  skeleton of three rows stands for its rows, in the panel's colors, a bar for its status line, and
-  the frame shows no totals; a failure shows the rows again with the cursor and marks, and reading
-  the same directory again keeps them in sight
-  ([ADR 0068](adr/0068-a-panel-hides-the-rows-it-leaves.md)); in
-  place of the file's icon in front of the path in the viewer's title, while its `Reading` window
-  shows a gauge; on the icon of a host connecting in the location menu;
-  and in front of the titles of the location menu, the zoxide window, and the search of a whole
-  tree, drawn over the line of the frame by `window::draw_title_dots`, so the title stays in place;
-  until their first rows come, `window::draw_skeleton` draws rows of faint bars, as many as the
-  window had the last time it opened (`App` keeps them in memory, one the first time), which a shine
-  crosses at once from when the dots show, one cell every 40 ms, in their place; the status line of
-  the search has a bar of its own, crossed with them. Until a job knows how far it is, its gauge is
-  a faint bar of `▒` with no percentage, over which the same shine runs to and fro as fast, turning
-  at its ends (`window::unknown_gauge` over `window::shine_bar`, which the skeleton of rows draws
-  too; `Shine::bounce`); a dialog's gauge (`Text::Gauge`) gets the shine from its owner
-  (`Dialog::render_shining`). Each
-  waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows until
-  150 ms later, so quick work does not flicker. Frames come from the time since the app's first
-  frame, so spinners move together and tests draw given instants; `App::spin_due` tells the event
-  loop when the next frame is due. With `animations.spinners` off, a still mark stands in place of
-  the spinner. R in the location menu keeps its rows while the dots turn, and shows the reason it
-  failed right of the filter. In debug builds, `--slow-spinners SECONDS` holds back every result of
-  background work by that long, in order, and `--slow-connections SECONDS` holds back only
-  connections made or ended, in a queue of their own, so the dots of a host connecting can be
-  watched in the location menu; `--slow-volumes SECONDS` lists every volume in the location menu
-  as if none answered in time and sends each answer that long after, so the skeletons of their
-  sizes and `not responding` can be watched. Each frame goes out as synchronized output
-  (`draw_whole` in `tui/mod.rs`), so the cursor of a field does not show on its way through the
-  cells a shine changes. A spinner's next frame is due 40 ms after a frame that drew the shine of
-  its `Wait` moving over a bar, which the shine tells it, else 80 ms later, the next frame of the
-  dots, or sooner when a resting shine sweeps again (`Wait::moves_after`). A frame that only a
-  spinner or a window that grows asked for is for time alone (`App::frame_for_time`): a side whose
-  panel does not move with time puts back the cells it drew on the last frame (`render::Frames`),
-  and a window that shows whole stays where it was found, without `Stage::show` looking for it again
-  ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
-- **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and
-  `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons
-  and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text
-  cut short, the arrow of combo boxes, the dot of a choice among others, in the lists of combo
-  boxes and the pull-down menu, and the check of a setting that is on, in check boxes and the
-  pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by
-  `ui.borders`, with the tees that join lines to frames; and the characters that are the same either
-  way: the single line, the line between columns, the `·` after the mode on its line, the spinner,
-  the arrows of the sort order, the bar beside a marked row, the checks of checksums, the progress
-  bar, the mark of secrets, and the icons of the Configuration dialog's categories.
-  `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and
-  `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the
-  viewer's `Styles`). `scripts/glyphs.sh`, part of `just lint`, fails on a special character
-  written in Rust code that draws, outside `glyphs.rs` and the tests.
+- **Keys.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md)); see the keymap below. The panels take keys in Normal mode, as vim's buffers do; text fields, quick search, the command line, and the filters of the lists in Insert mode. The line above the F-key bar shows on the left the mode, in bold capitals as lualine shows it, `NORMAL`, `INSERT`, `VISUAL`, or `VISUAL LINE`, and after Ctrl+o `(insert)`; then, after `·`, the kind of window that has the keys, named by its keymap context so that it says which keys work ([ADR 0032](adr/0032-line-of-the-mode.md)): `Rename`, `List` for the location menu, the tab menu, the zoxide window, the workspaces, the command history, and the list of the key hints, `Menu` for F9, `Dialog` for every dialog, the Configuration dialog, the search of a tree, the jobs, and the checksums, `Help`, and `Viewer`; `window_kind` maps every context, and none to the contexts that are only fallbacks, such as `search_input`. The panels show the mode alone. Where the line is short the kind goes first, then the mode is cut. On the right it shows the count, register, operator, or keys of a command typed so far, as typed, Ctrl+x as `^X`, or how much Visual mode selects, as vim's `showcmd` does; while the command of Ctrl+x has the keys, the mode starts with `(^X)`, as vim's `(insert)` after Ctrl+o. Unlike vim's `showmode`, it shows every mode everywhere, Normal mode too. A message, such as that a search went round, takes the place of the mode until the next key, as vim's messages do on its command line. Left of the cells of what is typed it shows who is where in the active panel, `alice@mac` or `deploy@web`, as long as it fits after the mode or the message ([ADR 0031](adr/0031-who-and-where-on-screen.md)). The command line and [quick search](#quick-search) take the line while they have the keys, as vim's command line and search do ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md)); a window over them, such as the command history of `q :`, takes the line back. The cursor is a bar in Insert mode and a block in the others (DECSCUSR), and the terminal's own shape comes back whenever another program gets the terminal, and on quitting.
+- **Panels.** Each panel lists a directory with `..` first (but in a `/`), then directories, then files, by name as the language of the formats orders names, with the numbers in them by value (`ui.natural_sort`; off, by their characters ignoring case). A layout (`panel::layout::Layout`, [ADR 0096](adr/0096-layouts-of-a-panel.md)) lists the details of the columns and of the status line, before the name and after it; the name takes what they leave, and narrow panels drop the details at the end of the list first. The one built-in layout has the columns name, size, and modification time (local time: the date, with its year, and the time, in the formats of the region, as `12.10.26 05:05`), so narrow panels drop the time, then the size. Sizes have a unit and a decimal below 100 (`512B`, `78.5K`, `503G`), the unit from M on bold, from G on in a color too, as the theme's `size_units` say. The status line shows, after the name, every byte of the entry under the cursor, a directory's too, its mode (`-rw-r--r--`), and its owner by name where known, else in digits not grouped (`alice:20`), those it has, while the name keeps 8 cells, an owner too long losing the ends of its names evenly first, down to 4 cells each; a line `│` in the color of the frame before each; a symlink's own. It cuts the name at its end, `»` before the details (ADR 0094). A column of owners is always 11 cells. The mode and the owner set apart what is ours ([ADR 0097](adr/0097-the-mode-and-the-owner-set-apart-what-is-ours.md)): the set of permissions that applies, as the system checks them, and the uid and gid that are ours, as they are, the rest dim; no set for uid 0, a symlink's mode dim whole. Local panels go by the process (`Machine.identity`: `geteuid`, `getegid`, `getgroups`); a host's task asks `id -u` and `id -G` through `Session::spawn_in` once it connects, over the master only, and the app keeps the answer with the connection (`Done::Identified`, `HostState.identity`). Names of owners ([ADR 0098](adr/0098-owners-by-name-where-known.md)): a local listing comes with those of its uids and gids (`Listed.owners`, `Names::local`: `nix`'s `User` and `Group` in `spawn_blocking`, no longer than 500 ms); a host's are those of `id -un` and `id -Gn`, of its user and groups alone (`Identity.names`). The size column is as wide as the longest size and the words `UP--DIR` and `DIR` (7 cells in English); the time column as the longest time of the formats. Each panel has its own sort order: name, extension, modification time, or size (`o n`, `o e`, `o m`, `o s`); time and size start newest and largest first, the same key again reverses, ties go by name, and an arrow in the header marks the order. Directories stay first. Names that start with a dot are shown unless `ui.show_hidden` is off; `o h` switches them in both panels. Sorting and hiding keep the cursor on its entry.
+- **Names that do not fit** ([ADR 0025](adr/0025-marks-of-text-cut-short.md)) lose their middle to `»` (a Nerd Font chevron with icons, `Theme.glyphs.marks`), in the theme's bold accent everywhere (`truncated`; `truncated_cursor` under the cursor, `truncated_dialog` in dialogs and lists, `truncated_menu` in the menus of F9, `truncated_bar` on the bars, `truncated_error` in error dialogs), and paths their start, as titles do (`«/deploy/site`); `noc_text::fit_cut` says where the mark goes, and `cells::fit`, `cells::fitted`, and `cells::spans` draw it as spans. `K` makes the status lines of both panels two rows high, the name under the cursor going on in the second, plain, after `»` as the viewer's wrapped rows, without the details, until `K` or Esc (`App.whole`, `View.whole`, not saved; [ADR 0094](adr/0094-k-shows-the-whole-name-on-the-status-line.md)). The z keys scroll the names of all rows as vim scrolls lines that do not wrap (`Panel.shift`, back to 0 in another directory): `z h`/`z l` a column, `z H`/`z L` half the column, `z s` the start, `z e` the end of the name under the cursor into view; `z l` and `z L` stop with the end of the longest name on screen at the right edge (`Panel::shift_limit`), and each render brings the scroll back as far as the names on screen need. Only the names scroll: the icon or marker stays in front, and a scrolled name shows `«` over its first cell after it and `»` where it is cut. Each name scrolls no further than its end comes to the right edge, so that a name that fits does not move ([ADR 0095](adr/0095-a-name-scrolls-no-further-than-its-end.md)). The status line scrolls as many cells, plain, `«` over its first, but no further than its end comes to the right edge of its last row, of both while `K` shows them (ADR 0094), and that far once the name under the cursor shows its end in its row (ADR 0096). Ctrl+g says where the panel is on the line of the mode until the next key, as vim's, plain, where the messages that warn take the theme's color for them (`Message`): its path in quotes, as the title shows it, or whole, without `~`, after a count; then the row under the cursor of the rows, `..` counting as in `5G`, and how far down, as the viewer's title writes them (`"~/src" 5/42 11%`).
+- **Scrolling.** The rows of a panel and of the lists scroll as vim 9.1 scrolls a window (`tui/scroll.rs`, a port of vim's `move.c` for lines one row high, checked against vim on random keys): five rows stay above and below the cursor, as vim's `defaults.vim` sets 'scrolloff' (`scroll::SCROLLOFF`, no setting), fewer at the ends and in a low window; a jump far off the screen puts the cursor in the middle. Ctrl+d and Ctrl+u scroll half a window and move the cursor as far, Ctrl+f and Ctrl+b scroll a window less two rows, with a count that many windows at once, and put the cursor at its top or bottom. Unlike vim's, Ctrl+f stops with the last row at the bottom, and once it shows, puts the cursor on it, as mc's PgDn does. The wheel scrolls as vim's Ctrl+e and Ctrl+y, but never past the last row either; where it cannot scroll, as when the rows all fit, it moves the cursor as far, as in mc and Far. The view is worked out before each frame, as vim does it before it redraws; when the window grows or the list shrinks, the rows come down so that none show empty after the last while rows hide above. When the rows do not fit, a scroll bar runs down the right of the frame along them, as in Far ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md)).
+- **The cursor of the inactive panel.** Unlike mc, the inactive panel shows where its cursor is (the checksum comparison reads the file there): its row gets a background of its own under the row's colors, which stay (a mark too). The theme sets it as `cursor_inactive`: the dark gray of the 16 colors in `mc-classic`, dimmed reverse video in `terminal`, the dialogs' `surface0` in the Catppuccin themes, and in the Noon themes the text fields' blue (`#2D4672`) in `noon-dark`, as the dialogs' one is a single step of gray above the panels in 256 colors, and the dialogs' blue-gray (`#E8ECF4`) in `noon-light`.
+- **The cursor where the user is root.** In a local panel while Noon Commander runs as root, and in a panel on a host whose ssh user is root, the cursor is on red: `root_cursor` takes the place of `cursor` in the theme that panel is drawn with ([ADR 0031](adr/0031-who-and-where-on-screen.md)).
+- **Free space.** As in mc, the bottom of a panel's frame shows the free space and size of the file system that holds the directory, and the share that is free: `123G / 500G (24%)`. It is read with every listing, so it changes when a job reads the panel again or on `R`; a panel on another directory of the same file system keeps what it read last. Locally it waits at most as long as a volume in the location menu, so a dead network mount leaves it out; over SFTP it needs the `statvfs@openssh.com` extension, which OpenSSH's server has. A file system that reports no size, or a panel too narrow for it, shows none.
+- **Total of the directory.** At the left of the same line, the size of the files shown and how many files and directories are shown: `12M in 45 files, 3 dirs`, the size as the Size column writes it. Hidden files count while the panel shows them, `..` does not, and a link to a directory is a directory. A panel on a host that is not connected shows none. Where the panel is too narrow for both, the free space is left out first.
+- **Targets of symlinks.** With a symlink under the cursor, the status line shows its target as stored in the link, as mc does: `config -> /etc/app/config.toml`, read with the listing; with `ui.icons` a Nerd Font arrow (nf-md-arrow_right) takes the place of `->`. The name stays plain, as its row above already shows its kind; the arrow is toned down as an icon; the target has the color of its kind (`directory`, `file`, `device`, `special`, `stale_link` where nothing is there; never `executable`, as the target's permissions are not read). The target tells its kind too: with icons by the icon of a directory, a file (devicons' by its last name), or a broken link in front of it, in its color toned down; without them by mc's marker after it where `ls -F` puts one, `/opt/`, and `!` after a broken one. Where the name and the target do not both fit, they share the room evenly, what one does not need going to the other: the name loses its end, the target its start, as a path in the title does, its icon and marker kept; with less than 4 cells for either the name shows alone.
+- **Marks.** Space or Shift+Down marks the entry under the cursor, or unmarks it, and moves down, as mc's Insert does (Shift+Up moves up), and a count marks that many, the row at the end of the listing once; `g *` inverts the marks on files, leaving directories as they are; `..` cannot be marked. A marked row keeps the colors of its name, as the inactive cursor does: a bar `▌` in the panel's frame beside it shows the mark, in the theme's `mark` (yellow in mc-classic), and the Noon and Catppuccin themes put `marked` under the row, the color of the mark faint over the panel's, apart from the inactive cursor in 256 colors too; mc-classic, whose 16 colors have none between blue and yellow, and `terminal` have the bar alone. Under the cursor a marked row looks as any other, beside its bar. The line below the listing shows the size of the marked files and how many entries are marked, such as `12,345 B in 3 files`. Marks are names, so they survive sorting and `R` (for names still there); another directory starts unmarked, and entries that get hidden lose their marks, so that no operation acts on what is not shown. `g +` marks and `g -` unmarks the names that match a shell pattern, in a dialog with mc's option Files only (off). Patterns are read as mc reads them: `*`, `?`, `[a-z]` (`[!…]` or `[^…]` outside the set), `{a,b}`, and `\` for the next character as it is; the whole name must match, and what does not parse is literal. The keys after Ctrl+s take the pattern as text or as a regular expression too, and switch its case, smart at first, in place of mc's Case sensitive ([search modes](#search-modes)). The dialog opens with the last pattern (`*` at first), its way and case, and Files only.
+- **Visual mode.** `v` or `V` selects rows from the one under the cursor to wherever the cursor goes, as vim's Visual mode selects lines, and with a count as many rows (`3V`), or, after a command of Visual mode, as many as it took times the count, as vim's `resel_VIsual`; `o` goes to the other end, `g v` selects the rows selected last again, and Esc ends it, as does the key of `v` and `V` that started it, while the other switches its kind, as vim's; after `V` the line of the mode says `VISUAL LINE`. Space marks the rows selected; `y`, `x`, `d`, `D`, `X`, F5, F6, F8, `f #`, and `g x` make them the marked entries and act on them, as on any marks, and put the cursor on the first row, as vim's operators do. The line of the mode shows how many entries it selects, without `..`. The other F-keys and the commands of the pull-down menu end Visual mode and do what they do in Normal mode. Visual mode is the tab's, as its cursor is: Ctrl+w and Tab to the other panel, a click there, and Alt+1 … Alt+9 and Alt+0 to another tab leave it in the panel or the tab left, which draws the rows it selects and has it again with the keys; Ctrl+x runs its command there in Visual mode, and gives the keys back once that panel is in Normal mode or still in the Visual mode it kept ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)). The selection is held by the entries on its ends, so that a listing of the same directory or another sort order keeps it on them.
+- **Jumps.** Each tab keeps a jump list, as vim does with `jumpoptions=stack`: going to another directory (Enter, `h`, Go to directory, a menu, zoxide, a workspace's tab), `G`, `g g`, `n`, `N`, and a quick search that found a match put where the panel was on it, up to 100 places, even when they stay on the row, as vim's; a jump after Ctrl+o keeps the place Ctrl+o went to, and drops those after it. `n` with a count puts it there once, and one that finds nothing, never; nor does a directory that cannot be read. Ctrl+o goes back, and Ctrl+i forward again (Tab too without the kitty keyboard protocol), with a count too, without changing the places, as vim's; after a jump that stayed on the row, the first Ctrl+o stays there too. A count past the end of the list goes nowhere and keeps it as it is, as vim's; a place in this directory moves the cursor at once, another one reads its directory.
+- **F7 makes a directory**, as in mc: the dialog opens with the name under the cursor, in Insert mode with the cursor after it; Ctrl+u clears it. The name may be a relative path, an absolute one, or start with `~` for the home directory (the remote one on a host; `\~` for a name that starts with `~`); missing parents are not made. The directory is made in the background, locally or by the host's task, and panels on the directory it is in read it again, the one that asked with the cursor on it. An error shows in a red dialog, as mc shows errors.
+- **F5 copies** the marked entries, or the one under the cursor, as mc does: a dialog asks where to, opening with the other panel's location (`host:/path` for a host), and whether to preserve attributes (times and permission bits; on, and remembered). F5, F6, and Shift+F5 share the dialog (`tui/transfer.rs`, [ADR 0043](adr/0043-one-dialog-for-copy-and-move.md)): the same field and check box, only the words differ. A typed target is `host:path` for a host the app knows, or a path from the active panel's directory, as F7 takes it. A target that is the source directory, a source, or in one of the sources, is an error; so is, from the job, a source under its name spelled otherwise, where the file system ignores case (see File operations). The job's window shows entries and bytes, with the gauge on the bytes. A taken name asks as a warning (ADR 0060): the path of the file there; New and Existing, each with its size and time, on a line that views the file, over every window but the dialogs, the question back in front once the viewer closes; a combo box for the rest of the taken names, but at the last entry; and Overwrite, Skip (the default), Rename…, and Abort, without Skip for the only entry, where Abort is the default. Rename… asks for a name or a path from the file's directory, offering the free name. A rename and a save ask the same question, for one file (`App::taken_dialog`). Copies are written under a temporary name and renamed when complete, unless `transfer.atomic_upload` is off. When the job ends, panels on the target, its parent, and the source directory read them again.
+- **Shift+F5 copies the entry under the cursor** (`y p`, as vim's `y y p` puts a copy of a line under it), not the marked ones, which stay marked, as mc's and Far's Shift+F5: the dialog of F5 opens with its name, in Insert mode with the cursor where Shift+F6 puts it, before a file's last extension, so that the copy goes beside it under the name typed (`report (1).pdf`). A path or `host:path` there copies elsewhere, as with F5; the name unchanged is an error, the source itself; a name that is not UTF-8 cannot be edited, which an error says: F5 copies it. In Visual mode and in quick search, Shift+F5 ends them first, as the other F-keys do.
+- **F3 views** the file under the cursor, as mc does (on a directory it opens it): the viewer (`noc-viewer`) takes the screen, with the path and the position (first line, lines, and how far the last line on screen is, or `End` once the end shows) on top, a scroll bar on the right when the text does not fit, and its own F-key bar. It reads the file in parts of `viewer.part_mib`, 1 MiB by default, so that the first screen waits for little, or, through the host's shared session, of `viewer.host_part_kib`, 256 KiB, as every part read there is sent; in the background (closing the viewer stops that), asking for the size of the file and for the bytes of the part, no more, at once (`Vfs::open_file_range`), each ending after its last line feed, or going on to the first for up to 16 MiB where a line is longer than the part (`Want::most`), the next when a move down shows the end of what it holds, and keeps a window of `viewer.window_mib`, reading a part it dropped again when a move up reaches it ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md)). A local file of at most 16 MiB is read whole behind the screen once its first part shows, with no window (`Want::ahead`), so that its lines are all counted ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md)). Until the end is known the position is `line/? percent%` by bytes, the scroll bar goes by bytes, and `more below` ends the text. `G`, End, and a thumb dragged far past what was read jump: the viewer reads the part there alone, the last one of the file for its end, from the start of a line (`Want::after_feed`), apart from the parts read in order (`Parts`); a local file is read on in order instead where that is no more than 16 MiB. The lines of the parts apart have no numbers, so the position is `at/size percent%` in bytes, short, until scrolling up has read what lies between and the parts meet; nothing counts lines behind the screen. A line to go to, as a search result, is reached in order, through the parts before it ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md)). A read longer than 150 ms shows the `Reading` dialog (`tui/reading.rs`, a `Dialog` that `Reading` wraps): where the part starts, a gauge (`Text::Gauge`), and Cancel alone, which Enter and Esc press too, and which stops the read and keeps what was read ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). A file that grew between parts, as a log that is being written, goes on past what was its end; one that shrank, or whose time changed with the same size, is read again from the start. Text is UTF-8; invalid bytes and what the terminal would act on show as `·` in the theme's faint `hidden`, as mc's `.` (`Theme.glyphs.hidden`); tabs go to stops of 8, and `\r\n` ends lines. Long lines wrap, each row after the first starting with `»`, as vim's 'showbreak' (F2 cuts them, `«` and `»` mark where they go on past the screen, as vim's 'listchars', and Left and Right, `h`, `l`, and the z keys as vim's scroll then, no further than the end of the longest line on screen at the right edge, and back as far as the lines on screen need after paging or widening); the position is a line and a row within it, so that only the lines in view are wrapped, whatever the size of the file. Keys follow vim and less: `j`/`k`, Ctrl+e/Ctrl+y, and the arrows a line, Ctrl+f/Ctrl+b and PgDn/PgUp a page but for the two rows that vim keeps, Space/`f` and `b` a whole page, as less, Ctrl+d/Ctrl+u and `d`/`u` half a page, rounded down as vim's 'scroll'; unlike vim's, every key down stops with the end at the bottom, where a dimmed line across the text, `──── EOF ────`, follows the last line (`noc-scroll` has the steps of both and the scroll bar, [ADR 0023](adr/0023-paging-stops-at-the-end.md)); `g g`/`G` and Home/End the ends, and F3, F10, `q`, or Esc to close; F1 or `g ?` shows the help over it.
+- **The viewer edits, opens, and goes on** ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md)), in every viewer of a file, but not of text that the app holds (the checksums, a file a save would write): `e` and F4 edit it as F4 does in the panels, at the line on top where the lines have numbers, once its start is read (F4 shows on its F-key bar only then); the viewer stays, and reads the file again (`Viewer::reload`) once the editor changed it, or, on a host, once the copy went back (`Then::Discard`). `g x` opens it externally, as in the panels; `R` reads it again, up to the line on top, as less's `R`. `] f` and `[ f` view the next file and the one before, with a count that many, no further than the last or the first, its lines wrapped or cut as they were (`Viewing.neighbours`): those of the panel it was viewed from, as the panel shows them, whose cursor goes along; those the search of a tree found, its cursor going along too, each from its first line that matched; or those of the directory of the log, listed then (`Effect::ListSiblings`) and sorted as the active panel sorts; the `ssh_config` of a host and the file of a question about a taken name have none. `F` follows the end as it grows, as `tail -f` and less's `F`: once a second (`Effect::Poll`) the app asks the size and the time of the file (`Viewer::check`); one that only grew is read on from its end, or again where its last line had no line feed yet (`Part::open`), as what was added goes on with that line; one that shrank or changed otherwise is read again, to its end. `Follow` takes the place of `End` in the position; a move up or `F` again stops it, and so does a file that can no longer be looked at, which the line of the mode says.
+- **Ctrl+\\ views the log** of this run (Ctrl+4 without the kitty keyboard protocol, which sends the same byte), in every mode, and Help → View the log: the viewer on the file of the log, from its end (`App::view_log`). As the viewer of a question about a taken name, it stands in front of every window, the menus, the help, Configuration, the pull-down menu, and find among them (`App::viewer_over`), and in front of the dialogs open when it opened too, whose ids it keeps (`Viewing.log`): `App::dialog_in_front` leaves them out of the keys, the mouse, and the screen while it shows, and they stay as they were, so everything is there again once it closes. A dialog that comes in front of them later stands in front of it: one over them, or a prompt of ssh while no other dialog waits; queued behind them, it waits as it would anyway. Again, it reads the log anew, in place of the viewer on screen. Without a log it says why, as the About page does.
+- **F4 edits** the file under the cursor in `$VISUAL`, else `$EDITOR`, else `vi`, split at spaces (`code -w`), without a shell. A local file is edited where it is. A remote one is copied, with its times and permission bits, to `edit-PID-N-host/name` in the runtime directory (`editing::copy_path`): a directory of its own, closed to group and others, which the copy job makes first, and the file's own name, by which the editor knows its kind, as `Makefile` or `.bashrc`; a `/` in the host becomes `_`, and the host is cut to fit a name of 255 bytes. When the editor exits and the copy's size or time changed, it goes back over the original by the copy job, with `overwrite` and as `transfer.atomic_upload` says, keeping the original's permissions. Both copies show the job's window. The local copy is removed once it went back, or at once if it did not change, and its directory with it unless something else is left there, such as a backup the editor wrote; one that did not go back (a failure, Abort, or the host gone) stays, and a red dialog says where. Panels on the file's directory read it again. First, F4 reads the size of the file and its first 8000 bytes, through the host's session for a remote one, before anything is copied (`Effect::Sniff`): a file with a NUL among them looks binary, as git tells one (`noc_text::is_binary`), and one larger than `edit.large_mib`, 64 MiB by default, as the editor of mc's `filesize_threshold`, is large; for either, a question in the colors of warnings, Cancel the default, comes before the editor, saying that a host's file is copied first (`Purpose::EditAnyway`). One that cannot be read goes to the editor all the same, which says why. The viewer knows both from the part it read first, and asks at once.
+- **`g x` opens externally** the marked entries, or the one under the cursor, as vim's `gx` opens what is under its cursor: each with the program the desktop has for it, as a double click would, through `open` on macOS and `xdg-open` on Linux, one after another (`noc_tools::opener`). A directory opens in the desktop's file manager. The opener runs without a shell, input, or output, in a process group of its own, and is never killed: a program it starts runs on after Noon Commander quits. One still running after five seconds counts as having opened its file. The first failure stops the rest and shows in a red dialog, with the exit code, since the opener's output goes nowhere. Remote entries do not open yet: on a host, the line of the mode says that only local files open externally, and the command is dimmed in the File menu.
+- **F6 moves or renames** the marked entries, or the one under the cursor, with the dialog of F5 (`Move "x" to:`). Preserve attributes, shared with copies, applies where a move copies; a rename keeps them anyway. A new name in the field renames in place, as in mc, its own name in another case too, where the file system ignores case. Locally, and within one host, the job renames (`move_within`); between the local file system and a host, or two hosts, it copies and removes each source once all of it is copied. Its window says Moving; when it ends, the panels on both sides read their directories again.
+- **Shift+F6 renames in place** the entry under the cursor, not the marked ones: its row becomes a text field from the name on, over the columns after it, in Insert mode with the cursor before a file's last extension (after the whole name of a directory, a dotfile, or a name that ends with a dot), so that Ctrl+u takes away the rest of the name. Enter renames in every mode; Esc goes to Normal mode, where vim's motions and operators edit the name, and Esc there keeps the name; Ctrl+c keeps it in every mode; other panel keys do nothing (`Context::Rename`). The status line stays as it was, with the old name and its size. An empty or unchanged name renames nothing; one with `/` or NUL, or `.` or `..`, is an error and the field stays. A name that is not UTF-8 cannot be edited, which an error says: F6 renames it. `noc_ops::rename` checks the new name first: a directory's is an error, a file's asks the question of a copy about a taken name, for one file (Overwrite, Rename… to another name in the directory, and Cancel, the default), and the entry's own name spelled otherwise, differing only in case or normalization where the file system ignores them (see File operations), renames it; spelled so, another entry's name is taken. Without `posix-rename` the file there goes first. A reload keeps the field on its entry; the field goes with the entry or when the panel goes elsewhere.
+- **F8 deletes** the marked entries, or the one under the cursor, after a red question with Yes as the default, as in mc: `Delete file "x"?`, `Delete directory "x" and everything in it?`, or `Delete 2 files and 1 directory?`. mc asks a second time before it goes into a directory that is not empty; Noon Commander says so in the first question instead. The job runs in a task of its own, with a window that shows what it counts, the entry at hand, a gauge, and done/total; Esc or Abort stops it. A failure asks in a red dialog what the job could not do by its `Step` (`Cannot delete`, `Cannot read`, `Cannot create`, …), the path on a line of its own, and under a line the reason and its code (`Code: 13`, `SFTP code: 3`, or `Code: —` where the system gave none); then, under a line, the combo box The rest (ask each time, skip every failure, skip failures with the same code, where there is a code), and Retry, the default, Skip, and Abort. Only what does something shows: no Retry where it would fail again (the target is the source itself), no The rest at the last entry, no Skip for the only one, whose Skip is Abort; the window of the job knows how far it is (`JobView::more`, `JobView::single`). When the job ends, panels on the directory read it again, and a cursor whose entry is gone stays on its row. If the host's connection is lost, the job waits for it, `Waiting for web to connect…`, while Connection asks whether to connect again; Retry there goes on where the job was once the host is back, and Cancel ends the job.
+- **Jobs.** A job's window has Background, the default, and Abort: Enter sends the job behind the panels, which take the keys again, and Esc aborts, as in mc. It is a `Dialog`, which `JobView` wraps: five lines of text, the gauge among them (`Text::Gauge`), which follow the job at each frame (`Dialog::replace_text`), and its keys and mouse are a dialog's, a count too ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md)). As many jobs run at once as `transfer.parallel_jobs` says (2); a later one waits, in front or behind, and starts when one ends, the oldest first. Abort takes a waiting job away at once. The jobs of F4 never wait, but count while they run. `f j` lists the jobs, as mc's Background jobs: a row for each, with what it does, how far it is (a percentage, `counting`, `waiting`, or `aborting`), and the entry at hand, and Show (the default), Abort, and OK. It is a `Dialog` with a picker without a filter or a line over its rows (`Picker::bare`), which `JobsList` wraps: the rows are a stop of the focus, where Enter, Space, and a double click press Show, and Tab, Left, and Right go to the buttons; the wheel scrolls the rows. Show brings the selected job to the front, in its window; the selection follows its job while jobs above it end, and the next row once it ends itself. Questions from jobs behind the panels open over whatever is on screen, in turn with other dialogs, and the top right corner, where Far has its clock, says how many run and how far they are together (`2 jobs 37%`, the mean of their gauges); a click there opens the list. The jobs of F4 stay in front, so that the editor does not open in the middle of other work. F10 always asks before quitting, with Yes as the default, or No while jobs run; quitting stops them and waits up to five seconds, so that a copy removes its unfinished file before the connections close.
+- **Checksums.** `f #` (not in mc) asks for an algorithm (a combo box, the last one chosen, SHA-256 at first) for the marked entries, or the one under the cursor; files in directories count. For one file, the dialog has a field for the checksum it should have, pasted from a download page or a line of `sha256sum` (the first word counts, in any case); hex of another length picks the algorithm that has it, and anything else is an error. If the other panel's cursor is on a file, a check box compares the two (checked when they have the same name), which hashes both. The job has the usual window, Background, and list. When it ends, a window shows the checksums: with several files, a list with each checksum shortened in the middle and a mark (✓, ✗, or `-` for skipped), under a filter that finds a file by its name or its checksum, and under the list, apart from it by a line as in the location menu, the name and the whole checksum of the file under the cursor, in as many lines whichever it is ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)): the checksum in groups of 8 digits, at most 4 to a line, and with `ui.icons` the file's icon in front of the name and a pound sign in front of the checksum ([ADR 0087](adr/0087-the-whole-checksum-under-the-list-is-in-blocks.md)). The window opens on the rows, in Normal mode (`checksums`, falling back to `dialog`); `/` types in the filter. One file, or two compared, are a dialog: each name with its whole checksum, then, between two lines, the verdict (✓ matches or ✗ not, the same or different), in color. To clipboard puts the checksum of the file under the cursor, or of the first file, on the clipboard, All to clipboard every line in the format of `sha256sum` (`<hex>  <name>`; names with a backslash or a line break escaped as GNU coreutils does), View (F3) shows those lines in the viewer, in place of the window, which comes back when it closes, and Save… writes them to a file through the dialog of saving, from the panel's directory (`name.sha256` for one file, `SHA256SUMS` for several; `b3`, `md5`, … for the others). A dialog has no View. No message follows a button. Windows of jobs that end while one is open wait their turn. The window is a `Dialog`, which `SumsWindow` (`tui/sums.rs`) wraps, as `FindWindow` wraps the search of a tree ([ADR 0061](adr/0061-a-picker-is-a-part-of-a-dialog.md)): its picker for several files, and for one file or two lines of text (`Dialog::with_text`): each name, which loses its middle where too long, its checksum in lines of equal length (`Text::Even`), and the verdict (`Text::Verdict`).
+- **Saving a file** ([ADR 0059](adr/0059-one-dialog-saves-a-file.md)). What has a file to save, so far Save… of the checksums, gives `tui/save.rs` a `Save`: the title, the directory, the name offered, and the bytes. Its dialog has one field, `File name:`, with that name; it takes a name, a relative path, an absolute one, or `~/…`, as F7 does (`panel::resolve`), on the host of the directory, and Tab completes files and directories from there, not from the panel, which may have gone elsewhere. OK writes the file (`Effect::WriteFile`), locally or through SFTP, never over one: a name that is taken asks the question of a copy about a taken name, for one file, where New views what would be written; Overwrite writes over it, Rename… under another name, and Cancel is the default. An error is a window of its own; once it is written, the panels on its directory read it again and show it, and nothing else says so.
+- **Clipboard.** Copying goes through OSC 52: the event loop writes the escape sequence between frames, and the terminal puts the text on the clipboard of the machine it runs on, over ssh too. Nothing tells whether it did, so the UI says nothing after it; the buttons that copy say they put the text on the clipboard. Noon Commander never reads the clipboard ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
+- **Terminal title.** With `ui.terminal_title` (the default) the event loop titles the terminal's window or tab with OSC 0 between frames: the active panel's directory (`~/src — noc`, `host:path` with the host's alias), after `[root]` while Noon Commander runs as root or the active panel is on a host as root, sanitized like every name. Before the first title it saves the terminal's own on xterm's stack of titles (`CSI 22 t`) and takes it back from there (`CSI 23 t`) on quitting and before handing the terminal to another program, which gets the shell's title and may set its own.
+- **The other panel.** As vim's windows: Ctrl+w w, Ctrl+w Ctrl+w, or Ctrl+w p makes the other panel active; Ctrl+w x or Ctrl+w r swaps the panels, as mc's Ctrl+u, and the active one stays active on the other side; Ctrl+w f opens the directory under the cursor in the other panel, as mc's Alt+o (from a file, the parent directory with the cursor on this one) and moves the cursor down; Ctrl+w v shows this directory in the other panel with the cursor on the same name, as mc's Alt+i. Panels keep their identity when swapped (only where they are drawn changes), so a listing still in flight reaches the panel that asked for it. Sort order and errors go with the panel; mc keeps the sort order on its side. Ctrl+w h and Ctrl+w l make the panel drawn on that side active, whichever it is after Ctrl+w x. Keys act on the active panel; Ctrl+x runs the next command in the other panel, then gives the keys back, as vim's Ctrl+o in Insert mode runs one command of Normal mode ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). It comes with the command, as a register does (`Extra`), with the count and the register after it (`Ctrl+x 2g t`); those typed before it go, and Esc and Ctrl+x again give it up. `App::typed` makes the other panel active for the command and keeps where the keys were and the mode it had (`returns`), so any command works there as in the active panel, those of the cursor, the marks, and the files too, and needs nothing of its own. `App::come_back` gives the keys back once the panel has them in Normal mode, or in the Visual mode it kept ([ADR 0066](adr/0066-visual-mode-stays-with-its-tab.md)), with nothing in front and no program to hand the terminal to: after the key, or, as the event loop asks before each frame, once the mouse closed its window or the program it ran returned. Windows of a panel open centered over both, as every window does; the panel drawn active, after Ctrl+x the other one, says which they act on.
+- <a id="quick-search"></a>**Quick search.** `/` starts quick search, typed as vim's search, in Insert mode, and `?` starts it up the rows; typing in a panel in Normal mode does nothing but its commands, and `i`, `!`, and `:` open the [command line](#command-line-of--and-). As vim's search, it is typed on the line of the mode, after `/` or `?`, in place of the mode while it has the keys, and the status line of the panel keeps the name under the cursor ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md)). It looks from the row after the one where it started, round, or after `?` up from the row before it, round to the bottom, and a count before `/` or `?` goes to the match of that number (`2/`). It matches in the [search mode](#search-modes), with smart case, which the keys after Ctrl+s, or a click on a glyph at the right end of its line, switch while it runs. As fzf, the default, the cursor jumps to the best match as fzf ranks it, the first after where it started of those as good, and Ctrl+g to the next best, round to the best; in the plain and regex modes, to the first name after where it started that holds the text anywhere, or that matches it as a regular expression, as the filters of the lists match, and Ctrl+g to the next one, round to the top, as many as the count. It runs as vim's incremental search (`panel::Search`, with vim's `search_start`, `match_start`, and `old_viewstate`): every edit of the text searches again from where it searches from, with the rows on screen as they were before it. As in mc, a character after which no name matches is not typed, and nothing moves; one that leaves a regular expression unfinished is ([ADR 0042](adr/0042-quick-search-types-only-what-matches.md)). While nothing matches, after a switch or with the last search brought back, the cursor stays where it searches from and the text as it is. Ctrl+g and Ctrl+t move where it searches from as vim's do, so that an edit after them searches on from the match before, and Enter stays on the match. The listing keeps its order. While it runs, every name on screen shows where it matches in the colors of what is found (`find_match`, as in the [search of a whole tree](#search-of-a-whole-tree)), the cursor's too: each place it holds the text or matches the regular expression, or the letters fzf matched (`Matcher::positions`), in what of the name shows. The text, kept as typed, is a field with a cursor, edited with the keys that every text field shares in Insert mode (`input`): Left, Right, Shift+Left, Shift+Right, Home, End (and Ctrl+b, Ctrl+e, as on vim's command line), Backspace, Delete, Ctrl+u, Ctrl+w, and Ctrl+r and a register; as on vim's command line, Delete at the end of the text deletes the character before, Shift and Ctrl with Left and Right go by what spaces part. Unlike vim's, Backspace and Delete with nothing typed keep the search open, as on the command line, so that one too many does not go to the parent directory. As in vim, Enter (and Ctrl+j) ends the search: it searches once more from where it searches from, with the count, and goes to the match, or says "Pattern not found", keeping the text for `n` either way; Esc or Ctrl+c (`abort`) gives it up and puts back the cursor and the rows on screen as they were when it started, keeping nothing for `n`. Ctrl+g goes to the next match down and Ctrl+t to the next up, after `?` too, as in vim. The arrows, the page keys, and the F-keys of the panel end the search and do what they do, as in mc; Shift+F7 goes to the next match. While it runs, every character is text, even one that a panel binds, such as `*`. A search that finds a match puts where it started in the jump list, as vim's, and so does one that finds none after Ctrl+g or Ctrl+t moved where it searches from. The app keeps what the last search found, whichever panel it ran in, as vim keeps its last pattern: `n` and `N` (and Shift+F7, mc's and Far's key to search again) go to the next and the previous name that matches it, round, the way it went and the other way, so up after `?`, and Ctrl+g with nothing typed yet searches for it again, as mc's Ctrl+s Ctrl+s does. As vim's, they say when they go round past the last row or the first ("search hit BOTTOM, continuing at TOP"), when nothing matches ("Pattern not found: name"), and that there was no search before, on the line of the mode until the next key; so does Enter in quick search, when its last search went round (a count can take it round too; after Ctrl+g or Ctrl+t it does not), but in the fzf mode, which ranks the rows rather than go down them. Long names lose their middle, marked with `»` in an accent. Names are shown terminal-safe: control and bidi characters, and marks that join the next character, become `?`. Listings run in background tasks; a reply carries the generation of its request, so a stale one is dropped. If a directory cannot be read, the panel stays where it was and says why below the listing. Going up puts the cursor on the directory just left. A panel shows a [`Location`](#locations), always a directory.
+- <a id="command-line-of--and-"></a>**Command line of `!` and `:`** ([ADR 0019](adr/0019-shell-command-line.md)). In a local panel, `i` or `!` opens a line above the F-key bar for a shell command, after a prompt as a shell's: `alice@mac:~/src $`, with `~` for home, and `#` where the user is root. It takes a third of the width at most: the middle of the directory goes first, then the user, then the directory. `:` opens it for commands of Noon Commander, of which `!command` is the only one so far. In a panel on a connected host the prompt has the user that `ssh -G` gave and the host's alias, `deploy@web:/var/www $`. The line opens in Insert mode, as vim's command line, where every character is text. Ctrl+j, or Enter after an odd number of `\` at the end of a line, starts a new line, marked `>`; long lines wrap, and the line grows up to a third of the screen and ten rows, then scrolls to the cursor. Up and Down move between lines, Home and End (Ctrl+b, Ctrl+e) go to the ends of the line. Tab completes the word before the cursor, as vim's `:!` does (see [Completion](#completion)). Ctrl+f goes to Normal mode where the cursor is, in place of vim's window of the command line: vim's motions, operators, registers, and undo edit the command there, Esc then leaves Insert mode, as in that window, rather than close the line, and Ctrl+c and F10 close it in any mode; `j` and `k` go through its lines, in the column of the first of them, or after `v` ended Visual mode, or after the end of the line where Ctrl+o left Insert mode, or at the ends after `$` and End, as vim's `curswant`, which the next Ctrl+o keeps, and then the history, which goes on from the command an undo brings back (in Visual mode only its lines), and `q :` opens the window of the history. Enter hands the command to the event loop, which suspends the TUI as for F4 and runs it with `noc-tools`' `Shell`: the words of `shell.run`, `$SHELL -i -c` by default, with the variables of Noon Commander's environment in them (`/bin/sh` for a program that comes out empty), then the command in one argument as typed, in the panel's directory; `-i` gives the shell the aliases and functions of its rc files ([ADR 0054](adr/0054-shell-run.md)). The shell runs as a job, as a shell runs one, and so does the editor of F4: `noc_tools::job` puts it in a process group of its own with the terminal, and `Running::wait` waits for SIGCHLD and asks `waitid` whether it ended or was stopped, then takes the terminal back (`tcsetpgrp` with SIGTTOU blocked, through `nix`'s `pthread_sigmask`), which zsh, which `exec`s the last command of `-c`, never gives back. One stopped by Ctrl+z gets `[stopped]` under its output, as a mark of a failure, and the keys of a dialog, which are read (`output::finish`): Enter continues it (`Running::resume`), Esc ends it with SIGHUP (`Running::end`), and after that kills it, `[stopped] Enter continue · Esc kill`, if it went on. A `Running` dropped before it ends kills all of its group. What ends Noon Commander while it runs goes on to it, as a shell passes SIGHUP on (`Running::pass_on`, from `output::finish`): SIGHUP, or SIGTERM, then SIGCONT, to its group, which has a second to end and is then let go (`Running::let_go`), not killed. On a host, the host's task builds the ssh command from its session (`Session::command_in`) and the event loop runs it with the terminal: over the master, with `cd -- '<dir>' || exit` and then `exec` and the words of the host's `run` in `hosts.toml`, else of `shell.run`, quoted but for each variable, which the host's shell expands as `"$NAME"`, then the command quoted, `'` and `\` outside the quotes after a `\`, as POSIX shells and fish both read them. What ends Noon Commander goes on to that ssh, which ends the session, so that the host ends the command. `tui/output.rs` shows the command after its prompt first, bold, and afterwards ends its output on a line of its own as zsh does (a dim `⏎`, spaces to the last column, `\r`, a cleared line); then a line in reverse video asks for a key, with the exit status of a failure, unless `shell.pause` says not to wait, and after the key `[exit N]` takes its place for a command that failed. The event loop then takes the terminal back; both panels read their directories again, as in mc. Esc, Ctrl+c, or F10 closes the line, as on vim's command line, in Insert mode and in Normal mode; Backspace on an empty line does not. `g <`, a `global` key, as vim shows the output of its last command, hands the terminal over without a program wherever it is pressed but in Insert mode: its own screen shows, with the output of the commands, until a key that the `user_screen` context binds to Cancel (`g <`, Enter, `q`, Esc), and then whatever was in front, a dialog, a menu, the viewer, or the line, is there again as it was. Shift+Enter starts a new line too where the terminal speaks the kitty keyboard protocol: at start the event loop asks for it with `supports_keyboard_enhancement` (in `spawn_blocking`, before the stream of events takes crossterm's reader) and then pushes `DISAMBIGUATE_ESCAPE_CODES` and `REPORT_ALTERNATE_KEYS`, so that Alt with a symbol typed with Shift, such as Alt++, arrives as that symbol (Ctrl+[, Ctrl+m, and Ctrl+i then arrive apart from Esc, Enter, and Tab, so the keymap binds them wherever it binds those). The preset lists the keys of such a terminal, where Tab in the panels goes to the other panel and Ctrl+i forward through the jump list; the app builds its keymap with `Keyboard::Kitty` there, and else with `Keyboard::Legacy`, which drops the bindings of Tab and gives Tab those of Ctrl+i, the key it arrives as. The event loop pops the modes, and turns bracketed paste off, whenever another program gets the terminal, on exit, and on a panic. With bracketed paste a paste arrives as one event: the command line takes it whole, line breaks included, and runs nothing; text fields, quick search, and the menus' filters take its characters without line breaks; panels, the pull-down menu, dialogs' buttons, and the viewer ignore it. Each command that ran, unless it starts with a space, goes to `history.toml` in the state directory with its host (the alias; none for a local one), directory, and time: `noc-config`'s `add_command` reads the file again, replaces the same command on the same host, keeps the newest `shell.history_size`, and writes it whole and atomically, mode 0600; one task makes the changes in turn, and the app keeps the commands in memory. Up on the first line of a command, or Ctrl+p, goes back through the commands of the panel's host, and Down on the last line, or Ctrl+n, forward to what was typed, as on vim's command line; the line of `:` shows them after `!`, which runs them. `q :` in a panel, or on the line in Normal mode, opens the window of the history (`tui/history.rs`), one of the [lists](#lists): the commands of the panel's host, or of all of them after Tab, newest first, filtered as quick search matches, each by its first line, and below them where the command under the cursor ran: its host's alias, or `local`, then its directory, each line after its icon (`Glyphs.ran`), and when it ran on the line over them, in the color of the title (`Body.footer_label`; [ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md)); Enter puts it on the line, with the prompt reversed until the next key if it ran on another host, and F8, or `d d` on the rows, removes it.
+- **Keymap.** The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md)): one preset, `tui/keymap/preset.rs`, maps keys to `Action`s per mode (`Mode::Normal`, `Insert`, `Visual`) and context (`global`, `panel`, `input`, `quick_search`, `rename`, `command_line`, `command_history`, `find`, `user_screen`, `list`, `location_menu`, `tab_menu`, `jump`, `workspaces`, `checksums`, `pull_down`, `dialog`, `help`, `dialog_input`, `path_input`, `completion`, `viewer`), in the order the help lists them. A context with many keys binds them in groups (`Bound::Groups`, `keymap::Group`): the panels in Normal and Visual mode, the text fields in each mode, and the viewer; the help and the list of the key hints show each group under its name, and the keys of the other contexts under the context's ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md)). The app says which mode and context the next key goes to (`App::place`): the mode is that of the text field with the keys, Visual mode while a panel selects rows, and else Normal mode. Each context falls back along a chain in its mode (`Context::chain`), for example the help to the dialog, the text fields (`quick_search`, `rename`, `dialog_input`, `command_line`) to `input`, which holds the keys that edit text in each mode, and the windows that list items (`location_menu`, `tab_menu`, `jump`, `workspaces`, `command_history`) to `list`, which holds the keys they share, then, in Insert mode only, to `input` for their filters; the search of a tree falls back as a dialog does, `find` to `dialog` and its fields, `find_input`, to `dialog_input`; the window of the checksums of several files, `checksums`, to `dialog`, and while its filter takes text to `list` and `input`. Every one but `user_screen` falls back to `global` last, whose keys are the same in every mode: the key hints, the output of commands, and Ctrl+l, which redraws the screen; the app takes them before whatever is in front, which stays as it was. The first context that knows a key sequence decides, except that a sequence it only starts does what a later context binds it to. Bindings are key sequences matched by prefix with a 1-second timeout (`g g`, `Z Z`, `Ctrl+w h`). The panels group keys under `g`, Ctrl+w (the panels, as vim's windows), `t` (tabs and workspaces), `o` (sort order and hidden names), and `f` (`f j` the jobs, `f #` the checksums, `f /` and `f f` the search of the files below by text and by name, the rest of mc's Ctrl+x letters left for later). In Insert mode a character is text unless the context itself binds it, and in Normal and Visual mode a character nothing binds does nothing. The keymap reads what vim lets come with a command and hands it to the app with the action (`Typed`, `Extra`): a count before it (digits, `0` only after another), a register after `"`, the character after the actions that take one (`f`, `t`, `F`, `T`, `r`, `"`, and Ctrl+r and Ctrl+v in Insert mode), and, in the panels, noc's Ctrl+x before it, which runs it in the other panel. The app repeats a motion over rows a count's times, and gives the count to what takes it as a number (`G`, `g g`, `g t`, Ctrl+o) and to the text fields, whose editor (`tui/edit/`) reads it itself. `Esc` acts at once: it never waits for a key after it, and while a command is pending it gives the command up; so does a key that cannot go on with it, which in Normal and Visual mode goes too, as in vim (`g x` and Ctrl+w `e` do nothing), unless what came before it does something alone. The keymap says so (`KeyState::take_dropped`), and the app then gives up the part a text field holds, such as an operator that waits for its motion, or the one command after Ctrl+o. A count typed after a register multiplies the one typed before it. An `Esc` and a quick next key arrive as Alt and that key, so in Insert and Visual mode, and in the panels, Alt and a key that nothing binds, any key but `Esc`, go to the keymap as `Esc`, then as the key in the mode `Esc` left (`App::key`, with `Keymap::alt_as_esc`), even while a command is pending, unless the key goes on with it. vim gets them so without the kitty keyboard protocol; with it, which Noon Commander asks for, vim would type the key with the eighth bit set, and Noon Commander does as nvim does in Insert and Visual mode ([ADR 0022](adr/0022-vim-modes.md)). The pull-down menu and the dialogs (contexts `pull_down`, `dialog`, `dialog_input`, `path_input`, `completion`, `find`, `find_input`, and `checksums`, which `Context::alt_letters_are_hotkeys` names) take Alt and a key otherwise, in every mode: Alt and a letter or a digit that nothing binds go to the app as `Resolved::Hotkey`, the letter of a menu, a command, or an element of the dialog, and do nothing where nothing has the letter, and Alt never stands for Esc there ([ADR 0033](adr/0033-letters-in-dialogs.md)), as it never did on a password, where the `Esc` would close its dialog and send the key to the panels. Keys are written with `crokey` names. User overrides of the keymap are planned. The F-key bar is generated from the keymap in the mode and context of the next key, and so is the help screen (F1): the keys of each mode and context, with what they do, for what the app can do already; a prompt from ssh shows over it. It is a large window, 80% of the width and of the height of the screen, and, as the Configuration dialog, lists its sections on the left (`tui/sidebar.rs`, which both draw): About, with the license and the report of `crate::about` that `noc debug version` prints too (the build; the system, read once at start; the terminal, from its variables and the keyboard protocol the TUI found, without asking for its name; and the external tools, the editor, zoxide, ripgrep, and fd, which are asked in the background at start and again when `[zoxide] program`, `[search] program`, or `[search] fd` changes, `Effect::Detect`), and the files the app keeps; and Keys, which folds, with a group for each part of the app (panels, text fields, search and renaming, the command line, lists and menus, menus and dialogs, the viewer) and tips, each under its title in points after a bullet (`•`, `-` without icons). It opens at the top of About first, and then where it was when it closed last (`help::Spot`, which the app keeps): the section, Keys open or folded, what had the keys, and how far down the text was. The titles of the parts of a section are bold on a line across (`── Panels ──`), the names of the groups of keys of a context (`keymap::Group`) alone over them, in the color of titles, and the keys and the names of the facts take the theme's `keys`, a color apart from the titles, as the keys of the key hints and of their list (Ctrl+k) do, and those of the menus of F9 in `menu_keys`. Tab moves between the sections and the text; in the sections `j` and `k` choose, `l` or Enter opens Keys or goes to the text, and `h` goes up to Keys and folds it; in the text `h` goes back. Each section has a letter, highlighted in its name: Alt and it show the section from anywhere, opening Keys for a group, and give the text the keys, as the letters of dialogs do. A click chooses a section, and one on Keys opens or folds it. The text scrolls as the viewer does, with the keys it does not take in the sections and with the wheel too, stopping with its last line at the bottom, with no line after it, a scroll bar, and how far down it is in its bottom frame.
+- **Text fields.** A text field (`dialog::Field`, and the command line) holds a `tui/edit/` `Editor`: the text, the cursor, and vim's modes over it. In Insert mode characters go in at the cursor, and Left, Right, Home, End, Shift+Left, Shift+Right, Backspace, Delete, Ctrl+w, Ctrl+u, Ctrl+r and a register, and Ctrl+v edit around it. Ctrl+v types the next character, or Tab, as it is; unlike vim's, it gives up on any other control key, so that no control character gets into a name or a command. As vim's 'backspace' has them, Ctrl+w and Ctrl+u stop once where Insert mode started, but on the command line, whose keys are those of vim's, and at the start of a line join it to the line above; a move of the cursor, Ctrl+u, and the focus coming back start a new change for undo, and a new insert at the next change, as vim's `Insstart` and `Insstart_orig`, and so do Home and End where the cursor is already, as vim's `start_arrow`: right after a move, Ctrl+w and Ctrl+u still stop where the insert started, and after a move to the right with something typed, or after Ctrl+u, they keep stopping there. Ctrl+u is a change of its own because vim's `defaults.vim` maps it after Ctrl+g u; Ctrl+w, which it does not map, deletes within the change, as in vim. On the command line, in quick search, and in the filters, as on vim's command line, Delete at the end deletes the character before, and Shift and Ctrl with Left and Right go by what spaces part, Right on to the space after. Ctrl+o, in the fields that have a Normal mode, runs one command of it, after which, or after Esc, Insert mode is back; from after the end of a line the command starts on its last character, and the cursor goes back after it if it is still there, as in vim, and so after a command that deletes to the end of the line and after the text that `p` and `P` put, but not after `0`, `^`, and Home, which vim's `ins_at_eol` leaves before the character they go to, even the last; Insert mode then starts on that last character, before the cursor goes past it, so the first Ctrl+w or Ctrl+u deletes only it, as vim's `Insstart` is set. `$`, End, and Backspace onto the line above leave the cursor after the end of the line, as vim's do under `restart_edit`, so Insert mode starts there; and the end of the line is a place for Backspace to stop, as in Visual mode. A key that is not the field's, such as `j` to the next field of a dialog, or Ctrl+l, is that one command too. Esc goes to Normal mode, with the cursor on the character before it. Normal mode has vim's motions (`h`, `l`, `w`, `b`, `e`, `W`, `B`, `E`, `0`, `^`, `$`, `f`, `t`, `F`, `T`, `;`, `,`, and `-`, `+`, and `_`, which go to the first character that is not blank of the line above, below, or this one, and take lines whole after an operator, so `d _` is `d d`), the operators `d`, `c`, and `y` on a motion or doubled for the line, `x`, `X`, `s`, `S`, `C`, `D`, `r`, `~`, `p`, `P`, `u`, Ctrl+r, `i`, `a`, `I`, `A`, and `v`, Visual mode, whose motions select and whose `d`, `c`, `y`, and `~` act on the selection, and where, as in vim, the cursor can go past the last character of a line (`l`, Space, `$`, `w`, `e` at the end, a count before `v`, Backspace from the line below), so that the selection takes the line break too where a line follows; a count before `v` selects that many characters, or, after a command of Visual mode, as much as it took times the count, as vim's `resel_VIsual` (to the ends of lines after `$`); Space and Backspace move as `l` and `h`, and on the command line go on to the next line and back to the one before, as vim's 'whichwrap' has them. As in vim, `w` and `b` stop on an empty line, as on a word, and after an operator `w` from an empty line stops at the start of the next line, so that `d w` deletes it whole, `C` and `D` take a count of lines as `$` does, and more lines than one from the last line go nowhere (`2 d d`, `3 D`), `cw` changes to the end of the word, which is the cursor on its last character, `c b` at the start of the text goes nowhere, `^` on a line of blanks is the last of them, and `~` keeps a character whose other case would take more than one, and is a change for undo even on one without a case. On the command line, operators take what vim's rules give them: an exclusive motion that ends at the start of a line ends at the end of the line before, or takes the lines whole from the indent (`:help exclusive`, so `d w` on an empty line takes it), and a delete over lines from the indent to the end of a line takes them whole (`:help d`, as `d 2 $`); Backspace from the start of a line to the start of a line above deletes the characters but keeps lines in the register, as vim's `op_yank`. A count repeats a motion or a change, and multiplies with the count of an operator (`2d3w`); it stops where the motion can go no further. Undo takes back one change at a time, and all that one stay in Insert mode typed, a change of an operator `c` with it, and, as in vim, a change that changes nothing (`x` on an empty line, `d 0` at its start, Delete at the end in Insert mode, `C` on an empty line) is one too, so that `u` after it takes back nothing to see; but after `d d` deleted the only line, vim's `ML_EMPTY`, deletes are no change at all. It keeps 1000, and undo and redo leave the cursor where the change starts, as vim's do, on its line and in its column (after `d b` at the start of the word deleted; after `d d`, `c c`, and `S` of one line on its first character that is not blank, if the cursor was after it, as 'startofline' moves it first; from a line that is gone, on the first character of the last one that is not blank). The registers (`edit::Registers`) live in the app, which every field and the command line share: the unnamed one, which every yank and delete fills, a yank of nothing and `C` on an empty line with nothing, as vim's, but not a delete after `d d` deleted the only line, and `a` … `z`, of which `A` … `Z` append; `_` keeps nothing. `"` names one in `global`, wherever keys are commands, so that the name never runs as a command; after an operator that waits, as in vim, `"` gives it up and names none, and the key after it is a command of its own (the app tells the keymap, `KeyState::set_operator`). None reads or writes the system clipboard. Pasted text is one change, as vim puts it: at the cursor in Insert mode; in Normal mode as if typed in Insert mode, then Esc, so before the cursor at the start of a line and after it elsewhere, with the cursor on its last character; and in place of the selection in Visual mode, which goes to the unnamed register. After Ctrl+o, Normal mode stays after it, and an operator that waits is given up, and the paste with it, as in vim. What a delete appends to a register (`"Ad w`), the unnamed register keeps alone, as vim's register 1, which it reads then. A field holds one line, and a line put in it becomes text, its breaks spaces; the command line holds lines, and `d d`, `y y`, and `p` take and put them whole. A secret field stays in Insert mode, keeps no undo, and never copies its text into a register; what reads its text reads it into memory reserved up front and wiped when it goes.
+- **Key hints.** As which-key does, the keymap lists the keys that can follow a pending sequence, or every key of a context, with what the help says they do (`Keymap::hints`, drawn by `tui/which_key.rs` in columns across the bottom of the panels; where not all fit, the last cell says how many do not, faint, after the chevron down of the location menu). A key that does nothing alone and starts one sequence shows that sequence whole, as `] t`, with what it does, and shares a row with the keys that do the same, as `Z Z, F10`. The event loop owns the `KeyState`: with `ui.which_key` on, a sequence that does nothing alone and does not start with `Esc` (such as `g` or Ctrl+w) does not time out; its hints show `ui.which_key_delay_ms` after its last key (`Keymap::hints_due`), and it then waits for the next key. So does Ctrl+x, whose hints list every key of the panel. In Insert mode the hints leave out characters, which are text. While hints show, the next key runs as it would have, or shows the keys that can follow it; `Esc` closes them and `Backspace` takes back the last key, or with none closes them, and so do `Ctrl+[` and `Ctrl+h`, which the kitty keyboard protocol tells apart from them. `Esc` never starts a sequence, and never shows hints. The `KeyState` also keeps what the pending command has typed, which the line above the F-key bar shows (`KeyState::showcmd`).
+- **The list of the key hints.** The action `key_hints`, Ctrl+k everywhere, in every mode, bound once in the `global` context, opens `tui/key_hints.rs` at once ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md)): the keymap resolves it with the count, the register, and Ctrl+x typed before it, and leaves in the `KeyState` the hints of the keys typed before it, whether the strip showed them or not (`KeyState::take_listed`); with nothing typed, or from F9 → Help → Key hints…, they are every key of the mode and context (`Keymap::every_key`). The app takes it before whatever is in front, which stays open under the list, the dialogs too (`Context::KeyHints`, which falls back to `list`); in the list itself it does nothing. The list has every sequence of the hints, whole, after the keys typed (`Keymap::sequences`), one row for each command, under the name of its group or of the context that binds it (`keymap::Heading`), the headings left out while fzf ranks the rows or while one heading has them all; it opens with its filter taking the keys, Enter closes it and runs the command where the keys went before, with that count and register, and Esc goes to the rows, where Esc again closes it.
+- **Mouse.** On by default (`ui.mouse`; [ADR 0018](adr/0018-mouse-support.md)). The event loop captures the mouse while it is on and turns crossterm's events into `Pointer`s (`tui/mouse.rs`): a click, a double click (the same cell within 400 ms), a right click, or a step of the wheel, or a drag with the left button; moves are dropped without a redraw, and so are drags while no thumb of a scroll bar is held. Rendering records where the F-key slots, the panels, their rows, the tabs, the menu bar, the corner of the jobs, and each window's rows and buttons were drawn (`mouse::Drawn`), and `App::pointer` looks there, front first, as keys go. A click on an F-key slot presses its key, and one on the corner of the jobs opens their list; in a panel a click moves the cursor and gives the panel the keys, a double click does what Enter does, a right click marks the row as in mc and Far, and the wheel scrolls the panel under it, by `ui.wheel` lines or a page, or moves its cursor as far where it cannot scroll; a click on a tab shows it, and in the viewer the wheel scrolls. In the pull-down menu a click opens a menu or runs a command; in a dialog a click chooses, puts the cursor in a field, switches a check box, or presses a button. Other windows and menus take the wheel as Up and Down, a click on a row or a button, and in menus a double click that opens and a click outside that closes. Scroll bars end in arrows; as in Far, a click on one does what a step of the wheel does there, a click on the track pages towards it, and the thumb, pressed, drags (`noc_scroll::scrollbar::Bar`); `App::scroll_bars` lists those of what is in front, with what each scrolls (`Scrolled`). Widgets move their own cursor or focus and return the key a press stands for, which they then take as if typed, so the mouse reuses what the keys do. A double click counts only if its first click left the same thing in front, so one that closed a menu or a dialog does not reach what is under it. While the mouse is captured, the terminal selects text with a modifier held: Shift in most terminals, Option in iTerm2.
+- **Dialogs.** Modal and centered over the panels, those for one panel too, such as Go to directory and those of `g +` and `g -`, with buttons: `{ OK }`, in bold, marks the default one, and a line across the dialog (`╟───╢`, or `├───┤` with single lines) sets the buttons apart from what is above them, in every dialog and window. A dialog has a message, combo boxes, text fields, check boxes, items, and buttons, each optional but the buttons, with lines between them where they need them; an item is a line that opens what it names, such as a file to view, with what it says of it on the right, and the dialog stays while it is open; ssh's prompts and the app's own questions are the same kind of dialog, and each one in the queue knows where its answer goes. Keys go to the first dialog in the queue (contexts `dialog` and `dialog_input`). A dialog whose first focus is a text field opens in Insert mode, with the cursor after the field's text, and any other in Normal mode. In Normal mode `j`, `k`, `h`, `l`, the arrows, and Tab move between the combo boxes, the fields, the check boxes, the items, and the buttons, as many as a count says, past the fields too, `g g` and `G` (Home, End, Ctrl+b, Ctrl+f) go to the first of them and the last, Space opens the list of a combo box, switches a check box, opens an item, or presses a button, Enter opens the item or presses the button with the focus (the default one from elsewhere), and Esc, `q`, Ctrl+c, or F10 cancels. A field takes the keys of a [text field](#ui) in its mode: in Insert mode every character is text, Space too, Tab, Up, and Down still move the focus, Enter presses the default button, Esc goes to Normal mode, and Ctrl+c or F10 cancels; in Normal mode, Esc gives up an operator that waits, then cancels. The focus comes to a field in Insert mode with Tab, a click, or from a field in Insert mode, and else in Normal mode. Long text stays where it is while the cursor shows, and else scrolls to put the cursor in the middle, as vim's 'sidescroll' 0 does; what Visual mode selects shows in reverse. A message taller than the screen scrolls between the top and the rest of the dialog, which keeps its buttons, with a scroll bar on the frame that the mouse and the wheel move. A dialog counts its own moves, the rows of its picker too (`App::counts_moves`: the dialogs of the queue, the search of a tree, the window of checksums): the app gives it the count with the key, as the editor of a field reads it; elsewhere, in the lists, the app repeats a motion as many times, and gives a list the count before Ctrl+f or Ctrl+b, which scrolls as many pages at once.
+- **Size of a window.** Dialogs, lists, and the windows of jobs, progress, and reading, windows to choose from and close, are 76 cells wide, borders included (`window::WIDTH`), and as tall as what they show. Windows to read and scroll through are large: 80% of the width and of the height of the screen, whatever they show, but never narrower than 76 cells where the screen has room (`window::large`): the help, the list of the key hints, the Configuration dialog, and the search of a tree; a list is large by `Body.large`, a dialog by `Dialog::large` ([ADR 0088](adr/0088-large-windows.md)). `tui/window/` holds what they share: the sizes, the colors by tone (`Colors`, `Tone`), the frame, the buttons, and the skeleton with its shine. `window::draw_box` draws the frame of every window, as wide as the window asks but leaving two cells free on either side of the screen, for the margin and the shadow (`window::box_width`); where that leaves fewer than 20, 20, or the whole screen if it is narrower. What lays out text to that width asks `window::inner_width`. The key hints along the bottom of the screen span it (`window::draw_frame`).
+- **Combo boxes** ([ADR 0057](adr/0057-combo-boxes.md)). One of a few choices, `[SHA-256 ▼]` after its label (a Nerd Font chevron with `ui.icons`), as wide as its widest choice, in the colors of text fields (`dialog_input`), its brackets faint (`dialog_bracket`) and its arrow in the color of titles (`dialog_symbol`), as the brackets and the check of a check box, `[✓]` (`󰄬` with `ui.icons`); with the focus, either is in its colors alone. In errors and warnings they take the tone's (`error_input`, `warning_input`, and their brackets and symbols; [ADR 0048](adr/0048-errors-and-warnings-in-dialogs.md)), and with the focus the colors of the tone's focus. `ComboBox` is in `tui/combo_box.rs`, which the dialogs (`Dialog::with_combo_box`, the checksum dialog and the search of a tree) and the Configuration dialog hold. Space, Alt and its letter, or a click opens its list under it, or above it where there is more room, as the list of completions (`window::pop_up`), over the dialog and past its frame, in the colors of fields too, apart from the dialog's: at most ten rows that scroll with a scroll bar, the choice marked with the dot of a radio button, `•` (`󰧞` with `ui.icons`), in the color of titles, the cursor on it. The row under the cursor, and a box with the focus, are in the colors of the focus, or in those of fields reversed where fields have the focus's (mc-classic, the terminal theme); in the Configuration dialog the name of the setting shows the cursor, and the box stays as a field. The list has the keys until it closes (context `combo_box`, the line of the mode says `Combo box`): `j`, `k`, the page keys, `g g`, and `G` move its cursor, a count too, and the wheel as Up and Down; Enter, Space, a click, or Alt and the letter of a row takes it and closes the list; Esc, `q`, Ctrl+c, F10, or a click outside closes it with the choice it had, and the second click of a double click that closed it ends there. Moving does not change the choice: Enter does. On a closed box, Enter presses the default button, as on a check box, and `j` and `k` move the focus. The box has no text of its own yet; one that takes typed text, as a combo box of Far or Qt can, may come.
+- **Letters of dialogs** ([ADR 0033](adr/0033-letters-in-dialogs.md)). As in Far and mc, every element of a dialog but Cancel has a letter, which an `&` marks in its Fluent text (`Label`, in `tui/label.rs`, as for the menus of F9) and which shows in the theme's `dialog_hotkey`, or `error_hotkey` in red dialogs, as mc's `dhotnormal` and `errdhotnormal`, and on what has the focus in `dialog_hotkey_focused` or `error_hotkey_focused`, as mc's `dhotfocus` and `errdhotfocus`: the color of titles, not bold, and underlined where that color would not show (the cursor, red dialogs, a title's own color). Alt and it act on the element from anywhere in the dialog, in every mode, while typing in a field too: a text field gets the focus, in Insert mode, as with Tab; a check box switches and the list of a combo box opens, each getting the focus; a button is pressed. In the open list, Alt and the letter of a choice take it, as the algorithms have theirs. The one field of a form without a label (Copy, Move, Create a new directory, Go to directory, Save workspace, Rename workspace, Save checksums) takes its letter from the prompt over it, as `&Copy "x" to:`. What ssh asks is ssh's text, with no letter, but the buttons of its dialogs have theirs. Names that the user gave, of files, paths, workspaces, and hosts, have their `&` doubled before they go into a label, so they never make a letter. The window of a job, the jobs, the checksums, and the Configuration dialog have letters too. Letters are unique within a dialog, which a test checks.
+- **Text.** Fluent files under `crates/noc/i18n/`, embedded in the binary and read with `fl!` from `i18n-embed-fl`, which checks message IDs against `en-US` at compile time; only `en-US` for now. `ui.language = "auto"` follows the system locale (through `sys-locale`). Arguments are inserted without Unicode isolation marks, which terminals would show. Numbers are passed to messages as numbers, so that plural forms see them, and written by `noc_locale::fluent`, the formatter of every bundle, in the formats of the region. A prompt with what is typed in it (`Filter: …`) is split where its message puts the typed text (`search::Prompt`), so a translation may put it anywhere.
+- **Formats of the region** ([ADR 0035](adr/0035-formats-of-the-region.md)). `noc-locale` writes numbers, dates, and times, and compares names, as `ui.formats` says: `auto` takes each part from `LC_ALL`, its own `LC_TIME`, `LC_NUMERIC`, or `LC_COLLATE`, then, on macOS, System Settings through Foundation's formatters, which apply the user's own date format, separators, and 24-hour time, then `LANG`; `iso` is neutral (`2025-10-17 14:05`, `1234.5`); a language tag names a region's formats in CLDR, through ICU4X. A time shows its date, with the year, and its time of day, in digits; every number is grouped. The formats in use are global (`noc_locale::current`); a change of the setting makes new ones in a task (`Effect::Formats`) and sorts the panels again. Help → About shows where they come from. Each `Formats` keeps the texts it wrote, 4,096 at most, so rows drawn again ask the system nothing ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
+- **Themes.** Built in: `mc-classic`, the colors of mc's default skin (blue panels, a cyan cursor that replaces the row's colors, a dark gray one under them in the inactive panel, yellow headers; directories white, executables green, broken links red, devices magenta; gray dialogs with mc's shadow; a black-and-cyan F-key bar; red error dialogs, and warnings black on yellow); `terminal`, the terminal's own colors with reverse video; `noon-dark` and `noon-light`, the colors of the logo (`assets/icons/logo.svg`); and `catppuccin-mocha` and `catppuccin-latte`, the dark and light flavors of [Catppuccin](https://catppuccin.com) ([ADR 0010](adr/0010-truecolor-themes.md)). `ui.theme` picks one; an unknown name is an error. `mc-classic` uses the 16 ANSI colors, so the terminal's palette decides its shades. The Catppuccin themes are built by one function from a palette of named colors, so both flavors give each color the same role: panels on `base`, dialogs, menus, and the F-key labels on `surface0`, text fields on `surface1`, the idle menu bar on `mantle`, the F-key numbers and the shadow on `crust`; a `blue` cursor, the active panel's title, and focused buttons; `lavender` headers, `mauve` marks and dialog titles, and the checks of check boxes and arrows of combo boxes, their brackets `overlay1`, warnings on `peach`, darkened in Latte; directories `blue`, executables `green`, symlinks `teal`, broken links `red`, devices `pink`; hosts `overlay1`, `yellow`, `green`, `red` by state; the units of sizes G in `peach`, the color Catppuccin gives numbers, and T `red`. The Noon themes are built the same way from a palette of roles taken from the logo: the cursor, the active panel's title, and focused buttons are on the logo's gold (`#A46D00`), and the menu bar on its amber frame (`#996400`), with cream text; error dialogs and the cursor where the user is root are on a deep red (`#A63A32`) with cream text, as the gold is deep, rather than on the bright red of text, which glares as a background; warnings are on a dark orange, nearly brown (`#8F4F0C`), with cream text, in 256 colors on `#D75F00`, as the nearest is the menu bar's, and in `noon-light` on a light orange (`#F9955F`) with navy text ([ADR 0048](adr/0048-errors-and-warnings-in-dialogs.md)); the F-key bar is dark, its numbers bold in the color of the headers; `noon-dark` has the logo's navy panels and dialogs a shade lighter, cream directories, and bright gold headers (`#FFC24A`), which read better on navy; `noon-light` has cream panels (`#FFFBEA`) with navy text, pale blue-gray dialogs, the gold and the amber twice as light (`#FFC24A`, `#FFB833`) and a pale red (`#F2A39A`) with navy text, and a dark amber for headers, which the bright gold is too pale for on cream. These themes are 24-bit RGB where `COLORTERM` is `truecolor` or `24bit`; elsewhere each is the nearest of the 6×6×6 cube and the gray ramp of the 256-color palette, never the 16 colors below them, which the terminal's palette redefines. User themes in `themes/` are planned for M4. Panels and dialogs are framed with double lines unless `ui.borders` is `single`; as in mc, a dialog leaves a blank cell between its frame and its edge, which gives way on a screen too small for it.
+- **Icons.** Nerd Fonts v3 glyphs, on by default (`ui.icons`), in front of each name: our own for directories, `..`, links, broken links, FIFOs, sockets, devices, and executables, and in the location menu for the home directory, volumes, network volumes, and hosts (which tell their state); `devicons` for files by name or extension. devicons asks the disk whether a name it does not know is a directory, so names go to it inside a path with a NUL byte, which names nothing: drawing stays free of I/O, and remote names are never looked up locally. Without icons, mc's markers: `/` directory, `~` link to a directory, `@` link, `!` broken link, `*` executable, `|` FIFO, `=` socket, `-` character device, `+` block device and volume; the home directory is `~`.
+- **Animated windows.** With `animations.windows` (the default; [ADR 0034](adr/0034-animated-windows.md)), a window's frame grows from its middle as it opens and shrinks back as it closes: six sizes, 20 ms each, empty and in the window's colors, with its shadow; a menu of F9 drops from its bar. `tui/zoom.rs` does it on top of rendering: `App::render` draws each window through `Stage::show` under a `zoom::Window` that tells it apart (a dialog by its id, a job by its own), which marks every cell before the window draws to tell the cells it drew, even as they were, and finds the frame among them (its first top left corner, and the blank cells drawn around it); a window new since the last frame grows, its cells under it put back from before, and one of the last frame that is gone shrinks over everything at the end, unless another opened in its place. Keys reach the window at once; only the screen waits. The event loop wakes for the next size at `App::frame_due`. The first frame, a new size of the screen, the viewer coming or going, and the terminal coming back from another program show their windows at once. Completion lists and the key hints of which-key appear at once, as they come while typing. In debug builds, `--slow-windows SECONDS` has a frame take that long to grow or shrink, its six sizes shown for equal parts of it (`Stage::slow`), so each can be watched; `--show-sizes` has each window write the size of its frame as `WIDTHxHEIGHT` at the right of its bottom line, once it shows whole, animations on or off (`Stage::show_sizes`). Only windows drawn through `Stage::show` have it; the panels, the bars, and which-key do not.
+- **Spinners.** Whatever waits for work in the background shows one spinner, next to what tells what it waits for ([ADR 0037](adr/0037-spinners.md)). `tui/spinner.rs` keeps its clock. Braille dots turn, in the theme's `busy` color, where one cell is all there is: in place of the icon in front of the path in a panel's title (a folder, or a host in the color of its status), which shows the directory it reads at once (and while a directory of F7 or a rename it started is done, with the reading after it in one wait: `Panel::begin_work`), so the path never moves; the dots take the color of the host's status while it connects. A panel that reads another location, or its first, is veiled (`Panel::veiled`): its rows take no keys, clicks, or wheel, and only the keys that need no entries, sorting, and the command line work (`App::holds_back`); from when the dots show, a skeleton of three rows stands for its rows, in the panel's colors, a bar for its status line, and the frame shows no totals; a failure shows the rows again with the cursor and marks, and reading the same directory again keeps them in sight ([ADR 0068](adr/0068-a-panel-hides-the-rows-it-leaves.md)); in place of the file's icon in front of the path in the viewer's title, while its `Reading` window shows a gauge; on the icon of a host connecting in the location menu; and in front of the titles of the location menu, the zoxide window, and the search of a whole tree, drawn over the line of the frame by `window::draw_title_dots`, so the title stays in place; until their first rows come, `window::draw_skeleton` draws rows of faint bars, as many as the window had the last time it opened (`App` keeps them in memory, one the first time), which a shine crosses at once from when the dots show, one cell every 40 ms, in their place; the status line of the search has a bar of its own, crossed with them. Until a job knows how far it is, its gauge is a faint bar of `▒` with no percentage, over which the same shine runs to and fro as fast, turning at its ends (`window::unknown_gauge` over `window::shine_bar`, which the skeleton of rows draws too; `Shine::bounce`); a dialog's gauge (`Text::Gauge`) gets the shine from its owner (`Dialog::render_shining`). Each waiting thing keeps a `Wait`, which remembers the first frame that drew it; nothing shows until 150 ms later, so quick work does not flicker. Frames come from the time since the app's first frame, so spinners move together and tests draw given instants; `App::spin_due` tells the event loop when the next frame is due. With `animations.spinners` off, a still mark stands in place of the spinner. R in the location menu keeps its rows while the dots turn, and shows the reason it failed right of the filter. In debug builds, `--slow-spinners SECONDS` holds back every result of background work by that long, in order, and `--slow-connections SECONDS` holds back only connections made or ended, in a queue of their own, so the dots of a host connecting can be watched in the location menu; `--slow-volumes SECONDS` lists every volume in the location menu as if none answered in time and sends each answer that long after, so the skeletons of their sizes and `not responding` can be watched. Each frame goes out as synchronized output (`draw_whole` in `tui/mod.rs`), so the cursor of a field does not show on its way through the cells a shine changes. A spinner's next frame is due 40 ms after a frame that drew the shine of its `Wait` moving over a bar, which the shine tells it, else 80 ms later, the next frame of the dots, or sooner when a resting shine sweeps again (`Wait::moves_after`). A frame that only a spinner or a window that grows asked for is for time alone (`App::frame_for_time`): a side whose panel does not move with time puts back the cells it drew on the last frame (`render::Frames`), and a window that shows whole stays where it was found, without `Stage::show` looking for it again ([ADR 0069](adr/0069-a-frame-for-time-alone.md)).
+- **Glyphs.** Every special character the UI draws is in `tui/glyphs.rs`: `Glyphs::NERD` and `Glyphs::PLAIN`, which `ui.icons` picks and the theme carries (`Theme.glyphs`), with the icons and markers of kinds, hosts, and volumes, the glyph of root, the scroll bars, the marks of text cut short, the arrow of combo boxes, the dot of a choice among others, in the lists of combo boxes and the pull-down menu, and the check of a setting that is on, in check boxes and the pull-down menu; `Lines::DOUBLE` and `Lines::SINGLE` by `ui.borders`, with the tees that join lines to frames; and the characters that are the same either way: the single line, the line between columns, the `·` after the mode on its line, the spinner, the arrows of the sort order, the bar beside a marked row, the checks of checksums, the progress bar, the mark of secrets, and the icons of the Configuration dialog's categories. `decor.rs` picks among them by kind, and asks devicons for files. `noc-scroll`, `noc-text`, and `noc-viewer` hold none: they take what they draw with as parameters (`BarGlyphs`, `Marks`, the viewer's `Styles`). `scripts/glyphs.sh`, part of `just lint`, fails on a special character written in Rust code that draws, outside `glyphs.rs` and the tests.
 
 ## Releases
 
-A signed tag `vX.Y.Z` starts `.github/workflows/release.yml`, the only place where releases
-are built ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md)):
+A signed tag `vX.Y.Z` starts `.github/workflows/release.yml`, the only place where releases are built ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md)):
 
 ```text
 ci (ci.yml on the tag) ──────────────────────────┐            ┌──► homebrew
@@ -2479,20 +615,8 @@ draft ──► build (aarch64, x86_64; macOS, Linux) ─┴──► publish �
                                                                └──► aur (one per package)
 ```
 
-- `draft` checks the tag against `Cargo.toml` and its signature, takes the notes from
-  `CHANGELOG.md` with `packaging/release-notes.sh`, which joins its wrapped lines, and creates
-  a draft release.
-- `build` compiles `noc` for each target without a cache, packs
-  `noon-commander-X.Y.Z-<target>.tar.gz`, attests its build provenance, and uploads it. The
-  Linux targets are `*-unknown-linux-musl`, built on a runner of their architecture and linked
-  statically, which a step checks
-  ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md)).
-- `publish` verifies the tarballs' attestations and publishes the draft once CI and every
-  build passed. It hands on their checksums, and that of GitHub's archive of the tag.
-- `homebrew` renders `packaging/homebrew/noon-commander.rb.in` and commits it to
-  `noon-commander/homebrew-tap` through the API as a GitHub App, so GitHub signs the commit.
-- `aur` updates `noon-commander`, `noon-commander-bin`, and `noon-commander-git` in the AUR, in
-  an Arch Linux container: `packaging/aur/update.sh` renders the `PKGBUILD`, builds it with
-  `makepkg`, and commits it to a clone of the package's repository, and a last step pushes the
-  commit with the key of the `release` environment, against `packaging/aur/known_hosts`
-  ([ADR 0090](adr/0090-aur-packages.md)).
+- `draft` checks the tag against `Cargo.toml` and its signature, takes the notes from `CHANGELOG.md` with `packaging/release-notes.sh`, which joins its wrapped lines, and creates a draft release.
+- `build` compiles `noc` for each target without a cache, packs `noon-commander-X.Y.Z-<target>.tar.gz`, attests its build provenance, and uploads it. The Linux targets are `*-unknown-linux-musl`, built on a runner of their architecture and linked statically, which a step checks ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md)).
+- `publish` verifies the tarballs' attestations and publishes the draft once CI and every build passed. It hands on their checksums, and that of GitHub's archive of the tag.
+- `homebrew` renders `packaging/homebrew/noon-commander.rb.in` and commits it to `noon-commander/homebrew-tap` through the API as a GitHub App, so GitHub signs the commit.
+- `aur` updates `noon-commander`, `noon-commander-bin`, and `noon-commander-git` in the AUR, in an Arch Linux container: `packaging/aur/update.sh` renders the `PKGBUILD`, builds it with `makepkg`, and commits it to a clone of the package's repository, and a last step pushes the commit with the key of the `release` environment, against `packaging/aur/known_hosts` ([ADR 0090](adr/0090-aur-packages.md)).

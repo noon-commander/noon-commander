@@ -78,7 +78,7 @@ client; the system `ssh` is the single source of truth for connections and auth.
 ## Layout
 
 | Crate | Responsibility |
-| --- | --- |
+| ----- | -------------- |
 | `crates/noc` | Binary and UI: CLI, bootstrap, askpass entry point, ratatui app, keymap, themes, icons, i18n |
 | `crates/noc-config` | XDG paths, TOML schemas, defaults, writing config files |
 | `crates/noc-locale` | Formats of the region: numbers, dates, times, the order of names (ADR 0035) |
@@ -108,7 +108,7 @@ client; the system `ssh` is the single source of truth for connections and auth.
 Paths come from `crates/noc-config/src/paths.rs`.
 
 | File | Location | Holds |
-| --- | --- | --- |
+| ---- | -------- | ----- |
 | `config.toml` | XDG config | All settings except per-host ones (ADR 0009) |
 | `hosts.toml` | Next to `config.toml` | Typed per-host settings; `[hosts]` in `config.toml` is an error (ADR 0007) |
 | `workspaces.toml` | XDG data | Saved tabs of both panels (ADR 0017) |

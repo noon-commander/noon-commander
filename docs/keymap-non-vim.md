@@ -1,111 +1,58 @@
 # Keys that are not vim's
 
-The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md)). This
-file lists every key of [keymap/preset.rs](../crates/noc/src/tui/keymap/preset.rs) that does not
-come from vim, and why it is there: the program it comes from, or noc's own reason, and what vim
-does with the key in that place; which keys of vim's kind do the same; and what the key does in a
-terminal without the kitty keyboard protocol. [keymap-compare.md](keymap-compare.md) has every
-key, beside those of mc, Far, yazi, and ranger.
+The keymap is vim's, in its modes, with mc's F-keys ([ADR 0022](adr/0022-vim-modes.md)). This file lists every key of [keymap/preset.rs](../crates/noc/src/tui/keymap/preset.rs) that does not come from vim, and why it is there: the program it comes from, or noc's own reason, and what vim does with the key in that place; which keys of vim's kind do the same; and what the key does in a terminal without the kitty keyboard protocol. [keymap-compare.md](keymap-compare.md) has every key, beside those of mc, Far, yazi, and ranger.
 
-Change this file with the preset: a key that is not vim's gets its row here in the same change,
-and the row goes with the key; a change of the keys of an action changes its vim-style keys too.
-The sections follow the preset, one per context and mode, named as in keymap-compare.md, and merged
-where their keys and reasons are the same; a row has only the keys of its action that are not
-vim's. Keys are written as `keymap::describe` writes them.
+Change this file with the preset: a key that is not vim's gets its row here in the same change, and the row goes with the key; a change of the keys of an action changes its vim-style keys too. The sections follow the preset, one per context and mode, named as in keymap-compare.md, and merged where their keys and reasons are the same; a row has only the keys of its action that are not vim's. Keys are written as `keymap::describe` writes them.
 
 ## What counts as vim's
 
-A key is vim's where vim, or nvim, binds it in that mode to the same command, or to what that
-command is in a list of files:
+A key is vim's where vim, or nvim, binds it in that mode to the same command, or to what that command is in a list of files:
 
-- Motions move over rows as over lines: `j`, `k`, `G`, `g g`, the arrows, the page keys, Ctrl+d,
-  Ctrl+u, Ctrl+o, and the `z` keys; `/`, `?`, `n`, and `N` search the names, `/` the filter of a
-  list too; `v` and `V` select rows.
-- Commands of lines act on rows: `y y` and `Y` copy, as vim's yank lines; `d d` removes a row of
-  a list, as vim's deletes a line; `K` shows the whole name under the cursor, as vim's looks up
-  what is under it; `g x` opens it; `g f` views it, as vim's goes to the file whose name is under
-  the cursor; `!` opens the command line for a shell command, as vim's starts `:.!`; `Z Z` quits.
-- Ctrl+w acts on the panels as vim's on windows: Ctrl+w f opens the directory under the cursor in
-  the other panel, as vim's opens the file under it in a new window, and Ctrl+w v shows this
-  directory there, as vim's splits the window on the same file.
-- Esc and Ctrl+c leave a mode and give a command up, as in vim, and in noc close what is in front
-  too. Enter takes what was typed, as on vim's command line, or what is under the cursor, as in
-  netrw and the quickfix list; Ctrl+y too in the lists and menus, as in vim's pop-up menu. Ctrl+[
-  and Ctrl+m are bound wherever Esc and Enter are, and Ctrl+i wherever Tab is but in the panels;
-  they go with those keys here.
-- Text fields, quick search, and the command line take the keys of vim's Insert, Normal, and
-  Visual mode, of its command line and the window of it, and of its pop-up menu. Alt and a key
-  stand for Esc and the key, as in nvim, but in dialogs, where Alt and a letter are the dialog's
-  letters ([ADR 0033](adr/0033-letters-in-dialogs.md)).
+- Motions move over rows as over lines: `j`, `k`, `G`, `g g`, the arrows, the page keys, Ctrl+d, Ctrl+u, Ctrl+o, and the `z` keys; `/`, `?`, `n`, and `N` search the names, `/` the filter of a list too; `v` and `V` select rows.
+- Commands of lines act on rows: `y y` and `Y` copy, as vim's yank lines; `d d` removes a row of a list, as vim's deletes a line; `K` shows the whole name under the cursor, as vim's looks up what is under it; `g x` opens it; `g f` views it, as vim's goes to the file whose name is under the cursor; `!` opens the command line for a shell command, as vim's starts `:.!`; `Z Z` quits.
+- Ctrl+w acts on the panels as vim's on windows: Ctrl+w f opens the directory under the cursor in the other panel, as vim's opens the file under it in a new window, and Ctrl+w v shows this directory there, as vim's splits the window on the same file.
+- Esc and Ctrl+c leave a mode and give a command up, as in vim, and in noc close what is in front too. Enter takes what was typed, as on vim's command line, or what is under the cursor, as in netrw and the quickfix list; Ctrl+y too in the lists and menus, as in vim's pop-up menu. Ctrl+[ and Ctrl+m are bound wherever Esc and Enter are, and Ctrl+i wherever Tab is but in the panels; they go with those keys here.
+- Text fields, quick search, and the command line take the keys of vim's Insert, Normal, and Visual mode, of its command line and the window of it, and of its pop-up menu. Alt and a key stand for Esc and the key, as in nvim, but in dialogs, where Alt and a letter are the dialog's letters ([ADR 0033](adr/0033-letters-in-dialogs.md)).
 
-Every other key is here: keys that vim does not bind, and keys that it binds to something that a
-listing, a dialog, or a pager has not. These contexts have only vim's keys, and no section:
-`input` and `rename` in every mode, `path_input`, `completion`, `jump`, `key_hints`, and
-`user_screen`; the letters of dialogs, which `path_input` and `completion` take too, are under
-`dialog`. The mouse is not in the keymap ([ADR 0018](adr/0018-mouse-support.md));
-keymap-compare.md lists what it does.
+Every other key is here: keys that vim does not bind, and keys that it binds to something that a listing, a dialog, or a pager has not. These contexts have only vim's keys, and no section: `input` and `rename` in every mode, `path_input`, `completion`, `jump`, `key_hints`, and `user_screen`; the letters of dialogs, which `path_input` and `completion` take too, are under `dialog`. The mouse is not in the keymap ([ADR 0018](adr/0018-mouse-support.md)); keymap-compare.md lists what it does.
 
 ## Vim-style keys
 
-The column Vim-style keys says which keys of vim's kind do what the row's keys do, in the same
-context and mode. Keys of vim's kind are those that vim's Normal mode takes: letters, digits,
-symbols, and Space; Ctrl and a letter; Esc, Enter, and Backspace; and sequences of them. The F-keys,
-Tab, the arrows, the page keys, Home, End, Delete, Insert, and Alt with any key, or Shift with one
-that is not a letter, are not. Ctrl+[, Ctrl+m, and Ctrl+i go with Esc, Enter, and Tab.
+The column Vim-style keys says which keys of vim's kind do what the row's keys do, in the same context and mode. Keys of vim's kind are those that vim's Normal mode takes: letters, digits, symbols, and Space; Ctrl and a letter; Esc, Enter, and Backspace; and sequences of them. The F-keys, Tab, the arrows, the page keys, Home, End, Delete, Insert, and Alt with any key, or Shift with one that is not a letter, are not. Ctrl+[, Ctrl+m, and Ctrl+i go with Esc, Enter, and Tab.
 
-- After each key, in brackets, where it comes from: vim, for vim's own keys, which this file lists
-  nowhere else; otherwise the program, or noc, as the key's own row says.
+- After each key, in brackets, where it comes from: vim, for vim's own keys, which this file lists nowhere else; otherwise the program, or noc, as the key's own row says.
 - A row whose keys are all of vim's kind lists them again: they are their own vim-style keys.
-- — means none: only the row's keys do it there. Keys that end a mode and act, such as the F-keys
-  in Visual mode and quick search, have none, though Esc or Enter and then a key of the panel do it
-  in two.
+- — means none: only the row's keys do it there. Keys that end a mode and act, such as the F-keys in Visual mode and quick search, have none, though Esc or Enter and then a key of the panel do it in two.
 - A row with several actions has a line for each key, as the Action column does.
 
 ## Without the kitty keyboard protocol
 
-noc asks for the kitty keyboard protocol where the terminal speaks it, and the preset lists the
-keys of such a terminal ([ADR 0019](adr/0019-shell-command-line.md),
-[ADR 0022](adr/0022-vim-modes.md)). Elsewhere some keys arrive as others: Ctrl+i as Tab, Ctrl+[ as
-Esc, Ctrl+m and Shift+Enter as Enter; and an Esc with a key typed quickly after it arrives as Alt
-and the key. The About section of the help, and `noc debug version`, say which keyboard the
-terminal has.
+noc asks for the kitty keyboard protocol where the terminal speaks it, and the preset lists the keys of such a terminal ([ADR 0019](adr/0019-shell-command-line.md), [ADR 0022](adr/0022-vim-modes.md)). Elsewhere some keys arrive as others: Ctrl+i as Tab, Ctrl+[ as Esc, Ctrl+m and Shift+Enter as Enter; and an Esc with a key typed quickly after it arrives as Alt and the key. The About section of the help, and `noc debug version`, say which keyboard the terminal has.
 
-The column Without kitty says what a key does there, where that is something else; Same marks the
-others. A row whose keys differ has a line for each key.
+The column Without kitty says what a key does there, where that is something else; Same marks the others. A row whose keys differ has a line for each key.
 
-- Ctrl+[ and Ctrl+m are bound wherever Esc and Enter are, so they lose nothing. Ctrl+i is bound
-  wherever Tab is but in the panels; there the keymap drops the bindings of Tab and gives it those
-  of Ctrl+i, so Tab differs only there.
-- An Alt key that nothing binds stands for Esc and the key either way, but in dialogs and the
-  pull-down menu, where Alt and a letter are their letters, and an Esc and a quick letter act on
-  what the letter marks. Where an Alt key is bound itself, an Esc and a quick key do what the Alt
-  key does, rather than what Esc and then the key would.
+- Ctrl+[ and Ctrl+m are bound wherever Esc and Enter are, so they lose nothing. Ctrl+i is bound wherever Tab is but in the panels; there the keymap drops the bindings of Tab and gives it those of Ctrl+i, so Tab differs only there.
+- An Alt key that nothing binds stands for Esc and the key either way, but in dialogs and the pull-down menu, where Alt and a letter are their letters, and an Esc and a quick letter act on what the letter marks. Where an Alt key is bound itself, an Esc and a quick key do what the Alt key does, rather than what Esc and then the key would.
 
 ## noc's own groups
 
-The panels group keys of noc's own under a first key, as vim groups its own under `g`, `z`, and
-Ctrl+w. Each takes a letter whose command in vim works in the text of a line, which a listing has
-not:
+The panels group keys of noc's own under a first key, as vim groups its own under `g`, `z`, and Ctrl+w. Each takes a letter whose command in vim works in the text of a line, which a listing has not:
 
 - `t`: the tabs and the workspaces. vim's `t` goes to before a character in the line.
-- `o`: the order of the rows, as ranger's sort keys, the hidden names, and, doubled, the
-  Configuration dialog. vim's `o` opens a line below.
-- `f`: the file operations. It stands for mc's Ctrl+x and keeps its letters for mc's commands:
-  `c` chmod, `o` chown, `e` chattr, `l`, `s`, and `v` links, `j` the jobs. mc has no checksums, so
-  they take `#`, for a hash; the search of the files below takes `/` and `f`, which mc's Ctrl+x
-  does not use either. vim's `f` goes to a character in the line.
+- `o`: the order of the rows, as ranger's sort keys, the hidden names, and, doubled, the Configuration dialog. vim's `o` opens a line below.
+- `f`: the file operations. It stands for mc's Ctrl+x and keeps its letters for mc's commands: `c` chmod, `o` chown, `e` chattr, `l`, `s`, and `v` links, `j` the jobs. mc has no checksums, so they take `#`, for a hash; the search of the files below takes `/` and `f`, which mc's Ctrl+x does not use either. vim's `f` goes to a character in the line.
 
 ## Everywhere (`global`, every mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Ctrl+k | `key_hints` | noc | Ctrl+k (noc) | Same | The keys that can be typed now, in a list, in every mode and every terminal. vim's Normal mode binds no Ctrl+k, and noc has not the digraphs that vim's Insert mode types with it. It arrives as a byte of its own without the kitty keyboard protocol, and is no prefix of tmux or screen. It replaced Alt+/, which an Esc and a quick `/` arrived as, so that Esc then `/` showed the hints rather than start quick search ([ADR 0022](adr/0022-vim-modes.md)). It opens the list at once, as Telescope's `keymaps` picker in nvim does, rather than the strip of which-key, which shows on its own after a key that starts others ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md)). |
 | Ctrl+\\<br>Ctrl+4 | `view_log` | noc | — | Same: Ctrl+\\ arrives as Ctrl+4 | The log of this run, from its end, in front of what is open, in every mode. No Ctrl and a letter is free in every mode: Ctrl+b … Ctrl+y are bound, the roadmap leaves Ctrl+a, Ctrl+g, and Ctrl+q to vim's text fields, and Ctrl+z suspends; an Esc and a quick key arrive as Alt and the key; Ctrl+Shift+K arrives as Ctrl+k without the kitty keyboard protocol, and kitty and WezTerm take it for themselves. vim binds Ctrl+\\ only to start Ctrl+\\ Ctrl+n and Ctrl+\\ Ctrl+g, which go to Normal mode, as Esc does here. Raw mode turns off the SIGQUIT that it sends in a shell. Without the protocol Ctrl+\\ sends the byte 0x1C, which crossterm reads as Ctrl+4, and which many terminals send for Ctrl+4, so both are bound; Ctrl+4 is typed alike on every layout, where Ctrl+\\ is hard on some ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md)). |
 
 ## Panels (`panel`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | l<br>Right | `enter` | ranger, yazi | Enter (vim); l (ranger, yazi) | Same | Open the directory under the cursor, as in ranger and yazi: a row has no column for vim's l and Right to go to, so they go into the tree. |
 | h<br>Left<br>Backspace<br>Ctrl+h | `parent` | ranger, yazi, noc | h (ranger, yazi); Backspace, Ctrl+h (noc) | Same | The parent directory, where h and Left go in ranger and yazi. vim's Backspace and Ctrl+h go left as its h does, so they go up with it; some terminals send Ctrl+h for Backspace. |
 | R | `reload` | ranger | R (ranger) | Same | Read the directory again, as ranger's R does. vim's R starts Replace mode, which a listing has not. |
@@ -146,7 +93,7 @@ not:
 ## Panels (`panel`, Visual mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Space | `mark` | yazi, ranger | Space (yazi, ranger) | Same | Mark the rows selected, beside the marks already there, and leave Visual mode, as Space marks in Normal mode. |
 | F5 | `copy` | mc | y (vim) | Same | As in Normal mode, on the rows selected. |
 | x<br>F6 | `move` | yazi, mc | x (yazi) | Same | As in Normal mode, on the rows selected. vim's x deletes what Visual mode selects. |
@@ -159,7 +106,7 @@ not:
 ## Quick search (`quick_search`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Up<br>Down<br>PgUp<br>PgDn | `up`<br>`down`<br>`page_up`<br>`page_down` | mc | — | Same | End the search and move in the panel, as in mc. On vim's command line they go through the history. |
 | F1<br>F3<br>F4<br>F5<br>Shift+F5<br>F6<br>Shift+F6<br>F7<br>F8<br>F9<br>Shift+F9<br>F10 | `help`<br>`view`<br>`edit`<br>`copy`<br>`duplicate`<br>`move`<br>`rename`<br>`mkdir`<br>`delete`<br>`pull_down`<br>`pull_down_last`<br>`quit` | mc | — | Same | End the search and do what they do in the panel, as in mc ([ADR 0022](adr/0022-vim-modes.md)). |
 | Shift+F7 | `next_match` | mc, Far | Ctrl+g (vim) | Same | The next match, with their key to search again. |
@@ -167,7 +114,7 @@ not:
 ## Dialogs and help (`dialog`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Tab<br>Ctrl+i | `next_field` | mc | j, Ctrl+n (vim), but on a list and in the help | Same | The next field or button, as in mc's dialogs. vim's Tab is Ctrl+i, which goes forward through the jump list, which a dialog has not. |
 | Shift+Tab | `prev_field` | mc | k, Ctrl+p (vim), but on a list and in the help | Same | The field or button before, as in mc's dialogs. |
 | Space | `toggle` | mc | Space (mc) | Same | Switch the check box, open the list of the combo box, or press the button, as in mc's dialogs. vim's Space goes right. |
@@ -178,14 +125,14 @@ not:
 ## Help (`help`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and show its section rather than close the help | Show the section whose letter it is, as the letters of dialogs, `dialog` above, act on their elements, opening Keys for one of its groups; the text gets the keys, to scroll it ([ADR 0033](adr/0033-letters-in-dialogs.md)). With Alt, so that the plain letters stay the help's keys. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
 | b<br>Space<br>f<br>u<br>d | `window_up`<br>`window_down`<br>`window_down`<br>`half_page_up`<br>`half_page_down` | less | b (less)<br>Space, f (less)<br>Space, f (less)<br>Ctrl+u (vim); u (less)<br>Ctrl+d (vim); d (less) | Same | A whole page up or down, and half of one, as in less and ranger's pager. vim's b, Space, f, u, and d go back a word, go right, find a character, undo, and delete, none of which the help has; Space presses no button here. |
 
 ## Text fields (`dialog_input`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Up<br>Down | `up`<br>`down` | mc, Far | — | Same | The field or button before and after, as in the dialogs of mc and Far. vim's Up and Down in Insert mode go to the line above and below. |
 | Tab<br>Ctrl+i<br>Shift+Tab | `next_field`<br>`next_field`<br>`prev_field` | mc | — | Same | As in `dialog`. vim's Tab in Insert mode types a tab. |
 | F10 | `cancel` | mc | Ctrl+c (vim) | Same | As in `dialog`. |
@@ -193,13 +140,13 @@ not:
 ## Text fields (`dialog_input`, Visual mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F10 | `cancel` | mc | Ctrl+c (vim) | Same | As in `dialog`. |
 
 ## Fields that search (`search_input`, Insert and Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Ctrl+s Ctrl+s<br>Ctrl+s s | `search_mode` | noc | Ctrl+s Ctrl+s (noc) | Same | Switch how the field with the focus matches, round through the ways it has: as it is, as fzf does, as a regular expression, or as a shell pattern ([ADR 0030](adr/0030-search-modes.md), [ADR 0045](adr/0045-ctrl-s-switches-the-field-typed-in.md), [ADR 0046](adr/0046-case-and-the-keys-of-search-fields.md)): quick search, the filter of a list while it takes text, the text of the search of a tree, and the pattern of g +; nowhere else, so that two such fields in one dialog never ask which. Ctrl+s leads every switch of the field, as g leads keys of the panels, so that each takes a letter rather than a key of its own: a text field in Insert mode has few keys left that vim does not bind. vim binds no Ctrl+s in Normal mode, in Insert mode, or on its command line; terminals stop their output with it (XOFF), which raw mode turns off, so it arrives, as a byte of its own without the kitty keyboard protocol too. Ctrl+x is vim's to subtract in Normal mode and to start completion in Insert mode, as Ctrl+x Ctrl+f completes file names; Ctrl+Shift+s arrives as Ctrl+s without the protocol, and kitty takes it to paste from the selection. mc's Ctrl+s searches again, which Ctrl+g does here, as on vim's command line. Ctrl+s replaced Alt+r, which an Esc and a quick r arrived as, so that Esc then r switched the mode rather than give the search up and rename ([ADR 0033](adr/0033-letters-in-dialogs.md)). |
 | Ctrl+s p<br>Ctrl+s f<br>Ctrl+s r<br>Ctrl+s g | `search_plain`<br>`search_fzf`<br>`search_regex`<br>`search_glob` | noc | Ctrl+s p, f, r, g (noc) | Same | Match as it is, as fzf does, as a regular expression, or as a shell pattern, by its initial, if the field has that way; the key hints show only those it has. |
 | Ctrl+s c | `case_mode` | noc | Ctrl+s c (noc) | Same | Switch whether case counts, round: smart case, case ignored, case. c for case. |
@@ -208,7 +155,7 @@ not:
 ## List of a combo box (`combo_box`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Space | `confirm` | noc | Enter (vim) | Same | Take the choice under the cursor and close the list, as Enter does: Space opened it on the box, so Space again takes what it shows, as the space bar does in the lists of macOS and of browsers ([ADR 0057](adr/0057-combo-boxes.md)). vim's Space goes right, which a list has not. |
 | q<br>F10 | `cancel` | less, ranger, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | Close the list with the choice it had, as in `dialog`; the dialog stays. |
 | Alt and a letter | — | Far, mc | — | Esc and a quick letter arrive as Alt and the letter too, and take its choice rather than close the list | Take the choice whose letter is highlighted in the list, as the letters of dialogs act on their elements ([ADR 0033](adr/0033-letters-in-dialogs.md)); other Alt keys do nothing. Not in the preset: `Context::alt_letters_are_hotkeys` asks for it. |
@@ -216,7 +163,7 @@ not:
 ## Viewer (`viewer`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | b<br>Space<br>f<br>u<br>d | `window_up`<br>`window_down`<br>`window_down`<br>`half_page_up`<br>`half_page_down` | less | b (less)<br>Space, f (less)<br>Space, f (less)<br>Ctrl+u (vim); u (less)<br>Ctrl+d (vim); d (less) | Same | As in the help. |
 | F2 | `toggle_wrap` | mc, Far | — | Same | Their key to wrap long lines, or cut them. |
 | e<br>F4 | `edit` | noc, mc | e (noc); v (less) | Same | Edit the file viewed, as e and F4 edit a file in the panels, at the line on top, as less's v does ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md)). less's and mc's e go a line down, as Ctrl+e does here; vim's e goes to the end of a word. mc's and Far's viewers switch to hex with F4, which noc has not. |
@@ -229,19 +176,19 @@ not:
 ## Lists (`list`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | q<br>F10 | `cancel` | less, ranger, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | As in `dialog`; F10 closes mc's lists too. |
 
 ## Lists (`list`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F10 | `cancel` | mc | Ctrl+c (vim) | Same | As in Normal mode. |
 
 ## Location menu (`location_menu`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F3 | `view` | mc | g f (vim) | Same | View the ssh_config that defines the host under the cursor, from its Host line, as F3 views a file. |
 | e<br>F4 | `edit_host` | noc, mc | e (noc) | Same | Edit the settings of the host under the cursor, as e and F4 edit a file in the panels ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md), [ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md)). vim's e goes to the end of a word. |
 | F8 | `disconnect` | mc | d d (vim) | Same | Disconnect the host under the cursor, as F8 deletes. |
@@ -250,19 +197,19 @@ not:
 ## Location menu (`location_menu`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F3<br>F4<br>F8 | `view`<br>`edit_host`<br>`disconnect` | mc | — | Same | As in Normal mode, while the filter takes text. |
 
 ## Tab menu (`tab_menu`, Normal and Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F8 | `close_tab` | mc | d d (vim), in Normal mode | Same | Close the tab under the cursor, as F8 deletes. |
 
 ## Workspaces window (`workspaces`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | a<br>F7 | `save_workspace` | yazi, mc | a (yazi) | Same | Save the tabs of both panels as a new workspace, as yazi's a adds an entry and A and F7 add a directory in the panels; F7 is mc's. vim's a appends after the cursor. |
 | W<br>F2 | `replace_workspace` | noc, mc | W (noc) | Same | Save the tabs of both panels in place of the workspace under the cursor, after a question, as t W saves them in the panels; F2 saves in mc's editor. vim's W goes to the next WORD. |
 | r<br>F6 | `move` | yazi, mc | r (yazi) | Same | Rename the workspace, as r and F6 rename in the panels. |
@@ -271,13 +218,13 @@ not:
 ## Workspaces window (`workspaces`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F7<br>F2<br>F6<br>F8 | `save_workspace`<br>`replace_workspace`<br>`move`<br>`delete` | mc | — | Same | As in Normal mode, while the filter takes text. |
 
 ## Pull-down menu (`pull_down`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Shift+Tab<br>Tab<br>Ctrl+i | `left`<br>`right`<br>`right` | noc | h (vim)<br>l (vim)<br>l (vim) | Same | The menu to the left and the right, as Tab goes through the fields of a dialog. vim's Tab is Ctrl+i, which goes forward through the jump list. |
 | q | `cancel` | less, ranger | Esc, Ctrl+c (vim); q (less, ranger) | Same | As in `dialog`. |
 | F9<br>F10 | `cancel` | noc, mc | Esc, Ctrl+c (vim); q (less, ranger) | Same | F9 closes the menu, then the menu bar, as Esc does; F10 closes mc's menus. |
@@ -286,39 +233,39 @@ not:
 ## Command line (`command_line`, Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Ctrl+j<br>Shift+Enter | `new_line` | noc | Ctrl+j (noc) | Same<br>Shift+Enter arrives as Enter, and runs the command | A new line in the command, which may span lines ([ADR 0019](adr/0019-shell-command-line.md)). vim's command line has one line, and its Ctrl+j runs it, as Enter does. Ctrl+j arrives as LF where Enter arrives as CR, so it works in every terminal; Shift+Enter, only with the kitty keyboard protocol. |
 | F10 | `abort` | mc | Ctrl+c (vim) | Same | Close the command line in any mode, as F10 cancels a dialog ([ADR 0022](adr/0022-vim-modes.md)). |
 
 ## Command line (`command_line`, Normal and Visual mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F10 | `cancel` | mc | Ctrl+c (vim); Esc (vim), in Normal mode | Same | As in Insert mode. |
 
 ## Command history (`command_history`, Normal and Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | Tab<br>Ctrl+i | `next_field` | noc | — | Same | The commands of the panel's host, or of all hosts: the window's one switch, as Tab goes to the next field of a dialog. vim's Tab is Ctrl+i, which goes forward through the jump list. |
 | F8 | `delete` | mc | d d (vim), in Normal mode | Same | Remove the command, as F8 deletes. |
 
 ## Search of a whole tree (`find`, Normal mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F3 | `view` | mc, Far | g f (vim) | Same | View the file of the row from its line, as in the results of mc's and Far's Find file. |
 | e<br>F4 | `edit` | noc, mc, Far | e (noc) | Same | Edit the file of the row at the line, as e edits a file in the panels, and F4 in the results of mc's and Far's Find file. vim's e goes to the end of a word. |
 
 ## Search of a whole tree (`find_input`, Normal and Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F3<br>F4 | `view`<br>`edit` | mc, Far | — | Same | As in `find`, in the fields too, whose letters stay theirs: text, or the keys of a field in Normal mode, rather than g f and e. |
 
 ## Checksums (`checksums`, Normal and Insert mode)
 
 | Keys | Action | From | Vim-style keys | Without kitty | Why |
-| --- | --- | --- | --- | --- | --- |
+| ---- | ------ | ---- | -------------- | ------------- | --- |
 | F3 | `view` | mc | — | Same | View the lines of the checksums, as F3 views a file ([ADR 0058](adr/0058-the-window-of-checksums-filters-and-views-them.md)). |
 | Tab<br>Ctrl+i<br>Shift+Tab | `next_field`<br>`next_field`<br>`prev_field` | noc | — | Same | In Insert mode, while the filter takes text: the focus of the buttons, as Tab goes through the fields of a dialog. vim's Tab is Ctrl+i, which goes forward through the jump list. |

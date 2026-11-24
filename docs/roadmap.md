@@ -11,11 +11,9 @@
 
 - [x] `noc-config`: XDG paths, TOML schema, defaults, `noc config init`
 - [x] Host discovery: scanner for `Host`, `Match`, and `Include`; lazy `ssh -G`
-- [x] Cache for `ssh -G` results, keyed by the state of the config files; removed in M4
-      ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
+- [x] Cache for `ssh -G` results, keyed by the state of the config files; removed in M4 ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
 - [x] ssh argument validator and forwarding policy ([ADR 0004](adr/0004-forwarding-compile-time-feature.md))
-- [x] Master connection, SFTP channels, askpass bridge
-      ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
+- [x] Master connection, SFTP channels, askpass bridge ([ADR 0002](adr/0002-controlmaster-per-host.md), [ADR 0003](adr/0003-askpass-bridge.md))
 - [x] `noc-vfs`: local and SFTP backends
 - [x] Debug commands: `noc debug hosts`, `noc debug ls <host>:<path>`
 - [x] Tests: local `sftp-server` over pipes, fake `ssh` program
@@ -24,10 +22,8 @@
 
 - [x] TUI skeleton: alternate screen, event loop, two panels, F10 quits, terminal restore
 - [x] Local panels: listing, navigation, background loading, errors
-- [x] Virtual root: `[Local]` and the hosts from ssh_config, with labels and cached addresses
-      (no cache since [ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
-- [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost
-      connections
+- [x] Virtual root: `[Local]` and the hosts from ssh_config, with labels and cached addresses (no cache since [ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
+- [x] Opening hosts: background connect (Esc stops it), remote listings, `start_dir`, lost connections
 - [x] Disconnect, `ssh -G` on connect, connection state in the root
 - [x] Sorting (`o n`, `o e`, `o m`, `o s`) and hidden files (`ui.show_hidden`, `o h`)
 - [x] Quick search
@@ -40,15 +36,12 @@
 
 ## M3: File operations (done)
 
-- [x] Panel actions that the keymap binds already: Ctrl+w x swaps the panels, Ctrl+w f opens
-      the directory under the cursor in the other panel, Ctrl+w v shows this directory there
-- [x] Marks: Space, Shift+Down, Shift+Up (were `J` and `K`), `g *`; their total below the
-      listing
+- [x] Panel actions that the keymap binds already: Ctrl+w x swaps the panels, Ctrl+w f opens the directory under the cursor in the other panel, Ctrl+w v shows this directory there
+- [x] Marks: Space, Shift+Down, Shift+Up (were `J` and `K`), `g *`; their total below the listing
 - [x] `g +` and `g -` mark and unmark by pattern, as mc's `+` and `-`
 - [x] VFS: create and remove directories, remove files, rename, set permissions and times
 - [x] F7 mkdir
-- [x] Job engine (`noc-ops`): progress, a decision on each failure, cancellation; deleting,
-      copying, and moving, with a question when a name is taken
+- [x] Job engine (`noc-ops`): progress, a decision on each failure, cancellation; deleting, copying, and moving, with a question when a name is taken
 - [x] F8 delete
 - [x] VFS: read and write files as streams
 - [x] F5 copy in any direction, with progress, cancellation, and a question for taken names
@@ -62,342 +55,136 @@
 
 ## M4: Polish (current)
 
-- [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the
-      root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
-- [x] Location menu: `g l`, with a filter; the keys stay with the active panel
-      ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md))
-- [x] Ctrl+x runs the next command in the other panel, as Ctrl+x `g l` its location menu, and
-      gives the keys back once it ends
-      ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md))
-- [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`,
-      `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
+- [x] Virtual root of mounted volumes and a list of SFTP hosts, with the connected hosts in the root; `[volumes] hide` ([ADR 0006](adr/0006-virtual-root-with-volumes-and-hosts.md))
+- [x] Location menu: `g l`, with a filter; the keys stay with the active panel ([ADR 0049](adr/0049-menus-of-a-panel-keep-the-active-panel.md))
+- [x] Ctrl+x runs the next command in the other panel, as Ctrl+x `g l` its location menu, and gives the keys back once it ends ([ADR 0051](adr/0051-ctrl-x-sends-a-command-to-the-other-panel.md))
+- [x] Host settings in `hosts.toml`, typed and edited with F4 on a host: `other_dir`, `remember_dir` ([ADR 0007](adr/0007-typed-host-settings-in-hosts-toml.md))
 - [x] Clipboard through OSC 52 ([ADR 0008](adr/0008-clipboard-through-osc-52.md))
-- [x] Checksums (f #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an
-      expected checksum, comparison with the file in the other panel, Copy and Save
-- [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`,
-      and missing, with a total
-- [x] F9 pull-down menu: `File`, `View`, `Go`, `Search`, `Tools`, `Window`, `Help`, without
-      `Left` and `Right`; every command acts on the active panel (`Ctrl+x F9` on the other), with
-      Command history, Command output, and Key hints; `ui.menu_bar`
-      ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md))
-- [x] Configuration dialog (Tools → Configuration…): categories with icons, scrolling
-      settings with a scroll bar, Interface; writes changed keys to `config.toml`
-      ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md))
-- [x] Configuration: categories for `[transfer]`, `[ssh]`, `[discovery]`, `[volumes]`, applied
-      at once
-- [x] Help (F1) in sections, as the Configuration dialog: About (version, build, system, files)
-      and Keys, which folds, with a group per part of the app; it opens where it was left
-- [x] Catppuccin themes in 24-bit color, Mocha and Latte, with the nearest of 256 colors
-      where `COLORTERM` does not announce 24-bit color
-      ([ADR 0010](adr/0010-truecolor-themes.md))
+- [x] Checksums (f #): SHA-256, SHA-512, SHA-1, MD5, BLAKE3 of files and trees, an expected checksum, comparison with the file in the other panel, Copy and Save
+- [ ] Verify files of checksums (`*.sha256`, `SHA256SUMS`, `*.md5`, `*.sfv`): `OK`, `FAILED`, and missing, with a total
+- [x] F9 pull-down menu: `File`, `View`, `Go`, `Search`, `Tools`, `Window`, `Help`, without `Left` and `Right`; every command acts on the active panel (`Ctrl+x F9` on the other), with Command history, Command output, and Key hints; `ui.menu_bar` ([ADR 0091](adr/0091-pull-down-menu-without-left-and-right.md))
+- [x] Configuration dialog (Tools → Configuration…): categories with icons, scrolling settings with a scroll bar, Interface; writes changed keys to `config.toml` ([ADR 0009](adr/0009-configuration-dialog-writes-config-toml.md))
+- [x] Configuration: categories for `[transfer]`, `[ssh]`, `[discovery]`, `[volumes]`, applied at once
+- [x] Help (F1) in sections, as the Configuration dialog: About (version, build, system, files) and Keys, which folds, with a group per part of the app; it opens where it was left
+- [x] Catppuccin themes in 24-bit color, Mocha and Latte, with the nearest of 256 colors where `COLORTERM` does not announce 24-bit color ([ADR 0010](adr/0010-truecolor-themes.md))
 - [x] Noon themes from the logo's colors, dark and light (`noon-dark`, `noon-light`)
-- [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light),
-      Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
+- [ ] More built-in dark and light pairs from the same palette roles: Gruvbox (dark/light), Rosé Pine (main/dawn), Tokyo Night (night/day), Solarized (dark/light)
 - [ ] User themes
-- [ ] Keymap overrides: the user's own bindings per mode and context, on top of vim's
-      ([ADR 0022](adr/0022-vim-modes.md))
-- [x] Tabs: each panel has its own (`t n`, `t c`, `g t`, `g T`), on a line above the panels or
-      in their frames, `ui.tab_bar`
-      ([ADR 0011](adr/0011-tabs-per-panel.md))
-- [x] zoxide: `g z` jumps to the directories it ranks; directories where the user did
-      something go to it, `[zoxide]`; external programs live in `noc-tools`
-      ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
-- [x] Release workflow from signed tags: macOS binaries for arm64 and x86_64 with build
-      provenance attestations, and a Homebrew tap
-      ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
-- [x] Go to directory (`g d`), as mc's Quick cd, with `~`, `..`, `-`, `host:path`, and `:path`
-  for the local side ([ADR 0065](adr/0065-a-colon-without-a-host-is-local.md))
+- [ ] Keymap overrides: the user's own bindings per mode and context, on top of vim's ([ADR 0022](adr/0022-vim-modes.md))
+- [x] Tabs: each panel has its own (`t n`, `t c`, `g t`, `g T`), on a line above the panels or in their frames, `ui.tab_bar` ([ADR 0011](adr/0011-tabs-per-panel.md))
+- [x] zoxide: `g z` jumps to the directories it ranks; directories where the user did something go to it, `[zoxide]`; external programs live in `noc-tools` ([ADR 0012](adr/0012-external-tools-and-zoxide.md))
+- [x] Release workflow from signed tags: macOS binaries for arm64 and x86_64 with build provenance attestations, and a Homebrew tap ([ADR 0014](adr/0014-release-workflow-and-homebrew-tap.md))
+- [x] Go to directory (`g d`), as mc's Quick cd, with `~`, `..`, `-`, `host:path`, and `:path` for the local side ([ADR 0065](adr/0065-a-colon-without-a-host-is-local.md))
 - [x] Tab completion of paths in Go to directory, F5, F6, and F7, with a list of choices
-- [x] Shift+F6 renames the entry under the cursor in its row, in Insert mode with the cursor
-      before the last extension
-- [x] Shift+F5 (`y p`) copies the entry under the cursor, not the marked ones, in the dialog of F5
-      opening with its name, as mc does; a copy never goes over its source under a name in
-      another case, where the file system ignores case
-- [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window
-      ([ADR 0016](adr/0016-fuzzy-search.md))
-- [x] Search modes: plain, fzf, and regex in quick search and the filters of the lists,
-      `ui.default_search_mode`, switched by Ctrl+s, each field keeping its way and case
-      ([ADR 0030](adr/0030-search-modes.md),
-      [ADR 0047](adr/0047-search-fields-remember-their-way-and-case.md))
-- [x] `f /` searches the files below for text with ripgrep, local or on the host, in a dialog
-      with a field for the text and one for the files; `[search]`
-      ([ADR 0027](adr/0027-search-of-a-whole-tree.md),
-      [ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md))
-- [x] `f f` finds files and directories by name with fd, in the Files and dirs mode of `f /`
-      ([ADR 0029](adr/0029-files-and-directories-with-fd.md))
+- [x] Shift+F6 renames the entry under the cursor in its row, in Insert mode with the cursor before the last extension
+- [x] Shift+F5 (`y p`) copies the entry under the cursor, not the marked ones, in the dialog of F5 opening with its name, as mc does; a copy never goes over its source under a name in another case, where the file system ignores case
+- [x] Fuzzy search as fzf does it in quick search, the location menu, and the zoxide window ([ADR 0016](adr/0016-fuzzy-search.md))
+- [x] Search modes: plain, fzf, and regex in quick search and the filters of the lists, `ui.default_search_mode`, switched by Ctrl+s, each field keeping its way and case ([ADR 0030](adr/0030-search-modes.md), [ADR 0047](adr/0047-search-fields-remember-their-way-and-case.md))
+- [x] `f /` searches the files below for text with ripgrep, local or on the host, in a dialog with a field for the text and one for the files; `[search]` ([ADR 0027](adr/0027-search-of-a-whole-tree.md), [ADR 0028](adr/0028-programs-on-hosts-without-a-terminal.md))
+- [x] `f f` finds files and directories by name with fd, in the Files and dirs mode of `f /` ([ADR 0029](adr/0029-files-and-directories-with-fd.md))
 - [ ] Panelize what the search of a tree found, as mc and Far do, to act on it in a panel
-- [x] Workspaces: the tabs of both panels saved under a name (t W), restored from their
-      window (t w), by name, which also saves, saves in place of one, renames, and deletes them;
-      `workspaces.toml`
-      ([ADR 0017](adr/0017-workspaces.md),
-      [ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md))
-- [ ] Favorites in the location menu: directories the user chooses, local or remote, as
-      bookmarks in its Favorites group
+- [x] Workspaces: the tabs of both panels saved under a name (t W), restored from their window (t w), by name, which also saves, saves in place of one, renames, and deletes them; `workspaces.toml` ([ADR 0017](adr/0017-workspaces.md), [ADR 0070](adr/0070-workspaces-by-name-and-saved-in-place.md))
+- [ ] Favorites in the location menu: directories the user chooses, local or remote, as bookmarks in its Favorites group
 - [ ] History of the directories visited
 - [ ] chmod and symlinks
-- [ ] Trash: the marked entries, or the one under the cursor, moved to the trash (`d d`)
-      rather than deleted: `~/.Trash` on macOS, the FreeDesktop trash on Linux. SFTP
-      has no trash, so what hosts do needs an ADR
-- [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the
-      viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
-- [x] Scroll bars on the frames wherever rows do not fit, which the mouse presses and drags
-      ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md))
-- [x] Text cut short marked with `»` and `«` (Nerd Font chevrons with icons) in an accent, `K`
-      for the whole name under the cursor, the z keys to scroll names and cut lines sideways, the
-      same marks in the viewer ([ADR 0025](adr/0025-marks-of-text-cut-short.md))
-- [x] Lists show the whole row under the cursor under their rows; `K` is the panels' alone
-      ([ADR 0041](adr/0041-lists-always-show-the-whole-row.md))
-- [x] The tab menu and the zoxide window show no whole row: their paths nearly always fit
-      ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md))
-- [x] Every window with buttons is a dialog: the window of a read of the viewer, with Cancel
-      alone, the window of a job, the list of jobs
-      ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md))
-- [x] `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx`:
-      `open` on macOS, `xdg-open` on Linux, local files only
-      ([ADR 0026](adr/0026-open-externally.md))
-- [ ] `g x` on a host: a copy of the remote file in the runtime directory, which the desktop's
-      program then opens, as F4 edits a copy
+- [ ] Trash: the marked entries, or the one under the cursor, moved to the trash (`d d`) rather than deleted: `~/.Trash` on macOS, the FreeDesktop trash on Linux. SFTP has no trash, so what hosts do needs an ADR
+- [x] Mouse support ([ADR 0018](adr/0018-mouse-support.md)): panels, tabs, the F-key bar, the viewer, the pull-down menu, dialogs, and every window; `ui.mouse` and `ui.wheel`
+- [x] Scroll bars on the frames wherever rows do not fit, which the mouse presses and drags ([ADR 0024](adr/0024-scroll-bars-on-the-frames.md))
+- [x] Text cut short marked with `»` and `«` (Nerd Font chevrons with icons) in an accent, `K` for the whole name under the cursor, the z keys to scroll names and cut lines sideways, the same marks in the viewer ([ADR 0025](adr/0025-marks-of-text-cut-short.md))
+- [x] Lists show the whole row under the cursor under their rows; `K` is the panels' alone ([ADR 0041](adr/0041-lists-always-show-the-whole-row.md))
+- [x] The tab menu and the zoxide window show no whole row: their paths nearly always fit ([ADR 0071](adr/0071-the-tab-menu-and-the-zoxide-window-show-no-whole-row.md))
+- [x] Every window with buttons is a dialog: the window of a read of the viewer, with Cancel alone, the window of a job, the list of jobs ([ADR 0073](adr/0073-a-window-with-buttons-is-a-dialog.md))
+- [x] `g x` opens the marked entries, or the one under the cursor, externally, as vim's `gx`: `open` on macOS, `xdg-open` on Linux, local files only ([ADR 0026](adr/0026-open-externally.md))
+- [ ] `g x` on a host: a copy of the remote file in the runtime directory, which the desktop's program then opens, as F4 edits a copy
 - [ ] Restore panel state on start, with the tabs
 - [x] Typing in a panel no longer starts quick search; `ui.type_to_search` is gone
-- [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a
-      command in a local panel's directory; several lines (Ctrl+j, `\` Enter)
+- [x] Shell command line ([ADR 0019](adr/0019-shell-command-line.md)): `!` (and `:!`) runs a command in a local panel's directory; several lines (Ctrl+j, `\` Enter)
 - [x] Shell command line on hosts, over the master connection, with a terminal
 - [x] Shell command line: Shift+Enter (kitty keyboard protocol), bracketed paste
-- [x] `g <` shows the output of commands in place of the panels; each command shows after its
-      prompt, its output ends on a line of its own, and a failure leaves `[exit N]`;
-      `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
-- [x] Command history per host: Up/Down (Ctrl+p/Ctrl+n) for the panel's host, a window
-      (`q :`) for one host or all; `shell.history_size`, `history.toml` in the state directory
-- [x] The command history shows the command alone in its rows, and where and when the one under
-      the cursor ran below them
-      ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md))
-- [x] Aliases and functions of the shell's rc files on the command line: `shell.run`,
-      `$SHELL -i -c` by default, with `$NAME` expanded where the command runs, and a host's
-      own `run` in `hosts.toml`, edited with F4 ([ADR 0054](adr/0054-shell-run.md))
-- [x] Terminal title: the active panel's directory, the terminal's own title back on quitting;
-      `ui.terminal_title`
-- [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …; `ui.which_key`,
-      `ui.which_key_delay_ms`
-- [x] Ctrl+k lists the keys that can be typed now over whatever is in front, every sequence
-      whole, which what is typed filters and Enter runs from
-      ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md))
-- [x] One keymap, vim's, in its modes, with mc's F-keys, in place of two presets chosen by
-      `ui.keymap`, one modelled on mc ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and
-      Visual mode in the panels, the lists, the dialogs, and the text fields; vim's motions,
-      operators, registers, counts, and undo in text fields; Visual mode and a jump list
-      (Ctrl+o, Ctrl+i) in the panels, where Tab goes to the other panel if the terminal tells it
-      from Ctrl+i; the mode and the command typed on a line above the F-key
-      bar, and the cursor's shape
-- [x] Quick search typed on the line of the mode, as vim's search
-      ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md))
-- [x] `K` shows the whole name in two rows of the status lines, without a frame of its own
-      ([ADR 0094](adr/0094-k-shows-the-whole-name-on-the-status-line.md))
+- [x] `g <` shows the output of commands in place of the panels; each command shows after its prompt, its output ends on a line of its own, and a failure leaves `[exit N]`; `shell.pause`. `! $SHELL` gives an interactive shell, so there is no console of its own
+- [x] Command history per host: Up/Down (Ctrl+p/Ctrl+n) for the panel's host, a window (`q :`) for one host or all; `shell.history_size`, `history.toml` in the state directory
+- [x] The command history shows the command alone in its rows, and where and when the one under the cursor ran below them ([ADR 0072](adr/0072-the-command-history-shows-where-a-command-ran.md))
+- [x] Aliases and functions of the shell's rc files on the command line: `shell.run`, `$SHELL -i -c` by default, with `$NAME` expanded where the command runs, and a host's own `run` in `hosts.toml`, edited with F4 ([ADR 0054](adr/0054-shell-run.md))
+- [x] Terminal title: the active panel's directory, the terminal's own title back on quitting; `ui.terminal_title`
+- [x] Key hints, as which-key: the keys that can follow `g`, Ctrl+w, …; `ui.which_key`, `ui.which_key_delay_ms`
+- [x] Ctrl+k lists the keys that can be typed now over whatever is in front, every sequence whole, which what is typed filters and Enter runs from ([ADR 0092](adr/0092-ctrl-k-lists-the-keys-at-once.md))
+- [x] One keymap, vim's, in its modes, with mc's F-keys, in place of two presets chosen by `ui.keymap`, one modelled on mc ([ADR 0022](adr/0022-vim-modes.md)): Normal, Insert, and Visual mode in the panels, the lists, the dialogs, and the text fields; vim's motions, operators, registers, counts, and undo in text fields; Visual mode and a jump list (Ctrl+o, Ctrl+i) in the panels, where Tab goes to the other panel if the terminal tells it from Ctrl+i; the mode and the command typed on a line above the F-key bar, and the cursor's shape
+- [x] Quick search typed on the line of the mode, as vim's search ([ADR 0093](adr/0093-quick-search-on-the-line-of-the-mode.md))
+- [x] `K` shows the whole name in two rows of the status lines, without a frame of its own ([ADR 0094](adr/0094-k-shows-the-whole-name-on-the-status-line.md))
 - [ ] `.` repeats the last change, in text fields and of files
 - [ ] Yanks copied to the system clipboard through OSC 52, behind a setting
 - [ ] A key of vim's for editing the command line in `$EDITOR`
-- [ ] Words as vim's 'iskeyword' parts them: also where the script changes (Latin, Han, kana,
-      emoji), with `×` and `÷` as letters, and with U+200B as a blank
-- [ ] A character and its combining marks as one, as vim's: an `e` with U+0301 (names in NFD,
-      as macOS has them) is moved over, deleted, replaced, yanked, and typed after as one
-      character, and the cursor never stops on the mark
-- [ ] `j` and `k` keep the column on the screen, as vim's, rather than the character: a wide
-      character takes two cells, and a tab goes to the next multiple of 8, as the command line
-      would show it
+- [ ] Words as vim's 'iskeyword' parts them: also where the script changes (Latin, Han, kana, emoji), with `×` and `÷` as letters, and with U+200B as a blank
+- [ ] A character and its combining marks as one, as vim's: an `e` with U+0301 (names in NFD, as macOS has them) is moved over, deleted, replaced, yanked, and typed after as one character, and the cursor never stops on the mark
+- [ ] `j` and `k` keep the column on the screen, as vim's, rather than the character: a wide character takes two cells, and a tab goes to the next multiple of 8, as the command line would show it
 - [ ] `~` switches the case of `ß` and `İ` as vim's does, to `ẞ` and `i`
-- [ ] More of vim's commands in text fields: `r`, `u`, `U`, `D`, `X`, `C`, `S`, and `J` in
-      Visual mode, and `U` in Normal mode; Shift and Ctrl with Left and Right move in Visual mode
-      as `w`, `W`, `b`, and `B`; Ctrl+r Ctrl+r, Ctrl+r Ctrl+o, and Ctrl+r Ctrl+p put a register
-      in Insert mode, as Ctrl+r does
-- [ ] More of vim's keys: in text fields `g e`, `g E`, `|`, the operators `g u`, `g U`, and
-      `g ~`, Ctrl+a and Ctrl+x, `g v`, `g i`, `g I`, `g p`, and `g P`; in the panels a count before
-      `%`, and in Visual mode Ctrl+o, Tab, `O`, and `g v`
-- [ ] More of vim's keys in text fields: `g _`, `%`, `v` and `V` after an operator (`d v e`),
-      `V`, search (`*`, `#`, `/`, `?`, `n`, `N`), macros (`q`, `@`), and marks (`m`, `` ` ``),
-      so that `q a` no longer falls through to `a` and `m b` to `b`; in Insert mode Ctrl+a and
-      the register `.` (`" . p`, Ctrl+r `.`), Ctrl+q as Ctrl+v, and Ctrl+g `u`, where Ctrl+g
-      now does nothing and `u` is typed
-- [ ] The keys of vim's command line for completion: Shift+Tab with no list goes back from the
-      last match, Ctrl+d lists the matches, Ctrl+l puts in what they share, and Ctrl+a all of them
-- [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`,
-      `d i "`, `c i (`); `c i w` only moves the cursor until then
-- [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other
-      name than these, `a` … `z`, `A` … `Z`, `"`, and `_` gives the command up
+- [ ] More of vim's commands in text fields: `r`, `u`, `U`, `D`, `X`, `C`, `S`, and `J` in Visual mode, and `U` in Normal mode; Shift and Ctrl with Left and Right move in Visual mode as `w`, `W`, `b`, and `B`; Ctrl+r Ctrl+r, Ctrl+r Ctrl+o, and Ctrl+r Ctrl+p put a register in Insert mode, as Ctrl+r does
+- [ ] More of vim's keys: in text fields `g e`, `g E`, `|`, the operators `g u`, `g U`, and `g ~`, Ctrl+a and Ctrl+x, `g v`, `g i`, `g I`, `g p`, and `g P`; in the panels a count before `%`, and in Visual mode Ctrl+o, Tab, `O`, and `g v`
+- [ ] More of vim's keys in text fields: `g _`, `%`, `v` and `V` after an operator (`d v e`), `V`, search (`*`, `#`, `/`, `?`, `n`, `N`), macros (`q`, `@`), and marks (`m`, `` ` ``), so that `q a` no longer falls through to `a` and `m b` to `b`; in Insert mode Ctrl+a and the register `.` (`" . p`, Ctrl+r `.`), Ctrl+q as Ctrl+v, and Ctrl+g `u`, where Ctrl+g now does nothing and `u` is typed
+- [ ] The keys of vim's command line for completion: Shift+Tab with no list goes back from the last match, Ctrl+d lists the matches, Ctrl+l puts in what they share, and Ctrl+a all of them
+- [ ] Text objects in text fields: `iw`, `aw`, `iW`, `aW`, quotes, and brackets (`c i w`, `d i "`, `c i (`); `c i w` only moves the cursor until then
+- [ ] Registers as vim's: `"0` the last yank, `"1` … `"9` and `"-` the deletes; any other name than these, `a` … `z`, `A` … `Z`, `"`, and `_` gives the command up
 - [ ] `p` in Visual mode puts in place of the selection; `Y` yanks the line, as vim's `y y`
 - [ ] A count repeats what `i`, `a`, `I`, and `A` type (`3ix` Esc)
-- [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`, `V`,
-      `r` Enter, and Ctrl+d and Ctrl+u, which scroll in vim's window of the command line; a put of
-      lines within a line leaves the cursor at their start, and Ctrl+r of whole lines ends them with
-      a line break
-- [ ] The command line shows its mode and the command typed, as vim's window of the command
-      line does: Normal and Visual mode after Ctrl+f, an operator or a register that waits
-      (`2d`, `"a`), and `(insert)` after Ctrl+o
-- [ ] Ctrl+v and a code types the character of that code, as vim's: `065`, `x41`, `o101`,
-      `u20ac`, `U0001F600`
-- [ ] `:` and `!` in Visual mode in the panels open the command line for the rows selected, as
-      vim's `:'<,'>`
-- [ ] Ctrl+w with Ctrl held (`Ctrl+w Ctrl+h`, `Ctrl+l`, `Ctrl+x`, `Ctrl+r`, `Ctrl+p`,
-      `Ctrl+v`, `Ctrl+f`) and with the arrows; a count before `Ctrl+w w` names the panel
-- [ ] After a count or a register, Ctrl+c only gives the command up, and Esc in Visual mode
-      ends it too, as in vim
-- [ ] `g`, Ctrl+w, `Z`, and the other sequences never time out, with the key hints off too,
-      as vim's own commands; Delete takes back the last digit of a count (vim's `N<Del>`)
-- [ ] A count before `G` and `g g` goes to that line or row in the viewer, the help, and the
-      lists, as in the panels; before Ctrl+d and Ctrl+u, it scrolls that many rows, which they
-      keep, as vim's `'scroll'`
+- [ ] The lines of the command line in Normal mode: `o`, `O`, `J`, `g g`, `G`, `d j`, `d k`, `V`, `r` Enter, and Ctrl+d and Ctrl+u, which scroll in vim's window of the command line; a put of lines within a line leaves the cursor at their start, and Ctrl+r of whole lines ends them with a line break
+- [ ] The command line shows its mode and the command typed, as vim's window of the command line does: Normal and Visual mode after Ctrl+f, an operator or a register that waits (`2d`, `"a`), and `(insert)` after Ctrl+o
+- [ ] Ctrl+v and a code types the character of that code, as vim's: `065`, `x41`, `o101`, `u20ac`, `U0001F600`
+- [ ] `:` and `!` in Visual mode in the panels open the command line for the rows selected, as vim's `:'<,'>`
+- [ ] Ctrl+w with Ctrl held (`Ctrl+w Ctrl+h`, `Ctrl+l`, `Ctrl+x`, `Ctrl+r`, `Ctrl+p`, `Ctrl+v`, `Ctrl+f`) and with the arrows; a count before `Ctrl+w w` names the panel
+- [ ] After a count or a register, Ctrl+c only gives the command up, and Esc in Visual mode ends it too, as in vim
+- [ ] `g`, Ctrl+w, `Z`, and the other sequences never time out, with the key hints off too, as vim's own commands; Delete takes back the last digit of a count (vim's `N<Del>`)
+- [ ] A count before `G` and `g g` goes to that line or row in the viewer, the help, and the lists, as in the panels; before Ctrl+d and Ctrl+u, it scrolls that many rows, which they keep, as vim's `'scroll'`
 - [ ] `/` and Enter with nothing typed searches for the last pattern again
-- [ ] Visual mode in the panels: `/`, `?`, `n`, and `N` move its end; `g ?`, `g m`, `g M`, `Z Z`,
-      and `Y` do what they do in Normal mode, as their F-keys already do, and `g l` and `t t` too
-- [ ] The jump list as vim's by default: a jump after Ctrl+o keeps the places after it, and a
-      place already in the list moves to its end, rather than as `jumpoptions=stack`
-- [ ] Up and Down on the command line recall only the commands that start with what is typed,
-      as on vim's
+- [ ] Visual mode in the panels: `/`, `?`, `n`, and `N` move its end; `g ?`, `g m`, `g M`, `Z Z`, and `Y` do what they do in Normal mode, as their F-keys already do, and `g l` and `t t` too
+- [ ] The jump list as vim's by default: a jump after Ctrl+o keeps the places after it, and a place already in the list moves to its end, rather than as `jumpoptions=stack`
+- [ ] Up and Down on the command line recall only the commands that start with what is typed, as on vim's
 - [ ] `H`, `M`, `L`, `z z`, `z t`, `z b`, Ctrl+e, and Ctrl+y in the panels and the lists
 - [ ] Enter and `l` on a file open it
-- [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`, `N`);
-      Space goes back from the output of commands, as from vim's hit-enter prompt; Ctrl+u and
-      Ctrl+d in the lists of dialogs; Ctrl+e closes the pull-down menu and the filters of lists,
-      where Ctrl+y confirms; Replace mode (`R`, Insert in Insert mode),
-      `Z Q`, `' '`, and marks (`m a`); a click gives up a command that waits, such as `d` or `"a`,
-      and a paste uses up a count or a register that waits, as vim's does
-- [x] The location menu replaces the virtual root and the list of hosts: groups Favorites,
-      Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with
-      a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and
-      panels that stay on a lost host; no `..` in `/`
-      ([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md))
-- [x] Who is where: `user@host` on the line of the mode and in a shell's prompt; `#`, red, and
-      a cursor on red for root; a glyph and `[root]` in the terminal title while Noon Commander
-      runs as root
-      ([ADR 0031](adr/0031-who-and-where-on-screen.md))
-- [x] Letters in every dialog, as in Far and mc: Alt and the letter puts the focus in a field,
-      switches a check box, opens a combo box, or presses a button, while typing too;
-      Alt+1 … Alt+9 and Alt+0 open the categories of the Configuration dialog, and Alt and a
-      letter the sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
-- [x] Windows grow from their middle as they open and shrink back as they close, the menus of
-      F9 drop from their bar; `animations.windows`; `--slow-windows` and `--show-sizes` in debug
-      builds ([ADR 0034](adr/0034-animated-windows.md))
-- [x] One spinner for everything that waits, shown after 150 ms; `animations.spinners`; a panel
-  turns braille dots in place of the icon before the path in its title, and the viewer in place of
-  the file's icon; the location menu, the zoxide window, and the
-  search of a whole tree turn them in front of their title, a skeleton with a shine in place of the
-  rows to come, as many rows as the window had the last time; a job's gauge is a faint bar with the
-  shine running to and fro until it knows how far it is; R in the location menu keeps the rows;
-  `--slow-spinners` and `--slow-connections` in debug builds ([ADR 0037](adr/0037-spinners.md))
-- [x] The location menu shows its rows after at most 150 ms; the sizes of a volume that has not
-      answered are a skeleton until its answer comes, and `not responding` after 5 s; a volume
-      is never asked again while it has not answered; `--slow-volumes` in debug builds
-      ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md))
-- [x] The location menu shows a card of the place under the cursor in place of its whole row:
-      what a volume mounts and how much of it is free, where a host is defined, how to reach it,
-      and how it is: connected with its tabs, why it failed, or where it opens
-      ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md))
-- [x] `ssh -G` for the host the cursor of the location menu rests on, once a run, with a
-      skeleton in its card meanwhile and its failure there
-      ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md))
-- [x] No cache of `ssh -G`: addresses come from this run's alone, in the cards of hosts, not in
-      their rows; `noc debug hosts` runs `ssh -G` each time
-      ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
-- [x] Words in place of sizes not known, `not responding` in the colors of warnings and
-      `size unknown`, faint; cards of hosts with the address at the right end, `ssh -G` failures
-      in the log, one word for how a host is, the directories it opens after folders on the sides
-      of their panels; errors no longer crossed out; the row of the rest named over two lines
-      ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md))
-- [x] Hosts are named by their alias alone: no `label` in `hosts.toml`; the card of a host shows
-      `sftp` over its address and where it is defined, the home directory's the kind of its
-      volume ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md))
-- [x] A host not connected says `Not connected` in its card, which no longer shows where it
-      opens ([ADR 0083](adr/0083-a-host-not-connected-says-so.md))
-- [x] Every card starts with what the place is and ends with where it comes from: a volume's
-      mount point and what it mounts, the home directory's path and its volume
-      ([ADR 0084](adr/0084-cards-show-a-place-and-where-it-comes-from.md))
-- [x] The hosts of the location menu by name after those used last, as the panels order names
-      ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md))
-- [x] The keys of the panels, the text fields, and the viewer in groups, which the list of the
-      key hints (Ctrl+k) and the help show under their names
-      ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md))
-- [x] Large windows, 80% of the screen across and down, never narrower than 76 cells: the
-      help, the list of the key hints, which shows what the command under the cursor does under
-      its rows, the Configuration dialog, and the search of a tree
-      ([ADR 0088](adr/0088-large-windows.md))
-- [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end,
-      and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled
-      back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file
-      that changes is read again; cancel-safe
-      ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md))
-- [x] `G` and End in the viewer jump to the end of the file, and a thumb dragged far ahead to its
-      byte: the part there alone is read, on a host too; the title says where the screen is in
-      bytes until the parts read in order reach it; the log opens the same way
-      ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md))
-- [x] The viewer shows a file once 1 MiB of it is read (`viewer.part_mib`, 16 before), on a host
-      256 KiB (`viewer.host_part_kib`), and asks a host for no byte past a part; a line that
-      goes on past a part stays whole up to 16 MiB; a local file of at most 16 MiB is read whole
-      behind the screen, so that its lines are counted
-      ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md))
-- [x] The viewer edits its file (`e`, F4) at the line on top and reads it again after, opens it
-      (`g x`), reads it again (`R`), goes to the next file and the one before (`] f`, `[ f`) of
-      the panel, of the search of a tree, or of the directory of the log, and follows its end as
-      it grows (`F`); F4 asks first for a file that looks binary or is larger than
-      `edit.large_mib`
-      ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md))
-- [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System
-      Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the
-      numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))
-- [x] Names sorted as the language of the formats orders them, numbers by value;
-      `ui.natural_sort`
-- [x] Search that matches names in either Unicode form, NFC or NFD (as macOS has them), and
-      ignores case by full case folding (`ß` as `ss`), in plain text, regular expressions,
-      `g +` and `g -`, and completion
-- [x] Combo boxes in place of radio buttons and `< … >`: the algorithm of `f #`, the mode of the
-      search of a tree, and the choices of the Configuration dialog; a list that opens under the
-      box and has the keys, context `combo_box` ([ADR 0057](adr/0057-combo-boxes.md))
-- [x] Ctrl+\\ (Ctrl+4 without the kitty keyboard protocol) views the log of this run from its end,
-      in every mode, in front of the menus, windows, and dialogs, which come back once it closes
-- [x] CI on Linux as well as macOS: clippy, tests (SFTP against the system's `sftp-server`), the
-      release build, and MSRV
-- [x] Static Linux binaries for x86-64 and 64-bit ARM in each release, linked with musl
-      ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md))
-- [x] AUR packages `noon-commander`, `noon-commander-bin`, and `noon-commander-git`, updated by
-      each release ([ADR 0090](adr/0090-aur-packages.md))
+- [ ] Smaller keys of vim's: in the viewer `0`, `$`, `z h`, `z l`, and search (`/`, `?`, `n`, `N`); Space goes back from the output of commands, as from vim's hit-enter prompt; Ctrl+u and Ctrl+d in the lists of dialogs; Ctrl+e closes the pull-down menu and the filters of lists, where Ctrl+y confirms; Replace mode (`R`, Insert in Insert mode), `Z Q`, `' '`, and marks (`m a`); a click gives up a command that waits, such as `d` or `"a`, and a paste uses up a count or a register that waits, as vim's does
+- [x] The location menu replaces the virtual root and the list of hosts: groups Favorites, Mounts, and SFTP, the places used last first (`recent.toml`), the first ten of each with a row for the rest; F4 and F8 on hosts there; a Retry dialog for failed connections, and panels that stay on a lost host; no `..` in `/` ([ADR 0021](adr/0021-location-menu-replaces-the-virtual-root.md))
+- [x] Who is where: `user@host` on the line of the mode and in a shell's prompt; `#`, red, and a cursor on red for root; a glyph and `[root]` in the terminal title while Noon Commander runs as root ([ADR 0031](adr/0031-who-and-where-on-screen.md))
+- [x] Letters in every dialog, as in Far and mc: Alt and the letter puts the focus in a field, switches a check box, opens a combo box, or presses a button, while typing too; Alt+1 … Alt+9 and Alt+0 open the categories of the Configuration dialog, and Alt and a letter the sections of the help ([ADR 0033](adr/0033-letters-in-dialogs.md))
+- [x] Windows grow from their middle as they open and shrink back as they close, the menus of F9 drop from their bar; `animations.windows`; `--slow-windows` and `--show-sizes` in debug builds ([ADR 0034](adr/0034-animated-windows.md))
+- [x] One spinner for everything that waits, shown after 150 ms; `animations.spinners`; a panel turns braille dots in place of the icon before the path in its title, and the viewer in place of the file's icon; the location menu, the zoxide window, and the search of a whole tree turn them in front of their title, a skeleton with a shine in place of the rows to come, as many rows as the window had the last time; a job's gauge is a faint bar with the shine running to and fro until it knows how far it is; R in the location menu keeps the rows; `--slow-spinners` and `--slow-connections` in debug builds ([ADR 0037](adr/0037-spinners.md))
+- [x] The location menu shows its rows after at most 150 ms; the sizes of a volume that has not answered are a skeleton until its answer comes, and `not responding` after 5 s; a volume is never asked again while it has not answered; `--slow-volumes` in debug builds ([ADR 0074](adr/0074-the-location-menu-shows-its-rows-before-the-volumes-answer.md))
+- [x] The location menu shows a card of the place under the cursor in place of its whole row: what a volume mounts and how much of it is free, where a host is defined, how to reach it, and how it is: connected with its tabs, why it failed, or where it opens ([ADR 0075](adr/0075-the-location-menu-shows-a-card-of-the-place-under-the-cursor.md))
+- [x] `ssh -G` for the host the cursor of the location menu rests on, once a run, with a skeleton in its card meanwhile and its failure there ([ADR 0076](adr/0076-ssh-g-for-the-host-under-the-cursor-of-the-location-menu.md))
+- [x] No cache of `ssh -G`: addresses come from this run's alone, in the cards of hosts, not in their rows; `noc debug hosts` runs `ssh -G` each time ([ADR 0079](adr/0079-ssh-g-results-are-not-cached.md))
+- [x] Words in place of sizes not known, `not responding` in the colors of warnings and `size unknown`, faint; cards of hosts with the address at the right end, `ssh -G` failures in the log, one word for how a host is, the directories it opens after folders on the sides of their panels; errors no longer crossed out; the row of the rest named over two lines ([ADR 0081](adr/0081-words-for-sizes-not-known-and-cards-with-two-ends.md))
+- [x] Hosts are named by their alias alone: no `label` in `hosts.toml`; the card of a host shows `sftp` over its address and where it is defined, the home directory's the kind of its volume ([ADR 0082](adr/0082-hosts-are-named-by-their-alias.md))
+- [x] A host not connected says `Not connected` in its card, which no longer shows where it opens ([ADR 0083](adr/0083-a-host-not-connected-says-so.md))
+- [x] Every card starts with what the place is and ends with where it comes from: a volume's mount point and what it mounts, the home directory's path and its volume ([ADR 0084](adr/0084-cards-show-a-place-and-where-it-comes-from.md))
+- [x] The hosts of the location menu by name after those used last, as the panels order names ([ADR 0085](adr/0085-the-location-menu-lists-hosts-by-name.md))
+- [x] The keys of the panels, the text fields, and the viewer in groups, which the list of the key hints (Ctrl+k) and the help show under their names ([ADR 0086](adr/0086-groups-of-keys-live-in-the-preset.md))
+- [x] Large windows, 80% of the screen across and down, never narrower than 76 cells: the help, the list of the key hints, which shows what the command under the cursor does under its rows, the Configuration dialog, and the search of a tree ([ADR 0088](adr/0088-large-windows.md))
+- [x] F3 reads a file in parts of `viewer.part_mib`, the next when the screen reaches the end, and holds a window of `viewer.window_mib`, reading parts it dropped again when scrolled back; a read that takes long shows a dialog with a gauge, Stop keeps what was read; a file that changes is read again; cancel-safe ([ADR 0038](adr/0038-viewer-reads-a-window-of-the-file.md))
+- [x] `G` and End in the viewer jump to the end of the file, and a thumb dragged far ahead to its byte: the part there alone is read, on a host too; the title says where the screen is in bytes until the parts read in order reach it; the log opens the same way ([ADR 0077](adr/0077-the-viewer-jumps-to-the-end-of-a-file.md))
+- [x] The viewer shows a file once 1 MiB of it is read (`viewer.part_mib`, 16 before), on a host 256 KiB (`viewer.host_part_kib`), and asks a host for no byte past a part; a line that goes on past a part stays whole up to 16 MiB; a local file of at most 16 MiB is read whole behind the screen, so that its lines are counted ([ADR 0078](adr/0078-the-viewer-reads-small-parts.md))
+- [x] The viewer edits its file (`e`, F4) at the line on top and reads it again after, opens it (`g x`), reads it again (`R`), goes to the next file and the one before (`] f`, `[ f`) of the panel, of the search of a tree, or of the directory of the log, and follows its end as it grows (`F`); F4 asks first for a file that looks binary or is larger than `edit.large_mib` ([ADR 0080](adr/0080-the-viewer-edits-opens-and-follows-its-file.md))
+- [x] Formats of the region for dates, times, and numbers: the system's (on macOS as System Settings has them), `iso`, or a language tag, `ui.formats`; plural forms that see the numbers in every message with a count ([ADR 0035](adr/0035-formats-of-the-region.md))
+- [x] Names sorted as the language of the formats orders them, numbers by value; `ui.natural_sort`
+- [x] Search that matches names in either Unicode form, NFC or NFD (as macOS has them), and ignores case by full case folding (`ß` as `ss`), in plain text, regular expressions, `g +` and `g -`, and completion
+- [x] Combo boxes in place of radio buttons and `< … >`: the algorithm of `f #`, the mode of the search of a tree, and the choices of the Configuration dialog; a list that opens under the box and has the keys, context `combo_box` ([ADR 0057](adr/0057-combo-boxes.md))
+- [x] Ctrl+\\ (Ctrl+4 without the kitty keyboard protocol) views the log of this run from its end, in every mode, in front of the menus, windows, and dialogs, which come back once it closes
+- [x] CI on Linux as well as macOS: clippy, tests (SFTP against the system's `sftp-server`), the release build, and MSRV
+- [x] Static Linux binaries for x86-64 and 64-bit ARM in each release, linked with musl ([ADR 0089](adr/0089-static-linux-binaries-with-musl.md))
+- [x] AUR packages `noon-commander`, `noon-commander-bin`, and `noon-commander-git`, updated by each release ([ADR 0090](adr/0090-aur-packages.md))
 - [ ] Combo boxes that take typed text, filtering their list or giving a value of their own
-- [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the
-      kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads
-      it ([crossterm#1074](https://github.com/crossterm-rs/crossterm/pull/1074)); letters and
-      digits at least, and whether Shift with a sign, as `;` for `:`, goes by the standard layout
+- [ ] Letters of other keyboard layouts as their keys in Normal and Visual mode, from the key the kitty keyboard protocol reports for the place on a standard keyboard, once crossterm reads it ([crossterm#1074](https://github.com/crossterm-rs/crossterm/pull/1074)); letters and digits at least, and whether Shift with a sign, as `;` for `:`, goes by the standard layout
 
 ## Known issues
 
-- **Non-UTF-8 remote file names end the SFTP session.** `openssh-sftp-client` 0.15 decodes names
-  as UTF-8 (`openssh-sftp-protocol` deserializes `Box<Path>` through `ssh_format`, which calls
-  `str::from_utf8`), so listing a directory with, say, a cp1251 or KOI8-R name fails and the
-  session closes. Options: an upstream patch that keeps names as bytes, a fork, or our own SFTP
-  v3 codec behind `SftpFs`.
+- **Non-UTF-8 remote file names end the SFTP session.** `openssh-sftp-client` 0.15 decodes names as UTF-8 (`openssh-sftp-protocol` deserializes `Box<Path>` through `ssh_format`, which calls `str::from_utf8`), so listing a directory with, say, a cp1251 or KOI8-R name fails and the session closes. Options: an upstream patch that keeps names as bytes, a fork, or our own SFTP v3 codec behind `SftpFs`.
 
 ## Backlog
 
 - Commands of Noon Commander after `:` (`:!` runs a shell command already).
 - A deb package.
 - Translations.
-- Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a
-  desktop helper (`pbcopy`, `wl-copy`, `xclip`) when Noon Commander runs on the desktop,
-  behind a setting ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
-- Checksums on the server (`sha256sum` over the host's master connection) for large remote
-  files, instead of reading them over SFTP. It runs remote commands, which Noon Commander does
-  not do yet, and the tools differ (`sha256sum`, `shasum`, `b3sum`), so it needs an ADR.
-  OpenSSH's server has no SFTP `check-file` extension.
+- Clipboard fallback where OSC 52 does not work (macOS Terminal, blocked multiplexers): a desktop helper (`pbcopy`, `wl-copy`, `xclip`) when Noon Commander runs on the desktop, behind a setting ([ADR 0008](adr/0008-clipboard-through-osc-52.md)).
+- Checksums on the server (`sha256sum` over the host's master connection) for large remote files, instead of reading them over SFTP. It runs remote commands, which Noon Commander does not do yet, and the tools differ (`sha256sum`, `shasum`, `b3sum`), so it needs an ADR. OpenSSH's server has no SFTP `check-file` extension.
 - CRC32, for `.sfv` files.
-- Resumable transfers: Retry after a failure, such as a lost connection
-  ([ADR 0064](adr/0064-jobs-wait-for-a-lost-host.md)) or a full disk, goes on from where the
-  file was cut off rather than writing it again. Where it goes on is the part from the start that
-  the target took without a gap (`FileWriter`), not the size of the file, as an SFTP writer has
-  several writes in flight, which the server may answer out of order. It goes on only if the
-  source has the size and the time it had when it was counted, and the target is no shorter;
-  else, or where a backend cannot write from an offset (a default of `Vfs`), the file is written
-  again. To check, the last 64 KiB before that point are read again on both ends, as
-  `rsync --append-verify` does. The part kept counts as done, not as copied, so the speed stays
-  what it is (ADR 0056). Perhaps later, Resume in the question about a taken name, as in Far, for
-  a file that an earlier job or run left short.
-- Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on
-  `/proc/self/mountinfo` on Linux) instead of reading them each time the location menu opens;
-  eject from the menu.
+- Resumable transfers: Retry after a failure, such as a lost connection ([ADR 0064](adr/0064-jobs-wait-for-a-lost-host.md)) or a full disk, goes on from where the file was cut off rather than writing it again. Where it goes on is the part from the start that the target took without a gap (`FileWriter`), not the size of the file, as an SFTP writer has several writes in flight, which the server may answer out of order. It goes on only if the source has the size and the time it had when it was counted, and the target is no shorter; else, or where a backend cannot write from an offset (a default of `Vfs`), the file is written again. To check, the last 64 KiB before that point are read again on both ends, as `rsync --append-verify` does. The part kept counts as done, not as copied, so the speed stays what it is (ADR 0056). Perhaps later, Resume in the question about a taken name, as in Far, for a file that an earlier job or run left short.
+- Watch for volumes that are mounted or unmounted (DiskArbitration on macOS, `poll` on `/proc/self/mountinfo` on Linux) instead of reading them each time the location menu opens; eject from the menu.
 - Plugins for other backends as a group of the location menu.
-- zoxide on a host, over its master connection, for remote directories; it runs remote
-  commands, which needs an ADR, as checksums on the server do.
+- zoxide on a host, over its master connection, for remote directories; it runs remote commands, which needs an ADR, as checksums on the server do.

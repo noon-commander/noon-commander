@@ -1,9 +1,0 @@
-default: true
-line-length: false # MD013
-no-duplicate-heading: # MD024
-  siblings_only: true
-no-inline-html: false # MD033
-fenced-code-language: true # MD040
-
-# >>> custom
-# <<< custom

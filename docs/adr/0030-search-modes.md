@@ -1,77 +1,31 @@
 # 0030. Search modes
 
-- Status: Accepted; amended by [ADR 0033](0033-letters-in-dialogs.md), Ctrl+s in place of Alt+r,
-  by [ADR 0044](0044-one-base-for-search-fields.md), one base for every field that searches, and
-  by [ADR 0045](0045-ctrl-s-switches-the-field-typed-in.md), Ctrl+s in the field typed in and the
-  glyph at its end, by [ADR 0046](0046-case-and-the-keys-of-search-fields.md), case in every
-  field and Ctrl+s as a leader, and by
-  [ADR 0047](0047-search-fields-remember-their-way-and-case.md), each field keeping its way and
-  case, and `ui.default_search_mode`
+- Status: Accepted; amended by [ADR 0033](0033-letters-in-dialogs.md), Ctrl+s in place of Alt+r, by [ADR 0044](0044-one-base-for-search-fields.md), one base for every field that searches, and by [ADR 0045](0045-ctrl-s-switches-the-field-typed-in.md), Ctrl+s in the field typed in and the glyph at its end, by [ADR 0046](0046-case-and-the-keys-of-search-fields.md), case in every field and Ctrl+s as a leader, and by [ADR 0047](0047-search-fields-remember-their-way-and-case.md), each field keeping its way and case, and `ui.default_search_mode`
 - Date: 2026-10-16
-- Amends: [ADR 0016](0016-fuzzy-search.md), [ADR 0027](0027-search-of-a-whole-tree.md),
-  [ADR 0029](0029-files-and-directories-with-fd.md)
+- Amends: [ADR 0016](0016-fuzzy-search.md), [ADR 0027](0027-search-of-a-whole-tree.md), [ADR 0029](0029-files-and-directories-with-fd.md)
 
 ## Context
 
-Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window,
-the workspaces, the command history, the list of the key hints) match what is typed as fzf does
-while `ui.fuzzy_search` is on ([ADR 0016](0016-fuzzy-search.md)), and as plain text anywhere
-while it is off. The switch is global and lives in the Configuration dialog: to look for a name
-the other way, the user goes there, changes it for every list, and comes back. Nothing on screen
-says which way a search matches, so a search that finds nothing does not tell a missing name from
-the wrong mode.
+Quick search and the filters of the lists (the location menu, the tab menu, the zoxide window, the workspaces, the command history, the list of the key hints) match what is typed as fzf does while `ui.fuzzy_search` is on ([ADR 0016](0016-fuzzy-search.md)), and as plain text anywhere while it is off. The switch is global and lives in the Configuration dialog: to look for a name the other way, the user goes there, changes it for every list, and comes back. Nothing on screen says which way a search matches, so a search that finds nothing does not tell a missing name from the wrong mode.
 
-Neither way takes a regular expression, which the search of a tree takes with a check box
-([ADR 0027](0027-search-of-a-whole-tree.md), [ADR 0029](0029-files-and-directories-with-fd.md)):
-`^\d` for the names that start with a digit, `\.(jpe?g|png)$` for images.
+Neither way takes a regular expression, which the search of a tree takes with a check box ([ADR 0027](0027-search-of-a-whole-tree.md), [ADR 0029](0029-files-and-directories-with-fd.md)): `^\d` for the names that start with a digit, `\.(jpe?g|png)$` for images.
 
 ## Decision
 
-- **Three modes**: plain, the text anywhere, ignoring case; fzf, as ADR 0016 has it; and regex,
-  a regular expression with smart case: case counts only once it has a capital letter that is not
-  escaped, as `\S` is not.
-- **`ui.search_mode`** (`"plain"`, `"fzf"`, `"regex"`; `"fzf"` by default) replaces
-  `ui.fuzzy_search`. The old key is not read: it is an unknown key, as any other.
-- **Ctrl+s switches the mode** of the search or the window it is pressed in, round: plain, fzf,
-  regex. It is the search of a tree's key for regular expressions too. The mode lasts until the
-  search ends or the window closes; the next one starts in `ui.search_mode` again. Nothing is saved.
-  Alt+r was the key first, which an Esc and a quick `r` arrived as;
-  [ADR 0033](0033-letters-in-dialogs.md) made it Ctrl+s.
-  `n` and `N` match the last search the way it matched.
-- **A glyph after the word of the prompt** says which mode, as in `Filter ~:`:
-  nf-cod-whole_word, nf-md-approximately_equal, and nf-cod-regex with icons; `=`, `~`, and `.*`
-  without. While the text is no regular expression, the glyph is crossed out in the color of a
-  broken link, nothing matches, and the lists say what is wrong with it, as the regex engine
-  says, in place of the rows.
-- **The search of a tree (`g /`) starts in the search mode too**, and its check box of regular
-  expressions goes. It has no fzf mode, ripgrep and fd matching a pattern rather than ranking
-  names, so there `fzf` is regex, which the check box was by default. Ctrl+s switches its text
-  between plain and regex, for this dialog only, and the label of the field says which:
-  `Text .*:`. The check box of case stays.
-- **The zoxide window** asks zoxide for every directory and filters them itself in the fzf and
-  regex modes, and gives zoxide the keywords in the plain mode, as before; Ctrl+s going to or
-  from the plain mode asks zoxide again.
-- **One engine for regular expressions**: the new `noc-pattern` crate builds them, with the
-  `regex` crate, smart case, and the last line of its error, for the regex mode and for fd's
-  search of names in `noc-tools`, which used to build them itself. A pattern matches the same
-  names in both.
-- **Quick search keeps the text as typed**: it no longer lowers it, so that a capital counts
-  once the mode becomes fzf or regex. The plain mode ignores case as it matches.
-- **Amended 2026-10-17: one Unicode form, and case folded.** Names and what is typed are
-  compared in NFC, so a name that macOS keeps in NFD (`e` and a combining accent) matches the
-  `é` typed; the plain mode ignores case by Unicode's full case folding (`ß` as `ss`, every sigma
-  as one) rather than by lower case. `noc_pattern::fold` and `nfc` do it, and
-  `noc_pattern::Normalized` maps what they match back to the characters of the name, grapheme by
-  grapheme, so the highlight lands on the name as drawn. The regex mode matches the name in NFC,
-  with its own case folding; `g +`, `g -`, and the completion of paths fold as the plain mode
-  does. The fzf mode keeps nucleo's own matching.
+- **Three modes**: plain, the text anywhere, ignoring case; fzf, as ADR 0016 has it; and regex, a regular expression with smart case: case counts only once it has a capital letter that is not escaped, as `\S` is not.
+- **`ui.search_mode`** (`"plain"`, `"fzf"`, `"regex"`; `"fzf"` by default) replaces `ui.fuzzy_search`. The old key is not read: it is an unknown key, as any other.
+- **Ctrl+s switches the mode** of the search or the window it is pressed in, round: plain, fzf, regex. It is the search of a tree's key for regular expressions too. The mode lasts until the search ends or the window closes; the next one starts in `ui.search_mode` again. Nothing is saved. Alt+r was the key first, which an Esc and a quick `r` arrived as; [ADR 0033](0033-letters-in-dialogs.md) made it Ctrl+s. `n` and `N` match the last search the way it matched.
+- **A glyph after the word of the prompt** says which mode, as in `Filter ~:`: nf-cod-whole_word, nf-md-approximately_equal, and nf-cod-regex with icons; `=`, `~`, and `.*` without. While the text is no regular expression, the glyph is crossed out in the color of a broken link, nothing matches, and the lists say what is wrong with it, as the regex engine says, in place of the rows.
+- **The search of a tree (`g /`) starts in the search mode too**, and its check box of regular expressions goes. It has no fzf mode, ripgrep and fd matching a pattern rather than ranking names, so there `fzf` is regex, which the check box was by default. Ctrl+s switches its text between plain and regex, for this dialog only, and the label of the field says which: `Text .*:`. The check box of case stays.
+- **The zoxide window** asks zoxide for every directory and filters them itself in the fzf and regex modes, and gives zoxide the keywords in the plain mode, as before; Ctrl+s going to or from the plain mode asks zoxide again.
+- **One engine for regular expressions**: the new `noc-pattern` crate builds them, with the `regex` crate, smart case, and the last line of its error, for the regex mode and for fd's search of names in `noc-tools`, which used to build them itself. A pattern matches the same names in both.
+- **Quick search keeps the text as typed**: it no longer lowers it, so that a capital counts once the mode becomes fzf or regex. The plain mode ignores case as it matches.
+- **Amended 2026-10-17: one Unicode form, and case folded.** Names and what is typed are compared in NFC, so a name that macOS keeps in NFD (`e` and a combining accent) matches the `é` typed; the plain mode ignores case by Unicode's full case folding (`ß` as `ss`, every sigma as one) rather than by lower case. `noc_pattern::fold` and `nfc` do it, and `noc_pattern::Normalized` maps what they match back to the characters of the name, grapheme by grapheme, so the highlight lands on the name as drawn. The regex mode matches the name in NFC, with its own case folding; `g +`, `g -`, and the completion of paths fold as the plain mode does. The fzf mode keeps nucleo's own matching.
 
 ## Consequences
 
 - A search that finds nothing can be tried the other ways without leaving it.
-- A `config.toml` with `ui.fuzzy_search` does not load until the key is removed or changed to
-  `search_mode`; Noon Commander is pre-alpha, and the error names the key.
+- A `config.toml` with `ui.fuzzy_search` does not load until the key is removed or changed to `search_mode`; Noon Commander is pre-alpha, and the error names the key.
 - `noc-tools` depends on `noc-pattern`, which depends on no other `noc-*` crate.
-- Ctrl+s is one action everywhere, `search_mode`; in the search of a tree it goes round two modes
-  rather than three. `toggle_regex` goes.
+- Ctrl+s is one action everywhere, `search_mode`; in the search of a tree it goes round two modes rather than three. `toggle_regex` goes.
 - The dialog of `g /` is a line shorter.

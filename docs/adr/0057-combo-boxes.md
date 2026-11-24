@@ -2,88 +2,31 @@
 
 - Status: Accepted
 - Date: 2026-10-31
-- Amends: [ADR 0018](0018-mouse-support.md), [ADR 0029](0029-files-and-directories-with-fd.md),
-  [ADR 0033](0033-letters-in-dialogs.md)
+- Amends: [ADR 0018](0018-mouse-support.md), [ADR 0029](0029-files-and-directories-with-fd.md), [ADR 0033](0033-letters-in-dialogs.md)
 
 ## Context
 
-Three places asked for one of a few choices, each its own way. The checksum dialog had five radio
-buttons, one under another, five rows of a small dialog for one setting. The search of a whole
-tree had two on a line, Text and Files and dirs, drawn apart from the rest of `Dialog`
-(`in_a_row`). The Configuration dialog had `< choice >`, which Space, Enter, `h`, and `l` went
-round without showing the other choices, so a theme was found by going through them.
+Three places asked for one of a few choices, each its own way. The checksum dialog had five radio buttons, one under another, five rows of a small dialog for one setting. The search of a whole tree had two on a line, Text and Files and dirs, drawn apart from the rest of `Dialog` (`in_a_row`). The Configuration dialog had `< choice >`, which Space, Enter, `h`, and `l` went round without showing the other choices, so a theme was found by going through them.
 
-Radio buttons take a row each, and as many letters as choices among those of the dialog; a list
-of choices that grows, as the algorithms or the themes may, makes the dialog grow. Far has combo
-boxes for this, and so have Qt (`QComboBox`) and GTK (`GtkComboBox`): a box with the choice and an
-arrow, whose list opens under it. vim's pop-up menu, which the list of completions already copies,
-shows how a list opens under a line and takes the keys.
+Radio buttons take a row each, and as many letters as choices among those of the dialog; a list of choices that grows, as the algorithms or the themes may, makes the dialog grow. Far has combo boxes for this, and so have Qt (`QComboBox`) and GTK (`GtkComboBox`): a box with the choice and an arrow, whose list opens under it. vim's pop-up menu, which the list of completions already copies, shows how a list opens under a line and takes the keys.
 
-"Drop-down" was the other name. The pull-down menu of F9 (`Context::PullDown`) is too close to it;
-Far, Qt, and GTK say combo box, and a combo box may take typed text too, which some settings will
-want.
+"Drop-down" was the other name. The pull-down menu of F9 (`Context::PullDown`) is too close to it; Far, Qt, and GTK say combo box, and a combo box may take typed text too, which some settings will want.
 
 ## Decision
 
-- **A combo box** (`ComboBox`, `tui/combo_box.rs`) shows its choice as `[SHA-256 ▼]`, after its
-  label on its line, as wide as its widest choice, so that it does not move as the choice changes,
-  in the colors of text fields (`dialog_input`), as Far draws its combo boxes. The arrow is `▼`,
-  Far's, as the scroll bars have it, or a Nerd Font chevron with `ui.icons`, from
-  `tui/glyphs.rs`.
-- **Its brackets are faint and its arrow in the color of titles**, two roles of every theme,
-  `dialog_bracket` and `dialog_symbol` (mc-classic: dark gray and blue; Catppuccin: `overlay1`
-  and `mauve`; Noon: `faint` and gold; the terminal theme: dim and bold), so that the choice
-  stands out between them. Check boxes take the same, `[✓]`, their brackets faint and their
-  check, which was `x`, a `✓` in the color of titles, or a Nerd Font check with `ui.icons`; one
-  function draws them, in the dialogs and the Configuration dialog alike. What has the focus is
-  in its colors alone. The pull-down menu of F9 takes the marks of both, in the same color: the
-  dot of the lists (below) for a command taken among others, as a sort order or the
-  workspace restored last, where it had `•` (`*` without icons), and the check for a setting that
-  is on, where it had `x` without icons. Two marks, as the menus of Windows and GTK have, so that
-  one among others does not read as a setting to turn off.
-- **Its list opens under it**, or above it where there is more room, over the dialog and past its
-  frame, as the list of completions (`window::pop_up`): a frame, at most ten rows, a scroll bar on
-  the frame when they do not all fit, and the cursor on the choice. The choice has the dot of a
-  radio button in front of it, `•`, as Far's `(•)`, or a Nerd Font dot with `ui.icons`, in the
-  color of titles but under the cursor: one among others, where the check of a check box is on or
-  off. It
-  is in the colors of fields too, which every theme sets apart from those of dialogs, so that it
-  does not run into the dialog it covers.
-- **The row under the cursor, and a box with the focus**, are in the colors of the focus, as a
-  button with it; where fields have those colors already, as in mc-classic (black on cyan) and the
-  terminal theme (reversed), in those of fields reversed, as Far shows the text selected in a
-  field. No theme needs a color of its own for them. In the Configuration dialog the name of the
-  setting shows the cursor, and the box stays as a field, as its text fields do.
-- **The list has the keys until it closes**, as a menu: a context of its own, `combo_box`, which
-  falls back to `global` only, and the line of the mode says `NORMAL · Combo box`. `j`, `k`, the
-  arrows, Ctrl+n, Ctrl+p, the page keys, `g g`, and `G` move its cursor, with a count too; the
-  wheel moves it as Up and Down do. Moving does not change the choice. Enter, Space, a click on a
-  row, or Alt and the letter of a row takes it and closes the list; Esc, `q`, Ctrl+c, F10, or a
-  click outside closes it with the choice it had, and the click goes no further. The second click
-  of the double click that opened the list, or of one whose first click closed it, does nothing.
-- **On a closed box**, Space, a click, and Alt and the letter of its label open the list. Enter
-  presses the default button, as it does on a check box, and `j`, `k`, and Tab move the focus.
-  The Configuration dialog has no default button: Enter opens the list there too, and `h` and `l`
-  still take the choice before and the next without it, applied at once, as before.
-- **Radio buttons go.** The checksum dialog has `Algorithm: [SHA-256 ▼]`, its message no longer
-  ending in "with:"; the search of a tree has `Mode: [Text ▼]`; the Configuration dialog has a
-  combo box for each choice. `Dialog::with_choices`, `in_a_row`, and the mark `(*)` are gone.
-- **Letters** ([ADR 0033](0033-letters-in-dialogs.md)): the label of a combo box has one, among
-  those of the dialog, and Alt and it give the box the focus and open its list. Its choices may
-  have letters of their own, as the algorithms do, unique among them but not among those of the
-  dialog: Alt and one takes that choice while the list is open, and does nothing else. The
-  choices of the Configuration dialog, names of themes and the like, have none.
+- **A combo box** (`ComboBox`, `tui/combo_box.rs`) shows its choice as `[SHA-256 ▼]`, after its label on its line, as wide as its widest choice, so that it does not move as the choice changes, in the colors of text fields (`dialog_input`), as Far draws its combo boxes. The arrow is `▼`, Far's, as the scroll bars have it, or a Nerd Font chevron with `ui.icons`, from `tui/glyphs.rs`.
+- **Its brackets are faint and its arrow in the color of titles**, two roles of every theme, `dialog_bracket` and `dialog_symbol` (mc-classic: dark gray and blue; Catppuccin: `overlay1` and `mauve`; Noon: `faint` and gold; the terminal theme: dim and bold), so that the choice stands out between them. Check boxes take the same, `[✓]`, their brackets faint and their check, which was `x`, a `✓` in the color of titles, or a Nerd Font check with `ui.icons`; one function draws them, in the dialogs and the Configuration dialog alike. What has the focus is in its colors alone. The pull-down menu of F9 takes the marks of both, in the same color: the dot of the lists (below) for a command taken among others, as a sort order or the workspace restored last, where it had `•` (`*` without icons), and the check for a setting that is on, where it had `x` without icons. Two marks, as the menus of Windows and GTK have, so that one among others does not read as a setting to turn off.
+- **Its list opens under it**, or above it where there is more room, over the dialog and past its frame, as the list of completions (`window::pop_up`): a frame, at most ten rows, a scroll bar on the frame when they do not all fit, and the cursor on the choice. The choice has the dot of a radio button in front of it, `•`, as Far's `(•)`, or a Nerd Font dot with `ui.icons`, in the color of titles but under the cursor: one among others, where the check of a check box is on or off. It is in the colors of fields too, which every theme sets apart from those of dialogs, so that it does not run into the dialog it covers.
+- **The row under the cursor, and a box with the focus**, are in the colors of the focus, as a button with it; where fields have those colors already, as in mc-classic (black on cyan) and the terminal theme (reversed), in those of fields reversed, as Far shows the text selected in a field. No theme needs a color of its own for them. In the Configuration dialog the name of the setting shows the cursor, and the box stays as a field, as its text fields do.
+- **The list has the keys until it closes**, as a menu: a context of its own, `combo_box`, which falls back to `global` only, and the line of the mode says `NORMAL · Combo box`. `j`, `k`, the arrows, Ctrl+n, Ctrl+p, the page keys, `g g`, and `G` move its cursor, with a count too; the wheel moves it as Up and Down do. Moving does not change the choice. Enter, Space, a click on a row, or Alt and the letter of a row takes it and closes the list; Esc, `q`, Ctrl+c, F10, or a click outside closes it with the choice it had, and the click goes no further. The second click of the double click that opened the list, or of one whose first click closed it, does nothing.
+- **On a closed box**, Space, a click, and Alt and the letter of its label open the list. Enter presses the default button, as it does on a check box, and `j`, `k`, and Tab move the focus. The Configuration dialog has no default button: Enter opens the list there too, and `h` and `l` still take the choice before and the next without it, applied at once, as before.
+- **Radio buttons go.** The checksum dialog has `Algorithm: [SHA-256 ▼]`, its message no longer ending in "with:"; the search of a tree has `Mode: [Text ▼]`; the Configuration dialog has a combo box for each choice. `Dialog::with_choices`, `in_a_row`, and the mark `(*)` are gone.
+- **Letters** ([ADR 0033](0033-letters-in-dialogs.md)): the label of a combo box has one, among those of the dialog, and Alt and it give the box the focus and open its list. Its choices may have letters of their own, as the algorithms do, unique among them but not among those of the dialog: Alt and one takes that choice while the list is open, and does nothing else. The choices of the Configuration dialog, names of themes and the like, have none.
 
 ## Consequences
 
-- A setting with many choices takes one row and shows them all on demand; the dialogs that had
-  radio buttons are shorter.
-- Changing the mode of the search of a tree takes two keys, Alt+M and then Alt+D or Alt+X, where
-  Alt+D and Alt+X did it alone; `f f` still opens it in Files and dirs.
-- In the Configuration dialog Space and Enter open a list rather than go to the next choice, so
-  going round takes `l`, as before, or the list.
-- The list may cover the elements under the box, and the buttons, as a menu does; it closes
-  before anything under it takes a key or a click.
-- A combo box that takes typed text, as Far's and Qt's can, filtering its list or giving a value
-  of its own, is the next step: the box would hold a text field, and the list would follow it as
-  the list of completions follows its field.
+- A setting with many choices takes one row and shows them all on demand; the dialogs that had radio buttons are shorter.
+- Changing the mode of the search of a tree takes two keys, Alt+M and then Alt+D or Alt+X, where Alt+D and Alt+X did it alone; `f f` still opens it in Files and dirs.
+- In the Configuration dialog Space and Enter open a list rather than go to the next choice, so going round takes `l`, as before, or the list.
+- The list may cover the elements under the box, and the buttons, as a menu does; it closes before anything under it takes a key or a click.
+- A combo box that takes typed text, as Far's and Qt's can, filtering its list or giving a value of its own, is the next step: the box would hold a text field, and the list would follow it as the list of completions follows its field.

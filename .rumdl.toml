@@ -1,0 +1,25 @@
+[MD013] # line-length
+line-length = 0
+reflow = true
+reflow-mode = "normalize"
+
+[MD033] # no-inline-html
+enabled = false
+
+[MD059] # descriptive-link-text
+enabled = true
+
+[MD060] # table-format
+enabled = true
+style = "compact"
+aligned-delimiter = true
+
+[MD076] # list-item-spacing
+style = "tight"
+allow-loose-continuation = true
+
+# >>> custom
+# Its links are relative to the release tarball, where LICENSE and CHANGELOG.md sit beside it.
+[per-file-ignores]
+"packaging/tarball/README.md" = ["MD057"]
+# <<< custom

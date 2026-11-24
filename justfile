@@ -34,7 +34,7 @@ _shell_scripts := '''
 # Lint the code and check its formatting without changing files.
 lint:
     {{ shell(_justfiles, 'just --fmt --check') }}
-    markdownlint-cli2
+    rumdl check
     RUST_LOG=warn taplo lint
     RUST_LOG=warn taplo fmt --check
     {{ shell(_shell_scripts, 'shellcheck') }}
@@ -52,6 +52,7 @@ lint:
 # Fix what lint finds, where a safe automatic fix exists.
 fix:
     {{ shell(_justfiles, 'just --fmt') }}
+    rumdl fmt
     RUST_LOG=warn taplo fmt
     {{ shell(_shell_scripts, 'shfmt --write') }}
     zizmor --offline --pedantic --quiet --no-exit-codes --fix .
@@ -106,6 +107,7 @@ dist:
 
 # Remove caches, build artifacts and generated files.
 clean:
+    rm -rf .rumdl_cache
     rm -rf target
     find . -type f -name .DS_Store -delete
     # >>> custom clean

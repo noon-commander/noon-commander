@@ -477,7 +477,7 @@ fn split_words(text: &str) -> Vec<String> {
                 }
             }
             '"' => {
-                quoted = !quoted;
+                quoted.toggle();
                 word.get_or_insert_with(String::new);
             }
             c if c.is_whitespace() && !quoted => words.extend(word.take()),

@@ -742,7 +742,7 @@ impl Viewer {
             }
             Command::Left => self.column = self.column.saturating_sub(1),
             Command::ToggleWrap => {
-                self.wrap = !self.wrap;
+                self.wrap.toggle();
                 self.top.1 = 0;
                 self.column = 0;
             }

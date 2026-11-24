@@ -90,7 +90,7 @@ fn about_shows_the_tools_once_they_answer_and_asks_again_for_another_program() {
         "{effects:?}"
     );
     let mut new = config();
-    new.ui.show_hidden = !new.ui.show_hidden;
+    new.ui.show_hidden.toggle();
     let effects = app.apply_config(config(), new);
     assert!(
         !effects

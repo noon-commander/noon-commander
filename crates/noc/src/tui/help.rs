@@ -701,7 +701,7 @@ impl Help {
             self.focus = Focus::Sidebar;
             if row == Row::Keys {
                 self.choose(Row::Keys);
-                self.keys_open = !self.keys_open;
+                self.keys_open.toggle();
             } else {
                 self.choose(row);
             }

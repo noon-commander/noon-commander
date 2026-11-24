@@ -149,7 +149,7 @@ impl HistoryWindow {
                 .map_or(HistoryEvent::Pending, |entry| event(entry, false)),
             Pick::Closed => HistoryEvent::Closed,
             Pick::Other(Action::NextField) => {
-                self.all = !self.all;
+                self.all.toggle();
                 self.picker.set_rows(self.texts());
                 self.picker.focus_best();
                 HistoryEvent::Pending

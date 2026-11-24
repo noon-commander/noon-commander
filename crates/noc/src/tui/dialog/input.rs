@@ -79,7 +79,7 @@ impl Dialog {
                     DialogEvent::Pending
                 }
                 Focus::Check(index) => {
-                    self.checks[index].on = !self.checks[index].on;
+                    self.checks[index].on.toggle();
                     DialogEvent::Pending
                 }
                 Focus::Button(index) => DialogEvent::Pressed(self.buttons[index]),

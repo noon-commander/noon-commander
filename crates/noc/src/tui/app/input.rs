@@ -168,7 +168,7 @@ impl App {
             }
             // As in mc, for both panels, and in every tab.
             Action::ToggleHidden => {
-                self.config.ui.show_hidden = !self.config.ui.show_hidden;
+                self.config.ui.show_hidden.toggle();
                 let show = self.config.ui.show_hidden;
                 for panel in self.panels_mut() {
                     panel.set_show_hidden(show);

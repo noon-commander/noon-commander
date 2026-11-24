@@ -349,7 +349,10 @@ fn base_command(settings: &SshSettings) -> Command {
 
 /// Starts the child in a new session without a controlling terminal, so ssh can neither read
 /// from nor draw on the TUI's terminal; prompts go through the askpass bridge (ADR 0003).
-#[allow(unsafe_code)]
+#[expect(
+    unsafe_code,
+    reason = "setsid in `pre_exec`, the sole exception to the ban on unsafe"
+)]
 fn detach_from_terminal(command: &mut Command) {
     // SAFETY: the hook runs in the forked child before `exec` and only calls setsid(2), which
     // is async-signal-safe; converting its error code does not allocate.

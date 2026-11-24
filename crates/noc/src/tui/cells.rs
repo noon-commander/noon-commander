@@ -44,8 +44,12 @@ pub(crate) fn size_parts(bytes: f64, formats: &Formats) -> (String, usize) {
 pub(crate) fn short_size_key(bytes: f64) -> (usize, usize, u64) {
     let (value, power, fraction) = size_scale(bytes);
     let scale = if fraction == 0 { 1.0 } else { 10.0 };
-    // Below 1024 with at most one decimal; formats round halves to even.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    // Formats round halves to even.
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "below 1024 with at most one decimal"
+    )]
     let digits = (value * scale).round_ties_even() as u64;
     (power, fraction, digits)
 }

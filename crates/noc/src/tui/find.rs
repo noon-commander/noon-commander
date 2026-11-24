@@ -1012,7 +1012,10 @@ fn line_spans(
 }
 
 #[cfg(test)]
-#[allow(clippy::single_range_in_vec_init)]
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "matches are ranges; one is common"
+)]
 mod tests {
     use std::time::Instant;
 
@@ -1374,7 +1377,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::single_range_in_vec_init)]
     fn by_name_it_finds_files_and_directories_and_goes_into_one() {
         let mut window = window();
         // Shift+Tab from the text goes to the modes, whose list Space opens.

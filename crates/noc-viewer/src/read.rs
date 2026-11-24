@@ -53,8 +53,10 @@ pub struct Progress {
 
 /// A part of a file, read, and its lines made for the screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
-// Each bool tells a thing of its own about the bytes read, not a state.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool tells a thing of its own about the bytes read, not a state"
+)]
 pub struct Part {
     /// What was asked for.
     pub want: Want,

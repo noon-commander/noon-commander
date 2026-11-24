@@ -1,7 +1,10 @@
 //! zoxide tests against `tests/support/fake-zoxide`, which logs its command lines. They never
 //! touch the user's zoxide database.
 
-#![allow(clippy::unwrap_used)]
+#![expect(
+    clippy::unwrap_used,
+    reason = "the helpers, which `allow-unwrap-in-tests` leaves out"
+)]
 
 use std::fmt::Write as _;
 use std::io::Write as _;

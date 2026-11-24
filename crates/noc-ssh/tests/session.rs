@@ -1,7 +1,10 @@
 //! Session tests against `tests/support/fake-ssh`, which serves SFTP with the local
 //! `sftp-server`. No network, no real ssh.
 
-#![allow(clippy::unwrap_used)]
+#![expect(
+    clippy::unwrap_used,
+    reason = "the helpers, which `allow-unwrap-in-tests` leaves out"
+)]
 
 use std::ffi::OsString;
 use std::fmt::Write as _;

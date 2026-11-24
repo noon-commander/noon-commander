@@ -223,7 +223,11 @@ impl Formats {
         let max = max.unwrap_or(3).max(min);
         let whole = value.fract() == 0.0 && min == 0;
         // Whole numbers that fit print exactly, as integers.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a whole number within 0 to 2^53 casts exactly"
+        )]
         if whole && (0.0..9.007_199_254_740_992e15).contains(&value) {
             self.whole(value as u64, grouping)
         } else {

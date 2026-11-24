@@ -1221,8 +1221,10 @@ fn shown_name(row: Row<'_>, decor: Decor) -> [String; 2] {
 
 /// `bytes` with its unit, as [`cells::short_size`] writes sizes on the frame.
 pub(crate) fn short_size(bytes: u64) -> String {
-    // Sizes stay far below 2^52, where `f64` would round them.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "sizes stay far below 2^52, where `f64` would round them"
+    )]
     cells::short_size(bytes as f64, &noc_locale::current())
 }
 

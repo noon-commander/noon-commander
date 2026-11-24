@@ -559,7 +559,10 @@ fn sorted(mut found: Vec<Finding>) -> Vec<Finding> {
 }
 
 #[tokio::test]
-#[allow(clippy::single_range_in_vec_init)]
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "matches are ranges; one is common"
+)]
 async fn fd_finds_names_keeps_what_the_globs_let_through_and_stops_at_the_limit() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();

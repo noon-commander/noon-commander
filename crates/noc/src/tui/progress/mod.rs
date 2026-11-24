@@ -187,8 +187,10 @@ impl Samples {
             .or_else(|| self.0.front())?;
         let span = at.saturating_sub(since);
         (!span.is_zero()).then(|| {
-            // Sizes stay far below 2^52, where `f64` would round them.
-            #[allow(clippy::cast_precision_loss)]
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "sizes stay far below 2^52, where `f64` would round them"
+            )]
             let copied = bytes.saturating_sub(from) as f64;
             copied / span.as_secs_f64()
         })
@@ -788,8 +790,10 @@ fn skipped(from: Point, to: Point) -> bool {
 
 /// A count or a size as a float, for the sums of a [`Forecast`].
 fn float(count: u64) -> f64 {
-    // Counts and sizes stay far below 2^52, where `f64` would round them.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "counts and sizes stay far below 2^52, where `f64` would round them"
+    )]
     let float = count as f64;
     float
 }
@@ -923,8 +927,10 @@ struct Size(u64);
 
 impl Size {
     fn key(self) -> (usize, usize, u64) {
-        // Sizes stay far below 2^52, where `f64` would round them.
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "sizes stay far below 2^52, where `f64` would round them"
+        )]
         cells::short_size_key(self.0 as f64)
     }
 }
@@ -1173,8 +1179,11 @@ impl JobView {
                         .left
                         .map(|left| Duration::from_secs(whole_seconds(left))),
                 });
-                // A ratio within 0 … 1.
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                #[expect(
+                    clippy::cast_possible_truncation,
+                    clippy::cast_sign_loss,
+                    reason = "a ratio within 0 to 1"
+                )]
                 let percent = (self.ratio() * 100.0).round() as u64;
                 Seen::Working {
                     current: current.clone(),

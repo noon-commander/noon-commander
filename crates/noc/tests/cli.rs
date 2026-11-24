@@ -2,7 +2,10 @@
 //! `crates/noc-ssh/tests/support/fake-ssh`, which serves SFTP with the local `sftp-server`.
 //! Every test gets its own home and XDG directories.
 
-#![allow(clippy::unwrap_used)]
+#![expect(
+    clippy::unwrap_used,
+    reason = "the helpers, which `allow-unwrap-in-tests` leaves out"
+)]
 
 use std::fmt::Write as _;
 use std::io::Write as _;

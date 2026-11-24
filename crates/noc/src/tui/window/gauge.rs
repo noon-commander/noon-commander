@@ -16,8 +16,10 @@ pub(crate) fn ratio(done: u64, total: u64) -> f64 {
     if total == 0 {
         return 0.0;
     }
-    // Counts and sizes stay far below 2^52, where `f64` would round them.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "counts and sizes stay far below 2^52, where `f64` would round them"
+    )]
     let ratio = done as f64 / total as f64;
     ratio.clamp(0.0, 1.0)
 }
@@ -25,11 +27,11 @@ pub(crate) fn ratio(done: u64, total: u64) -> f64 {
 /// A bar of `width` cells, filled for `ratio`, and the percentage after it. Block characters
 /// show in any theme, where colors alone would not.
 pub(crate) fn gauge(ratio: f64, width: usize, theme: &Theme) -> Line<'static> {
-    // `ratio` is within 0 … 1, and bars are a few dozen cells.
-    #[allow(
+    #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
-        clippy::cast_precision_loss
+        clippy::cast_precision_loss,
+        reason = "`ratio` is within 0 to 1, and bars are a few dozen cells"
     )]
     let (percent, filled) = {
         let percent = (ratio * 100.0).round() as u64;

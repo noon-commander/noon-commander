@@ -11,7 +11,7 @@ use crate::spelling::spelled_otherwise;
 
 /// How to copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(
+#[expect(
     clippy::struct_excessive_bools,
     reason = "independent switches, like the options of cp"
 )]

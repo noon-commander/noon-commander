@@ -118,8 +118,10 @@ fn format(formatter: &NSDateFormatter, at: DateTime) -> String {
     let seconds = at
         .to_zoned(jiff::tz::TimeZone::UTC)
         .map_or(0, |zoned| zoned.timestamp().as_second());
-    // Seconds since 1970 fit an `f64` exactly for any date a file has.
-    #[allow(clippy::cast_precision_loss)]
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "seconds since 1970 fit an `f64` exactly for any date a file has"
+    )]
     let seconds = seconds as f64;
     autoreleasepool(|_| {
         let date = NSDate::dateWithTimeIntervalSince1970(seconds);

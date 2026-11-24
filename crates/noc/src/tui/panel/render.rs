@@ -887,8 +887,10 @@ fn column_cell(detail: Detail, row: Row<'_>, (view, owners): (&View<'_>, Owners<
             _ if entry.is_dir_like() => Cell::plain(fl!("panel-dir"), Align::Right),
             None => Cell::plain(String::new(), Align::Right),
             Some(size) => {
-                // Sizes stay far below 2^52, where `f64` would round them.
-                #[allow(clippy::cast_precision_loss)]
+                #[expect(
+                    clippy::cast_precision_loss,
+                    reason = "sizes stay far below 2^52, where `f64` would round them"
+                )]
                 let (number, power) = cells::size_parts(size as f64, view.formats);
                 let unit = cells::unit(power).to_owned();
                 Cell {

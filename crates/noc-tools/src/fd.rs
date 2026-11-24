@@ -307,7 +307,10 @@ pub fn ended(program: &Path, status: ExitStatus, stderr: &[u8]) -> Result<Ended,
 }
 
 #[cfg(test)]
-#[allow(clippy::single_range_in_vec_init)] // Matches are ranges; one is common.
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "matches are ranges; one is common"
+)]
 mod tests {
     use std::os::unix::process::ExitStatusExt as _;
 

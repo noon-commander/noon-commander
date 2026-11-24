@@ -14,7 +14,10 @@ fn find_request(effects: &[Effect]) -> &FindRequest {
 }
 
 #[test]
-#[allow(clippy::single_range_in_vec_init)]
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "matches are ranges; one is common"
+)]
 fn f_slash_lists_the_files_then_searches_as_the_text_is_typed() {
     let mut app = with_files(&["a1", "b2"]);
     let effects = keys(&mut app, &["f", "/"]);
@@ -96,7 +99,10 @@ fn f_slash_on_a_host_searches_through_its_connection() {
 
 /// The app with the search of a tree open on `/srv`, which found `src/run/main.rs` with a
 /// line 3 that matches, under the cursor, which has the focus.
-#[allow(clippy::single_range_in_vec_init)]
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "matches are ranges; one is common"
+)]
 fn found_main(app: &mut App) {
     let effects = app.handle(action(Action::FindFile));
     let generation = find_request(&effects).generation;
@@ -170,7 +176,10 @@ fn f3_views_a_file_found_at_its_line_and_f4_edits_it_there() {
 }
 
 #[test]
-#[allow(clippy::single_range_in_vec_init)]
+#[expect(
+    clippy::single_range_in_vec_init,
+    reason = "matches are ranges; one is common"
+)]
 fn bracket_f_in_the_viewer_goes_through_the_files_found_with_the_cursor() {
     let mut app = with_files(&["a1"]);
     let effects = app.handle(action(Action::FindFile));

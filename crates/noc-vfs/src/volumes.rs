@@ -325,10 +325,16 @@ fn candidates() -> Vec<Candidate> {
 }
 
 /// The queries of `statvfs` still running, everywhere but on macOS.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg_attr(
+    all(target_os = "macos", not(test)),
+    expect(dead_code, reason = "macOS asks `statfs` instead")
+)]
 static STATVFS: LazyLock<Probes<Result<Space, String>>> = LazyLock::new(Probes::new);
 
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg_attr(
+    all(target_os = "macos", not(test)),
+    expect(dead_code, reason = "macOS asks `statfs` instead")
+)]
 async fn statvfs_volumes(candidates: Vec<Candidate>, first: Duration) -> Volumes {
     let asked = join_all(candidates.into_iter().map(|candidate| async move {
         let path = candidate.mount_point.clone();
@@ -384,7 +390,10 @@ pub(crate) fn space_of(path: &Path) -> io::Result<Space> {
     statvfs_space(path)
 }
 
-#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[cfg_attr(
+    all(target_os = "macos", not(test)),
+    expect(dead_code, reason = "macOS asks `statfs` instead")
+)]
 fn statvfs_space(path: &Path) -> io::Result<Space> {
     let stat = rustix::fs::statvfs(path)?;
     let fragment = if stat.f_frsize == 0 {
@@ -400,7 +409,10 @@ fn statvfs_space(path: &Path) -> io::Result<Space> {
 
 /// Mount discovery from `/proc/self/mountinfo`. Only plain std code, so that it is compiled
 /// and tested on every platform even though only Linux uses it.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg_attr(
+    not(target_os = "linux"),
+    expect(dead_code, reason = "only Linux reads mountinfo")
+)]
 mod linux {
     use std::collections::{HashMap, HashSet};
     use std::ffi::OsString;

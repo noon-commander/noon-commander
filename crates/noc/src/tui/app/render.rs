@@ -482,11 +482,11 @@ impl App {
             return None;
         }
         let ratio = behind.iter().map(|job| job.view.ratio()).sum::<f64>();
-        // A few jobs, each at 0 … 1.
-        #[allow(
+        #[expect(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,
-            clippy::cast_precision_loss
+            clippy::cast_precision_loss,
+            reason = "a few jobs, each at 0 to 1"
         )]
         let percent = (ratio / behind.len() as f64 * 100.0).round() as u64;
         Some((behind.len(), percent))

@@ -252,8 +252,10 @@ impl Default for TransferConfig {
 /// The `[ui]` section. Values are checked by the TUI, which knows its languages.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-// Each bool is a switch of its own in `config.toml`, not a state.
-#[allow(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each bool is a switch of its own in `config.toml`, not a state"
+)]
 pub struct UiConfig {
     /// Interface language as a language tag such as `en-US`, or `auto` for the system locale.
     /// Default: `auto`.

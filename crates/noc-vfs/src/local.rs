@@ -4,9 +4,8 @@ use std::io;
 use std::os::unix::ffi::{OsStrExt as _, OsStringExt};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
-use rustix::fs::{AtFlags, CWD, Timespec, Timestamps};
 use tokio::io::{AsyncReadExt as _, AsyncSeekExt as _, AsyncWriteExt as _};
 
 use crate::volumes::space_of;
@@ -220,32 +219,15 @@ impl Vfs for LocalFs {
     async fn set_modified(&self, path: &PathBuf, time: SystemTime) -> Result<(), VfsError> {
         let target = path.clone();
         tokio::task::spawn_blocking(move || {
-            let invalid = || io::Error::from(io::ErrorKind::InvalidInput);
-            let times = Timestamps {
-                last_access: timespec(SystemTime::now()).ok_or_else(invalid)?,
-                last_modification: timespec(time).ok_or_else(invalid)?,
-            };
+            let times = fs::FileTimes::new()
+                .set_accessed(SystemTime::now())
+                .set_modified(time);
             // By path: opening a FIFO to set its times would wait for a writer.
-            rustix::fs::utimensat(CWD, os_path(&target), &times, AtFlags::empty())
-                .map_err(io::Error::from)
+            fs::set_times(os_path(&target), times)
         })
         .await
         .map_err(VfsError::task_failed)?
         .map_err(|err| VfsError::local(err, path))
-    }
-}
-
-/// `time` as seconds and nanoseconds from the epoch, negative before it.
-fn timespec(time: SystemTime) -> Option<Timespec> {
-    match time.duration_since(UNIX_EPOCH) {
-        Ok(after) => Timespec::try_from(after).ok(),
-        Err(before) => {
-            let zero = Timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            };
-            zero.checked_sub(Timespec::try_from(before.duration()).ok()?)
-        }
     }
 }
 
@@ -326,6 +308,8 @@ fn kind_of(file_type: fs::FileType) -> FileKind {
 
 #[cfg(test)]
 mod tests {
+    use std::time::UNIX_EPOCH;
+
     use super::*;
     use crate::fixture;
 

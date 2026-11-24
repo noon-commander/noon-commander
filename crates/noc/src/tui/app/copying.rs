@@ -336,7 +336,7 @@ impl App {
                     (0, Ok(location)) => self.view_for(location, question),
                     (0, Err(bytes)) => {
                         let name = file_name(&target).unwrap_or_default();
-                        let name = String::from_utf8_lossy(&name).into_owned();
+                        let name = String::from_utf8_lossy_owned(name);
                         self.view_text_for(name, bytes, question)
                     }
                     _ => self.view_for(target, question),

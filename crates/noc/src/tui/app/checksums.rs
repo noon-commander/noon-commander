@@ -306,7 +306,7 @@ impl App {
             }
             SumsEvent::CopyAll => {
                 let text = sums_file(&results.lines);
-                self.clipboard = Some(String::from_utf8_lossy(&text).into_owned());
+                self.clipboard = Some(String::from_utf8_lossy_owned(text));
             }
             SumsEvent::View => {
                 if let Some(results) = self.results.pop_front() {

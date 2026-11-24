@@ -138,7 +138,7 @@ impl App {
         let here = self.panel_of(panel).map(Panel::location);
         let name = file_name(location).filter(|_| location.parent().as_ref() == here);
         match (name, location) {
-            (Some(name), _) => String::from_utf8_lossy(&name).into_owned(),
+            (Some(name), _) => String::from_utf8_lossy_owned(name),
             (None, Location::Local(path)) => path.display().to_string(),
             (None, Location::Remote { path, .. }) => path.display().into_owned(),
         }

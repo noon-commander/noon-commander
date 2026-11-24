@@ -625,7 +625,7 @@ mod linux {
             out.push(bytes[i]);
             i += 1;
         }
-        String::from_utf8_lossy(&out).into_owned()
+        String::from_utf8_lossy_owned(out)
     }
 
     /// Of mounts stacked on the same mount point, only the last one is visible.

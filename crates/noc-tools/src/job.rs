@@ -108,20 +108,11 @@ impl Running {
     ///
     /// # Errors
     ///
-    /// [`ToolError::Spawn`] if waiting for the program fails.
+    /// [`ToolError::Io`] if waiting for the program fails.
     pub async fn wait(&mut self) -> Result<Waited, ToolError> {
-        let Self {
-            child,
-            program,
-            job,
-            ..
-        } = self;
-        let wait_error = |source| ToolError::Spawn {
-            program: program.clone(),
-            source,
-        };
+        let Self { child, job, .. } = self;
         let Some(job) = job else {
-            return child.wait().await.map(Waited::Ended).map_err(wait_error);
+            return Ok(Waited::Ended(child.wait().await?));
         };
         loop {
             tokio::select! {
@@ -131,11 +122,11 @@ impl Running {
                     // Nothing better is left to do if this fails: the next use of the terminal
                     // stops this process, and the shell it was started from says so.
                     let _ = set_foreground(getpgrp());
-                    return status.map(Waited::Ended).map_err(wait_error);
+                    return Ok(Waited::Ended(status?));
                 }
                 heard = job.signals.recv() => {
                     if heard.is_none() {
-                        return child.wait().await.map(Waited::Ended).map_err(wait_error);
+                        return Ok(Waited::Ended(child.wait().await?));
                     }
                 }
             }

@@ -24,7 +24,7 @@ pub enum ToolError {
     /// The program did not finish in time and was stopped.
     #[error("{} did not finish in time", program.display())]
     Timeout { program: PathBuf },
-    /// Reading the program's output failed.
+    /// Any other I/O error: reading the program's output, or waiting for it.
     #[error("I/O error")]
     Io(#[from] io::Error),
 }

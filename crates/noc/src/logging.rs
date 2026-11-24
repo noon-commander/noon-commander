@@ -352,10 +352,7 @@ mod tests {
         let (path, _file) = open(&dir).unwrap();
         let name = path.file_name().unwrap().to_str().unwrap();
         let pid = format!("-{}{SUFFIX}", std::process::id());
-        let stamp = name
-            .strip_prefix(PREFIX)
-            .and_then(|rest| rest.strip_suffix(&pid))
-            .unwrap();
+        let stamp = name.strip_circumfix(PREFIX, &pid).unwrap();
         assert_eq!(stamp.len(), "20261105T142301Z".len(), "{name}");
         assert!(
             stamp.ends_with('Z') && stamp.as_bytes()[8] == b'T',

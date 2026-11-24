@@ -506,13 +506,10 @@ fn os_release_name(text: &str) -> Option<String> {
 /// An `os-release` value without its quotes and backslashes, as a shell would read it.
 fn unquote(value: &str) -> String {
     let value = value.trim();
-    if let Some(inner) = value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')) {
+    if let Some(inner) = value.strip_circumfix('\'', '\'') {
         return inner.to_owned();
     }
-    let inner = value
-        .strip_prefix('"')
-        .and_then(|v| v.strip_suffix('"'))
-        .unwrap_or(value);
+    let inner = value.strip_circumfix('"', '"').unwrap_or(value);
     let mut text = String::with_capacity(inner.len());
     let mut chars = inner.chars();
     while let Some(c) = chars.next() {

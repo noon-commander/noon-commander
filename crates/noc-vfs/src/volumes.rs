@@ -378,16 +378,12 @@ async fn statvfs_volumes(candidates: Vec<Candidate>, first: Duration) -> Volumes
 }
 
 /// The space of the file system that holds `path`. Blocking; a dead network mount hangs it.
-#[cfg(target_os = "macos")]
 pub(crate) fn space_of(path: &Path) -> io::Result<Space> {
-    // `statvfs` on macOS has 32-bit block counts; `statfs` does not.
-    macos::stat(path).map(|stat| stat.space)
-}
-
-/// The space of the file system that holds `path`. Blocking; a dead network mount hangs it.
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn space_of(path: &Path) -> io::Result<Space> {
-    statvfs_space(path)
+    cfg_select! {
+        // `statvfs` on macOS has 32-bit block counts; `statfs` does not.
+        target_os = "macos" => macos::stat(path).map(|stat| stat.space),
+        _ => statvfs_space(path),
+    }
 }
 
 #[cfg_attr(

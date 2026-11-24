@@ -60,11 +60,11 @@ fn source(var: &dyn Fn(&str) -> Option<String>, own: &'static str) -> Source {
     if let Some(source) = set("LC_ALL").or_else(|| set(own)) {
         return source;
     }
-    // Terminals on macOS set `LANG` from the language, not the region.
-    #[cfg(target_os = "macos")]
-    return Source::System;
-    #[cfg(not(target_os = "macos"))]
-    set("LANG").unwrap_or(Source::Iso)
+    cfg_select! {
+        // Terminals on macOS set `LANG` from the language, not the region.
+        target_os = "macos" => Source::System,
+        _ => set("LANG").unwrap_or(Source::Iso),
+    }
 }
 
 /// The source that a POSIX locale in `variable` names.

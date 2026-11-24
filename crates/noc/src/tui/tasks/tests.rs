@@ -844,7 +844,7 @@ async fn a_job_s_progress_goes_in_batches_before_what_it_reports_next() {
     let bytes: Vec<u64> = reports.iter().map(|report| report.1.bytes_done).collect();
     let expected: Vec<u64> = (1..=1000).chain([1000]).collect();
     assert_eq!(bytes, expected, "every report, in order");
-    assert!(reports.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+    assert!(reports.array_windows().all(|[a, b]| a.0 <= b.0));
     for (current, reports) in &batches[..batches.len() - 1] {
         let last = reports.last().unwrap().1.bytes_done;
         assert_eq!(
@@ -883,10 +883,7 @@ async fn a_job_s_counting_goes_in_batches_in_order_with_its_progress() {
         .map(|count| count.expect("a count"))
         .collect();
     assert!(counts.len() < 10, "{counts:?}");
-    assert!(
-        counts.windows(2).all(|pair| pair[0] < pair[1]),
-        "{counts:?}"
-    );
+    assert!(counts.array_windows().all(|[a, b]| a < b), "{counts:?}");
     assert_eq!(counts.last(), Some(&1000));
 }
 

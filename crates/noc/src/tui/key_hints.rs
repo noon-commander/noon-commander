@@ -152,10 +152,7 @@ impl KeyHintsWindow {
     /// rows under one, while they have more than one; without headings while the rows are
     /// `ranked`, best first, out of their groups.
     fn lines(rows: &[&Row], ranked: bool) -> Vec<MenuLine> {
-        let headed = !ranked
-            && rows
-                .windows(2)
-                .any(|pair| pair[0].heading != pair[1].heading);
+        let headed = !ranked && rows.array_windows().any(|[a, b]| a.heading != b.heading);
         let mut lines = Vec::with_capacity(rows.len());
         let mut heading = None;
         for (index, row) in rows.iter().enumerate() {

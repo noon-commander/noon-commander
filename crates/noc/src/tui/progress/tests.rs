@@ -501,7 +501,7 @@ fn a_time_left_holds_still_where_the_forecast_does() {
             left = count_down(Some((second - 1, left)), second, secs(forecast));
             seen.push(whole_seconds(left.shown));
         }
-        assert!(seen.windows(2).all(|pair| pair[1] <= pair[0]), "{seen:?}");
+        assert!(seen.array_windows().all(|[a, b]| b <= a), "{seen:?}");
         assert!(seen[240..].iter().all(|left| *left == rest), "{seen:?}");
     }
 }
@@ -1378,8 +1378,8 @@ fn the_time_left_rides_out_a_pace_that_comes_and_goes() {
         });
     assert!(slow < 4.5 && fast > 5.5, "{speeds:?}");
     // The time left shown goes down by the clock.
-    for pair in shown.windows(2) {
-        assert_eq!(pair[0] - pair[1], 1, "{shown:?}");
+    for [a, b] in shown.array_windows() {
+        assert_eq!(a - b, 1, "{shown:?}");
     }
 }
 

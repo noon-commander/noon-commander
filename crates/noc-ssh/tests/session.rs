@@ -157,8 +157,7 @@ impl Fake {
 }
 
 fn contains_pair(args: &[String], first: &str, second: &str) -> bool {
-    args.windows(2)
-        .any(|pair| pair[0] == first && pair[1] == second)
+    args.array_windows().any(|[a, b]| a == first && b == second)
 }
 
 fn value_after<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {

@@ -377,10 +377,10 @@ mod tests {
             .map(f64::from)
             .chain((0..2_000).map(|step| f64::from(1_023 * 1024 + step) * 1024.0));
         let sizes: Vec<f64> = sizes.collect();
-        for pair in sizes.windows(2) {
-            let read = short_size(pair[0], &iso) == short_size(pair[1], &iso);
-            let keys = short_size_key(pair[0]) == short_size_key(pair[1]);
-            assert_eq!(read, keys, "{pair:?}");
+        for &[a, b] in sizes.array_windows() {
+            let read = short_size(a, &iso) == short_size(b, &iso);
+            let keys = short_size_key(a) == short_size_key(b);
+            assert_eq!(read, keys, "{a} {b}");
         }
     }
 

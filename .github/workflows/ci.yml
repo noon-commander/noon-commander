@@ -48,23 +48,18 @@ jobs:
           rustup default stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: >-
-          cargo install --locked "just@$JUST_VERSION" cargo-deny@0.22.0 taplo-cli@0.10.0
-          cargo-shear@1.14.0 zizmor@1.30.1
+          cargo install --locked "just@$JUST_VERSION" rumdl@0.3.5 cargo-deny@0.22.0
+          taplo-cli@0.10.0 cargo-shear@1.14.0 zizmor@1.30.1
       # ShellCheck comes with the Linux runner only.
       - if: runner.os == 'macOS'
         name: Install ShellCheck
         run: brew install shellcheck
-      # actionlint, shfmt, and markdownlint-cli2 are not Rust programs. markdownlint-cli2 is
-      # installed outside the checkout, so no linter sees its node_modules.
-      - name: Install actionlint, shfmt, and markdownlint-cli2
+      # actionlint and shfmt are not Rust programs.
+      - name: Install actionlint and shfmt
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install mvdan.cc/sh/v3/cmd/shfmt@v3.14.1
           echo "$(go env GOPATH)/bin" >>"$GITHUB_PATH"
-          cp .github-deps/markdownlint/package.json .github-deps/markdownlint/package-lock.json \
-            "$RUNNER_TEMP"
-          npm ci --prefix "$RUNNER_TEMP" --ignore-scripts
-          echo "$RUNNER_TEMP/node_modules/.bin" >>"$GITHUB_PATH"
       # Named rather than looked for, so that the SFTP tests fail instead of skipping without it.
       - run: just ci
         env:

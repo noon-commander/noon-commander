@@ -72,12 +72,12 @@ ci: lint test
 # Build the debug binaries.
 [positional-arguments]
 build *args:
-    cargo build --workspace --locked "${@}"
+    cargo build --workspace --locked "$@"
 
 # Build the release binaries.
 [positional-arguments]
 build-release *args:
-    cargo build --workspace --locked --release "${@}"
+    cargo build --workspace --locked --release "$@"
 
 # Check the build with the oldest supported Rust, as CI does.
 build-msrv:
@@ -87,7 +87,7 @@ build-msrv:
 # Run the binary, passing the arguments to it.
 [positional-arguments]
 run *args:
-    cargo run --locked -- "${@}"
+    cargo run --locked -- "$@"
 
 # Show outdated dependencies without changing files.
 outdated:
